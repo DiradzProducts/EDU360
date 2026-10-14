@@ -62,31 +62,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Initialize from localStorage or path
+  // Initialize from localStorage (requires explicit login)
   useEffect(() => {
     try {
       const stored = localStorage.getItem('edu360_active_user');
       if (stored) {
         setUser(JSON.parse(stored));
       } else {
-        // Infer from URL if visiting a role route directly
-        if (pathname.startsWith('/teacher')) {
-          setUser(defaultUsers.teacher);
-        } else if (pathname.startsWith('/parent')) {
-          setUser(defaultUsers.parent);
-        } else if (pathname.startsWith('/student')) {
-          setUser(defaultUsers.student);
-        } else if (pathname.startsWith('/admin')) {
-          setUser(defaultUsers.admin);
-        } else {
-          // Default to null on /login and /register
-          if (pathname !== '/login' && pathname !== '/register') {
-            setUser(defaultUsers.teacher); // sensible default
-          }
-        }
+        // Unauthenticated session - requires login with credentials
+        setUser(null);
       }
     } catch {
-      setUser(defaultUsers.teacher);
+      setUser(null);
     }
     setMounted(true);
   }, []);

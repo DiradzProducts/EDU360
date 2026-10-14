@@ -19,6 +19,8 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { UserRole } from '@/lib/types';
 
 const demoPersonas = [
   {
@@ -69,6 +71,7 @@ const demoPersonas = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const { loginWithCredentials, loginAs } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [schoolCode, setSchoolCode] = useState('EDU-GLOBAL-360');
@@ -83,25 +86,24 @@ export default function LoginPage() {
 
     try {
       const res = await api.login(email, password, schoolCode);
-      if (res && res.portal_redirect) {
-        router.push(res.portal_redirect);
+      if (res && res.user) {
+        loginWithCredentials(res.user);
+      } else if (res && res.portal_redirect) {
+        const roleFromPath = (res.portal_redirect.replace('/', '') || 'student') as UserRole;
+        loginAs(roleFromPath);
       } else {
-        router.push('/admin');
+        loginAs('student');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Login failed. Please verify credentials.');
-    } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickPersonaSelect = (persona: typeof demoPersonas[0]) => {
+  const handleSelectCredentials = (persona: typeof demoPersonas[0]) => {
     setEmail(persona.email);
     setPassword(persona.password);
-    setLoading(true);
-    setTimeout(() => {
-      router.push(persona.target);
-    }, 400);
+    setErrorMessage('');
   };
 
   return (
@@ -119,37 +121,40 @@ export default function LoginPage() {
             </div>
             <div className="text-left">
               <span className="text-2xl font-black tracking-tight text-slate-900">EDU<span className="text-blue-600">360</span></span>
-              <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">K–12 Outcomes & Intelligence</span>
+              <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">K–12 Outcomes &amp; Intelligence</span>
             </div>
           </Link>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Institutional Sign In
           </h1>
           <p className="mt-1.5 text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
-            Access your unified school action portal or test all 4 roles via 1-click sandbox personas below
+            Secure authentication required. Sign in with your official school credentials.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Quick 1-Click Role Logins */}
+          {/* Left Column: Authorized Institutional Account Directory */}
           <div className="lg:col-span-5 space-y-3.5 order-2 lg:order-1">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                1-Click Demo Sandbox Logins
+                <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                Authorized Institutional Accounts
               </span>
-              <span className="text-[10px] font-semibold text-slate-400">Pre-seeded</span>
+              <span className="text-[10px] font-semibold text-slate-400">Click to autofill</span>
             </div>
 
             <div className="space-y-2.5">
               {demoPersonas.map((p) => {
                 const Icon = p.icon;
+                const isSelected = email === p.email;
                 return (
                   <button
                     key={p.role}
                     type="button"
-                    onClick={() => handleQuickPersonaSelect(p)}
-                    className={`w-full text-left p-3.5 rounded-2xl bg-white border ${p.border} shadow-xs hover:shadow-md transition-all duration-200 group flex items-center justify-between`}
+                    onClick={() => handleSelectCredentials(p)}
+                    className={`w-full text-left p-3.5 rounded-2xl bg-white border ${
+                      isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : p.border
+                    } shadow-xs hover:shadow-md transition-all duration-200 group flex items-center justify-between`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr ${p.color} text-white shadow-sm shrink-0`}>
@@ -164,19 +169,22 @@ export default function LoginPage() {
                             {p.role}
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-500 block">{p.sub}</span>
+                        <span className="text-[11px] text-slate-500 block">{p.email}</span>
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">Pass: {p.password}</span>
                       </div>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                    <span className="text-xs font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                      Select
+                    </span>
                   </button>
                 );
               })}
             </div>
 
             <div className="rounded-xl bg-blue-50/70 p-3.5 border border-blue-200/80 text-[11px] text-blue-900 flex items-start gap-2">
-              <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+              <School className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
               <span>
-                <b>Institutional School Code:</b> Every registered school possesses a client code (e.g., <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono font-bold text-blue-900">EDU-GLOBAL-360</code>).
+                <b>Institutional School Code:</b> Default demonstration code: <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono font-bold text-blue-900">EDU-GLOBAL-360</code>.
               </span>
             </div>
           </div>

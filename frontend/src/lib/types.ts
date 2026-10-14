@@ -279,5 +279,7 @@ export interface ClassRecording {
   duration: string;
   video_url: string;
   thumbnail?: string;
+  thumbnail_url?: string;
   date: string;
+  date_recorded?: string;
 }

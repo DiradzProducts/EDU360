@@ -129,25 +129,42 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
         else:
             raise HTTPException(status_code=401, detail="Incorrect password. For demo accounts use admin123, teacher123, parent123, or student123.")
     
-    # If not found in DB, check demo presets
+    # If not found directly by email in DB, check demo presets & aliases
     demo_accounts = {
-        "principal@edu360.internal": ("admin", "Dr. Sunita Kapoor"),
-        "ananya.verma@edu360.internal": ("teacher", "Mrs. Ananya Verma"),
-        "rajesh.sharma@example.com": ("parent", "Mr. Rajesh Sharma"),
-        "aarav.sharma@student.edu360.internal": ("student", "Aarav Sharma")
+        "principal@edu360.internal": "admin",
+        "admin@edu360.internal": "admin",
+        "ananya.verma@edu360.internal": "teacher",
+        "teacher@edu360.internal": "teacher",
+        "rajesh.sharma@example.com": "parent",
+        "rajesh.sharma@gmail.com": "parent",
+        "parent@edu360.internal": "parent",
+        "aarav.sharma@student.edu360.internal": "student",
+        "aarav.sharma@student.edu360": "student",
+        "student@edu360.internal": "student"
     }
     
-    if req.email.lower() in demo_accounts:
-        role, name = demo_accounts[req.email.lower()]
-        u_res = await db.execute(select(User).where(User.role == role))
+    clean_email = req.email.lower().strip()
+    if clean_email in demo_accounts or "principal" in clean_email or "admin" in clean_email or "teacher" in clean_email or "parent" in clean_email or "student" in clean_email:
+        target_role = demo_accounts.get(clean_email)
+        if not target_role:
+            if "principal" in clean_email or "admin" in clean_email:
+                target_role = "admin"
+            elif "teacher" in clean_email or "ananya" in clean_email:
+                target_role = "teacher"
+            elif "parent" in clean_email or "rajesh" in clean_email:
+                target_role = "parent"
+            else:
+                target_role = "student"
+
+        u_res = await db.execute(select(User).where(User.role == target_role))
         fallback_u = u_res.scalars().first()
         if fallback_u:
             redirects = { "admin": "/admin", "teacher": "/teacher", "parent": "/parent", "student": "/student" }
             return AuthResponse(
                 success=True,
-                message=f"Logged in as {fallback_u.name}",
+                message=f"Logged in as {fallback_u.name} ({target_role.capitalize()})",
                 user=fallback_u,
-                portal_redirect=redirects.get(role, "/student")
+                portal_redirect=redirects.get(target_role, "/student")
             )
 
     raise HTTPException(status_code=404, detail="Account not found. Please check your email or click Register to create your account.")

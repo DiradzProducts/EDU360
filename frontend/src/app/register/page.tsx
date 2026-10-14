@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { UserRole } from '@/lib/types';
 
 const roleOptions = [
   {
@@ -72,6 +74,7 @@ const sampleClientCodes = [
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { loginWithCredentials, loginAs } = useAuth();
 
   // Step state
   const [schoolCode, setSchoolCode] = useState('EDU-GLOBAL-360');
@@ -143,12 +146,12 @@ export default function RegisterPage() {
       });
 
       setTimeout(() => {
-        if (res && res.portal_redirect) {
-          router.push(res.portal_redirect);
+        if (res && res.user) {
+          loginWithCredentials(res.user);
         } else {
-          router.push(`/${selectedRole}`);
+          loginAs(selectedRole as UserRole);
         }
-      }, 2000);
+      }, 1500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Registration failed. Please check inputs.');
       setLoading(false);
