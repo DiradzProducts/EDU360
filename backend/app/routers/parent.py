@@ -206,3 +206,105 @@ async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: As
         "message": "Digital Sign-off stamped with tamper-evident digital seal.",
         "clearance": clearance
     }
+
+# --- 7. Dual-Mode Parent-Teacher Connection & Sliding PTM Engine ---
+from app.routers.teacher import _ptm_slots, _ptm_event_config, _parent_teacher_notes
+from app.schemas.schemas import (
+    PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest,
+    ParentTeacherNoteResponse, ParentTeacherNoteCreate
+)
+
+@router.get("/ptm/event-config", response_model=PTMEventConfigResponse)
+@router.get("/ptm/config", response_model=PTMEventConfigResponse)
+async def get_parent_ptm_event_config():
+    return _ptm_event_config
+
+@router.get("/ptm/slots", response_model=list[PTMSlotResponse])
+async def get_parent_ptm_slots(scope: str = None):
+    if scope and scope != "ALL":
+        return [s for s in _ptm_slots if s["interaction_scope"] == scope or s["status"] == "BREAK"]
+    return _ptm_slots
+
+@router.post("/ptm/slots/{slot_id}/hold")
+async def parent_hold_ptm_slot(slot_id: str):
+    for slot in _ptm_slots:
+        if slot["id"] == slot_id:
+            if slot["status"] != "AVAILABLE":
+                raise HTTPException(status_code=400, detail="Slot is not available")
+            slot["status"] = "HELD"
+            return {"success": True, "message": "Slot held for 5 minutes", "slot": slot}
+    raise HTTPException(status_code=404, detail="PTM slot not found")
+
+@router.post("/ptm/slots/book", response_model=PTMSlotResponse)
+async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_db)):
+    for slot in _ptm_slots:
+        if slot["id"] == req.slot_id:
+            slot["status"] = "BOOKED"
+            slot["booked_student_id"] = req.booked_student_id
+            slot["booked_student_name"] = req.booked_student_name
+            slot["booked_class"] = req.booked_class
+            slot["booked_parent_id"] = req.booked_parent_id
+            slot["booked_parent_name"] = req.booked_parent_name
+            slot["interaction_scope"] = req.interaction_scope
+            slot["subject_name"] = req.subject_name
+            slot["is_sibling_combo"] = req.is_sibling_combo
+            slot["sibling_student_id"] = req.sibling_student_id
+            slot["sibling_student_name"] = req.sibling_student_name
+            slot["focus_table_agenda"] = req.focus_table_agenda or []
+            slot["meeting_url"] = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
+
+            # Closed-Loop Telemetry: Auto-update Focus Table if agenda items selected
+            if req.focus_table_agenda and req.booked_student_id:
+                ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.booked_student_id))
+                ft = ft_res.scalars().first()
+                if ft:
+                    agenda_str = ", ".join(req.focus_table_agenda)
+                    ft.teacher_action = f"[PTM Agenda Booked for 24 Oct]: {agenda_str}"
+                    ft.updated_at = datetime.datetime.utcnow()
+                    await db.commit()
+
+            return slot
+    raise HTTPException(status_code=404, detail="PTM slot not found")
+
+@router.get("/notes/{student_id}", response_model=list[ParentTeacherNoteResponse])
+async def get_parent_student_notes(student_id: int):
+    return [n for n in _parent_teacher_notes if n["student_id"] == student_id]
+
+@router.post("/notes", response_model=ParentTeacherNoteResponse)
+async def create_parent_note(req: ParentTeacherNoteCreate, db: AsyncSession = Depends(get_db)):
+    note_id = f"ptn-{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{len(_parent_teacher_notes)+1}"
+    created_at_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+    new_note = {
+        "id": note_id,
+        "interaction_scope": req.interaction_scope,
+        "student_id": req.student_id,
+        "student_name": req.student_name,
+        "student_class": req.student_class,
+        "parent_id": req.parent_id,
+        "parent_name": req.parent_name,
+        "parent_phone": req.parent_phone,
+        "teacher_id": req.teacher_id,
+        "teacher_name": req.teacher_name,
+        "subject_id": req.subject_id,
+        "subject_name": req.subject_name,
+        "homeroom_teacher_id": req.homeroom_teacher_id,
+        "note_type": req.note_type,
+        "content": req.content,
+        "created_at": created_at_str,
+        "is_focus_table_evidence": req.is_focus_table_evidence,
+        "focus_concept_tag": req.focus_concept_tag
+    }
+    _parent_teacher_notes.insert(0, new_note)
+
+    # Closed-loop telemetry to Focus Table if flagged as evidence
+    if req.is_focus_table_evidence:
+        ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.student_id))
+        ft = ft_res.scalars().first()
+        if ft:
+            evidence_tag = f"[{req.focus_concept_tag}] " if req.focus_concept_tag else ""
+            ft.teacher_action = f"[Parent Note {created_at_str}] {evidence_tag}{req.content}"
+            ft.updated_at = datetime.datetime.utcnow()
+            await db.commit()
+
+    return new_note
+

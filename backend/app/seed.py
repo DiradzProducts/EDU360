@@ -7,7 +7,8 @@ from app.models.models import (
     Event, EventStaffAssignment, VendorEquipment, ExitClearance,
     LiveClass, AttendanceRecord, Homework, HomeworkSubmission,
     FocusTable, LeaveRequest, FeeMilestone, BusRoute,
-    StudentPortfolio, ClassRecording, InventoryItem, StaffMember
+    StudentPortfolio, ClassRecording, InventoryItem, StaffMember,
+    StudentGamification, DailyQuest, MagicBoosterChest
 )
 
 async def seed_data():
@@ -22,16 +23,18 @@ async def seed_data():
             User(id=2, name="Mrs. Ananya Verma", email="ananya.verma@edu360.internal", role="teacher", avatar="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150", phone="+91 98111 00002"),
             User(id=3, name="Mr. Rajesh Sharma", email="rajesh.sharma@example.com", role="parent", avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", phone="+91 98111 00003"),
             User(id=4, name="Aarav Sharma", email="aarav.sharma@student.edu360.internal", role="student", avatar="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150", phone="+91 98111 00004"),
+            User(id=5, name="Aarav Kumar", email="aarav.junior@student.edu360.internal", role="student", avatar="https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150", phone="+91 98111 00005"),
         ]
         db.add_all(users)
 
         # 2. Students
         students = [
-            Student(id=1, user_id=4, name="Aarav Sharma", roll_no="14", class_name="Class 8", section="B", admission_no="EDU-2024-082", guardian_name="Mr. Rajesh Sharma", guardian_phone="+91 98111 00003", guardian_email="rajesh.sharma@example.com", attendance_pct=91.4, bus_route_id=1, academic_average_pct=76.8, status="Active"),
-            Student(id=2, user_id=None, name="Diya Patel", roll_no="18", class_name="Class 8", section="B", admission_no="EDU-2024-083", guardian_name="Mrs. Sunita Patel", guardian_phone="+91 98222 11111", guardian_email="sunita.patel@example.com", attendance_pct=96.0, bus_route_id=1, academic_average_pct=92.5, status="Active"),
-            Student(id=3, user_id=None, name="Rohan Iyer", roll_no="22", class_name="Class 8", section="B", admission_no="EDU-2024-084", guardian_name="Mr. S. Iyer", guardian_phone="+91 98333 22222", guardian_email="s.iyer@example.com", attendance_pct=88.2, bus_route_id=1, academic_average_pct=81.0, status="Active"),
-            Student(id=4, user_id=None, name="Ananya Gupta", roll_no="04", class_name="Class 8", section="B", admission_no="EDU-2024-085", guardian_name="Mr. P. Gupta", guardian_phone="+91 98444 33333", guardian_email="p.gupta@example.com", attendance_pct=94.5, bus_route_id=1, academic_average_pct=89.0, status="Active"),
-            Student(id=5, user_id=None, name="Kabir Mehta", roll_no="15", class_name="Class 8", section="B", admission_no="EDU-2024-086", guardian_name="Mrs. R. Mehta", guardian_phone="+91 98555 44444", guardian_email="r.mehta@example.com", attendance_pct=72.0, bus_route_id=1, academic_average_pct=64.2, status="Active"),
+            Student(id=1, user_id=4, name="Aarav Sharma", roll_no="14", class_name="Class 8", section="B", admission_no="EDU-2024-082", guardian_name="Mr. Rajesh Sharma", guardian_phone="+91 98111 00003", guardian_email="rajesh.sharma@example.com", attendance_pct=91.4, bus_route_id=1, academic_average_pct=76.8, status="Active", grade_tier="secondary", age=14),
+            Student(id=2, user_id=None, name="Diya Patel", roll_no="18", class_name="Class 8", section="B", admission_no="EDU-2024-083", guardian_name="Mrs. Sunita Patel", guardian_phone="+91 98222 11111", guardian_email="sunita.patel@example.com", attendance_pct=96.0, bus_route_id=1, academic_average_pct=92.5, status="Active", grade_tier="secondary", age=14),
+            Student(id=3, user_id=None, name="Rohan Iyer", roll_no="22", class_name="Class 8", section="B", admission_no="EDU-2024-084", guardian_name="Mr. S. Iyer", guardian_phone="+91 98333 22222", guardian_email="s.iyer@example.com", attendance_pct=88.2, bus_route_id=1, academic_average_pct=81.0, status="Active", grade_tier="secondary", age=14),
+            Student(id=4, user_id=None, name="Ananya Gupta", roll_no="04", class_name="Class 8", section="B", admission_no="EDU-2024-085", guardian_name="Mr. P. Gupta", guardian_phone="+91 98444 33333", guardian_email="p.gupta@example.com", attendance_pct=94.5, bus_route_id=1, academic_average_pct=89.0, status="Active", grade_tier="secondary", age=14),
+            Student(id=5, user_id=None, name="Kabir Mehta", roll_no="15", class_name="Class 8", section="B", admission_no="EDU-2024-086", guardian_name="Mrs. R. Mehta", guardian_phone="+91 98555 44444", guardian_email="r.mehta@example.com", attendance_pct=72.0, bus_route_id=1, academic_average_pct=64.2, status="Active", grade_tier="secondary", age=13),
+            Student(id=6, user_id=5, name="Aarav Kumar", roll_no="08", class_name="Class 3-A", section="A", admission_no="EDU-2025-032", guardian_name="Mr. Rajesh Sharma", guardian_phone="+91 98111 00003", guardian_email="rajesh.sharma@example.com", attendance_pct=94.2, bus_route_id=1, academic_average_pct=88.5, status="Active", grade_tier="k5", age=8, avatar_character_url="https://api.dicebear.com/7.x/bottts/svg?seed=AaravJunior3D"),
         ]
         db.add_all(students)
 
@@ -315,14 +318,14 @@ async def seed_data():
 
         bus = BusRoute(
             id=1,
-            route_number="Route 4",
-            driver_name="Ramesh Kumar",
+            route_number="Route #4",
+            driver_name="Uncle Ramesh",
             driver_phone="+91 98450 12345",
             vehicle_no="KA-01-EB-4412",
             stops_json=bus_stops,
             current_stop_idx=2,
-            live_status="Moving smoothly • 8 mins to Aarav's Stop",
-            eta_mins=8
+            live_status="Moving smoothly • 2 Stops Away • 3 Mins ETA",
+            eta_mins=3
         )
         db.add(bus)
 
@@ -360,6 +363,117 @@ async def seed_data():
             InventoryItem(id=4, name="Dell OptiPlex Core i7 Desktop Terminals", category="IT Hardware", total_quantity=60, issued_quantity=58, damaged_quantity=0, min_threshold=5, status="Optimal"),
         ]
         db.add_all(inventory)
+
+        # 20. Junior Gamification (K-5 Junior Explorer Engine)
+        gamifications = [
+            StudentGamification(
+                id=1,
+                student_id=6,  # Aarav Kumar (Junior Explorer, Class 3-A)
+                level=3,
+                level_title="Explorer",
+                xp_points=450,
+                total_stars=180,
+                attendance_streak_days=7,
+                sound_effects_enabled=True
+            ),
+            StudentGamification(
+                id=2,
+                student_id=1,  # Aarav Sharma (Secondary, Class 8)
+                level=5,
+                level_title="Scholar",
+                xp_points=720,
+                total_stars=340,
+                attendance_streak_days=5,
+                sound_effects_enabled=True
+            )
+        ]
+        db.add_all(gamifications)
+
+        # 21. Daily Homework Quests with Star Rewards
+        quests = [
+            DailyQuest(
+                id=1,
+                student_id=6,
+                title="Count & Color 10 Stars in Chapter 2 Workbook",
+                subject="Math",
+                xp_reward=25,
+                stars_reward=50,
+                status="active",
+                teacher_reaction="Super Star! ⭐ - Ms. Priya",
+                proof_image_url=None,
+                due_date="Today, 4:00 PM"
+            ),
+            DailyQuest(
+                id=2,
+                student_id=6,
+                title="Draw and Name 3 Farm Animals",
+                subject="Art & Nature",
+                xp_reward=30,
+                stars_reward=60,
+                status="active",
+                teacher_reaction="Creative Genius! 🎨 - Ms. Neha",
+                proof_image_url=None,
+                due_date="Tomorrow, 10:00 AM"
+            ),
+            DailyQuest(
+                id=3,
+                student_id=6,
+                title="Read Aloud: The Magic Treehouse (Ch 1)",
+                subject="English Phonics",
+                xp_reward=20,
+                stars_reward=40,
+                status="completed",
+                teacher_reaction="Brilliant Pronunciation! 🌟 - Ms. Priya",
+                proof_image_url="/samples/storybook_audio_proof.png",
+                due_date="Yesterday"
+            )
+        ]
+        db.add_all(quests)
+
+        # 22. Magic Power Booster (4-Day Focus Table with Treasure Chests)
+        chests = [
+            MagicBoosterChest(
+                id=1,
+                student_id=6,
+                concept_title="Number Counting & Phonics",
+                day_number=1,
+                day_task_title="Count 1 to 20 with Number Blocks",
+                status="completed_claimed",
+                chest_stars=30,
+                parent_signed=True
+            ),
+            MagicBoosterChest(
+                id=2,
+                student_id=6,
+                concept_title="Number Counting & Phonics",
+                day_number=2,
+                day_task_title="Find & Circle 5 Rhyming Words",
+                status="ready_to_open",
+                chest_stars=30,
+                parent_signed=True
+            ),
+            MagicBoosterChest(
+                id=3,
+                student_id=6,
+                concept_title="Number Counting & Phonics",
+                day_number=3,
+                day_task_title="Solve 3 Animal Addition Riddles",
+                status="locked",
+                chest_stars=40,
+                parent_signed=False
+            ),
+            MagicBoosterChest(
+                id=4,
+                student_id=6,
+                concept_title="Number Counting & Phonics",
+                day_number=4,
+                day_task_title="Draw the Treasure Map & Spell 5 Words",
+                status="locked",
+                chest_stars=50,
+                parent_signed=False
+            )
+        ]
+        db.add_all(chests)
 
         await db.commit()
         print("EDU360 seed data populated successfully!")

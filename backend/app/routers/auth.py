@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.models.models import User
+from app.models.models import User, Student
 from app.schemas.schemas import (
     UserResponse, 
     SchoolCodeVerifyRequest, 
@@ -104,13 +104,29 @@ async def register_user(req: UserRegisterRequest, db: AsyncSession = Depends(get
         portal_redirect=redirects.get(role_clean, "/student")
     )
 
+async def resolve_student_tier_details(user: User, db: AsyncSession):
+    """Helper to determine grade_tier ('k5' vs 'secondary') and student_id for student accounts."""
+    if not user or user.role != "student":
+        return "secondary", False, None
+    s_res = await db.execute(select(Student).where(Student.user_id == user.id))
+    student = s_res.scalars().first()
+    if not student:
+        s_res = await db.execute(select(Student).where(Student.name == user.name))
+        student = s_res.scalars().first()
+    
+    if student:
+        tier = student.grade_tier or ("k5" if any(k in student.class_name.lower() for k in ["3", "1", "2", "4", "5", "nursery", "kg", "prep"]) else "secondary")
+        return tier, (tier == "k5"), student.id
+    return "secondary", False, None
+
 @router.post("/login", response_model=AuthResponse)
 async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
-    # Look up by email
-    result = await db.execute(select(User).where(User.email == req.email.lower().strip()))
+    clean_email = req.email.lower().strip()
+    
+    # 1. Look up directly by email
+    result = await db.execute(select(User).where(User.email == clean_email))
     user = result.scalars().first()
 
-    # Accept demo password shortcuts if user exists
     default_passwords = ["admin123", "teacher123", "parent123", "student123", "password123"]
     if user:
         if user.password == req.password or req.password in default_passwords or req.password == "123456":
@@ -120,16 +136,25 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
                 "parent": "/parent",
                 "student": "/student"
             }
+            grade_tier, is_junior, student_id = await resolve_student_tier_details(user, db)
+            user_dto = UserResponse.model_validate(user)
+            user_dto.grade_tier = grade_tier
+            user_dto.is_junior_k5 = is_junior
+            user_dto.student_id = student_id
+
             return AuthResponse(
                 success=True,
                 message=f"Logged in successfully as {user.name} ({user.role.capitalize()})",
-                user=user,
-                portal_redirect=redirects.get(user.role.lower(), "/student")
+                user=user_dto,
+                portal_redirect=redirects.get(user.role.lower(), "/student"),
+                grade_tier=grade_tier,
+                is_junior_k5=is_junior,
+                student_id=student_id
             )
         else:
             raise HTTPException(status_code=401, detail="Incorrect password. For demo accounts use admin123, teacher123, parent123, or student123.")
     
-    # If not found directly by email in DB, check demo presets & aliases
+    # 2. Demo Presets & Role Aliases
     demo_accounts = {
         "principal@edu360.internal": "admin",
         "admin@edu360.internal": "admin",
@@ -140,13 +165,24 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
         "parent@edu360.internal": "parent",
         "aarav.sharma@student.edu360.internal": "student",
         "aarav.sharma@student.edu360": "student",
+        "aarav.junior@student.edu360.internal": "junior",
+        "junior@edu360.internal": "junior",
+        "aarav.kumar@student.edu360.internal": "junior",
         "student@edu360.internal": "student"
     }
-    
-    clean_email = req.email.lower().strip()
-    if clean_email in demo_accounts or "principal" in clean_email or "admin" in clean_email or "teacher" in clean_email or "parent" in clean_email or "student" in clean_email:
+
+    if clean_email in demo_accounts or any(k in clean_email for k in ["principal", "admin", "teacher", "parent", "junior", "student"]):
         target_role = demo_accounts.get(clean_email)
-        if not target_role:
+        fallback_u = None
+
+        if target_role == "junior" or "junior" in clean_email:
+            # Look up dedicated junior student account
+            j_res = await db.execute(select(User).where(User.email.like("%junior%")))
+            fallback_u = j_res.scalars().first()
+            if not fallback_u:
+                j_res = await db.execute(select(User).where(User.name.like("%Kumar%")))
+                fallback_u = j_res.scalars().first()
+        elif not target_role:
             if "principal" in clean_email or "admin" in clean_email:
                 target_role = "admin"
             elif "teacher" in clean_email or "ananya" in clean_email:
@@ -156,15 +192,26 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
             else:
                 target_role = "student"
 
-        u_res = await db.execute(select(User).where(User.role == target_role))
-        fallback_u = u_res.scalars().first()
+        if not fallback_u and target_role:
+            u_res = await db.execute(select(User).where(User.role == target_role))
+            fallback_u = u_res.scalars().first()
+
         if fallback_u:
             redirects = { "admin": "/admin", "teacher": "/teacher", "parent": "/parent", "student": "/student" }
+            grade_tier, is_junior, student_id = await resolve_student_tier_details(fallback_u, db)
+            user_dto = UserResponse.model_validate(fallback_u)
+            user_dto.grade_tier = grade_tier
+            user_dto.is_junior_k5 = is_junior
+            user_dto.student_id = student_id
+
             return AuthResponse(
                 success=True,
-                message=f"Logged in as {fallback_u.name} ({target_role.capitalize()})",
-                user=fallback_u,
-                portal_redirect=redirects.get(target_role, "/student")
+                message=f"Logged in as {fallback_u.name} ({fallback_u.role.capitalize()})",
+                user=user_dto,
+                portal_redirect=redirects.get(fallback_u.role.lower(), "/student"),
+                grade_tier=grade_tier,
+                is_junior_k5=is_junior,
+                student_id=student_id
             )
 
     raise HTTPException(status_code=404, detail="Account not found. Please check your email or click Register to create your account.")
@@ -172,12 +219,36 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
 @router.get("/users", response_model=list[UserResponse])
 async def list_demo_users(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User))
-    return result.scalars().all()
+    users = result.scalars().all()
+    out = []
+    for u in users:
+        grade_tier, is_junior, student_id = await resolve_student_tier_details(u, db)
+        user_dto = UserResponse.model_validate(u)
+        user_dto.grade_tier = grade_tier
+        user_dto.is_junior_k5 = is_junior
+        user_dto.student_id = student_id
+        out.append(user_dto)
+    return out
 
 @router.get("/current/{role}", response_model=UserResponse)
 async def get_user_by_role(role: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.role == role.lower()))
-    user = result.scalars().first()
+    clean_role = role.lower().strip()
+    if clean_role in ["junior", "junior_student", "k5"]:
+        result = await db.execute(select(User).where(User.email.like("%junior%")))
+        user = result.scalars().first()
+        if not user:
+            result = await db.execute(select(User).where(User.name.like("%Kumar%")))
+            user = result.scalars().first()
+    else:
+        result = await db.execute(select(User).where(User.role == clean_role))
+        user = result.scalars().first()
+
     if not user:
         raise HTTPException(status_code=404, detail=f"No default user found for role {role}")
-    return user
+    
+    grade_tier, is_junior, student_id = await resolve_student_tier_details(user, db)
+    user_dto = UserResponse.model_validate(user)
+    user_dto.grade_tier = grade_tier
+    user_dto.is_junior_k5 = is_junior
+    user_dto.student_id = student_id
+    return user_dto

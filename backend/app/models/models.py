@@ -30,6 +30,28 @@ class Student(Base):
     bus_route_id = Column(Integer, nullable=True)
     academic_average_pct = Column(Float, default=78.4)
     status = Column(String(20), default="Active")
+    grade_tier = Column(String(20), default="secondary")  # 'k5' or 'secondary'
+    age = Column(Integer, default=14, nullable=True)
+    avatar_character_url = Column(String(255), nullable=True)
+
+def determine_grade_tier(class_name: str) -> str:
+    """Helper to classify student grade tier into 'k5' or 'secondary'."""
+    if not class_name:
+        return "secondary"
+    lower = class_name.lower().strip()
+    k5_keywords = ["nursery", "lkg", "ukg", "kg", "prep", "kindergarten", "primary", "junior"]
+    for kw in k5_keywords:
+        if kw in lower:
+            return "k5"
+    import re
+    match = re.search(r'\b(?:class|grade)?\s*([0-9]+)\b', lower)
+    if match:
+        val = int(match.group(1))
+        if 1 <= val <= 5:
+            return "k5"
+        elif val > 5:
+            return "secondary"
+    return "secondary"
 
 class OfficialDocument(Base):
     __tablename__ = "official_documents"
@@ -278,3 +300,42 @@ class StaffMember(Base):
     phone = Column(String(30), nullable=False)
     attendance_status = Column(String(20), default="Present")
     salary_slip_ready = Column(Boolean, default=True)
+
+class StudentGamification(Base):
+    __tablename__ = "student_gamifications"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), unique=True, nullable=False)
+    level = Column(Integer, default=1)  # e.g., Level 3
+    level_title = Column(String(50), default="Junior Explorer")  # e.g., "Explorer", "Star Voyager"
+    xp_points = Column(Integer, default=0)
+    total_stars = Column(Integer, default=0)
+    attendance_streak_days = Column(Integer, default=1)  # 7-Day fire streak
+    sound_effects_enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class DailyQuest(Base):
+    __tablename__ = "daily_quests"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    title = Column(String(150), nullable=False)  # e.g. "Count & Color 10 Stars in Chapter 2 Workbook"
+    subject = Column(String(50), nullable=False)  # Math, English, Art
+    xp_reward = Column(Integer, default=25)
+    stars_reward = Column(Integer, default=50)
+    status = Column(String(30), default="active")  # active, submitted, completed
+    teacher_reaction = Column(String(100), default="Super Star! ⭐ - Ms. Priya")
+    proof_image_url = Column(String(255), nullable=True)
+    due_date = Column(String(50), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class MagicBoosterChest(Base):
+    __tablename__ = "magic_booster_chests"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    concept_title = Column(String(100), nullable=False)  # "Number Counting & Phonics"
+    day_number = Column(Integer, nullable=False)  # 1, 2, 3, 4
+    day_task_title = Column(String(150), nullable=False)
+    status = Column(String(30), default="locked")  # completed_claimed, ready_to_open, locked
+    chest_stars = Column(Integer, default=30)
+    parent_signed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
