@@ -5,14 +5,16 @@ from sqlalchemy import select, update
 from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
-    LeaveRequest, ExitClearance
+    LeaveRequest, ExitClearance, Homework
 )
 from app.schemas.schemas import (
     FocusTableResponse, HomeworkSubmissionResponse, BusRouteResponse,
     FeeMilestoneResponse, FeePayRequest,
     LeaveRequestCreate, LeaveRequestResponse,
-    ExitClearanceResponse, ExitClearanceDigitalSign
+    ExitClearanceResponse, ExitClearanceDigitalSign,
+    AcademicComplianceResponse, HomeworkResponse
 )
+from app.services.backlog_engine import BacklogEngine
 
 router = APIRouter(prefix="/api/parent", tags=["parent"])
 
@@ -95,6 +97,25 @@ async def toggle_parent_checklist(table_id: int, db: AsyncSession = Depends(get_
 async def get_child_homework_submissions(student_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(HomeworkSubmission).where(HomeworkSubmission.student_id == student_id))
     return result.scalars().all()
+
+@router.get("/today-homework/{student_id}", response_model=list[HomeworkResponse])
+async def get_child_today_homework(student_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Retrieve current-day homework tasks only to keep the parent profile clean and uncluttered.
+    """
+    # System simulated current date is 2026-10-18
+    today_str = "2026-10-18"
+    result = await db.execute(select(Homework).where(Homework.due_date == today_str))
+    items = result.scalars().all()
+    if not items:
+        # Fallback to daily homework due closest to current date
+        fallback_res = await db.execute(select(Homework).where(Homework.task_type == "DAILY_HOMEWORK").order_by(Homework.id.desc()).limit(2))
+        items = fallback_res.scalars().all()
+    return items
+
+@router.get("/academic-compliance/{student_id}", response_model=AcademicComplianceResponse)
+async def get_child_academic_compliance(student_id: int, db: AsyncSession = Depends(get_db)):
+    return await BacklogEngine.get_compliance_dossier(db, student_id)
 
 # --- 3. Live Bus GPS Tracker ---
 @router.get("/bus-tracker/{student_id}", response_model=BusRouteResponse)

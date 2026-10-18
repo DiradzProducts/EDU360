@@ -8,7 +8,7 @@ from app.models.models import (
     LiveClass, AttendanceRecord, Homework, HomeworkSubmission,
     FocusTable, LeaveRequest, FeeMilestone, BusRoute,
     StudentPortfolio, ClassRecording, InventoryItem, StaffMember,
-    StudentGamification, DailyQuest, MagicBoosterChest
+    StudentGamification, DailyQuest, MagicBoosterChest, BacklogEvent
 )
 
 async def seed_data():
@@ -223,19 +223,167 @@ async def seed_data():
         ]
         db.add_all(att_records)
 
-        # 11. Homework & Submissions
-        hw = Homework(
-            id=1,
-            title="Worksheet #4: Solving Quadratics by Factoring",
-            subject="Mathematics",
-            class_name="Class 8B",
-            description="Complete Q1 to Q5 showing all intermediate calculation steps for quadratic roots.",
-            due_date="15 Oct 2026",
-            teacher_id=2,
-            teacher_name="Mrs. Ananya Verma",
-            max_marks=20
-        )
-        db.add(hw)
+        # 11. Homework & Submissions (Daily Homework vs Long-term Assignments)
+        homeworks_data = [
+            Homework(
+                id=1,
+                title="Worksheet #4: Solving Quadratics by Factoring",
+                subject="Mathematics",
+                class_name="Class 8B",
+                description="Complete Q1 to Q10 showing all intermediate calculation steps for quadratic roots. Mandatory step documentation.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-15",
+                due_time="17:00",
+                status="BACKLOG",
+                assigned_date="2026-10-12",
+                teacher_id=2,
+                teacher_name="Mrs. Ananya Verma",
+                max_marks=20,
+                resource_url="/samples/math_worksheet.png",
+                weightage="Daily Practice (5 pts)"
+            ),
+            Homework(
+                id=2,
+                title="Constitutional Rights Comparative Analysis Case Study",
+                subject="Social Science",
+                class_name="Class 8B",
+                description="Comparative study of Right to Equality (Articles 14-18) vs Right to Freedom (Articles 19-22) with 2 landmark Supreme Court cases.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-13",
+                due_time="16:00",
+                status="SUBMITTED",
+                assigned_date="2026-10-10",
+                teacher_id=3,
+                teacher_name="Mrs. Kalyani Murthy",
+                max_marks=20,
+                resource_url="/samples/civics_handout.pdf",
+                weightage="Daily Practice (5 pts)"
+            ),
+            Homework(
+                id=3,
+                title="The Merchant of Venice: Portia's Mercy Speech Critical Analysis",
+                subject="English Literature",
+                class_name="Class 8B",
+                description="Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia's argument on divine mercy against Shylock's legal bond insistence.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-18",
+                due_time="17:00",
+                status="PENDING",
+                assigned_date="2026-10-14",
+                teacher_id=4,
+                teacher_name="Mrs. Sunitha Rao",
+                max_marks=15,
+                resource_url="/samples/merchant_of_venice_act4.pdf",
+                weightage="Weekly Essay (10 pts)"
+            ),
+            Homework(
+                id=4,
+                title="Force & Laws of Motion: Newton's Third Law Lab Sheet",
+                subject="Physics",
+                class_name="Class 8B",
+                description="Experimental verification of action-reaction pairs using dual spring balances. Free-body diagram calculations and error margins.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-10",
+                due_time="17:00",
+                status="GRADED",
+                assigned_date="2026-10-06",
+                teacher_id=5,
+                teacher_name="Dr. K. Raman",
+                max_marks=20,
+                resource_url="/samples/physics_spring_lab.pdf",
+                weightage="Lab Assessment (20 pts)"
+            ),
+            Homework(
+                id=5,
+                title="Chemical Reactions: Redox Equations Balancing Practice",
+                subject="Chemistry",
+                class_name="Class 8B",
+                description="Complete balancing for 25 redox reactions, decomposition equations, and displacement reactions with stoichiometric coefficient validation.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-17",
+                due_time="18:00",
+                status="PENDING",
+                assigned_date="2026-10-15",
+                teacher_id=6,
+                teacher_name="Mrs. S. Sen",
+                max_marks=20,
+                resource_url="/samples/chemistry_worksheet_5.pdf",
+                weightage="Daily Practice (5 pts)"
+            ),
+            Homework(
+                id=6,
+                title="Cell Division: Mitosis & Meiosis Stages Comparison Chart",
+                subject="Biology",
+                class_name="Class 8B",
+                description="Hand-drawn structural diagrams of chromosomes during Metaphase and Anaphase with spindle fiber attachments and centriole positions.",
+                task_type="DAILY_HOMEWORK",
+                due_date="2026-10-19",
+                due_time="17:00",
+                status="PENDING",
+                assigned_date="2026-10-16",
+                teacher_id=7,
+                teacher_name="Dr. Shalini Gupta",
+                max_marks=20,
+                resource_url="/samples/biology_cell_diagram.pdf",
+                weightage="Daily Practice (5 pts)"
+            ),
+            # Long-Term Assignments & Projects
+            Homework(
+                id=7,
+                title="Autonomous Mars Rover & Sensor Array Capstone Project",
+                subject="STEM & Robotics",
+                class_name="Class 8B",
+                description="End-to-end hardware-software prototype with ultrasonic obstacle detection, ESP32 telemetry streaming, and a responsive web telemetry dashboard.",
+                task_type="ASSIGNMENT",
+                due_date="2026-10-28",
+                due_time="18:00",
+                status="PENDING",
+                assigned_date="2026-10-01",
+                teacher_id=2,
+                teacher_name="Mr. Rajesh Nambiar",
+                max_marks=50,
+                resource_url="/samples/Mars_Rover_Capstone_Brief.pdf",
+                weightage="25% of Term 1 Final Grade",
+                progress_pct=65.0
+            ),
+            Homework(
+                id=8,
+                title="National History Monograph: The Indian Constitution Evolution",
+                subject="Social Science",
+                class_name="Class 8B",
+                description="1500-word academic monograph referencing Constituent Assembly debates, B.R. Ambedkar committee drafts, and modern fundamental rights jurisprudence.",
+                task_type="ASSIGNMENT",
+                due_date="2026-11-05",
+                due_time="23:59",
+                status="PENDING",
+                assigned_date="2026-10-05",
+                teacher_id=3,
+                teacher_name="Mrs. Kalyani Murthy",
+                max_marks=40,
+                resource_url="/samples/Constitution_Monograph_Guidelines.pdf",
+                weightage="15% of Term 1 Final Grade",
+                progress_pct=40.0
+            ),
+            Homework(
+                id=9,
+                title="Full-Stack Data Visualization Portal with Python & SQLite",
+                subject="Computer Science",
+                class_name="Class 8B",
+                description="Develop a relational database client with normalized schemas, REST API endpoints, interactive Chart.js visualization, and unit test coverage.",
+                task_type="ASSIGNMENT",
+                due_date="2026-11-14",
+                due_time="23:59",
+                status="PENDING",
+                assigned_date="2026-10-08",
+                teacher_id=2,
+                teacher_name="Mr. Rajesh Nambiar",
+                max_marks=50,
+                resource_url="/samples/CS_Portal_Project_Blueprint.zip",
+                weightage="20% of Term 1 Final Grade",
+                progress_pct=20.0
+            )
+        ]
+        db.add_all(homeworks_data)
 
         sample_annotations = json.dumps([
             {"type": "tick", "x": 190, "y": 140, "color": "#10B981"},
@@ -244,21 +392,71 @@ async def seed_data():
             {"type": "text", "x": 430, "y": 415, "text": "Check sign in Q4: (-b ± √Δ)/(2a)", "color": "#EF4444"}
         ])
 
-        hw_sub = HomeworkSubmission(
+        submissions_data = [
+            HomeworkSubmission(
+                id=1,
+                homework_id=4,
+                student_id=1,
+                student_name="Aarav Sharma",
+                original_file_url="/samples/physics_spring_lab.pdf",
+                annotated_file_url="/samples/physics_spring_lab.pdf",
+                annotations_json=sample_annotations,
+                marks_obtained=18.5,
+                teacher_remarks="Outstanding derivation of action-reaction pairs in Q2. In Q4, double check signs when stating vector direction. Solid work overall!",
+                status="graded",
+                submitted_at=datetime.datetime(2026, 10, 9, 14, 20),
+                graded_at=datetime.datetime(2026, 10, 11, 10, 15),
+                late_submission=False,
+                is_backlog=False
+            ),
+            HomeworkSubmission(
+                id=2,
+                homework_id=2,
+                student_id=1,
+                student_name="Aarav Sharma",
+                original_file_url="/samples/civics_handout.pdf",
+                annotated_file_url=None,
+                annotations_json=None,
+                marks_obtained=None,
+                teacher_remarks=None,
+                status="submitted",
+                submitted_at=datetime.datetime(2026, 10, 13, 15, 45),
+                late_submission=False,
+                is_backlog=False
+            ),
+            HomeworkSubmission(
+                id=3,
+                homework_id=1,
+                student_id=1,
+                student_name="Aarav Sharma",
+                original_file_url="",
+                status="backlog",
+                is_backlog=True,
+                late_submission=False,
+                submitted_at=datetime.datetime(2026, 10, 15, 17, 1)
+            )
+        ]
+        db.add_all(submissions_data)
+
+        # 11b. Backlog Evidence Event
+        backlog_ev = BacklogEvent(
             id=1,
-            homework_id=1,
             student_id=1,
-            student_name="Aarav Sharma",
-            original_file_url="/samples/math_worksheet.png",
-            annotated_file_url="/samples/math_worksheet.png",
-            annotations_json=sample_annotations,
-            marks_obtained=17.5,
-            teacher_remarks="Impressive factoring in Q1 and Q2! In Q4, please double-check the negative sign in the discriminant formula before squaring.",
-            status="graded",
-            submitted_at=datetime.datetime.utcnow() - datetime.timedelta(days=1),
-            graded_at=datetime.datetime.utcnow() - datetime.timedelta(hours=4)
+            homework_id=1,
+            focus_table_id=1,
+            evidence_code="#EVD-BKLOG-884",
+            subject="Mathematics",
+            title="Worksheet #4: Solving Quadratics by Factoring",
+            task_type="DAILY_HOMEWORK",
+            due_date="2026-10-15",
+            due_time="17:00",
+            status="UNRESOLVED",
+            detected_at=datetime.datetime(2026, 10, 15, 17, 15),
+            late_submission=False,
+            teacher_name="Mrs. Ananya Verma",
+            notes="Student failed to submit Textbook Exercise 4.2 before the scheduled cutoff (15 Oct 2026, 05:00 PM). The system automatically transitioned the assignment to Backlog status. Tagged as verified evidence for parent progress review."
         )
-        db.add(hw_sub)
+        db.add(backlog_ev)
 
         # 12. Focus Table (Per-Student Shared Teacher-Parent Tool)
         focus_plan_json = json.dumps({
@@ -268,6 +466,15 @@ async def seed_data():
                 {"day": "Day 3 (Wed)", "focus": "Discriminant (b² - 4ac) Calculation & Signs", "exercise": "Revisit teacher corrections on Worksheet #4 and fix Q4.", "parent_checklist": "Checked corrected formula with student.", "status": "In Progress"},
                 {"day": "Day 4 (Thu)", "focus": "Timed 15-Minute Rapid Assessment", "exercise": "Attempt 6 online micro-quiz questions on EDU360 portal.", "parent_checklist": "Verify score submission.", "status": "Upcoming"}
             ]
+        })
+
+        compliance_summary_json = json.dumps({
+            "total_assigned": 9,
+            "on_time_submissions": 2,
+            "late_submissions": 0,
+            "backlog_count": 1,
+            "compliance_pct": 88.9,
+            "last_scanned_at": "2026-10-17T21:57:00Z"
         })
 
         focus_table = FocusTable(
@@ -281,7 +488,9 @@ async def seed_data():
             revision_plan_json=focus_plan_json,
             teacher_action="Host 5-min 1-on-1 doubt clearing session during zero period on Thursday.",
             parent_check_completed=True,
-            status="in_progress"
+            status="in_progress",
+            backlog_count=1,
+            academic_compliance_json=compliance_summary_json
         )
         db.add(focus_table)
 

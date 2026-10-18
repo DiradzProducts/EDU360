@@ -10,8 +10,8 @@ from app.models.models import (
 )
 from app.schemas.schemas import (
     LiveClassResponse, AttendanceRecordResponse, AttendanceJoinSimulate, AttendanceOverride,
-    HomeworkResponse, HomeworkSubmissionResponse, HomeworkSubmissionGrade,
-    FocusTableResponse, FocusTableUpdate,
+    HomeworkResponse, HomeworkSubmissionResponse, HomeworkSubmissionGrade, HomeworkCreate,
+    FocusTableResponse, FocusTableUpdate, BacklogEventResponse,
     LeaveRequestResponse, LeaveRequestReview,
     TeacherPersonalScheduleResponse, FacultyDutyTaskResponse, 
     UpdateDutyPaperCountRequest, ToggleDutyChecklistRequest,
@@ -96,9 +96,36 @@ async def override_attendance_record(class_id: int, record_id: int, req: Attenda
 
 # --- 2. Inline Homework Grading Canvas ---
 @router.get("/homework", response_model=list[HomeworkResponse])
-async def list_teacher_homework(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Homework).order_by(Homework.id.desc()))
+async def list_teacher_homework(task_type: str = None, db: AsyncSession = Depends(get_db)):
+    stmt = select(Homework)
+    if task_type:
+        stmt = stmt.where(Homework.task_type == task_type)
+    result = await db.execute(stmt.order_by(Homework.id.desc()))
     return result.scalars().all()
+
+@router.post("/homework", response_model=HomeworkResponse)
+async def create_teacher_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
+    new_hw = Homework(
+        title=req.title,
+        subject=req.subject,
+        class_name=req.class_name,
+        description=req.description,
+        task_type=req.task_type,
+        due_date=req.due_date,
+        due_time=req.due_time,
+        status="PENDING",
+        assigned_date=datetime.date.today().isoformat(),
+        teacher_id=req.teacher_id,
+        teacher_name=req.teacher_name,
+        max_marks=req.max_marks,
+        resource_url=req.resource_url,
+        weightage=req.weightage,
+        progress_pct=req.progress_pct or 0.0
+    )
+    db.add(new_hw)
+    await db.commit()
+    await db.refresh(new_hw)
+    return new_hw
 
 @router.get("/homework/{homework_id}/submissions", response_model=list[HomeworkSubmissionResponse])
 async def get_homework_submissions(homework_id: int, db: AsyncSession = Depends(get_db)):
@@ -424,7 +451,7 @@ _faculty_duty_tasks = [
         "title": "Term 1 Class 10 Board Mock Invigilation",
         "sub_category": "Main Examination Hall Duty",
         "event_or_exam_name": "Midterm Exams 2026",
-        "scheduled_date": "21 Oct 2026",
+        "scheduled_date": "16 Oct 2026",
         "time_window": "09:30 AM - 12:30 PM",
         "location_or_venue": "Examination Hall B (Seats 45-90)",
         "status": "IN_PROGRESS",
@@ -433,6 +460,9 @@ _faculty_duty_tasks = [
         "papers_completed": None,
         "submission_deadline": None,
         "assigned_by": "Vice Principal Academics",
+        "is_weekly": False,
+        "day_of_week": "Friday",
+        "frequency": "ONE_TIME",
         "action_checklist": [
             {"item": "Collect sealed question packets from Strong Room by 09:10 AM", "completed": True},
             {"item": "Verify student admit cards and photo ID barcodes", "completed": True},
@@ -454,8 +484,11 @@ _faculty_duty_tasks = [
         "priority": "CRITICAL",
         "papers_assigned": 45,
         "papers_completed": 32,
-        "submission_deadline": "22 Oct 2026",
+        "submission_deadline": "18 Oct 2026, 05:00 PM",
         "assigned_by": "Dr. Sunita Kapoor (Principal)",
+        "is_weekly": False,
+        "day_of_week": "Sunday",
+        "frequency": "ONE_TIME",
         "action_checklist": [
             {"item": "Annotate step marks on quadratic formula questions", "completed": True},
             {"item": "Flag students scoring < 60% into Focus Table queue", "completed": True},
@@ -469,7 +502,7 @@ _faculty_duty_tasks = [
         "title": "Annual Cultural Day 2026 (Navarasa) - Stage & AV Tech Lead",
         "sub_category": "Cultural Committee",
         "event_or_exam_name": "Annual Day 2026",
-        "scheduled_date": "14 Nov 2026",
+        "scheduled_date": "24 Oct 2026",
         "time_window": "03:00 PM - 06:00 PM",
         "location_or_venue": "Main School Auditorium",
         "status": "IN_PROGRESS",
@@ -478,6 +511,9 @@ _faculty_duty_tasks = [
         "papers_completed": None,
         "submission_deadline": None,
         "assigned_by": "Dr. Sunita Kapoor (Principal)",
+        "is_weekly": False,
+        "day_of_week": "Saturday",
+        "frequency": "ONE_TIME",
         "action_checklist": [
             {"item": "Coordinate with Horizon AV Tech for P3.9 LED Backdrop and sound checks", "completed": True},
             {"item": "Review stage lighting transitions for Classical Dance sequence", "completed": True},
@@ -501,9 +537,88 @@ _faculty_duty_tasks = [
         "papers_completed": None,
         "submission_deadline": None,
         "assigned_by": "Admin Office (Timetable Proxy Matrix)",
+        "is_weekly": False,
+        "day_of_week": "Friday",
+        "frequency": "DAILY",
         "action_checklist": [
             {"item": "Report to classroom promptly at 11:15 bell", "completed": False},
             {"item": "Supervise Exercise 4.2 revision questions from textbook page 78", "completed": False}
+        ]
+    },
+    {
+        "id": "duty-5",
+        "teacher_id": "ananya",
+        "category": "WEEKLY_ROUTINE",
+        "title": "Weekly Focus Table Remedial Audit & Parent Sign-Off",
+        "sub_category": "Weekly Academic Intervention Loop",
+        "event_or_exam_name": "Weekly Focus Table Review Cycle",
+        "scheduled_date": "Every Friday (Weekly Cadence)",
+        "time_window": "03:15 PM - 04:00 PM",
+        "location_or_venue": "Faculty Desk 12 / Student Focus Hub",
+        "status": "IN_PROGRESS",
+        "priority": "CRITICAL",
+        "papers_assigned": None,
+        "papers_completed": None,
+        "submission_deadline": None,
+        "assigned_by": "Academic Dean & Homeroom Lead",
+        "is_weekly": True,
+        "day_of_week": "Friday",
+        "frequency": "WEEKLY",
+        "action_checklist": [
+            {"item": "Audit weekly mastery score delta for 4 assigned Focus Table students", "completed": True},
+            {"item": "Dispatch targeted parent advisory notes with concept tag [Algebraic Fractions]", "completed": True},
+            {"item": "Log zero-period remedial attendance in SIS Backlog Engine", "completed": False},
+            {"item": "Submit weekly intervention sign-off to Academic Dean by 04:30 PM", "completed": False}
+        ]
+    },
+    {
+        "id": "duty-6",
+        "teacher_id": "ananya",
+        "category": "WEEKLY_ROUTINE",
+        "title": "Weekly Unit Lesson Plan & Question Bank Submission",
+        "sub_category": "Curriculum & Academic QA",
+        "event_or_exam_name": "Weekly Lesson Plan Governance",
+        "scheduled_date": "Every Monday (Weekly Routine)",
+        "time_window": "By 09:00 AM (Weekly)",
+        "location_or_venue": "Academic ERP Curriculum Portal",
+        "status": "PENDING",
+        "priority": "NORMAL",
+        "papers_assigned": None,
+        "papers_completed": None,
+        "submission_deadline": None,
+        "assigned_by": "HOD Mathematics",
+        "is_weekly": True,
+        "day_of_week": "Monday",
+        "frequency": "WEEKLY",
+        "action_checklist": [
+            {"item": "Upload Class 10 Calculus Chapter 5 lecture slides & activity worksheets", "completed": False},
+            {"item": "Contribute 15 Higher Order Thinking (HOTS) questions to Central Bank", "completed": False},
+            {"item": "Obtain digital HOD approval sign-off for next week's labs", "completed": False}
+        ]
+    },
+    {
+        "id": "duty-7",
+        "teacher_id": "ananya",
+        "category": "WEEKLY_ROUTINE",
+        "title": "Weekly Science & Mathematics Department Sync",
+        "sub_category": "Inter-Departmental Curriculum Sync",
+        "event_or_exam_name": "Weekly Academic Alignment",
+        "scheduled_date": "Every Wednesday (Weekly Routine)",
+        "time_window": "03:30 PM - 04:15 PM",
+        "location_or_venue": "Staff Conference Room 2",
+        "status": "COMPLETED",
+        "priority": "NORMAL",
+        "papers_assigned": None,
+        "papers_completed": None,
+        "submission_deadline": None,
+        "assigned_by": "Principal Dr. Sunita Kapoor",
+        "is_weekly": True,
+        "day_of_week": "Wednesday",
+        "frequency": "WEEKLY",
+        "action_checklist": [
+            {"item": "Review cross-disciplinary STEM physics-calculus integration milestones", "completed": True},
+            {"item": "Align midterm assessment windows to prevent multiple exams on single days", "completed": True},
+            {"item": "Sign off department meeting minutes in faculty portal", "completed": True}
         ]
     }
 ]
@@ -653,7 +768,7 @@ _ptm_event_config = {
     "buffer_mins": 2,
     "blackout_windows": [
         {"start": "11:00", "end": "11:15", "title": "Faculty Morning Tea Break"},
-        {"start": "13:00", "end": "13:45", "title": "Faculty Lunch Recess"}
+        {"start": "13:00", "end": "13:45", "title": "Faculty Lunch Break"}
     ]
 }
 
@@ -778,7 +893,7 @@ _ptm_slots = [
         "booked_class": None,
         "booked_parent_id": None,
         "booked_parent_name": None,
-        "subject_name": "Faculty Morning Tea Recess",
+        "subject_name": "Faculty Morning Tea Break",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
@@ -818,7 +933,7 @@ _ptm_slots = [
         "booked_class": None,
         "booked_parent_id": None,
         "booked_parent_name": None,
-        "subject_name": "Faculty Lunch Recess",
+        "subject_name": "Faculty Lunch Break",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,

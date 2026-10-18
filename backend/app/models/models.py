@@ -33,6 +33,9 @@ class Student(Base):
     grade_tier = Column(String(20), default="secondary")  # 'k5' or 'secondary'
     age = Column(Integer, default=14, nullable=True)
     avatar_character_url = Column(String(255), nullable=True)
+    backlog_count = Column(Integer, default=0)
+    total_assigned = Column(Integer, default=0)
+    on_time_count = Column(Integer, default=0)
 
 def determine_grade_tier(class_name: str) -> str:
     """Helper to classify student grade tier into 'k5' or 'secondary'."""
@@ -183,10 +186,17 @@ class Homework(Base):
     subject = Column(String(50), nullable=False)
     class_name = Column(String(30), nullable=False)
     description = Column(Text, nullable=False)
+    task_type = Column(String(20), default="DAILY_HOMEWORK")  # DAILY_HOMEWORK, ASSIGNMENT
     due_date = Column(String(50), nullable=False)
+    due_time = Column(String(50), default="17:00")
+    status = Column(String(20), default="PENDING")  # PENDING, SUBMITTED, GRADED, BACKLOG
+    assigned_date = Column(String(50), nullable=True)
     teacher_id = Column(Integer, nullable=False)
     teacher_name = Column(String(100), nullable=False)
     max_marks = Column(Integer, default=20)
+    resource_url = Column(String(255), nullable=True)
+    weightage = Column(String(50), nullable=True)
+    progress_pct = Column(Float, default=0.0)
 
 class HomeworkSubmission(Base):
     __tablename__ = "homework_submissions"
@@ -199,9 +209,11 @@ class HomeworkSubmission(Base):
     annotations_json = Column(Text, nullable=True)  # Canvas drawings, ticks, texts
     marks_obtained = Column(Float, nullable=True)
     teacher_remarks = Column(Text, nullable=True)
-    status = Column(String(20), default="submitted")  # submitted, graded, pending
+    status = Column(String(20), default="submitted")  # submitted, graded, pending, backlog
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
     graded_at = Column(DateTime, nullable=True)
+    late_submission = Column(Boolean, default=False)
+    is_backlog = Column(Boolean, default=False)
 
 class FocusTable(Base):
     __tablename__ = "focus_tables"
@@ -216,7 +228,28 @@ class FocusTable(Base):
     teacher_action = Column(Text, nullable=False)
     parent_check_completed = Column(Boolean, default=False)
     status = Column(String(30), default="in_progress")  # in_progress, needs_parent_check, mastered
+    backlog_count = Column(Integer, default=0)
+    academic_compliance_json = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class BacklogEvent(Base):
+    __tablename__ = "backlog_events"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    homework_id = Column(Integer, ForeignKey("homeworks.id"), nullable=False)
+    focus_table_id = Column(Integer, ForeignKey("focus_tables.id"), nullable=True)
+    evidence_code = Column(String(50), nullable=False)  # e.g., "#EVD-BKLOG-884"
+    subject = Column(String(50), nullable=False)
+    title = Column(String(150), nullable=False)
+    task_type = Column(String(20), default="DAILY_HOMEWORK")  # DAILY_HOMEWORK or ASSIGNMENT
+    due_date = Column(String(50), nullable=False)
+    due_time = Column(String(50), nullable=False)
+    status = Column(String(30), default="UNRESOLVED")  # UNRESOLVED, LATE_SUBMITTED, RESOLVED
+    detected_at = Column(DateTime, default=datetime.datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    late_submission = Column(Boolean, default=False)
+    teacher_name = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
 
 class LeaveRequest(Base):
     __tablename__ = "leave_requests"

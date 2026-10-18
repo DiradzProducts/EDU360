@@ -1,24 +1,28 @@
 import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, ClassRecording, Homework, HomeworkSubmission,
     StudentPortfolio, OfficialDocument, Student, BusRoute,
-    StudentGamification, DailyQuest, MagicBoosterChest
+    StudentGamification, DailyQuest, MagicBoosterChest,
+    BacklogEvent, FocusTable
 )
 from app.schemas.schemas import (
     LiveClassResponse, ClassRecordingResponse,
-    HomeworkResponse, HomeworkSubmissionResponse,
+    HomeworkResponse, HomeworkSubmissionResponse, HomeworkCreate,
     StudentPortfolioResponse, StudentPortfolioCreate,
     OfficialDocumentResponse,
     GamificationProfileResponse, DailyQuestResponse,
     DailyQuestCompleteRequest, DailyQuestCompleteResponse,
     MagicBoosterChestResponse, ChestUnlockRequest, ChestUnlockResponse,
     CelebrationPayload, SoundToggleRequest, AdventureTimetableItem,
-    JuniorBusRadarResponse, BusCoords, JuniorDashboardOverviewResponse
+    JuniorBusRadarResponse, BusCoords, JuniorDashboardOverviewResponse,
+    BacklogEventResponse, AcademicComplianceResponse
 )
+from app.services.backlog_engine import BacklogEngine, parse_deadline_datetime
 
 router = APIRouter(prefix="/api/student", tags=["student"])
 
@@ -40,9 +44,46 @@ async def list_recordings(subject: str = None, chapter: str = None, db: AsyncSes
 
 # --- 2. Homework & Annotations ---
 @router.get("/homework", response_model=list[HomeworkResponse])
-async def list_student_homework(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Homework).order_by(Homework.id.desc()))
+async def list_student_homework(
+    task_type: Optional[str] = None,
+    status: Optional[str] = None,
+    date: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Homework)
+    if task_type:
+        stmt = stmt.where(Homework.task_type == task_type)
+    if status:
+        stmt = stmt.where(Homework.status == status)
+    if date:
+        stmt = stmt.where(Homework.due_date == date)
+    stmt = stmt.order_by(Homework.id.desc())
+    result = await db.execute(stmt)
     return result.scalars().all()
+
+@router.post("/homework", response_model=HomeworkResponse)
+async def create_student_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
+    new_hw = Homework(
+        title=req.title,
+        subject=req.subject,
+        class_name=req.class_name,
+        description=req.description,
+        task_type=req.task_type,
+        due_date=req.due_date,
+        due_time=req.due_time,
+        status="PENDING",
+        assigned_date=datetime.date.today().isoformat(),
+        teacher_id=req.teacher_id,
+        teacher_name=req.teacher_name,
+        max_marks=req.max_marks,
+        resource_url=req.resource_url,
+        weightage=req.weightage,
+        progress_pct=req.progress_pct or 0.0
+    )
+    db.add(new_hw)
+    await db.commit()
+    await db.refresh(new_hw)
+    return new_hw
 
 @router.get("/submissions/{student_id}", response_model=list[HomeworkSubmissionResponse])
 async def get_student_submissions(student_id: int, db: AsyncSession = Depends(get_db)):
@@ -50,7 +91,22 @@ async def get_student_submissions(student_id: int, db: AsyncSession = Depends(ge
     return result.scalars().all()
 
 @router.post("/homework/{homework_id}/submit", response_model=HomeworkSubmissionResponse)
-async def submit_homework(homework_id: int, student_id: int, original_file_url: str = "/samples/math_worksheet.png", db: AsyncSession = Depends(get_db)):
+async def submit_homework(
+    homework_id: int,
+    student_id: int,
+    original_file_url: str = "/samples/math_worksheet.png",
+    db: AsyncSession = Depends(get_db)
+):
+    hw_res = await db.execute(select(Homework).where(Homework.id == homework_id))
+    hw = hw_res.scalars().first()
+
+    current_time = datetime.datetime(2026, 10, 17, 21, 57, 0)
+    is_late = False
+    if hw:
+        deadline = parse_deadline_datetime(hw.due_date, hw.due_time)
+        if deadline and current_time > deadline:
+            is_late = True
+
     result = await db.execute(select(HomeworkSubmission).where(
         HomeworkSubmission.homework_id == homework_id,
         HomeworkSubmission.student_id == student_id
@@ -59,23 +115,62 @@ async def submit_homework(homework_id: int, student_id: int, original_file_url: 
     if existing:
         existing.original_file_url = original_file_url
         existing.status = "submitted"
-        existing.submitted_at = datetime.datetime.utcnow()
-        await db.commit()
-        await db.refresh(existing)
-        return existing
-    
-    new_sub = HomeworkSubmission(
-        homework_id=homework_id,
-        student_id=student_id,
-        student_name="Aarav Sharma",
-        original_file_url=original_file_url,
-        status="submitted",
-        submitted_at=datetime.datetime.utcnow()
-    )
-    db.add(new_sub)
+        existing.submitted_at = current_time
+        existing.late_submission = is_late
+        existing.is_backlog = False
+        target_sub = existing
+    else:
+        st_res = await db.execute(select(Student).where(Student.id == student_id))
+        st = st_res.scalars().first()
+        student_name = st.name if st else "Student"
+
+        new_sub = HomeworkSubmission(
+            homework_id=homework_id,
+            student_id=student_id,
+            student_name=student_name,
+            original_file_url=original_file_url,
+            status="submitted",
+            submitted_at=current_time,
+            late_submission=is_late,
+            is_backlog=False
+        )
+        db.add(new_sub)
+        target_sub = new_sub
+
+    # If this task was in BacklogEvent, update status to LATE_SUBMITTED (retaining audit history)
+    ev_res = await db.execute(select(BacklogEvent).where(
+        BacklogEvent.homework_id == homework_id,
+        BacklogEvent.student_id == student_id
+    ))
+    ev = ev_res.scalars().first()
+    if ev:
+        ev.status = "LATE_SUBMITTED"
+        ev.resolved_at = current_time
+        ev.late_submission = True
+        ev.notes = f"Late submission uploaded on {current_time.strftime('%d %b %Y, %I:%M %p')}. Retained in backlog history for parent/teacher review."
+
     await db.commit()
-    await db.refresh(new_sub)
-    return new_sub
+    await db.refresh(target_sub)
+
+    try:
+        await BacklogEngine.evaluate_backlogs(db)
+    except Exception as e:
+        print(f"Compliance refresh info: {e}")
+
+    return target_sub
+
+@router.get("/compliance/{student_id}", response_model=AcademicComplianceResponse)
+async def get_student_academic_compliance(student_id: int, db: AsyncSession = Depends(get_db)):
+    return await BacklogEngine.get_compliance_dossier(db, student_id)
+
+@router.get("/backlog-events/{student_id}", response_model=list[BacklogEventResponse])
+async def get_student_backlog_events(student_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BacklogEvent).where(BacklogEvent.student_id == student_id).order_by(BacklogEvent.id.desc()))
+    return result.scalars().all()
+
+@router.post("/check-backlogs")
+async def run_manual_backlog_check(db: AsyncSession = Depends(get_db)):
+    return await BacklogEngine.evaluate_backlogs(db)
 
 # --- 3. Side-by-Side Portfolio ---
 @router.get("/portfolio/{student_id}", response_model=list[StudentPortfolioResponse])

@@ -8,6 +8,10 @@ from app.core.database import engine, Base
 from app.routers import auth, admin, teacher, parent, student
 from app.seed import seed_data
 
+import asyncio
+from app.services.backlog_engine import backlog_scheduler_task, BacklogEngine
+from app.core.database import AsyncSessionLocal
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Ensure database schema is initialized and seeded
@@ -18,7 +22,18 @@ async def lifespan(app: FastAPI):
         await seed_data()
     except Exception as e:
         print(f"Seed info: {e}")
+    
+    # Run immediate backlog scan & start background scheduler (every 15-30 minutes)
+    try:
+        async with AsyncSessionLocal() as session:
+            await BacklogEngine.evaluate_backlogs(session)
+    except Exception as e:
+        print(f"Initial backlog scan info: {e}")
+
+    worker_task = asyncio.create_task(backlog_scheduler_task(interval_seconds=900))
     yield
+    worker_task.cancel()
+
 
 app = FastAPI(
     title=settings.APP_NAME,

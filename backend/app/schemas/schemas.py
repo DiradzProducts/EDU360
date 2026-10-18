@@ -270,16 +270,38 @@ class AttendanceRecordResponse(BaseModel):
         from_attributes = True
 
 # --- Homework Schemas ---
+class HomeworkCreate(BaseModel):
+    title: str
+    subject: str
+    class_name: str
+    description: str
+    task_type: str = "DAILY_HOMEWORK"  # DAILY_HOMEWORK or ASSIGNMENT
+    due_date: str
+    due_time: str = "17:00"
+    teacher_id: int = 1
+    teacher_name: str = "Mrs. Ananya Verma"
+    max_marks: int = 20
+    resource_url: Optional[str] = None
+    weightage: Optional[str] = None
+    progress_pct: Optional[float] = 0.0
+
 class HomeworkResponse(BaseModel):
     id: int
     title: str
     subject: str
     class_name: str
     description: str
+    task_type: str = "DAILY_HOMEWORK"
     due_date: str
+    due_time: str = "17:00"
+    status: str = "PENDING"
+    assigned_date: Optional[str] = None
     teacher_id: int
     teacher_name: str
     max_marks: int
+    resource_url: Optional[str] = None
+    weightage: Optional[str] = None
+    progress_pct: Optional[float] = 0.0
     class Config:
         from_attributes = True
 
@@ -302,8 +324,40 @@ class HomeworkSubmissionResponse(BaseModel):
     status: str
     submitted_at: datetime.datetime
     graded_at: Optional[datetime.datetime] = None
+    late_submission: bool = False
+    is_backlog: bool = False
     class Config:
         from_attributes = True
+
+class BacklogEventResponse(BaseModel):
+    id: int
+    student_id: int
+    homework_id: int
+    focus_table_id: Optional[int] = None
+    evidence_code: str
+    subject: str
+    title: str
+    task_type: str
+    due_date: str
+    due_time: str
+    status: str
+    detected_at: datetime.datetime
+    resolved_at: Optional[datetime.datetime] = None
+    late_submission: bool = False
+    teacher_name: Optional[str] = None
+    notes: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class AcademicComplianceResponse(BaseModel):
+    student_id: int
+    student_name: str
+    total_assigned: int
+    on_time_submissions: int
+    late_submissions: int
+    backlog_count: int
+    compliance_pct: float
+    itemized_backlogs: list[BacklogEventResponse]
 
 # --- Focus Table Schemas ---
 class FocusTableUpdate(BaseModel):
@@ -323,6 +377,8 @@ class FocusTableResponse(BaseModel):
     teacher_action: str
     parent_check_completed: bool
     status: str
+    backlog_count: int = 0
+    academic_compliance_json: Optional[str] = None
     updated_at: datetime.datetime
     class Config:
         from_attributes = True
@@ -673,6 +729,9 @@ class FacultyDutyTaskResponse(BaseModel):
     submission_deadline: Optional[str] = None
     assigned_by: str
     action_checklist: Optional[List[ActionChecklistItem]] = None
+    is_weekly: Optional[bool] = False
+    day_of_week: Optional[str] = None
+    frequency: Optional[str] = None
 
 class UpdateDutyPaperCountRequest(BaseModel):
     papers_completed: int
