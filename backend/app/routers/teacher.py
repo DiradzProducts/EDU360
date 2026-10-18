@@ -471,31 +471,6 @@ _faculty_duty_tasks = [
         ]
     },
     {
-        "id": "duty-2",
-        "teacher_id": "ananya",
-        "category": "PAPER_CORRECTION",
-        "title": "Class 8-B Term 1 Mathematics Answer Scripts",
-        "sub_category": "Grading & Annotation Queue",
-        "event_or_exam_name": "Midterm Exams 2026",
-        "scheduled_date": "18 Oct 2026",
-        "time_window": "02:00 PM - 05:00 PM",
-        "location_or_venue": "Staff Room Desk 4 / Online Canvas",
-        "status": "IN_PROGRESS",
-        "priority": "CRITICAL",
-        "papers_assigned": 45,
-        "papers_completed": 32,
-        "submission_deadline": "18 Oct 2026, 05:00 PM",
-        "assigned_by": "Dr. Sunita Kapoor (Principal)",
-        "is_weekly": False,
-        "day_of_week": "Sunday",
-        "frequency": "ONE_TIME",
-        "action_checklist": [
-            {"item": "Annotate step marks on quadratic formula questions", "completed": True},
-            {"item": "Flag students scoring < 60% into Focus Table queue", "completed": True},
-            {"item": "Upload finalized grade master sheet to SIS", "completed": False}
-        ]
-    },
-    {
         "id": "duty-3",
         "teacher_id": "ananya",
         "category": "EVENT_COMMITTEE",

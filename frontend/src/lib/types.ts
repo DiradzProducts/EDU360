@@ -8,6 +8,9 @@ export interface User {
   school_code?: string;
   avatar?: string;
   phone?: string;
+  grade_tier?: 'k5' | 'secondary' | string;
+  is_junior_k5?: boolean;
+  student_id?: number;
 }
 
 export interface SchoolVerification {
@@ -23,6 +26,119 @@ export interface AuthResponse {
   message: string;
   user: User;
   portal_redirect: string;
+  grade_tier?: 'k5' | 'secondary' | string;
+  is_junior_k5?: boolean;
+  student_id?: number;
+}
+
+// --- Junior Gamification Interfaces (K-5 Junior Explorer) ---
+export interface GamificationProfile {
+  id: number;
+  student_id: number;
+  level: number;
+  level_title: string;
+  xp_points: number;
+  total_stars: number;
+  attendance_streak_days: number;
+  sound_effects_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DailyQuest {
+  id: number;
+  student_id: number;
+  title: string;
+  subject: string;
+  xp_reward: number;
+  stars_reward: number;
+  status: 'active' | 'submitted' | 'completed';
+  teacher_reaction: string;
+  proof_image_url?: string | null;
+  due_date: string;
+  created_at?: string;
+}
+
+export interface MagicBoosterChest {
+  id: number;
+  student_id: number;
+  concept_title: string;
+  day_number: number;
+  day_task_title: string;
+  status: 'completed_claimed' | 'ready_to_open' | 'locked';
+  chest_stars: number;
+  parent_signed: boolean;
+  created_at?: string;
+}
+
+export interface ChestCelebration {
+  trigger: string;
+  badge: string;
+  sound_effect: string;
+  animation: string;
+  dialog_title: string;
+  dialog_message: string;
+}
+
+export interface ChestUnlockResponse {
+  success: boolean;
+  message: string;
+  chest_id: number;
+  status: string;
+  awarded_stars: number;
+  awarded_xp: number;
+  total_stars: number;
+  xp_points: number;
+  level: number;
+  level_title: string;
+  level_up: boolean;
+  celebration: ChestCelebration;
+}
+
+export interface AdventureTimetableItem {
+  id: number;
+  time: string;
+  title: string;
+  subject: string;
+  island_theme: string;
+  mascot_at_node: boolean;
+  icon: string;
+  duration_mins: number;
+  teacher_name: string;
+  room: string;
+  completed: boolean;
+  period_number?: number;
+  time_slot?: string;
+  room_or_link?: string;
+}
+
+export interface JuniorBusRadar {
+  route_no: string;
+  driver_name: string;
+  driver_phone: string;
+  eta_mins: number;
+  stops_away: number;
+  current_coords: { lat: number; lng: number };
+  is_moving: boolean;
+  vehicle_no: string;
+  current_stop_name: string;
+  next_stop_name: string;
+  bus_mascot_icon: string;
+  status_badge: string;
+}
+
+export interface JuniorDashboardOverview {
+  student_id: number;
+  student_name: string;
+  class_name: string;
+  grade_tier: string;
+  avatar_character_url?: string;
+  profile: GamificationProfile;
+  active_quests: DailyQuest[];
+  magic_booster_chests: MagicBoosterChest[];
+  attendance_streak_days: number;
+  attendance_pct: number;
+  bus_route_id?: number;
 }
 
 
@@ -165,16 +281,29 @@ export interface AttendanceRecord {
   date: string;
 }
 
+export type TaskType = 'DAILY_HOMEWORK' | 'ASSIGNMENT';
+export type TaskStatus = 'PENDING' | 'SUBMITTED' | 'GRADED' | 'BACKLOG';
+
 export interface Homework {
   id: number;
   title: string;
   subject: string;
   class_name: string;
   description: string;
+  task_type: TaskType;
   due_date: string;
+  due_time: string;
+  status: TaskStatus;
   teacher_id: number;
   teacher_name: string;
   max_marks: number;
+  assigned_date?: string;
+  resource_url?: string;
+  weightage?: string;
+  progress_pct?: number;
+  late_submission?: boolean;
+  backlogEvidenceCode?: string;
+  isOverdue?: boolean;
 }
 
 export interface HomeworkSubmission {
@@ -187,9 +316,41 @@ export interface HomeworkSubmission {
   annotations_json?: string;
   marks_obtained?: number;
   teacher_remarks?: string;
-  status: 'submitted' | 'graded' | 'pending';
+  status: 'submitted' | 'graded' | 'pending' | 'backlog';
   submitted_at: string;
   graded_at?: string;
+  late_submission?: boolean;
+  is_backlog?: boolean;
+}
+
+export interface BacklogEvent {
+  id: number;
+  student_id: number;
+  homework_id: number;
+  focus_table_id?: number;
+  evidence_code: string;
+  subject: string;
+  title: string;
+  task_type: TaskType;
+  due_date: string;
+  due_time: string;
+  status: 'UNRESOLVED' | 'LATE_SUBMITTED' | 'RESOLVED';
+  detected_at: string;
+  resolved_at?: string;
+  late_submission?: boolean;
+  teacher_name?: string;
+  notes?: string;
+}
+
+export interface AcademicCompliance {
+  student_id: number;
+  student_name: string;
+  total_assigned: number;
+  on_time_submissions: number;
+  late_submissions: number;
+  backlog_count: number;
+  compliance_pct: number;
+  itemized_backlogs: BacklogEvent[];
 }
 
 export interface RevisionDay {
@@ -211,7 +372,9 @@ export interface FocusTable {
   revision_plan_json: string;
   teacher_action: string;
   parent_check_completed: boolean;
-  status: 'in_progress' | 'needs_parent_check' | 'mastered';
+  status: 'in_progress' | 'needs_parent_check' | 'mastered' | 'pending_approval' | 'approved' | 'not_enrolled';
+  backlog_count?: number;
+  academic_compliance_json?: string;
   updated_at: string;
 }
 
@@ -283,3 +446,296 @@ export interface ClassRecording {
   date: string;
   date_recorded?: string;
 }
+
+export interface StaffMemberItem {
+  id: number;
+  name: string;
+  role: string;
+  department: string;
+  phone: string;
+  email: string;
+  status: 'Present' | 'On Leave' | 'Short Permission';
+  assigned_duties: string;
+  salary: number;
+  qualification?: string;
+}
+
+export interface TeacherPermissionRequest {
+  id: number;
+  teacher_id: number;
+  teacher_name: string;
+  type: 'Casual Leave' | 'Medical Leave' | 'Late Arrival' | 'Early Departure' | 'On-Duty Movement';
+  date: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  applied_at: string;
+}
+
+export interface InventoryRecord {
+  id: number;
+  name: string;
+  category: 'Books' | 'Lab Equipment' | 'Sports Gear' | 'IT Hardware' | 'Classroom';
+  total_stock: number;
+  issued_count: number;
+  damaged_count: number;
+  reorder_level: number;
+  location: string;
+  last_audited: string;
+}
+
+export interface FeeDefaulter {
+  id: number;
+  student_name: string;
+  class_name: string;
+  roll_no: string;
+  parent_name: string;
+  parent_phone: string;
+  milestone_title: string;
+  amount_due: number;
+  days_overdue: number;
+  reminder_sent: boolean;
+}
+
+export interface TeacherScheduleItem {
+  period: number;
+  time: string;
+  subject: string;
+  class_name: string;
+  room: string;
+  status: 'Completed' | 'Live Now' | 'Upcoming';
+  is_live?: boolean;
+}
+
+export interface TeacherDutyItem {
+  id: number;
+  event_title: string;
+  role: string;
+  date: string;
+  venue: string;
+  student_volunteers: string[];
+  assigned_by: string;
+  progress_pct: number;
+  key_deliverables: string;
+}
+
+export interface TeacherStudentRosterItem {
+  id: number;
+  name: string;
+  roll_no: string;
+  class_name: string;
+  attendance_pct: number;
+  academic_average_pct: number;
+  guardian_name: string;
+  guardian_phone: string;
+  has_focus_table: boolean;
+  homework_status: 'Submitted' | 'Pending' | 'Graded';
+  last_active: string;
+}
+
+// --- New Admin Modules & Modern ERP Features ---
+export interface SubstitutionSlot {
+  id: number;
+  absent_teacher_id: number;
+  absent_teacher_name: string;
+  absent_reason: string;
+  reason?: string;
+  date: string;
+  period_number: number;
+  time_slot: string;
+  class_name: string;
+  subject: string;
+  substitute_teacher_id?: number | null;
+  substitute_teacher_name?: string | null;
+  assigned_substitute_name?: string | null;
+  suggested_proxy_id?: number | null;
+  status: 'Unassigned' | 'Assigned' | 'Completed';
+  priority: 'High' | 'Medium' | 'Low';
+  notes?: string;
+}
+
+export interface AvailableFacultyItem {
+  id: number;
+  name: string;
+  department: string;
+  free_periods_today: number;
+  free_periods?: number[];
+  is_subject_match: boolean;
+  current_status: string;
+  assigned_substitutions_today?: number;
+}
+
+export interface SecurityAuditLog {
+  id: number;
+  timestamp: string;
+  actor_name: string;
+  actor_role: string;
+  actor?: string;
+  action_type: string;
+  action?: string;
+  target_entity: string;
+  entity?: string;
+  ip_address: string;
+  status: 'VERIFIED' | 'FLAGGED' | 'SUCCESS';
+  details: string;
+  category?: string;
+  hash_seal?: string;
+}
+
+export interface FeeAgingSummary {
+  days_0_to_15: number;
+  days_16_to_30: number;
+  days_over_30: number;
+}
+
+export interface FeeFinancialAnalytics {
+  total_target: number;
+  total_collected: number;
+  total_overdue: number;
+  collection_rate_pct: number;
+  aging_summary: FeeAgingSummary;
+  defaulters_count: number;
+  reminders_dispatched_today: number;
+  active_milestone_title: string;
+  milestone_deadline: string;
+  academic_year?: string;
+}
+
+export interface AcademicRolloverClass {
+  class_id: number;
+  from_class: string;
+  to_class: string;
+  total_students: number;
+  eligible_for_promotion: number;
+  retention_review: number;
+  tc_requested: number;
+  status: 'Pending Review' | 'Ready to Roll' | 'Rolled Over';
+  target_class_teacher?: string;
+}
+
+// ========================================================
+// TEACHER COCKPIT, DUTY TASK CENTER & DUAL-MODE HUB TYPES
+// ========================================================
+
+// 1. Teacher Personal Timetable & Chronological Schedule
+export type PeriodActivityType = 
+  | 'TEACHING_SESSION' 
+  | 'LAB_SESSION' 
+  | 'EXAM_INVIGILATION' 
+  | 'SUBSTITUTION_COVER' 
+  | 'FREE_PREP_PERIOD'
+  | 'HOMEROOM_MENTORSHIP';
+
+export interface TeacherPersonalScheduleItem {
+  id: string;
+  period_number: number;
+  start_time: string;           // e.g. "09:00 AM"
+  end_time: string;             // e.g. "09:45 AM"
+  day_of_week: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+  activity_type: PeriodActivityType;
+  class_grade?: string;         // e.g. "Grade 8"
+  section?: string;             // e.g. "B"
+  subject_name?: string;        // e.g. "Mathematics"
+  room_number: string;          // e.g. "Room 204" or "Physics Lab"
+  is_current_active_period: boolean;
+  notes?: string;               // e.g. "Chapter 4 Quadratic Equations test review"
+}
+
+// 2. Faculty Duties & Operational Tasks Center
+export type FacultyDutyCategory = 
+  | 'EXAM_INVIGILATION' 
+  | 'PAPER_CORRECTION' 
+  | 'EVENT_COMMITTEE' 
+  | 'CAMPUS_SUBSTITUTION'
+  | 'WEEKLY_ROUTINE';
+
+export interface FacultyDutyTask {
+  id: string;
+  teacher_id: string;
+  category: FacultyDutyCategory;
+  title: string;                // e.g. "Term 1 Class 10 Board Mock Invigilation"
+  sub_category?: string;        // e.g. "Annual Day - Stage & Sound Committee"
+  event_or_exam_name: string;   // e.g. "Midterm Exams 2026" / "Annual Day 2026"
+  scheduled_date: string;
+  time_window: string;          // e.g. "10:00 AM - 01:00 PM"
+  location_or_venue: string;    // e.g. "Examination Hall B (Seats 45-90)"
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+  priority: 'CRITICAL' | 'NORMAL';
+  is_weekly?: boolean;
+  day_of_week?: string;
+  frequency?: 'DAILY' | 'WEEKLY' | 'ONE_TIME';
+  // Specific to Exam Invigilation:
+  seat_range?: string;          // e.g. "Seats 45 - 90"
+  student_count?: number;       // e.g. 45
+  // Specific to Paper Correction:
+  papers_assigned?: number;     // e.g. 45
+  papers_completed?: number;    // e.g. 30
+  submission_deadline?: string;
+  // Specific to Committee / Operational Tasks:
+  assigned_by: string;          // e.g. "Vice Principal / Admin"
+  action_checklist?: { item: string; completed: boolean }[];
+}
+
+// 3. Dual-Mode Parental Connection & Notes
+export type InteractionScope = 'HOMEROOM_CLASS' | 'SUBJECT_SPECIFIC';
+
+export interface ParentTeacherNote {
+  id: string;
+  interaction_scope: InteractionScope;
+  student_id: number;
+  student_name: string;
+  student_class: string;        // e.g. "8-B"
+  parent_id: string;
+  parent_name: string;
+  parent_phone: string;
+  teacher_id: string;
+  teacher_name: string;
+  subject_id?: string;
+  subject_name?: string;        // e.g. "Mathematics"
+  homeroom_teacher_id: string;  // Auto-CC'd for audit transparency
+  note_type: 'ACADEMIC_CONCERN' | 'APPRECIATION' | 'BEHAVIORAL' | 'PTM_FOLLOWUP';
+  content: string;
+  created_at: string;
+  is_focus_table_evidence: boolean;
+  focus_concept_tag?: string;   // e.g. "Algebraic Fractions"
+}
+
+// 4. Strict 10-Minute Sliding PTM Scheduler Engine
+export interface PTMEventConfig {
+  id: string;
+  title: string;                // "Post-Midterm Parent-Teacher Conference"
+  event_date: string;
+  school_start_time: string;    // "09:00"
+  school_end_time: string;      // "15:30"
+  slot_duration_mins: number;   // 10 minutes
+  buffer_mins: number;          // 2 minutes
+  blackout_windows: {
+    start: string;              // "13:00"
+    end: string;                // "13:45"
+    title: string;              // "Faculty Lunch Break"
+  }[];
+}
+
+export interface PTMSlot {
+  id: string;
+  event_id: string;
+  teacher_id: string;
+  start_time: string;           // "10:20 AM"
+  end_time: string;             // "10:30 AM"
+  status: 'AVAILABLE' | 'HELD' | 'BOOKED' | 'BREAK';
+  interaction_scope: InteractionScope;
+  booked_student_id?: number;
+  booked_student_name?: string;
+  booked_class?: string;
+  booked_parent_id?: string;
+  booked_parent_name?: string;
+  subject_name?: string;
+  locked_by_class?: string;     // e.g. "Class 7-A Parent"
+  is_sibling_combo?: boolean;   // true for 20-min double slot
+  sibling_student_id?: number;
+  sibling_student_name?: string;
+  meeting_url?: string;
+  focus_table_agenda?: string[];
+}
+
+
+

@@ -21,6 +21,7 @@ import {
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { UserRole } from '@/lib/types';
+import { Footer } from '@/components/footer';
 
 const demoPersonas = [
   {
@@ -58,13 +59,24 @@ const demoPersonas = [
   },
   {
     role: 'student',
-    title: 'Aarav Sharma',
-    sub: 'Class 8B • Roll #14',
+    title: 'Aarav Sharma (Secondary)',
+    sub: 'Class 8B • Grades 6-12 Portal',
     email: 'aarav.sharma@student.edu360.internal',
     password: 'student123',
     icon: BookOpen,
     color: 'from-purple-600 to-indigo-700',
     border: 'border-purple-200 hover:border-purple-400',
+    target: '/student'
+  },
+  {
+    role: 'student',
+    title: 'Aarav Kumar (Junior)',
+    sub: 'Class 3-A • K-5 Junior Explorer 🦊',
+    email: 'aarav.junior@student.edu360.internal',
+    password: 'student123',
+    icon: Sparkles,
+    color: 'from-amber-500 via-pink-500 to-indigo-500',
+    border: 'border-amber-300 hover:border-amber-500',
     target: '/student'
   }
 ];
@@ -104,6 +116,7 @@ export default function LoginPage() {
     setEmail(persona.email);
     setPassword(persona.password);
     setErrorMessage('');
+    loginAs(persona.role as UserRole);
   };
 
   return (
@@ -149,7 +162,7 @@ export default function LoginPage() {
                 const isSelected = email === p.email;
                 return (
                   <button
-                    key={p.role}
+                    key={p.email}
                     type="button"
                     onClick={() => handleSelectCredentials(p)}
                     className={`w-full text-left p-3.5 rounded-2xl bg-white border ${
@@ -301,6 +314,9 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+
+        {/* Brand Footer */}
+        <Footer />
       </div>
     </div>
   );

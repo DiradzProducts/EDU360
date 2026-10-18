@@ -60,79 +60,79 @@ body {
   background: #475569;
 }
 
-/* Bulletproof Full-Application Dark Mode Theme Rules */
-.dark body {
+/* Bulletproof Full-Application Dark Mode Theme Rules (For internal portals only) */
+html.dark:not(:has(.public-marketing)) body {
   background-color: #070B14 !important;
   color: #F8FAFC !important;
 }
 
-.dark header {
+html.dark:not(:has(.public-marketing)) header:not(.public-marketing-header) {
   background-color: rgba(15, 23, 42, 0.95) !important;
   border-color: #1E293B !important;
 }
 
-.dark main {
+html.dark:not(:has(.public-marketing)) main {
   background-color: #070B14 !important;
   color: #F8FAFC !important;
 }
 
-.dark .bg-white,
-.dark .bg-white\/95,
-.dark .bg-white\/90,
-.dark .bg-white\/80 {
+html.dark:not(:has(.public-marketing)) .bg-white,
+html.dark:not(:has(.public-marketing)) .bg-white\/95,
+html.dark:not(:has(.public-marketing)) .bg-white\/90,
+html.dark:not(:has(.public-marketing)) .bg-white\/80 {
   background-color: #0F172A !important;
 }
 
-.dark .bg-\[\#F8FAFC\] {
+html.dark:not(:has(.public-marketing)) .bg-\[\#F8FAFC\] {
   background-color: #070B14 !important;
 }
 
-.dark .border-slate-100,
-.dark .border-slate-200,
-.dark .border-slate-200\/90,
-.dark .border-slate-200\/80,
-.dark .border-slate-200\/70,
-.dark .border-slate-200\/60,
-.dark .border-\[\#E2E8F0\] {
+html.dark:not(:has(.public-marketing)) .border-slate-100,
+html.dark:not(:has(.public-marketing)) .border-slate-200,
+html.dark:not(:has(.public-marketing)) .border-slate-200\/90,
+html.dark:not(:has(.public-marketing)) .border-slate-200\/80,
+html.dark:not(:has(.public-marketing)) .border-slate-200\/70,
+html.dark:not(:has(.public-marketing)) .border-slate-200\/60,
+html.dark:not(:has(.public-marketing)) .border-\[\#E2E8F0\] {
   border-color: #1E293B !important;
 }
 
-.dark .text-slate-900,
-.dark .text-\[\#0F172A\] {
+html.dark:not(:has(.public-marketing)) .text-slate-900,
+html.dark:not(:has(.public-marketing)) .text-\[\#0F172A\] {
   color: #F8FAFC !important;
 }
 
-.dark .text-slate-800 {
+html.dark:not(:has(.public-marketing)) .text-slate-800 {
   color: #F1F5F9 !important;
 }
 
-.dark .text-slate-700 {
+html.dark:not(:has(.public-marketing)) .text-slate-700 {
   color: #CBD5E1 !important;
 }
 
-.dark .text-slate-600 {
+html.dark:not(:has(.public-marketing)) .text-slate-600 {
   color: #94A3B8 !important;
 }
 
-.dark .text-slate-500 {
+html.dark:not(:has(.public-marketing)) .text-slate-500 {
   color: #94A3B8 !important;
 }
 
-.dark .bg-slate-50,
-.dark .bg-slate-50\/80,
-.dark .bg-slate-50\/70 {
+html.dark:not(:has(.public-marketing)) .bg-slate-50,
+html.dark:not(:has(.public-marketing)) .bg-slate-50\/80,
+html.dark:not(:has(.public-marketing)) .bg-slate-50\/70 {
   background-color: #1E293B !important;
 }
 
-.dark .bg-slate-100 {
+html.dark:not(:has(.public-marketing)) .bg-slate-100 {
   background-color: #1E293B !important;
 }
 
-.dark .hover\:bg-slate-50:hover {
+html.dark:not(:has(.public-marketing)) .hover\:bg-slate-50:hover {
   background-color: #1E293B !important;
 }
 
-.dark .hover\:bg-slate-100:hover {
+html.dark:not(:has(.public-marketing)) .hover\:bg-slate-100:hover {
   background-color: #334155 !important;
 }
 
@@ -158,3 +158,16 @@ div[data-nextjs-dev-indicators] {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* Brand Footer Styles */
+.brand-footer {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.brand-name {
+  color: #6366f1;
+  font-weight: 600;
+}
+

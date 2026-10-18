@@ -32,7 +32,8 @@ import {
   Award,
   CheckCircle2,
   X,
-  ExternalLink
+  ExternalLink,
+  User
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
@@ -50,8 +51,16 @@ interface NotificationItem {
   color: string;
 }
 
+import { MarketingNavbar } from '@/components/marketing-navbar';
+
 export function Navbar() {
   const pathname = usePathname();
+
+  // If on public marketing landing page, strictly render the dedicated Public Marketing Navbar
+  if (pathname === '/') {
+    return <MarketingNavbar />;
+  }
+
   const router = useRouter();
   const { user, role, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -193,8 +202,8 @@ export function Navbar() {
           </Link>
         </div>
 
-        {/* Center: Role-Specific Navigation (Hidden on /student to avoid double-header with left sidebar) */}
-        {!isAuthPage && user && !pathname.startsWith('/student') && (
+        {/* Center: Role-Specific Navigation (Hidden on portals with dedicated left sidebars to avoid double navigation) */}
+        {!isAuthPage && user && !pathname.startsWith('/student') && !pathname.startsWith('/parent') && !pathname.startsWith('/teacher') && !pathname.startsWith('/admin') && (
           <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 dark:bg-slate-800/80 rounded-2xl p-1 border border-slate-200 dark:border-slate-700">
             {navItems.map((item, idx) => {
               const Icon = item.icon;
@@ -403,28 +412,52 @@ export function Navbar() {
 
               {/* Profile & Security Dropdown */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-2xl z-50 space-y-2">
-                  <div className="p-2 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Signed in as</span>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">{user.name}</span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">{user.email}</span>
-
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-semibold bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
-                      <span className="text-slate-600 dark:text-slate-400">School Client Code:</span>
-                      <span className="font-mono font-bold text-blue-700 dark:text-blue-400">{user.school_code || 'EDU-GLOBAL-360'}</span>
+                <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-2xl z-50 space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="p-2 border-b border-slate-100 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={user.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'}
+                        alt={user.name}
+                        className="h-10 w-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">{user.name}</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">{user.email}</span>
+                      </div>
                     </div>
 
-                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 p-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 font-semibold">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                      <span>Authenticated Session • Strict Role Enforced</span>
+                    <div className="flex items-center justify-between text-[10px] bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Session Status:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                        Active &bull; {user.role.toUpperCase()}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="pt-1">
+                  <div className="space-y-1">
+                    {user.role === 'student' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          if (pathname.startsWith('/student')) {
+                            window.dispatchEvent(new CustomEvent('edu360-navigate', { detail: 'profile' }));
+                          } else {
+                            router.push('/student?tab=profile');
+                          }
+                        }}
+                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
+                      >
+                        <User className="h-4 w-4 text-slate-400" />
+                        <span>View SIS Profile Dossier</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => { logout(); setShowUserMenu(false); }}
-                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-left"
+                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-left"
                     >
                       <LogOut className="h-4 w-4 text-red-500" />
                       <span>Sign Out / Lock Session</span>

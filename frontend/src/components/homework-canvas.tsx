@@ -54,11 +54,19 @@ export function HomeworkCanvas({ submission, onSave, readOnly = false }: Homewor
         const parsed = JSON.parse(submission.annotations_json);
         if (Array.isArray(parsed)) {
           setAnnotations(parsed);
+        } else {
+          setAnnotations([]);
         }
       } catch (e) {
         console.error("Failed to parse annotations JSON", e);
+        setAnnotations([]);
       }
+    } else {
+      setAnnotations([]);
     }
+    setMarks(submission.marks_obtained !== undefined && submission.marks_obtained !== null ? submission.marks_obtained : 17.5);
+    setRemarks(submission.teacher_remarks || "Good method in Q2, revise formula in Q4 before test!");
+    setSavedSuccess(false);
   }, [submission]);
 
   // Redraw canvas whenever annotations change

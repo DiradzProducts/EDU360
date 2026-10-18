@@ -19,8 +19,11 @@ import {
   AlertCircle,
   X,
   ExternalLink,
-  BookOpen
+  BookOpen,
+  MessageSquareQuote,
+  Check
 } from 'lucide-react';
+import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
 
 interface OfficialDocument {
   id: string;
@@ -38,6 +41,24 @@ export function ParentSisView() {
   const [selectedDoc, setSelectedDoc] = useState<OfficialDocument | null>(null);
   const [downloadToast, setDownloadToast] = useState<string | null>(null);
   const [selectedDaySchedule, setSelectedDaySchedule] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
+  const [remarks, setRemarks] = useState<StudentRemark[]>(() => getRemarksForStudent(1));
+  const [selectedRemarkCategory, setSelectedRemarkCategory] = useState<string>('ALL');
+
+  const handleAcknowledgeRemark = (remarkId: number) => {
+    setRemarks(prev => prev.map(r => {
+      if (r.id === remarkId) {
+        return {
+          ...r,
+          acknowledged_by_parent: true,
+          parent_ack_by: "Mr. Rajesh Sharma (Parent)",
+          parent_ack_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+        };
+      }
+      return r;
+    }));
+    setDownloadToast("Digitally signed and acknowledged faculty observation.");
+    setTimeout(() => setDownloadToast(null), 3000);
+  };
 
   const officialDocs: OfficialDocument[] = [
     {
@@ -312,6 +333,111 @@ export function ParentSisView() {
 
       </div>
 
+      {/* Official Faculty & School Remarks Dossier */}
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-3 py-0.5 text-xs font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                <MessageSquareQuote className="h-3.5 w-3.5" />
+                Official Pedagogical Observations &amp; Remarks
+              </span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Authorized for Parent &amp; Faculty Review
+              </span>
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+              Teacher Observations, Behavioral Feedback &amp; Commendations
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Review continuous qualitative assessments logged by Aarav&apos;s Class Teacher, Subject Mentors, and Principal.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              {remarks.length} Official Remarks
+            </span>
+          </div>
+        </div>
+
+        {/* Category Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {['ALL', 'Academic Excellence', 'Behavioral & Conduct', 'Special Commendation', 'Remedial / Focus Area'].map((cat) => {
+            const count = cat === 'ALL' ? remarks.length : remarks.filter(r => r.category === cat).length;
+            const isSelected = selectedRemarkCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedRemarkCategory(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {cat} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Remarks Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {remarks
+            .filter(r => selectedRemarkCategory === 'ALL' || r.category === selectedRemarkCategory)
+            .map((remark) => (
+              <div
+                key={remark.id}
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 p-5 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-9 w-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center justify-center shrink-0">
+                        {remark.author_name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{remark.author_name}</h4>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{remark.author_role} &bull; {remark.date}</span>
+                      </div>
+                    </div>
+
+                    <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold">
+                      {remark.category}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    &ldquo;{remark.remark_text}&rdquo;
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                  {remark.acknowledged_by_parent ? (
+                    <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold text-[11px] bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>Acknowledged on {remark.parent_ack_date || remark.date}</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleAcknowledgeRemark(remark.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>Acknowledge Observation</span>
+                    </button>
+                  )}
+
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Priority: {remark.priority}
+                  </span>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
       {/* Weekly Academic Timetable Preview */}
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -437,6 +563,25 @@ export function ParentSisView() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Student Relocation & School Exit Protocol (Only accessible when needed) */}
+        <div className="mt-4 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div>
+            <span className="font-bold text-slate-800 dark:text-slate-200 block">
+              Relocating or Transferring to another Institution?
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              Initiate formal Transfer Certificate (TC) departure clearance only when withdrawing or moving.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadToast("Exit Clearance Request registered. The Registrar will contact Mr. Rajesh Sharma.")}
+            className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3.5 py-2 font-bold shrink-0 transition-colors cursor-pointer"
+          >
+            Request School Exit / TC
+          </button>
         </div>
       </div>
 

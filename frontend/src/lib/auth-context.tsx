@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   role: UserRole;
   isAuthenticated: boolean;
+  mounted: boolean;
   loginAs: (role: UserRole) => void;
   loginWithCredentials: (user: User) => void;
   logout: () => void;
@@ -62,44 +63,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [mounted, setMounted] = useState(false);
 
+  // Helper to set session cookie for Next.js route protection
+  const syncSessionCookie = (activeRole: string | null) => {
+    if (typeof document !== 'undefined') {
+      if (activeRole) {
+        document.cookie = `edu360_session=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
+      } else {
+        document.cookie = 'edu360_session=; path=/; max-age=0; SameSite=Lax';
+      }
+    }
+  };
+
   // Initialize from localStorage (requires explicit login)
   useEffect(() => {
     try {
       const stored = localStorage.getItem('edu360_active_user');
       if (stored) {
-        setUser(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setUser(parsed);
+        syncSessionCookie(parsed.role);
       } else {
         // Unauthenticated session - requires login with credentials
         setUser(null);
+        syncSessionCookie(null);
       }
     } catch {
       setUser(null);
+      syncSessionCookie(null);
     }
     setMounted(true);
   }, []);
 
-  // Sync state if pathname implies role when user is set
+  // Sync state when user changes
   useEffect(() => {
-    if (!mounted || !user) return;
-    localStorage.setItem('edu360_active_user', JSON.stringify(user));
+    if (!mounted) return;
+    if (user) {
+      localStorage.setItem('edu360_active_user', JSON.stringify(user));
+      syncSessionCookie(user.role);
+    } else {
+      localStorage.removeItem('edu360_active_user');
+      syncSessionCookie(null);
+    }
   }, [user, mounted]);
 
   const loginAs = (role: UserRole) => {
     const selected = defaultUsers[role];
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
+    syncSessionCookie(role);
     router.push(`/${role}`);
   };
 
   const loginWithCredentials = (newUser: User) => {
     setUser(newUser);
     localStorage.setItem('edu360_active_user', JSON.stringify(newUser));
+    syncSessionCookie(newUser.role);
     router.push(`/${newUser.role}`);
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('edu360_active_user');
+    syncSessionCookie(null);
     router.push('/login');
   };
 
@@ -107,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const selected = defaultUsers[newRole];
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
+    syncSessionCookie(newRole);
     router.push(`/${newRole}`);
   };
 
@@ -118,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         role,
         isAuthenticated: !!user,
+        mounted,
         loginAs,
         loginWithCredentials,
         logout,

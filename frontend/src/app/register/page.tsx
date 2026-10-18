@@ -20,12 +20,15 @@ import {
   KeyRound, 
   CheckCircle2, 
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { UserRole } from '@/lib/types';
+import { Footer } from '@/components/footer';
 
 const roleOptions = [
   {
@@ -85,6 +88,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
@@ -122,6 +128,14 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!verifiedSchool) {
       setErrorMsg('Please enter a valid Institutional School Code issued to your school.');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMsg('Passwords do not match. Both password entries must be identical before creating your account.');
       return;
     }
     setLoading(true);
@@ -374,25 +388,25 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Mobile Number
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <Phone className="h-4 w-4" />
-                      </div>
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+91 98765 00000"
-                        className="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mobile Number
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Phone className="h-4 w-4" />
                     </div>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+91 98765 00000"
+                      className="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Account Password
@@ -402,13 +416,70 @@ export default function RegisterPage() {
                         <Lock className="h-4 w-4" />
                       </div>
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Create password (6+ chars)"
-                        className="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {password && password.length < 6 && (
+                      <span className="text-[10px] text-amber-600 mt-1 block font-medium">
+                        Must be at least 6 characters
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Confirm Password
+                      </label>
+                      {confirmPassword && (
+                        <span className={`text-[10px] font-bold ${
+                          password === confirmPassword 
+                            ? 'text-emerald-600' 
+                            : 'text-red-500'
+                        }`}>
+                          {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        className={`w-full rounded-xl border pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
+                          confirmPassword && password !== confirmPassword
+                            ? 'border-red-300 focus:ring-red-400 bg-red-50/20'
+                            : confirmPassword && password === confirmPassword
+                            ? 'border-emerald-300 focus:ring-emerald-400 bg-emerald-50/20'
+                            : 'border-slate-300 focus:ring-blue-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                        tabIndex={-1}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -441,6 +512,9 @@ export default function RegisterPage() {
             </p>
           </div>
         </div>
+
+        {/* Brand Footer */}
+        <Footer />
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { 
   Users, 
   MessageSquare, 
@@ -11,7 +12,9 @@ import {
   Sparkles, 
   Bot, 
   UserCheck,
-  Plus
+  Plus,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 import { AdmissionEnquiry } from '@/lib/types';
 
@@ -29,7 +32,6 @@ const stages = [
 ];
 
 export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBoardProps) {
-  const [selectedEnquiry, setSelectedEnquiry] = useState<AdmissionEnquiry | null>(null);
   const [convertingId, setConvertingId] = useState<number | null>(null);
 
   const handleConvert = async (id: number) => {
@@ -74,7 +76,13 @@ export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBo
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="text-xs font-bold text-slate-900">{enquiry.student_name}</h4>
+                          <Link 
+                            href={`/admin/leads/${enquiry.id}`}
+                            className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors flex items-center gap-1 group"
+                          >
+                            <span>{enquiry.student_name}</span>
+                            <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </Link>
                           <span className="text-[11px] text-slate-500 block">{enquiry.target_grade}</span>
                         </div>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600">
@@ -88,17 +96,14 @@ export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBo
 
                       {/* Action buttons */}
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                        {enquiry.chat_transcript && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedEnquiry(enquiry)}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded-lg"
-                            title="View AI Chatbot conversation"
-                          >
-                            <Bot className="h-3 w-3" />
-                            <span>Chat Log</span>
-                          </button>
-                        )}
+                        <Link
+                          href={`/admin/leads/${enquiry.id}`}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded-lg transition-colors"
+                          title="Open full lead dossier & AI chat log"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>Details</span>
+                        </Link>
 
                         {stage.id !== 'converted' ? (
                           <button
@@ -126,77 +131,6 @@ export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBo
           );
         })}
       </div>
-
-      {/* AI Chatbot Transcript Viewer Modal */}
-      {selectedEnquiry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-                  <Bot className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">AI Chatbot Transcript</h3>
-                  <span className="text-[11px] text-slate-500">Lead: {selectedEnquiry.student_name} ({selectedEnquiry.parent_name})</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedEnquiry(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="my-4 max-h-72 overflow-y-auto space-y-3 p-2 bg-slate-50 rounded-xl border border-slate-200">
-              {(() => {
-                try {
-                  const messages = JSON.parse(selectedEnquiry.chat_transcript || '[]');
-                  return messages.map((m: any, idx: number) => (
-                    <div 
-                      key={idx} 
-                      className={`flex flex-col ${m.sender === 'parent' ? 'items-end' : 'items-start'}`}
-                    >
-                      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs shadow-sm ${
-                        m.sender === 'parent' 
-                          ? 'bg-blue-600 text-white rounded-br-xs' 
-                          : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
-                      }`}>
-                        <p>{m.text}</p>
-                      </div>
-                      <span className="text-[9px] text-slate-400 mt-1 px-1">{m.time}</span>
-                    </div>
-                  ));
-                } catch {
-                  return <p className="text-xs text-slate-500">No structured transcript found.</p>;
-                }
-              })()}
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-              <button
-                onClick={() => setSelectedEnquiry(null)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  handleConvert(selectedEnquiry.id);
-                  setSelectedEnquiry(null);
-                }}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm"
-              >
-                <UserCheck className="h-4 w-4" />
-                <span>1-Click Convert to SIS Profile</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -26,9 +26,25 @@ import {
   Eye,
   Award,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck,
+  Send,
+  Bell,
+  UserCheck,
+  CheckCheck,
+  Printer,
+  FileCheck,
+  AlertTriangle,
+  ExternalLink,
+  FileSpreadsheet,
+  Copy,
+  PhoneCall,
+  MessageSquare,
+  Share2,
+  Upload
 } from 'lucide-react';
-import { FocusTable, RevisionDay, HomeworkSubmission } from '@/lib/types';
+import { FocusTable, RevisionDay, HomeworkSubmission, ParentTeacherNote, AcademicCompliance, BacklogEvent } from '@/lib/types';
+import { api } from '@/lib/api';
 import { HomeworkCanvas } from '@/components/homework-canvas';
 
 export interface FocusSubjectItem {
@@ -443,24 +459,65 @@ export const ALL_FOCUS_SUBJECTS: FocusSubjectItem[] = [
 ];
 
 interface FocusTableViewProps {
-  table?: FocusTable;
+  table?: FocusTable | null;
   submission?: HomeworkSubmission | null;
   isParentView?: boolean;
+  isNewUser?: boolean;
+  currentRole?: 'teacher' | 'parent' | 'student';
+  studentInfo?: {
+    name: string;
+    rollNo?: string;
+    className?: string;
+    parentName?: string;
+    parentPhone?: string;
+  };
   onToggleParentCheck?: () => Promise<void>;
   onUpdateStatus?: (newStatus: string) => Promise<void>;
+  onSchedulePtm?: () => void;
+  onChatWithParent?: () => void;
+  onVerifyRemedial?: (subjectId: string, remarks?: string) => void;
+  initialRemedialStatus?: Record<string, {
+    fileName: string;
+    fileSize: string;
+    notes?: string;
+    submittedAt: string;
+    verified?: boolean;
+    verifiedAt?: string;
+    teacherRemarks?: string;
+  }>;
 }
 
 export function FocusTableView({ 
   table, 
   submission,
   isParentView = false, 
+  isNewUser = false,
+  currentRole,
+  studentInfo,
   onToggleParentCheck,
-  onUpdateStatus 
+  onUpdateStatus,
+  onSchedulePtm,
+  onChatWithParent,
+  onVerifyRemedial,
+  initialRemedialStatus
 }: FocusTableViewProps) {
+  // Determine effective role (parent if isParentView or explicitly passed; student if currentRole === 'student')
+  const isStudent = currentRole === 'student';
+  const isParent = !isStudent && (Boolean(isParentView) || currentRole === 'parent');
+  const isTeacher = !isStudent && !isParent && (currentRole === 'teacher' || (!currentRole && !isParentView));
+
+  // Check for newly registered user without assigned remedial interventions
+  const isCleanNewUser = isNewUser || !table || table.status === 'not_enrolled' || (!table.subject && !table.weak_concept);
+
   // Active subject selection (defaults to mathematics or table.subject)
   const initialSubjectId = table?.subject?.toLowerCase().includes('physic') ? 'physics' : 'math';
   const [activeSubjectId, setActiveSubjectId] = useState<string>(initialSubjectId);
   const [subjectFilter, setSubjectFilter] = useState<'all' | 'critical' | 'in_progress' | 'on_track'>('all');
+
+  // For Parents: default to viewing CURRENT DAY homework/practice only to avoid clutter!
+  const [parentViewMode, setParentViewMode] = useState<'today_only' | 'full_plan'>('today_only');
+  const [briefingCopied, setBriefingCopied] = useState(false);
+  const [evidenceFilter, setEvidenceFilter] = useState<'all' | 'missed' | 'graded'>('all');
 
   // Modals for opening cards & diagnostic evidence
   const [selectedDayModal, setSelectedDayModal] = useState<RevisionDay | null>(null);
@@ -468,6 +525,140 @@ export function FocusTableView({
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [showPracticeSolution, setShowPracticeSolution] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [evidenceNotes, setEvidenceNotes] = useState<ParentTeacherNote[]>([]);
+  const [complianceData, setComplianceData] = useState<AcademicCompliance | null>(null);
+  const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
+
+  // Guardian approval state: NEVER auto-approved by default
+  const [guardianApproved, setGuardianApproved] = useState<boolean>(
+    Boolean(table?.status === 'approved' && table?.parent_check_completed === true)
+  );
+  const [guardianNotified, setGuardianNotified] = useState(false);
+  const [approvalDate, setApprovalDate] = useState<string | null>(
+    table?.status === 'approved' && table?.parent_check_completed ? '13 Oct 2026' : null
+  );
+
+  // Remedial Practice Solution Submission State (Per Subject)
+  const [remedialSubmissions, setRemedialSubmissions] = useState<Record<string, {
+    fileName: string;
+    fileSize: string;
+    notes?: string;
+    submittedAt: string;
+    verified?: boolean;
+    verifiedAt?: string;
+    teacherRemarks?: string;
+  }>>(initialRemedialStatus || {
+    math: {
+      fileName: 'Aarav_Quadratic_Factorization_Rough_Notebook.pdf',
+      fileSize: '1.4 MB',
+      notes: 'Completed 4 middle-term splitting questions. Checked negative sign distribution in Q3 & Q4.',
+      submittedAt: 'Today, 08:30 AM',
+      verified: false
+    }
+  });
+  const [currentRemedialFile, setCurrentRemedialFile] = useState<File | null>(null);
+  const [currentRemedialNotes, setCurrentRemedialNotes] = useState<string>('');
+  const [isSubmittingRemedial, setIsSubmittingRemedial] = useState<boolean>(false);
+  const remedialFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleRemedialFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCurrentRemedialFile(file);
+      triggerNotification(`Practice file selected: ${file.name}`);
+    }
+  };
+
+  const handleSubmitRemedialWork = () => {
+    if (!currentRemedialFile) return;
+    setIsSubmittingRemedial(true);
+    setTimeout(() => {
+      const now = new Date();
+      const timeStr = `Today at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      setRemedialSubmissions(prev => ({
+        ...prev,
+        [activeSubject.id]: {
+          fileName: currentRemedialFile.name,
+          fileSize: `${(currentRemedialFile.size / 1024).toFixed(1)} KB`,
+          notes: currentRemedialNotes.trim() || undefined,
+          submittedAt: timeStr,
+          verified: false
+        }
+      }));
+      setIsSubmittingRemedial(false);
+      setCurrentRemedialFile(null);
+      setCurrentRemedialNotes('');
+      triggerNotification('✓ Remedial Practice Solution submitted! Awaiting teacher verification.');
+    }, 400);
+  };
+
+  const handleResetRemedialSubmission = (subjectId: string) => {
+    setRemedialSubmissions(prev => {
+      const updated = { ...prev };
+      delete updated[subjectId];
+      return updated;
+    });
+    setCurrentRemedialFile(null);
+    setCurrentRemedialNotes('');
+  };
+
+  const handleTeacherVerifyRemedial = (subjectId: string, remarks?: string) => {
+    setRemedialSubmissions(prev => ({
+      ...prev,
+      [subjectId]: {
+        ...(prev[subjectId] || {
+          fileName: 'Remedial_Practice_Notebook.pdf',
+          fileSize: '1.2 MB',
+          submittedAt: 'Today'
+        }),
+        verified: true,
+        verifiedAt: 'Just now',
+        teacherRemarks: remarks || 'Practice verified. Factoring technique and sign accuracy approved.'
+      }
+    }));
+    if (onVerifyRemedial) {
+      onVerifyRemedial(subjectId, remarks);
+    }
+    triggerNotification(`✓ Verified ${studentInfo?.name || 'Student'}'s remedial practice solution!`);
+  };
+
+  const handleTeacherReturnRemedial = (subjectId: string, remarks: string) => {
+    setRemedialSubmissions(prev => ({
+      ...prev,
+      [subjectId]: {
+        ...(prev[subjectId] || {
+          fileName: 'Remedial_Practice_Notebook.pdf',
+          fileSize: '1.2 MB',
+          submittedAt: 'Today'
+        }),
+        verified: false,
+        teacherRemarks: remarks
+      }
+    }));
+    triggerNotification(`Returned remedial solution to ${studentInfo?.name || 'Student'} with revision notes.`);
+  };
+
+  React.useEffect(() => {
+    async function loadEvidenceNotes() {
+      try {
+        const notes = await api.getParentTeacherNotes(1);
+        setEvidenceNotes(notes.filter(n => n.is_focus_table_evidence));
+      } catch (err) {
+        console.error('Error loading Focus Table evidence notes', err);
+      }
+    }
+    loadEvidenceNotes();
+
+    async function loadComplianceData() {
+      try {
+        const comp = await api.getAcademicCompliance(table?.student_id || 1);
+        setComplianceData(comp);
+      } catch (err) {
+        console.error('Error loading Academic Compliance data', err);
+      }
+    }
+    loadComplianceData();
+  }, [table]);
 
   // Fallback realistic homework submission if not loaded yet
   const activeSubmission: HomeworkSubmission = submission || {
@@ -503,15 +694,15 @@ export function FocusTableView({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Parent verified state
+  // Parent verified state - defaults to false unless explicitly approved
   const [parentCheckedMap, setParentCheckedMap] = useState<Record<string, boolean>>({
-    math: table ? table.parent_check_completed : true,
+    math: Boolean(table?.status === 'approved' && table?.parent_check_completed),
     physics: false,
-    chemistry: true,
-    biology: true,
+    chemistry: false,
+    biology: false,
     english: false,
-    cs: true,
-    social: true
+    cs: false,
+    social: false
   });
 
   const activeSubject = ALL_FOCUS_SUBJECTS.find(s => s.id === activeSubjectId) || ALL_FOCUS_SUBJECTS[0];
@@ -521,7 +712,30 @@ export function FocusTableView({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleGuardianApprove = async () => {
+    const nowStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    setGuardianApproved(true);
+    setApprovalDate(nowStr);
+    setParentCheckedMap(prev => ({
+      ...prev,
+      [activeSubject.id]: true
+    }));
+    if (onUpdateStatus) {
+      await onUpdateStatus('approved');
+    }
+    triggerNotification('Focus Table Plan successfully reviewed and approved by Guardian!');
+  };
+
+  const handleNotifyGuardian = () => {
+    setGuardianNotified(true);
+    triggerNotification('Notification dispatched to Guardian via WhatsApp & Mobile App!');
+  };
+
   const toggleParentCheckForSubject = async (subId: string) => {
+    if (!guardianApproved) {
+      triggerNotification('Plan must be approved by Guardian before verifying daily notebooks.');
+      return;
+    }
     setParentCheckedMap(prev => ({
       ...prev,
       [subId]: !prev[subId]
@@ -539,6 +753,60 @@ export function FocusTableView({
     if (subjectFilter === 'on_track') return item.currentMastery >= 75;
     return true;
   });
+
+  // CLEAN EMPTY INITIAL STATE FOR NEW USERS
+  if (isCleanNewUser) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto py-6">
+        <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 sm:p-12 text-center shadow-md space-y-6">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm">
+            <ShieldCheck className="h-10 w-10" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-1 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Clean Initial Academic Record</span>
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+              Focus Table &mdash; No Active Remedial Plan Required
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+              This newly created account has zero active remediation backlogs, missed assignment deadlines, or flagged misconceptions. Your record is completely clear.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left pt-2">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block">Curriculum Status</span>
+              <span className="text-sm font-black text-slate-900 dark:text-white mt-1 block">Regular Track</span>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5">100% On-Schedule</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block">Guardian Approval</span>
+              <span className="text-sm font-black text-amber-600 dark:text-amber-400 mt-1 block">Not Required</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">No Active Plan</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block">Diagnostic Backlogs</span>
+              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1 block">0 Issues Flagged</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Clean Baseline</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-left text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-blue-900 dark:text-blue-300">
+              <Target className="h-4 w-4 text-blue-600" />
+              <span>How the Focus Table &amp; Guardian Approval Process Works</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+              Whenever a teacher grades homework or exams and flags an area needing reinforcement, a structured 4-day revision timetable is created. <b>The system will automatically alert your linked guardian, and the plan only enters &quot;Approved&quot; status once the guardian explicitly reviews and signs off on it.</b>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -650,14 +918,264 @@ export function FocusTableView({
       </div>
 
       {/* ========================================================= */}
-      {/* 2. ACTIVE 4-DAY REVISION TIMETABLE (CLICKABLE DAY CARDS)  */}
+      {/* 1.5 TEACHER PARENTAL CONNECTION & PTM EVIDENCE DOSSIER   */}
+      {/* (Exclusively visible to Teachers for parental connect)    */}
       {/* ========================================================= */}
-      <div className="rounded-3xl border border-purple-200/90 dark:border-purple-900/60 bg-white dark:bg-slate-900 p-6 shadow-md space-y-5">
+      {isTeacher && (
+        <div className="rounded-3xl border border-indigo-200/90 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 dark:from-indigo-950/30 dark:via-slate-900 dark:to-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-indigo-100 dark:border-indigo-950 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-black border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                  PTM Parental Connection Dossier
+                </span>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Verifiable Homework &amp; Missed Work Telemetry
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1 flex items-center gap-2">
+                Teacher Evidence Dossier for Parental Connection
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Target: <strong>{studentInfo?.name || 'Aarav Sharma'}</strong> ({studentInfo?.className || 'Class 8-B'}) • Guardian: <strong>{studentInfo?.parentName || 'Mr. Rajesh Sharma'}</strong> ({studentInfo?.parentPhone || '+91 98450 12345'})
+              </p>
+            </div>
+
+            {/* Quick Actions for Teacher */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  const script = `PTM BRIEFING FOR ${studentInfo?.name || 'Aarav Sharma'}:\n1. Diagnostic Graded HW: Worksheet #4 scored 17.5/20. Misconception identified in distributing negative signs across binomial denominators -(3x-5).\n2. Missed Work / Backlog: Worksheet 4.2 (Factorization) exceeded deadline on 15 Oct 2026. Evidence Code #EVD-BKLOG-884.\n3. Remedial Action: Active 4-Day targeted practice plan. Guardian requested to verify Day 2 rough notebook tonight.`;
+                  navigator.clipboard.writeText(script);
+                  setBriefingCopied(true);
+                  triggerNotification('PTM Evidence & Talking Points copied to clipboard!');
+                  setTimeout(() => setBriefingCopied(false), 3000);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 px-3.5 py-2 text-xs font-bold transition-all shadow-2xs active:scale-95"
+              >
+                {briefingCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{briefingCopied ? 'Briefing Copied ✓' : 'Copy Call Script'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onSchedulePtm) {
+                    onSchedulePtm();
+                  } else {
+                    triggerNotification(`Opening PTM Conference Scheduler for ${studentInfo?.parentName || 'Mr. Rajesh Sharma'}`);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs active:scale-95"
+              >
+                <PhoneCall className="h-3.5 w-3.5" />
+                <span>Call / Schedule PTM</span>
+              </button>
+
+              <button
+                onClick={() => setIsExportReportModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 px-3.5 py-2 text-xs font-bold transition-all shadow-xs active:scale-95"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>Export PTM PDF</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Dual Evidence Summary Grid (Homework vs Missed Work) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* EVIDENCE 1: DIAGNOSTIC GRADED HOMEWORK */}
+            <div className="rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                  <FileText className="h-3.5 w-3.5" />
+                  1. Graded Homework Evidence
+                </span>
+                <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                  Score: {activeSubmission.marks_obtained || 17.5} / 20
+                </span>
+              </div>
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                Worksheet #4: Algebraic Fractions &amp; Quadratic Roots
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900">
+                <strong>Pedagogical Finding:</strong> &ldquo;Aarav accurately factors binomial denominators, but drops negative signs during LCM numerator expansion in Q3: <code>-(3x - 5)</code> written as <code>-3x - 5</code> instead of <code>-3x + 5</code>.&rdquo;
+              </p>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] text-slate-500">Teacher: Mrs. Sunitha Rao</span>
+                <button
+                  onClick={() => setEvidenceModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 dark:text-purple-300 hover:underline cursor-pointer"
+                >
+                  <Eye className="h-3 w-3" />
+                  <span>Inspect Graded Canvas &rarr;</span>
+                </button>
+              </div>
+            </div>
+
+            {/* EVIDENCE 2: MISSED WORK / ACTIVE BACKLOG */}
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  2. Missed Work / Overdue Cutoff
+                </span>
+                <span className="rounded-full bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 px-2 py-0.5 text-[10px] font-bold">
+                  UNRESOLVED BACKLOG
+                </span>
+              </div>
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                Worksheet 4.2: Solving Quadratics by Factoring
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900">
+                <strong>Telemetry Audit:</strong> &ldquo;Student missed scheduled cutoff on 15 Oct 2026, 05:00 PM. Automatically transitioned to Backlog for parent review to ensure study consistency before Mid-Terms.&rdquo;
+              </p>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] font-mono text-slate-500">Audit Code: #EVD-BKLOG-884</span>
+                <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Overdue by 3 Days</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Talking Points Call Script Box */}
+          <div className="rounded-2xl bg-white dark:bg-slate-900/80 p-3.5 border border-indigo-100 dark:border-indigo-900/60 space-y-1">
+            <span className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
+              <MessageSquareQuote className="h-3.5 w-3.5" />
+              Prepared Talking Points for Call with {studentInfo?.parentName || 'Mr. Rajesh Sharma'}:
+            </span>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
+              &ldquo;Good afternoon Mr. Sharma. Calling to review Aarav&apos;s progress in Mathematics. He scored 17.5/20 on Worksheet #4 showing strong core factoring. However, Worksheet 4.2 missed its deadline on Oct 15 and is logged as an unresolved backlog. We have put him on a 4-day targeted practice plan to master distributive signs. Please inspect his rough notebook for Day 2 practice tonight.&rdquo;
+            </p>
+          </div>
+
+          {/* FACULTY REMEDIAL PRACTICE SOLUTION VERIFICATION */}
+          {(() => {
+            const activeRemedial = remedialSubmissions[activeSubject.id];
+            return (
+              <div className="rounded-2xl border border-emerald-200/90 dark:border-emerald-800/80 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 dark:from-emerald-950/30 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100 dark:border-emerald-900/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                      <FileCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>Remedial Practice Solution Verification</span>
+                        <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[10px] font-bold">
+                          Teacher Verification Queue
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Target Concept: <strong>{activeSubject.conceptTitle}</strong> ({activeSubject.subject})
+                      </p>
+                    </div>
+                  </div>
+
+                  {activeRemedial?.verified ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 text-white px-3 py-1 text-xs font-bold shadow-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Verified by Faculty ✓</span>
+                    </span>
+                  ) : activeRemedial ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 text-white px-3 py-1 text-xs font-bold shadow-xs">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>Awaiting Teacher Verification</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 text-xs font-bold">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>Pending Student Upload</span>
+                    </span>
+                  )}
+                </div>
+
+                {activeRemedial ? (
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-3.5 rounded-xl bg-white/90 dark:bg-slate-800/80 border border-emerald-200/80 dark:border-emerald-900">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className="font-bold text-slate-900 dark:text-white">Uploaded Solution:</span>
+                        <span className="font-mono text-purple-700 dark:text-purple-300 font-semibold truncate max-w-[280px]">
+                          {activeRemedial.fileName}
+                        </span>
+                        <span className="text-slate-400 font-normal">({activeRemedial.fileSize})</span>
+                        <span className="text-[10px] text-slate-500">• {activeRemedial.submittedAt}</span>
+                      </div>
+                      {activeRemedial.notes && (
+                        <p className="text-xs text-slate-600 dark:text-slate-300 italic bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
+                          Student note: &ldquo;{activeRemedial.notes}&rdquo;
+                        </p>
+                      )}
+                      {activeRemedial.teacherRemarks && (
+                        <p className="text-xs text-emerald-800 dark:text-emerald-300 font-medium bg-emerald-50/80 dark:bg-emerald-950/60 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                          Faculty note: &ldquo;{activeRemedial.teacherRemarks}&rdquo;
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!activeRemedial.verified ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleTeacherVerifyRemedial(activeSubject.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                          >
+                            <Check className="h-4 w-4" />
+                            <span>Verify &amp; Approve</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTeacherReturnRemedial(activeSubject.id, 'Please recheck negative signs in Q3 & Q4.')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 hover:bg-rose-50 text-rose-700 dark:text-rose-300 px-3 py-2 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            <X className="h-4 w-4" />
+                            <span>Return with Note</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 block">
+                            Solution Verified ✓
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            Focus table progression synced
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Student has not uploaded their rough notebook solution for {activeSubject.subject} yet.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => triggerNotification(`Remind SMS & App prompt sent to ${studentInfo?.name || 'Aarav'} & parent.`)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-3 py-1.5 font-bold hover:bg-amber-100 transition-colors cursor-pointer self-start sm:self-auto"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                      <span>Send Reminder</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 2. ACTIVE REVISION PLAN & TIMETABLE                       */}
+      {/* ========================================================= */}
+      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
         
         {/* Top Header of Active Plan */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-purple-100 dark:border-purple-900/40 pb-5">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 px-3 py-1 text-xs font-bold border border-purple-200 dark:border-purple-800">
                 <Sparkles className="h-3.5 w-3.5" />
                 Active Co-Tracked Plan
@@ -665,16 +1183,61 @@ export function FocusTableView({
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                 {activeSubject.subject} • {activeSubject.teacherName}
               </span>
+
+              {/* GUARDIAN APPROVAL STATUS BADGE (NEVER AUTO-APPROVED) */}
+              {!isStudent && (
+                guardianApproved ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-1 text-xs font-bold border border-emerald-300 dark:border-emerald-700">
+                    <CheckCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>Guardian Approved ({approvalDate || 'Verified'})</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-3 py-1 text-xs font-bold border border-amber-300 dark:border-amber-700">
+                    <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Awaiting Guardian Review &amp; Approval</span>
+                  </span>
+                )
+              )}
             </div>
+
             <h3 className="mt-2 text-xl font-black text-slate-900 dark:text-white">
               Target Intervention: {activeSubject.conceptTitle}
             </h3>
             <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
               Identified in {activeSubject.identifiedSource} • 4-Day Targeted Study (30 Mins / Day)
             </span>
+
+            {/* Workflow Action for Guardian Approval (Teachers & Parents Only) */}
+            {!isStudent && !guardianApproved && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2.5 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-2xl border border-amber-200 dark:border-amber-800/60">
+                {isParent ? (
+                  <button
+                    onClick={handleGuardianApprove}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    <span>Review &amp; Confirm Guardian Approval</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleNotifyGuardian}
+                    disabled={guardianNotified}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all disabled:opacity-60 cursor-pointer"
+                  >
+                    <Bell className="h-3.5 w-3.5" />
+                    <span>{guardianNotified ? 'Guardian Notification Dispatched ✓' : 'Notify Guardian for Explicit Approval'}</span>
+                  </button>
+                )}
+                <span className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
+                  {isParent 
+                    ? 'As student guardian, confirm approval to unlock co-signed notebook tracking.'
+                    : 'System enforces zero auto-approval. Guardian must verify plan.'}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Action Buttons: Diagnostic Homework Evidence + Full Diagnostic & Practice Sets */}
+          {/* Action Buttons: Full Diagnostic & Practice Sets (+ Teacher Evidence Inspect) */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-3 bg-purple-50/70 dark:bg-purple-950/40 p-2.5 rounded-2xl border border-purple-200 dark:border-purple-800">
               <div className="text-center px-3 border-r border-purple-200 dark:border-purple-800">
@@ -694,168 +1257,816 @@ export function FocusTableView({
               </div>
             </div>
 
-            <button
-              onClick={() => setEvidenceModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 px-3.5 py-3 text-xs font-bold shadow-xs transition-all active:scale-95"
-              title="Inspect teacher-annotated homework worksheet where the misconception was identified"
-            >
-              <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              <span>[ 👁️ View Diagnostic Homework Evidence: Worksheet #4 ({activeSubmission.marks_obtained || 17.5}/20) ]</span>
-            </button>
+            {/* Inspect Graded Evidence: Strictly for Teachers for parental connection */}
+            {isTeacher && (
+              <button
+                onClick={() => setEvidenceModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 px-3.5 py-3 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Inspect teacher-annotated homework worksheet where the misconception was identified"
+              >
+                <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span>Inspect Graded Evidence ({activeSubmission.marks_obtained || 17.5}/20)</span>
+              </button>
+            )}
 
             <button
               onClick={() => setSelectedSubjectModal(activeSubject)}
-              className="flex items-center gap-1.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 text-xs font-black shadow-md transition-all active:scale-95"
+              className="flex items-center gap-1.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Eye className="h-4 w-4" />
-              <span>[ Open Full Diagnostic &amp; Practice Sets ]</span>
+              <span>Full Diagnostic &amp; Practice</span>
             </button>
           </div>
         </div>
 
-        {/* 4-Day Timetable Grid - CLICKABLE CARDS */}
+        {/* TIMETABLE VIEW / PARENT CURRENT DAY VIEW */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              <span>4-Day Targeted Revision Timetable (Click any Day card to open exercise &amp; checklist)</span>
+              <span>
+                {isParent && parentViewMode === 'today_only'
+                  ? "Today's Active Focus & Homework (Current Day Only)"
+                  : '4-Day Targeted Revision Timetable'}
+              </span>
             </h4>
-            <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400">
-              Co-tracked by Teacher &amp; Parent
-            </span>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {activeSubject.revisionDays.map((item, idx) => {
-              const isCompleted = item.status === 'Completed';
-              const isInProgress = item.status === 'In Progress';
-
-              return (
-                <div 
-                  key={idx}
-                  onClick={() => setSelectedDayModal(item)}
-                  className={`rounded-2xl border p-4 flex flex-col justify-between transition-all cursor-pointer group hover:scale-[1.02] hover:shadow-md ${
-                    isCompleted 
-                      ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30' 
-                      : isInProgress
-                      ? 'border-purple-400 dark:border-purple-600 bg-purple-50/60 dark:bg-purple-950/40 ring-2 ring-purple-400/30'
-                      : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:border-purple-300'
+            {/* Parent Toggle: Current Day Only vs Full 4-Day Plan */}
+            {isParent ? (
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                <button
+                  onClick={() => setParentViewMode('today_only')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    parentViewMode === 'today_only'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                        {item.day}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                        isCompleted 
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
-                          : isInProgress 
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' 
-                          : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                      }`}>
-                        {item.status}
-                      </span>
+                  Today&apos;s Focus Only (Clean View)
+                </button>
+                <button
+                  onClick={() => setParentViewMode('full_plan')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    parentViewMode === 'full_plan'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  View Full 4-Day Plan
+                </button>
+              </div>
+            ) : (
+              <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400">
+                Co-tracked by Teacher &amp; Parent
+              </span>
+            )}
+          </div>
+
+          {/* PARENT CLEAN HERO CARD: TODAY'S HOMEWORK ONLY */}
+          {isParent && parentViewMode === 'today_only' ? (
+            <div className="rounded-2xl border border-purple-200/90 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-purple-600 text-white px-3 py-0.5 text-xs font-black">
+                    Day 2 • Active Today
+                  </span>
+                  <span className="rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 px-2.5 py-0.5 text-[11px] font-bold">
+                    In Progress
+                  </span>
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Profile kept clean: Displaying current day homework only
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <h5 className="text-base font-black text-slate-900 dark:text-white">
+                  Focus: Completing the Square Method &amp; Standard Form
+                </h5>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Prescribed 30-Min Practice: <strong>Practice 8 step-by-step expansions</strong> in rough study notebook. Ensure intermediate quadratic steps are written out.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-200/80 dark:border-purple-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-purple-900 dark:text-purple-300 block">
+                    Parent Home Check Requirement:
+                  </span>
+                  <p className="text-xs font-semibold text-purple-800 dark:text-purple-200 italic">
+                    &ldquo;Verify coefficient of x^2 is 1 and check sign before completing square.&rdquo;
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => toggleParentCheckForSubject(activeSubject.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 shrink-0 active:scale-95 ${
+                    parentCheckedMap[activeSubject.id]
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-purple-600 text-white hover:bg-purple-700'
+                  }`}
+                >
+                  {parentCheckedMap[activeSubject.id] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  <span>{parentCheckedMap[activeSubject.id] ? 'Co-Signed & Verified ✓' : 'Mark Daily Notebook Verified'}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* 4-DAY GRID (MODERNIZED & CLEAN) */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {activeSubject.revisionDays.map((item, idx) => {
+                const isCompleted = item.status === 'Completed';
+                const isInProgress = item.status === 'In Progress';
+
+                return (
+                  <div 
+                    key={idx}
+                    onClick={() => setSelectedDayModal(item)}
+                    className={`rounded-2xl border p-4 flex flex-col justify-between transition-all cursor-pointer group hover:scale-[1.01] hover:shadow-sm ${
+                      isCompleted 
+                        ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20' 
+                        : isInProgress
+                        ? 'border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/30 ring-1 ring-purple-400/30'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                          {item.day}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                          isCompleted 
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
+                            : isInProgress 
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' 
+                            : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <h5 className="mt-2 text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-1">
+                        {item.focus}
+                      </h5>
+
+                      <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                        {item.exercise}
+                      </p>
                     </div>
 
-                    <h5 className="mt-2 text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-1">
-                      {item.focus}
-                    </h5>
-
-                    <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
-                      {item.exercise}
-                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                        Parent Home Check:
+                      </span>
+                      <p className="text-[10px] text-slate-700 dark:text-slate-300 line-clamp-1 italic">
+                        &quot;{item.parent_checklist}&quot;
+                      </p>
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 mt-1.5 block group-hover:underline">
+                        Open day plan &rarr;
+                      </span>
+                    </div>
                   </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60">
-                    <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 block">
-                      Parent Home Check:
-                    </span>
-                    <p className="text-[10px] text-purple-800 dark:text-purple-200 line-clamp-1 italic">
-                      &quot;{item.parent_checklist}&quot;
-                    </p>
-                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 mt-2 block group-hover:underline">
-                      Click to open day plan →
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Diagnostic Homework Evidence Bar, Teacher Strategy & Parent Verification */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-purple-100 dark:border-purple-900/40">
-          
-          {/* 1. Teacher Strategy */}
-          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                <MessageSquareQuote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span>Teacher Strategy ({activeSubject.teacherName}):</span>
+        {/* 3. REFINED STRATEGY & PRACTICE CARDS */}
+        {isStudent ? (
+          /* ========================================================= */
+          /* STUDENT VIEW: PURE LEARNING & DRILL (ZERO EVIDENCE/PTM)   */
+          /* ========================================================= */
+          <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. Teacher Guidance Strategy */}
+              <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    <BrainCircuit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span>Teacher Strategy ({activeSubject.teacherName}):</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed italic line-clamp-3">
+                    &quot;{activeSubject.diagnosticObservation}&quot;
+                  </p>
+                </div>
+                <span className="text-[10px] text-slate-400 block">
+                  Remedial focus: Daily 30-min targeted exercises
+                </span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed italic line-clamp-3">
-                &quot;{activeSubject.diagnosticObservation}&quot;
+
+              {/* 2. Common Pitfall & How to Solve Correctly (Educational focus, NOT evidence) */}
+              <div className="rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/90 dark:border-amber-800 flex flex-col justify-between space-y-2 p-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-300">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span>Key Rule: Avoid Sign Pitfall</span>
+                    </div>
+                    <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
+                      Crucial Step
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-900 dark:text-amber-200 line-clamp-2">
+                    {activeSubject.commonMistake}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedSubjectModal(activeSubject)}
+                  className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Practice Rule &amp; View Solution &rarr;</span>
+                </button>
+              </div>
+
+              {/* 3. Daily Practice Goal & Student Target */}
+              <div className="rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 p-4 border border-purple-200/90 dark:border-purple-800 flex flex-col justify-between space-y-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 dark:text-purple-300 mb-1">
+                    <Target className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span>Today&apos;s Practice Target</span>
+                  </div>
+                  <p className="text-xs text-purple-900 dark:text-purple-200 leading-relaxed">
+                    Solve 8 step-by-step expansions in rough study notebook. Ensure parentheses are used when distributing signs.
+                  </p>
+                </div>
+                <div className="p-2 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-purple-100 dark:border-purple-900 flex items-center justify-between text-[11px] text-purple-800 dark:text-purple-300 font-semibold">
+                  <span>Zero Period Check Tomorrow</span>
+                  <span className="text-emerald-600 font-bold">🎯 In Progress</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. DEDICATED REMEDIAL PRACTICE SOLUTION SUBMISSION CARD */}
+            {(() => {
+              const activeRemedial = remedialSubmissions[activeSubject.id];
+              return (
+                <div className="rounded-3xl border border-purple-200/90 dark:border-purple-800/80 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-2xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shrink-0">
+                        <Upload className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>Remedial Practice Solution Submission</span>
+                          <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2.5 py-0.5 text-[10px] font-bold">
+                            Targeted Solution Upload
+                          </span>
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Upload snapshots or scanned PDF of your handwritten rough notebook drills for teacher review.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Target Topic indicator */}
+                    <div className="flex items-center gap-2 bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/60 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-900 dark:text-purple-200 self-start sm:self-auto">
+                      <Target className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="font-bold">{activeSubject.subject}:</span>
+                      <span className="truncate max-w-[220px]">{activeSubject.conceptTitle} (Practice Set 2)</span>
+                    </div>
+                  </div>
+
+                  {activeRemedial ? (
+                    /* Instant visual confirmation state */
+                    <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="rounded-full bg-emerald-600 text-white px-3 py-0.5 text-[11px] font-bold flex items-center gap-1 shadow-xs">
+                              <Check className="h-3 w-3" />
+                              Submitted — Awaiting Teacher Verification
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              {activeRemedial.submittedAt}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            Uploaded Solution: <span className="font-mono text-purple-700 dark:text-purple-300 font-medium">{activeRemedial.fileName}</span>{' '}
+                            <span className="text-slate-400 font-normal">({activeRemedial.fileSize})</span>
+                          </p>
+                          {activeRemedial.notes && (
+                            <p className="text-xs text-slate-600 dark:text-slate-400 italic bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 mt-1 max-w-xl">
+                              &ldquo;{activeRemedial.notes}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleResetRemedialSubmission(activeSubject.id)}
+                        className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 px-3.5 py-2 text-xs font-bold self-start sm:self-center transition-colors cursor-pointer shrink-0"
+                      >
+                        Re-submit Solution
+                      </button>
+                    </div>
+                  ) : (
+                    /* Submission Input Form */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                      {/* File Upload Box */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Handwritten Practice Sheet / Solution (PDF, JPG, PNG)
+                        </label>
+                        <input
+                          type="file"
+                          ref={remedialFileInputRef}
+                          onChange={handleRemedialFileChange}
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          className="hidden"
+                        />
+                        <div
+                          onClick={() => remedialFileInputRef.current?.click()}
+                          className="rounded-2xl border-2 border-dashed border-purple-200 dark:border-purple-800/80 p-4 text-center bg-purple-50/30 dark:bg-purple-950/20 hover:bg-purple-50/70 dark:hover:bg-purple-950/40 cursor-pointer transition-colors group flex flex-col items-center justify-center min-h-[110px]"
+                        >
+                          {currentRemedialFile ? (
+                            <div className="flex items-center justify-center gap-3 w-full">
+                              <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold shrink-0">
+                                <FileText className="h-5 w-5" />
+                              </div>
+                              <div className="text-left min-w-0">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white block truncate max-w-[200px]">
+                                  {currentRemedialFile.name}
+                                </span>
+                                <span className="text-[10px] text-emerald-600 font-semibold block">
+                                  Ready &bull; {(currentRemedialFile.size / 1024).toFixed(1)} KB (Click to change)
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="mx-auto h-5 w-5 text-purple-600 dark:text-purple-400 mb-1 group-hover:scale-110 transition-transform" />
+                              <span className="text-xs font-bold text-purple-900 dark:text-purple-300 block">
+                                Click to upload handwritten practice sheet
+                              </span>
+                              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                                PDF, PNG, JPG (handwritten notebook camera snapshot)
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Student Notes & Submit Action */}
+                      <div className="flex flex-col justify-between space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                            Student Notes / Problem Doubts (Optional)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={currentRemedialNotes}
+                            onChange={(e) => setCurrentRemedialNotes(e.target.value)}
+                            placeholder="e.g. Solved 15 questions; stuck on Q12 signs..."
+                            className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={isSubmittingRemedial || !currentRemedialFile}
+                            onClick={handleSubmitRemedialWork}
+                            className="rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            {isSubmittingRemedial ? (
+                              <>
+                                <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                <span>Submitting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3.5 w-3.5" />
+                                <span>Submit Remedial Work</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          /* ========================================================= */
+          /* TEACHER & PARENT VIEW: EVIDENCE & CO-SIGN WORKFLOW        */
+          /* ========================================================= */
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            {/* 1. Teacher Strategy */}
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-2">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  <MessageSquareQuote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span>Teacher Strategy ({activeSubject.teacherName}):</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed italic line-clamp-3">
+                  &quot;{activeSubject.diagnosticObservation}&quot;
+                </p>
+              </div>
+              <span className="text-[10px] text-slate-400 block">
+                Remedial focus: Daily 30-min targeted exercises
+              </span>
+            </div>
+
+            {/* 2. Diagnostic Homework Evidence Card */}
+            <div className="rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 p-4 border border-purple-200/90 dark:border-purple-800 flex flex-col justify-between space-y-2">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 dark:text-purple-300">
+                    <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span>Diagnostic Homework Evidence</span>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                    {activeSubmission.marks_obtained || 17.5}/20
+                  </span>
+                </div>
+                <p className="text-xs text-purple-900 dark:text-purple-200 line-clamp-2">
+                  Worksheet #4: Graded with teacher red-ink notes exposing the algebraic sign expansion pitfall.
+                </p>
+              </div>
+              {isTeacher ? (
+                <button
+                  onClick={() => setEvidenceModalOpen(true)}
+                  className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Inspect Graded Worksheet Canvas &rarr;</span>
+                </button>
+              ) : (
+                <div className="text-[11px] text-purple-700 dark:text-purple-300 font-medium pt-1">
+                  Verified by Mrs. Sunitha Rao for parent co-tracking
+                </div>
+              )}
+            </div>
+
+            {/* 3. Parent Co-Tracking Verification Action */}
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-2">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">
+                  <CheckCircle2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <span>Parent Practice Co-Sign</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  {guardianApproved
+                    ? (parentCheckedMap[activeSubject.id]
+                        ? "✓ Parent verified practice homework in student notebook."
+                        : "Guardian approved. Awaiting daily parent sign-off on notebook practice.")
+                    : "Awaiting initial Guardian Approval before verifying notebook practice."}
+                </p>
+              </div>
+
+              <div className="mt-2">
+                {!guardianApproved ? (
+                  isParent ? (
+                    <button
+                      onClick={handleGuardianApprove}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                    >
+                      <UserCheck className="h-4 w-4" />
+                      <span>Review &amp; Confirm Guardian Approval</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 block text-center py-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl">
+                      Awaiting Guardian Co-Sign
+                    </span>
+                  )
+                ) : (
+                  isParent ? (
+                    <button
+                      onClick={() => toggleParentCheckForSubject(activeSubject.id)}
+                      className={`w-full flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer ${
+                        parentCheckedMap[activeSubject.id]
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-purple-600 text-white hover:bg-purple-700'
+                      }`}
+                    >
+                      {parentCheckedMap[activeSubject.id] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                      <span>{parentCheckedMap[activeSubject.id] ? 'Co-Signed & Verified ✓' : 'Mark Daily Notebook Verified'}</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block text-center py-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl">
+                      {parentCheckedMap[activeSubject.id] ? '✓ Verified by Guardian' : 'Guardian Approved (Daily Pending)'}
+                    </span>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================== */}
+        {/* 3.5 DEDICATED ACADEMIC BACKLOG & COMPLIANCE SECTION    */}
+        {/* (Exclusively visible to Teachers for parental connect)*/}
+        {/* ===================================================== */}
+        {isTeacher && (
+          <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-0.5 text-xs font-black border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  PTM Audit Ledger
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Verifiable Academic Deadline &amp; Compliance Telemetry
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1 flex items-center gap-2">
+                Academic Backlog &amp; Compliance Ledger
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Multi-subject assignment tracking synced to Aarav&apos;s academic profile. Non-compliance events are archived for parent-teacher review.
               </p>
             </div>
-            <span className="text-[10px] text-slate-400 mt-2 block">
-              Remedial focus: Daily 30-min targeted exercises
+
+            <button
+              onClick={() => setIsExportReportModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 font-bold text-xs px-4 py-2.5 shadow-sm transition-all active:scale-95 shrink-0"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Export PTM Evidence Report (PDF)</span>
+            </button>
+          </div>
+
+          {/* Compliance Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-4">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Assigned Tasks</span>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {complianceData?.total_assigned || 9}
+              </div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">Daily Drills + Capstones</span>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">On-Time Submissions</span>
+              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
+                {complianceData?.on_time_submissions || 2}
+              </div>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-500 mt-0.5 block">Turned in before cutoff</span>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                <span>Active Backlogs</span>
+              </span>
+              <div className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-1">
+                {complianceData?.backlog_count || 1}
+              </div>
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 block">Unresolved Missed Cutoffs</span>
+            </div>
+
+            <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 p-4">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">Compliance Rating</span>
+              <div className="text-2xl font-black text-blue-700 dark:text-blue-400 mt-1">
+                {complianceData?.compliance_pct || 88.9}%
+              </div>
+              <div className="w-full bg-blue-200 dark:bg-blue-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className="bg-blue-600 h-full rounded-full"
+                  style={{ width: `${complianceData?.compliance_pct || 88.9}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Itemized Table of Unresolved Backlogs */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-amber-600" />
+                Itemized Unresolved Backlog Records (Parent Review Evidence)
+              </span>
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                {((complianceData?.itemized_backlogs && complianceData.itemized_backlogs.length > 0) ? complianceData.itemized_backlogs : [
+                  {
+                    id: 1,
+                    student_id: 1,
+                    homework_id: 1,
+                    focus_table_id: 1,
+                    evidence_code: '#EVD-BKLOG-884',
+                    subject: 'Mathematics',
+                    title: 'Worksheet #4.2: Solving Quadratics by Factoring',
+                    task_type: 'DAILY_HOMEWORK',
+                    due_date: '2026-10-15',
+                    due_time: '17:00',
+                    status: 'UNRESOLVED',
+                    teacher_name: 'Mrs. Ananya Verma',
+                    notes: 'Student missed scheduled cutoff. Flagged for parent PTM evidence review.'
+                  }
+                ]).length} Recorded Evidence Event(s)
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    <tr>
+                      <th className="p-3">Evidence ID</th>
+                      <th className="p-3">Subject &amp; Type</th>
+                      <th className="p-3">Task Title</th>
+                      <th className="p-3">Scheduled Deadline</th>
+                      <th className="p-3">Compliance Status</th>
+                      <th className="p-3">Teacher / Flag</th>
+                      {isTeacher && <th className="p-3 text-right">PTM Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {((complianceData?.itemized_backlogs && complianceData.itemized_backlogs.length > 0) ? complianceData.itemized_backlogs : [
+                      {
+                        id: 1,
+                        student_id: 1,
+                        homework_id: 1,
+                        focus_table_id: 1,
+                        evidence_code: '#EVD-BKLOG-884',
+                        subject: 'Mathematics',
+                        title: 'Worksheet #4.2: Solving Quadratics by Factoring',
+                        task_type: 'DAILY_HOMEWORK',
+                        due_date: '2026-10-15',
+                        due_time: '17:00',
+                        status: 'UNRESOLVED',
+                        teacher_name: 'Mrs. Ananya Verma',
+                        notes: 'Student missed scheduled cutoff. Flagged for parent PTM evidence review.'
+                      }
+                    ]).map((ev) => (
+                      <tr key={ev.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="p-3 font-mono font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                          {ev.evidence_code}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <div className="font-bold text-slate-800 dark:text-slate-200">{ev.subject}</div>
+                          <span className="text-[10px] text-slate-400 uppercase">
+                            {ev.task_type === 'ASSIGNMENT' ? '📑 Assignment' : '📅 Daily Homework'}
+                          </span>
+                        </td>
+                        <td className="p-3 font-medium text-slate-800 dark:text-slate-200 max-w-xs">
+                          {ev.title}
+                        </td>
+                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                          {ev.due_date} • {ev.due_time}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {ev.status === 'UNRESOLVED' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900 px-2.5 py-0.5 text-[10px] font-bold">
+                              <AlertTriangle className="h-3 w-3" />
+                              UNRESOLVED BACKLOG
+                            </span>
+                          ) : ev.status === 'LATE_SUBMITTED' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900 px-2.5 py-0.5 text-[10px] font-bold">
+                              <Clock className="h-3 w-3" />
+                              LATE SUBMITTED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                              RESOLVED
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-slate-600 dark:text-slate-400">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{ev.teacher_name || 'Mrs. Ananya Verma'}</span>
+                          <span className="block text-[10px] text-slate-400">Auto-Flagged at Deadline</span>
+                        </td>
+                        {isTeacher && (
+                          <td className="p-3 whitespace-nowrap text-right">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`Missed Assignment Evidence: ${ev.title} (${ev.evidence_code}) due on ${ev.due_date} was not turned in.`);
+                                triggerNotification(`Copied evidence for ${ev.evidence_code} to clipboard!`);
+                              }}
+                              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Copy className="h-3 w-3" />
+                              <span>Cite in Call</span>
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+        {/* 4. VERIFIABLE EVIDENCE LOGS & INTERVENTION TIMELINE */}
+        {isTeacher && (
+          <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-black border border-emerald-200 dark:border-emerald-800">
+                  Closed-Loop Telemetry Active
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Live Intervention Timeline, Backlogs &amp; Verifiable Evidence Stream
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                Faculty Remarks &amp; Backlog Evidence Logs
+              </h3>
+            </div>
+            <span className="text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              {evidenceNotes.length + 1} Verified Evidence Records
             </span>
           </div>
 
-          {/* 2. Diagnostic Homework Evidence Card */}
-          <div className="rounded-2xl bg-purple-50/80 dark:bg-purple-950/40 p-4 border border-purple-200 dark:border-purple-800 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 dark:text-purple-300">
-                  <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  <span>Diagnostic Homework Evidence</span>
+          <div className="space-y-3">
+            {/* Automatic Assignment Deadline Backlog Evidence Card */}
+            <div className="p-4 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border-l-4 border-l-amber-500 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-600 text-white shadow-2xs">
+                    ⚠️ Backlog • Deadline Exceeded
+                  </span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Quadratic Equations: Factorization Worksheet 4.2
+                  </span>
+                  <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                    Parent Evidence Dossier
+                  </span>
                 </div>
-                <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
-                  {activeSubmission.marks_obtained || 17.5}/20
+                <span className="text-[11px] font-mono font-bold text-red-600 dark:text-red-400">
+                  Deadline Lapsed: 15 Oct 2026, 11:59 PM (Overdue)
                 </span>
               </div>
-              <p className="text-xs text-purple-900 dark:text-purple-200 line-clamp-2">
-                Worksheet #4: Graded with teacher red-ink notes exposing the algebraic sign expansion pitfall.
-              </p>
-            </div>
-            <button
-              onClick={() => setEvidenceModalOpen(true)}
-              className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all active:scale-95"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              <span>Inspect Graded Worksheet Canvas →</span>
-            </button>
-          </div>
 
-          {/* 3. Parent Co-Tracking Verification Action */}
-          <div className="rounded-2xl bg-purple-50/80 dark:bg-purple-950/40 p-4 border border-purple-200 dark:border-purple-800 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 dark:text-purple-300 mb-1">
-                <CheckCircle2 className="h-4 w-4 text-purple-700 dark:text-purple-400" />
-                <span>Parent Practice Co-Sign</span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                &ldquo;Student failed to submit Textbook Exercise 4.2 before the scheduled deadline. The system automatically transitioned the assignment to <b>Backlog / Uncompleted</b> status. This record serves as verified evidence presented to parents during progress review to address study consistency.&rdquo;
+              </p>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                <span className="flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Auto-Flagged Backlog Evidence for PTM Review
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Evidence ID: #EVD-BKLOG-884
+                </span>
               </div>
-              <p className="text-xs text-purple-800 dark:text-purple-200">
-                {parentCheckedMap[activeSubject.id]
-                  ? "✓ Parent verified practice homework in student notebook."
-                  : "Awaiting parent verification of Day 2 notebook practice."}
-              </p>
             </div>
 
-            <button
-              onClick={() => toggleParentCheckForSubject(activeSubject.id)}
-              className={`mt-3 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-sm transition-all active:scale-95 ${
-                parentCheckedMap[activeSubject.id]
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
-              }`}
-            >
-              {parentCheckedMap[activeSubject.id] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              <span>{parentCheckedMap[activeSubject.id] ? 'Verified ✓' : 'Mark Verified'}</span>
-            </button>
-          </div>
+            {evidenceNotes.map((note) => (
+              <div
+                key={note.id}
+                className="p-4 rounded-2xl bg-emerald-50/30 dark:bg-emerald-950/20 border-l-4 border-l-emerald-500 border border-slate-200 dark:border-slate-800 space-y-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-2xs">
+                      {note.teacher_name} ({note.subject_name || 'Mathematics'})
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Target: {note.student_name} ({note.student_class})
+                    </span>
+                    {note.focus_concept_tag && (
+                      <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-emerald-500" />
+                        Concept: {note.focus_concept_tag}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {note.created_at}
+                  </span>
+                </div>
 
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                  &ldquo;{note.content}&rdquo;
+                </p>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Verified Evidence Synced to 4-Day Focus Plan
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Parent Notified: {note.parent_name}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {evidenceNotes.length === 0 && (
+              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
+                No external evidence notes logged yet for this cycle. Teacher observations during speed grading stream here automatically.
+              </div>
+            )}
+          </div>
         </div>
+      )}
+
       </div>
 
       {/* ========================================================= */}
@@ -1118,15 +2329,17 @@ export function FocusTableView({
               </button>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => {
-                    setEvidenceModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 px-3.5 py-2.5 text-xs font-bold text-purple-700 dark:text-purple-300 transition-colors"
-                >
-                  <FileText className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                  <span>Inspect Diagnostic Evidence Canvas</span>
-                </button>
+                {isTeacher && (
+                  <button
+                    onClick={() => {
+                      setEvidenceModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 px-3.5 py-2.5 text-xs font-bold text-purple-700 dark:text-purple-300 transition-colors cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>Inspect Diagnostic Evidence Canvas</span>
+                  </button>
+                )}
                 <button
                   onClick={() => triggerNotification(`Downloading ${selectedSubjectModal.practicePdfName}...`)}
                   className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors"
@@ -1150,7 +2363,7 @@ export function FocusTableView({
       {/* ========================================================= */}
       {/* 5. MODAL: DIAGNOSTIC HOMEWORK EVIDENCE & ANNOTATED CANVAS */}
       {/* ========================================================= */}
-      {evidenceModalOpen && (
+      {isTeacher && evidenceModalOpen && (
         <div 
           onClick={() => setEvidenceModalOpen(false)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
@@ -1239,6 +2452,208 @@ export function FocusTableView({
         </div>
       )}
 
+      {/* ===================================================== */}
+      {/* 5. PRINTABLE PARENT MEETING EVIDENCE REPORT MODAL     */}
+      {/* ===================================================== */}
+      {isTeacher && isExportReportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl max-h-[92vh] overflow-y-auto print:border-none print:shadow-none print:p-0">
+            {/* Modal Actions Bar (hidden during browser print) */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 print:hidden">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-black">
+                  Official Record
+                </span>
+                <span className="text-xs text-slate-500">PTM Progress Review Evidence Report</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all"
+                >
+                  <Printer className="h-4 w-4" />
+                  <span>Print Document</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const csvRows = [
+                      ['Evidence Code', 'Subject', 'Title', 'Scheduled Deadline', 'Status', 'Teacher'],
+                      ...(complianceData?.itemized_backlogs || []).map(b => [
+                        b.evidence_code,
+                        b.subject,
+                        `"${b.title}"`,
+                        `${b.due_date} ${b.due_time}`,
+                        b.status,
+                        `"${b.teacher_name || ''}"`
+                      ])
+                    ];
+                    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map(e => e.join(',')).join('\n');
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement('a');
+                    link.setAttribute('href', encodedUri);
+                    link.setAttribute('download', 'Aarav_Sharma_Academic_Compliance_Report.csv');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-all"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download CSV</span>
+                </button>
+                <button
+                  onClick={() => setIsExportReportModalOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* PRINTABLE DOCUMENT BODY */}
+            <div className="print-content space-y-6 text-slate-900 dark:text-slate-100">
+              {/* School Header */}
+              <div className="border-b-2 border-slate-900 dark:border-slate-100 pb-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-center sm:justify-start gap-2">
+                    <span className="rounded-lg bg-blue-600 text-white font-black px-2.5 py-1 text-sm">
+                      EDU360
+                    </span>
+                    <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider">
+                      Global Outcomes Academy
+                    </h1>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    K-12 Diagnostic &amp; Academic Compliance Registry • Affiliation #883921
+                  </p>
+                </div>
+                <div className="sm:text-right space-y-0.5 text-xs text-slate-500">
+                  <div className="font-bold text-slate-800 dark:text-slate-200">CONFIDENTIAL PTM DOSSIER</div>
+                  <div>Report Date: 17 Oct 2026</div>
+                  <div>Term: 2026-2027 Academic Year (Term 1)</div>
+                </div>
+              </div>
+
+              {/* Student Identification Profile */}
+              <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Student Name</span>
+                  <strong className="text-sm font-black text-slate-900 dark:text-white">Aarav Sharma</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Class &amp; Roll No</span>
+                  <span className="font-bold">Class 8-B (Roll #01)</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Guardian Name</span>
+                  <span className="font-bold">Mr. Rajesh Sharma</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Class Teacher</span>
+                  <span className="font-bold">Mrs. Ananya Verma</span>
+                </div>
+              </div>
+
+              {/* Executive Compliance Metrics Summary */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  1. Executive Compliance &amp; Submission Velocity Summary
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="rounded-xl border border-slate-200 p-3 bg-white dark:bg-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">Total Tasks Assigned</span>
+                    <strong className="text-xl font-black text-slate-900 dark:text-white">{complianceData?.total_assigned || 9}</strong>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 p-3 bg-emerald-50/50 dark:bg-emerald-950/30">
+                    <span className="text-[10px] text-emerald-700 block font-bold uppercase">Submitted On-Time</span>
+                    <strong className="text-xl font-black text-emerald-700 dark:text-emerald-400">{complianceData?.on_time_submissions || 2}</strong>
+                  </div>
+                  <div className="rounded-xl border border-red-200 p-3 bg-red-50/50 dark:bg-red-950/30">
+                    <span className="text-[10px] text-red-700 block font-bold uppercase">Missed Deadlines (Backlog)</span>
+                    <strong className="text-xl font-black text-red-600 dark:text-red-400">{complianceData?.backlog_count || 1}</strong>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 p-3 bg-blue-50/50 dark:bg-blue-950/30">
+                    <span className="text-[10px] text-blue-700 block font-bold uppercase">Compliance Score</span>
+                    <strong className="text-xl font-black text-blue-700 dark:text-blue-400">{complianceData?.compliance_pct || 88.9}%</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Itemized Audit Table of Unresolved Backlogs */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  2. Itemized Unresolved Backlogs &amp; Deadlines (Verifiable Audit Records)
+                </h3>
+                <table className="w-full text-left text-xs border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <thead className="bg-slate-100 dark:bg-slate-800 font-bold border-b border-slate-200 text-slate-700 dark:text-slate-200">
+                    <tr>
+                      <th className="p-2.5">Evidence ID</th>
+                      <th className="p-2.5">Subject</th>
+                      <th className="p-2.5">Assignment Description</th>
+                      <th className="p-2.5">Cutoff Date &amp; Time</th>
+                      <th className="p-2.5">Compliance Flag</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {(complianceData?.itemized_backlogs || []).map((b) => (
+                      <tr key={b.id}>
+                        <td className="p-2.5 font-mono font-bold text-red-600">{b.evidence_code}</td>
+                        <td className="p-2.5 font-semibold">{b.subject}</td>
+                        <td className="p-2.5">{b.title}</td>
+                        <td className="p-2.5 font-mono text-[11px]">{b.due_date} • {b.due_time}</td>
+                        <td className="p-2.5">
+                          <span className="rounded bg-red-100 text-red-800 font-bold px-2 py-0.5 text-[10px]">
+                            {b.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Focus Table Remediation Action Plan */}
+              <div className="space-y-2 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 p-4 text-xs">
+                <h3 className="font-black text-amber-900 dark:text-amber-300 uppercase tracking-wide">
+                  3. Remedial Action Plan &amp; Parent Follow-up
+                </h3>
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                  During this review, the parent agreed to monitor Aarav&apos;s evening study schedule (06:30 PM - 07:30 PM). Mathematics Worksheet 4.2 has been rescheduled as a prioritized Focus Table remedial exercise. Late submission is permitted with full teacher feedback, while the audit backlog remains logged to track long-term recovery.
+                </p>
+              </div>
+
+              {/* Official Signatures Block */}
+              <div className="pt-8 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-6 text-center text-xs">
+                <div className="space-y-8">
+                  <div className="h-10 border-b border-dashed border-slate-400"></div>
+                  <div>
+                    <strong>Mr. Rajesh Sharma</strong>
+                    <div className="text-[10px] text-slate-400">Parent / Guardian Signature</div>
+                  </div>
+                </div>
+                <div className="space-y-8">
+                  <div className="h-10 border-b border-dashed border-slate-400"></div>
+                  <div>
+                    <strong>Mrs. Ananya Verma</strong>
+                    <div className="text-[10px] text-slate-400">Class 8-B Teacher Signature</div>
+                  </div>
+                </div>
+                <div className="space-y-8">
+                  <div className="h-10 border-b border-dashed border-slate-400 flex items-center justify-center">
+                    <span className="rounded border border-blue-500 text-blue-600 px-2 py-0.5 text-[9px] font-black uppercase">
+                      EDU360 Official Seal
+                    </span>
+                  </div>
+                  <div>
+                    <strong>Dr. Sunita Kapoor</strong>
+                    <div className="text-[10px] text-slate-400">Academic Principal Verification</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,7 +31,12 @@ import {
   Video,
   Phone,
   Mail,
-  UserCheck
+  UserCheck,
+  BookOpen,
+  CheckSquare,
+  Square,
+  Eye,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
@@ -42,7 +47,8 @@ import {
   FeeMilestone, 
   HomeworkSubmission,
   ExitClearance,
-  LeaveRequest
+  LeaveRequest,
+  Homework
 } from '@/lib/types';
 import { BannerCarousel } from '@/components/banner-carousel';
 import { FocusTableView } from '@/components/focus-table-view';
@@ -52,6 +58,7 @@ import { ParentMarksView } from '@/components/parent-marks-view';
 import { ParentSisView } from '@/components/parent-sis-view';
 import { ParentPtmView } from '@/components/parent-ptm-view';
 import { ParentNotificationDrawer, ParentNotification } from '@/components/parent-notification-drawer';
+import { Footer } from '@/components/footer';
 
 export type ParentNavSection = 
   | 'dashboard'
@@ -61,8 +68,7 @@ export type ParentNavSection =
   | 'ptm_connect'
   | 'bus'
   | 'fees'
-  | 'leave'
-  | 'exit_clearance';
+  | 'leave';
 
 export default function ParentPage() {
   // Navigation & Layout State
@@ -141,16 +147,22 @@ export default function ParentPage() {
     }
   ]);
 
+  // Today's Homework State (Current Day Only - Keeping Profile Uncluttered)
+  const [todayHomework, setTodayHomework] = useState<Homework[]>([]);
+  const [selectedHwModal, setSelectedHwModal] = useState<Homework | null>(null);
+  const [parentHwVerifiedMap, setParentHwVerifiedMap] = useState<Record<number, boolean>>({});
+
   // Load Parent Portal Data
   useEffect(() => {
     async function loadData() {
       try {
-        const [ftRes, busRes, feesRes, subRes, exitsRes] = await Promise.all([
+        const [ftRes, busRes, feesRes, subRes, exitsRes, hwRes] = await Promise.all([
           api.getFocusTable(1),
           api.getBusTracker(1),
           api.getFees(1),
           api.getSubmission(1),
-          api.getExitClearances()
+          api.getExitClearances(),
+          api.getTodayHomework(1)
         ]);
         setFocusTable(ftRes);
         setBusRoute(busRes);
@@ -159,6 +171,7 @@ export default function ParentPage() {
         if (exitsRes && exitsRes.length > 0) {
           setExitClearance(exitsRes[0]);
         }
+        setTodayHomework(hwRes);
       } catch (err) {
         console.error('Error loading parent dashboard', err);
       }
@@ -306,7 +319,7 @@ export default function ParentPage() {
       ]
     },
     {
-      title: 'FINANCE & CLEARANCES',
+      title: 'FINANCE & BILLING',
       items: [
         {
           id: 'fees' as ParentNavSection,
@@ -314,13 +327,6 @@ export default function ParentPage() {
           icon: CreditCard,
           badge: 'Due Oct 25',
           badgeColor: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-        },
-        {
-          id: 'exit_clearance' as ParentNavSection,
-          label: 'TC & Exit Clearance',
-          icon: Stamp,
-          badge: 'Handover Active',
-          badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
         }
       ]
     }
@@ -345,8 +351,6 @@ export default function ParentPage() {
         return { title: 'Fee Milestones & Instant Online Receipts', subtitle: 'Installment breakdown, instant UPI/Card mock payment, and verified PDF receipts' };
       case 'leave':
         return { title: 'Student Leave Application & Attendance Sync', subtitle: 'Submit medical and casual leave requests directly to the class teacher' };
-      case 'exit_clearance':
-        return { title: 'Transfer Certificate (TC) & Dual-Verification Clearance', subtitle: 'Official zero-dispute digital sign-off and certificate archive protocol' };
       default:
         return { title: 'Parent Portal', subtitle: 'EDU360 K–12 Outcomes & Intelligence Platform' };
     }
@@ -370,32 +374,29 @@ export default function ParentPage() {
               : 'bg-white text-slate-800 border-r border-[#E2E8F0]'
           }`}
         >
-          {/* Top Brand & School Logo */}
+          {/* Sidebar Campus Context (No redundant EDU360 logo) */}
           <div className="flex h-16 items-center justify-between px-4 border-b border-inherit">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#2563EB] to-[#7C3AED] text-white shadow-sm shadow-blue-500/20 shrink-0">
-                  <GraduationCap className="h-5 w-5" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60 shrink-0 font-black text-xs">
+                  8B
                 </div>
                 <div className="flex flex-col truncate">
-                  <span className={`text-sm font-bold tracking-tight flex items-center gap-1 ${
+                  <span className={`text-xs font-bold tracking-tight truncate ${
                     sidebarTheme === 'dark' ? 'text-white' : 'text-slate-900'
                   }`}>
-                    EDU<span className="text-[#2563EB]">360</span>
-                    <span className="text-[9px] uppercase font-semibold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">
-                      PARENT
-                    </span>
+                    Oakridge International
                   </span>
-                  <span className={`text-[11px] font-medium truncate ${
+                  <span className={`text-[10px] font-medium truncate ${
                     sidebarTheme === 'dark' ? 'text-slate-400' : 'text-slate-500'
                   }`}>
-                    Oakridge International School
+                    Aarav Sharma • Class 8B
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#2563EB] to-[#7C3AED] text-white shadow-sm">
-                <GraduationCap className="h-5 w-5" />
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60 font-black text-xs">
+                8B
               </div>
             )}
 
@@ -471,26 +472,18 @@ export default function ParentPage() {
             ))}
           </div>
 
-          {/* Bottom Guardian Bio Card */}
+          {/* Bottom Academic Term Status (No redundant user bio) */}
           <div className="p-3 border-t border-inherit">
             {!sidebarCollapsed ? (
-              <div className="flex items-center gap-2.5 p-2 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
-                <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 text-white font-black text-xs flex items-center justify-center shrink-0">
-                  RS
-                </div>
-                <div className="flex flex-col truncate">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    Mr. Rajesh Sharma
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                    Parent of Aarav (8B)
-                  </span>
-                </div>
+              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Academic Term 2
+                </span>
+                <span className="font-semibold text-slate-400">2026-27</span>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 text-white font-black text-xs flex items-center justify-center">
-                RS
-              </div>
+              <div className="mx-auto h-2 w-2 rounded-full bg-emerald-500" title="Term 2 Active" />
             )}
           </div>
         </aside>
@@ -503,10 +496,10 @@ export default function ParentPage() {
           {/* Top Sticky Header */}
           <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#070B14]/95 px-5 sm:px-8 backdrop-blur-md">
             
-            {/* Left: Breadcrumbs & Section Title */}
+            {/* Left: Clean Breadcrumb & Title */}
             <div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                <span>Parent Portal</span>
+              <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                <span>Parent Workspace</span>
                 <ChevronRight className="h-3 w-3" />
                 <span className="text-blue-600 dark:text-blue-400 font-bold capitalize">
                   {activeNav.replace('_', ' ')}
@@ -517,11 +510,9 @@ export default function ParentPage() {
               </h1>
             </div>
 
-            {/* Right: Child Status Chip, Alerts Bell & Theme Toggle */}
+            {/* Right: Child Status Chip (Clean single indicator) */}
             <div className="flex items-center gap-3">
-              
-              {/* Child Info Badge */}
-              <div className="hidden lg:flex items-center gap-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 shadow-xs">
+              <div className="flex items-center gap-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 shadow-xs">
                 <div className="h-7 w-7 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 flex items-center justify-center font-bold text-xs">
                   AS
                 </div>
@@ -533,35 +524,10 @@ export default function ParentPage() {
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
-                    Class 8B • Roll #14 • Adm #EDU-2024-082
+                    Class 8B • Roll #14
                   </span>
                 </div>
               </div>
-
-              {/* High-Signal Push Alerts Bell */}
-              <button
-                onClick={() => setNotificationDrawerOpen(true)}
-                className="relative flex items-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs transition-all active:scale-95"
-                title="Open High-Signal Push Alerts Log"
-              >
-                <Bell className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                <span className="hidden sm:inline">Alerts</span>
-                {notifications.filter(n => n.unread).length > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-black text-white shadow-xs">
-                    {notifications.filter(n => n.unread).length}
-                  </span>
-                )}
-              </button>
-
-              {/* Theme Toggle Button */}
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs"
-                title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
-              </button>
-
             </div>
           </header>
 
@@ -572,252 +538,537 @@ export default function ParentPage() {
             {/* VIEW 1: PARENT DASHBOARD (HOME OVERVIEW)             */}
             {/* ===================================================== */}
             {activeNav === 'dashboard' && (
-              <div className="space-y-8">
+              <div className="space-y-6">
                 
+                {/* ===================================================== */}
+                {/* 1. PARENT COMMAND CENTER HERO HEADER                  */}
+                {/* ===================================================== */}
+                <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 sm:p-6 shadow-xs relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-500/10 via-purple-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute bottom-0 left-1/3 w-64 h-32 bg-gradient-to-t from-emerald-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    <div className="space-y-3 max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 px-3 py-1 text-xs font-semibold">
+                          <Users className="h-3.5 w-3.5 text-blue-500" />
+                          <span>Student: <strong>Aarav Sharma</strong> (Class 8-B • Roll #14)</span>
+                        </span>
+
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2.5 py-1 text-xs font-semibold">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>On Campus • Period 3 Mathematics (Room 204)</span>
+                        </span>
+
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium">
+                          <Bus className="h-3 w-3 text-blue-500" />
+                          <span>Route 4 Live: {busRoute?.eta_mins || 8}m ETA</span>
+                        </span>
+                      </div>
+
+                      <div>
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                          Welcome, Dr. &amp; Mrs. Sharma
+                        </h1>
+                        <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Here is your daily parental oversight summary for Thursday, 18 Oct 2026. Aarav is attending Period 3 Mathematics, Bus Route 4 is on schedule, and his Day 2 remedial practice notebook is ready for your parental verification sign-off tonight.
+                        </p>
+                      </div>
+
+                      {/* Operational Tags */}
+                      <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1 font-medium">
+                          <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>Homeroom Faculty: <strong className="text-slate-700 dark:text-slate-200">Mrs. Ananya Verma</strong></span>
+                        </span>
+                        <span className="text-slate-300 dark:text-slate-700">•</span>
+                        <span className="flex items-center gap-1 font-medium">
+                          <Target className="h-3.5 w-3.5 text-purple-500" />
+                          <span>Remedial Plan: <strong className="text-slate-700 dark:text-slate-200">Mathematics (Day 2 of 7)</strong></span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap lg:flex-col items-stretch lg:items-end gap-2.5 shrink-0">
+                      <button
+                        onClick={() => setActiveNav('fees')}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-500 hover:from-amber-500 hover:to-orange-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30 transition-all duration-200 active:scale-98 border border-amber-400/30 cursor-pointer"
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        <span>Pay Milestone 2 Fee (₹18,500)</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setActiveNav('ptm_connect')}
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          <Video className="h-3.5 w-3.5 text-blue-500" />
+                          <span>PTM Conference</span>
+                        </button>
+
+                        <button
+                          onClick={() => setActiveNav('leave')}
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>Apply Leave</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Moving Banner Slider Carousel */}
                 <BannerCarousel onActionClick={handleBannerAction} />
 
-                {/* Quick Pulse Metrics Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* ===================================================== */}
+                {/* 2. 4 EXECUTIVE PARENT METRIC CARDS                    */}
+                {/* ===================================================== */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
                   
                   {/* Metric 1: Attendance Compliance */}
                   <div 
                     onClick={() => setActiveNav('child_sis')}
-                    className="group cursor-pointer rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-md transition-all space-y-2"
+                    className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        Attendance Rate
-                      </span>
-                      <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
-                        CBSE Safe ✓
-                      </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Attendance Rate
+                        </span>
+                        <div className="h-9 w-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            94.2% Safe
+                          </h3>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md">
+                            CBSE Safe ✓
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          146 / 155 Days • Checked in at 08:02 AM today
+                        </p>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: '94.2%' }} />
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-slate-900 dark:text-white">94.2%</span>
-                      <span className="text-xs text-slate-500">146 / 155 Days</span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Above 75% board exam cutoff. 0 unexcused absences this week.
-                    </p>
-                    <div className="pt-2 text-[11px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform">
                       <span>View Full Attendance Ledger</span>
-                      <ArrowRight className="h-3 w-3" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
 
                   {/* Metric 2: Next Fee Milestone */}
                   <div 
                     onClick={() => setActiveNav('fees')}
-                    className="group cursor-pointer rounded-3xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/30 dark:bg-amber-950/20 p-5 shadow-sm hover:shadow-md transition-all space-y-2"
+                    className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-400 tracking-wider">
-                        Upcoming Fee Due
-                      </span>
-                      <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
-                        Due in 5 Days
-                      </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Upcoming Fee Due
+                        </span>
+                        <div className="h-9 w-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            ₹18,500
+                          </h3>
+                          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-md">
+                            Due in 5 Days
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Term 2 Tuition &amp; AC Transport installment open
+                        </p>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-amber-500 h-full rounded-full" style={{ width: '70%' }} />
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-amber-600 dark:text-amber-400">₹18,500</span>
-                      <span className="text-xs text-slate-500">Milestone 2</span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Term 2 Tuition &amp; AC Transport installment open for online pay.
-                    </p>
-                    <div className="pt-2 text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform">
                       <span>Pay Online via UPI/Card</span>
-                      <ArrowRight className="h-3 w-3" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
 
                   {/* Metric 3: Live Bus Telemetry */}
                   <div 
                     onClick={() => setActiveNav('bus')}
-                    className="group cursor-pointer rounded-3xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 p-5 shadow-sm hover:shadow-md transition-all space-y-2"
+                    className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold text-blue-800 dark:text-blue-400 tracking-wider">
-                        Live Bus GPS
-                      </span>
-                      <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 text-[10px] font-bold">
-                        Route 4 Live
-                      </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Live Bus GPS Telemetry
+                        </span>
+                        <div className="h-9 w-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                          <Bus className="h-4 w-4" />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            {busRoute?.eta_mins || 8} Mins ETA
+                          </h3>
+                          <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded-md">
+                            Route 4 Live
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Bus KA-01-EB-4412 approaching Sector 15 crossroad
+                        </p>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-blue-500 h-full rounded-full" style={{ width: '82%' }} />
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-blue-600 dark:text-blue-400">{busRoute?.eta_mins || 8} mins</span>
-                      <span className="text-xs text-slate-500">to Sector 15 Stop</span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Bus KA-01-EB-4412 approaching Sector 15 crossroad.
-                    </p>
-                    <div className="pt-2 text-[11px] font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform">
                       <span>Open Live GPS Telemetry</span>
-                      <ArrowRight className="h-3 w-3" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
 
                   {/* Metric 4: Academic Standing */}
                   <div 
                     onClick={() => setActiveNav('marks')}
-                    className="group cursor-pointer rounded-3xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/30 dark:bg-purple-950/20 p-5 shadow-sm hover:shadow-md transition-all space-y-2"
+                    className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold text-purple-800 dark:text-purple-400 tracking-wider">
-                        Unit Test 2 Results
-                      </span>
-                      <span className="rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 px-2 py-0.5 text-[10px] font-bold">
-                        Rank #4
-                      </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Unit Test 2 Results
+                        </span>
+                        <div className="h-9 w-9 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                          <Award className="h-4 w-4" />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            88.8% Aggregate
+                          </h3>
+                          <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded-md">
+                            Rank #4
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Grade A1 Distinction in 6 subjects • Class 8-B
+                        </p>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-purple-500 h-full rounded-full" style={{ width: '88.8%' }} />
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-purple-700 dark:text-purple-300">88.8%</span>
-                      <span className="text-xs text-slate-500">Grade A1</span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Distinction in 6 subjects. Top 10% academic standing in Class 8B.
-                    </p>
-                    <div className="pt-2 text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-400 group-hover:translate-x-0.5 transition-transform">
                       <span>View Full Score Breakdown</span>
-                      <ArrowRight className="h-3 w-3" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
 
                 </div>
 
-                {/* Quick Module Jump Grid */}
-                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+                {/* ===================================================== */}
+                {/* 3. TODAY'S HOMEWORK & REMEDIAL CO-TRACKING            */}
+                {/* ===================================================== */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-black border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
+                          <BookOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          Tonight's Parent Verification Tasks
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          18 Oct 2026 • Clutter-Free View
+                        </span>
+                      </div>
+                      <h3 className="text-base font-black text-slate-900 dark:text-white mt-1">
+                        Aarav&apos;s Homework &amp; Remedial Practice Check
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Past completed items are tucked away. Inspect tonight&apos;s practice and co-sign in 1 click.
+                      </p>
+                    </div>
+
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-3 py-1 rounded-xl border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
+                      2 Tasks Due Today
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Task 1: English Literature Homework */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-4 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                            English Literature
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">
+                            ⏰ Due Today, 05:00 PM
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                          The Merchant of Venice: Portia&apos;s Mercy Speech Critical Analysis
+                        </h4>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                          Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia&apos;s argument on divine mercy against Shylock&apos;s legal bond insistence.
+                        </p>
+                        <div className="text-[11px] text-slate-500">
+                          Teacher: Mrs. Sunitha Rao • Max Marks: 15
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedHwModal({
+                              id: 3,
+                              title: "The Merchant of Venice: Portia's Mercy Speech Critical Analysis",
+                              subject: 'English Literature',
+                              class_name: 'Class 8-B',
+                              description: "Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia's argument on divine mercy against Shylock's legal bond insistence.",
+                              task_type: 'DAILY_HOMEWORK',
+                              due_date: '2026-10-18',
+                              due_time: '17:00',
+                              status: 'PENDING',
+                              teacher_id: 4,
+                              teacher_name: 'Mrs. Sunitha Rao',
+                              max_marks: 15,
+                              weightage: 'Weekly Essay (10 pts)'
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>View Guidelines</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setParentHwVerifiedMap(prev => ({ ...prev, [3]: !prev[3] }));
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
+                            parentHwVerifiedMap[3]
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {parentHwVerifiedMap[3] ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                          <span>{parentHwVerifiedMap[3] ? 'Notebook Checked ✓' : 'Verify Notebook'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Task 2: Focus Table Day 2 Remedial Practice */}
+                    <div className="rounded-2xl border border-purple-200/90 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-600 text-white">
+                            Math Focus Plan (Day 2 of 7)
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-purple-700 dark:text-purple-300">
+                            🎯 30-Min Drill Tonight
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                          Quadratic Equations: Factorization by Splitting the Middle Term
+                        </h4>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                          Practice 8 step-by-step expansions in rough notebook. Teacher review scheduled for tomorrow zero period with Mrs. Ananya Verma.
+                        </p>
+                        <div className="text-[11px] text-purple-800 dark:text-purple-300 font-medium italic">
+                          Teacher Rubric Checkpoint: &ldquo;Monitor negative sign rule in middle term expansion&rdquo;
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-purple-200/60 dark:border-purple-800/60 flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => setActiveNav('focus_table')}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 dark:text-purple-300 hover:underline cursor-pointer"
+                        >
+                          <Target className="h-3 w-3" />
+                          <span>Open Focus Sprint Plan</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setParentHwVerifiedMap(prev => ({ ...prev, [99]: !prev[99] }));
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
+                            parentHwVerifiedMap[99]
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : 'bg-purple-600 text-white hover:bg-purple-700'
+                          }`}
+                        >
+                          {parentHwVerifiedMap[99] ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                          <span>{parentHwVerifiedMap[99] ? 'Co-Signed & Synced ✓' : 'Co-Sign Practice'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ===================================================== */}
+                {/* 4. QUICK MODULE ACCESS DIRECTORY                      */}
+                {/* ===================================================== */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                     <div>
                       <h3 className="text-base font-black text-slate-900 dark:text-white">
                         Parental Action &amp; Quick Access Directory
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        1-Click shortcuts across all student academic and administrative services
+                        1-Click shortcuts across student academics, fees, bus tracking, and administrative services
                       </p>
                     </div>
-                    <span className="text-xs font-bold text-slate-500">8 Core Modules</span>
+                    <span className="text-xs font-bold text-slate-500">8 Core Services</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <button
                       onClick={() => setActiveNav('marks')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 text-left transition-all space-y-2 group"
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                        <Award className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                        <Award className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-blue-600">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-blue-600">
                         Report Cards &amp; Memo
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         Unit Test 2 marks &amp; email PDF
                       </span>
                     </button>
 
                     <button
                       onClick={() => setActiveNav('focus_table')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:border-purple-300 text-left transition-all space-y-2 group"
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:border-purple-300 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                        <Target className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                        <Target className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-purple-600">
-                        Shared Focus Table
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-purple-600">
+                        1-Week Focus Sprint
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        Interventions across 7 subjects
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setActiveNav('child_sis')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:border-teal-300 text-left transition-all space-y-2 group"
-                    >
-                      <div className="h-9 w-9 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-teal-600">
-                        Child Profile &amp; Vault
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        94.2% attendance &amp; certificates
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => setActiveNav('ptm_connect')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 text-left transition-all space-y-2 group"
-                    >
-                      <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-blue-600">
-                        Teacher Connect &amp; PTM
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        Send notes &amp; book video call
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                        Remedial table &amp; rough work
                       </span>
                     </button>
 
                     <button
                       onClick={() => setActiveNav('bus')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:border-emerald-300 text-left transition-all space-y-2 group"
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:border-emerald-300 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-                        <Bus className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                        <Bus className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-emerald-600">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-emerald-600">
                         Live Bus GPS
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         Route 4 live stop telemetry
                       </span>
                     </button>
 
                     <button
                       onClick={() => setActiveNav('fees')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:border-amber-300 text-left transition-all space-y-2 group"
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:border-amber-300 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                        <CreditCard className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                        <CreditCard className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-amber-600">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-amber-600">
                         Fees &amp; Receipts
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         Pay UPI &amp; download receipts
                       </span>
                     </button>
 
                     <button
                       onClick={() => setActiveNav('leave')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-all space-y-2 group"
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
-                        <FileText className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold">
+                        <FileText className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-blue-600">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-blue-600">
                         Apply Leave
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                         Direct to Class Teacher 8B
                       </span>
                     </button>
 
                     <button
-                      onClick={() => setActiveNav('exit_clearance')}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:border-purple-300 text-left transition-all space-y-2 group"
+                      onClick={() => setActiveNav('child_sis')}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:border-teal-300 text-left transition-all space-y-1.5 group cursor-pointer"
                     >
-                      <div className="h-9 w-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                        <Stamp className="h-5 w-5" />
+                      <div className="h-8 w-8 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
+                        <ShieldCheck className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white block group-hover:text-purple-600">
-                        TC Exit Handover
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-teal-600">
+                        Official Records
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        Digital sign-off protocol
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                        Bonafide &amp; transcripts
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveNav('ptm_connect')}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 text-left transition-all space-y-1.5 group cursor-pointer"
+                    >
+                      <div className="h-8 w-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                        <Video className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-indigo-600">
+                        PTM Conferences
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                        Book sliding video slots
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setNotificationDrawerOpen(true)}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-300 text-left transition-all space-y-1.5 group cursor-pointer"
+                    >
+                      <div className="h-8 w-8 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
+                        <Bell className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-rose-600">
+                        Urgent Alerts
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                        Notifications drawer
                       </span>
                     </button>
                   </div>
@@ -830,12 +1081,12 @@ export default function ParentPage() {
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-purple-600 animate-pulse" />
                         <h3 className="text-base font-black text-slate-900 dark:text-white">
-                          Aarav’s Weak Concept Focus Intervention Hub
+                          Aarav&apos;s Weak Concept Focus Intervention Hub
                         </h3>
                       </div>
                       <button
                         onClick={() => setActiveNav('focus_table')}
-                        className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                        className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <span>Open Full Focus Table &amp; Diagnostic Evidence</span>
                         <ChevronRight className="h-3.5 w-3.5" />
@@ -846,43 +1097,16 @@ export default function ParentPage() {
                       table={focusTable}
                       submission={submission}
                       isParentView={true}
+                      currentRole="parent"
+                      studentInfo={{
+                        name: 'Aarav Sharma',
+                        rollNo: 'Roll #14',
+                        className: 'Class 8-B',
+                        parentName: 'Mr. Rajesh Sharma',
+                        parentPhone: '+91 98450 12345'
+                      }}
                       onToggleParentCheck={handleToggleParentFocusCheck}
                     />
-                  </div>
-                )}
-
-                {/* Exit Clearance Digital Sign-off Banner (if active) */}
-                {exitClearance && (
-                  <div className="rounded-3xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200 px-2.5 py-0.5 text-[10px] font-bold">
-                          Official Exit Handover Protocol
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Dual-Signature Verification</span>
-                      </div>
-                      <h3 className="mt-1 text-sm font-black text-slate-900 dark:text-white">
-                        Transfer Certificate (TC) Digital Approval Request
-                      </h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                        Confirm receipt of original certificates in good condition to permanently seal the archive record.
-                      </p>
-                    </div>
-
-                    {exitClearance.digital_parent_approved ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Digitally Stamped &amp; Approved ✓</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleDigitalSignExit}
-                        className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-xs font-bold shadow-sm"
-                      >
-                        <Stamp className="h-4 w-4" />
-                        <span>Provide Digital Sign-Off</span>
-                      </button>
-                    )}
                   </div>
                 )}
 
@@ -916,6 +1140,14 @@ export default function ParentPage() {
                     table={focusTable}
                     submission={submission}
                     isParentView={true}
+                    currentRole="parent"
+                    studentInfo={{
+                      name: 'Aarav Sharma',
+                      rollNo: 'Roll #14',
+                      className: 'Class 8-B',
+                      parentName: 'Mr. Rajesh Sharma',
+                      parentPhone: '+91 98450 12345'
+                    }}
                     onToggleParentCheck={handleToggleParentFocusCheck}
                   />
                 )}
@@ -1165,93 +1397,10 @@ export default function ParentPage() {
               </div>
             )}
 
-            {/* ===================================================== */}
-            {/* VIEW 9: TC & EXIT CLEARANCE PROTOCOL                   */}
-            {/* ===================================================== */}
-            {activeNav === 'exit_clearance' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Transfer Certificate (TC) &amp; Student Exit Handover
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Official zero-dispute dual verification handover checklist (PRD Section 4.4 #6)
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-purple-200 dark:border-purple-900/60 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
-                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-                    <div>
-                      <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 px-3 py-1 text-xs font-bold">
-                        Dual Verification Legal Archive Protocol
-                      </span>
-                      <h3 className="text-base font-black text-slate-900 dark:text-white mt-1.5">
-                        Exit Clearance Record #EDU-EXIT-2026-001
-                      </h3>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Aarav Sharma • Class 8B • Initiated on 10 Oct 2026
-                      </span>
-                    </div>
-
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-3 py-1 text-xs font-bold">
-                      {exitClearance?.status || 'Active Handover Protocol'}
-                    </span>
-                  </div>
-
-                  {/* Checklist */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
-                      <span className="font-bold text-emerald-800 dark:text-emerald-200 block">1. Accounts Clearance</span>
-                      <span className="text-emerald-600 dark:text-emerald-300 text-[11px] block">No pending fee arrears</span>
-                      <span className="font-black text-emerald-700 text-xs">✓ Cleared</span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
-                      <span className="font-bold text-emerald-800 dark:text-emerald-200 block">2. Library &amp; Lab Assets</span>
-                      <span className="text-emerald-600 dark:text-emerald-300 text-[11px] block">All books &amp; sports gear returned</span>
-                      <span className="font-black text-emerald-700 text-xs">✓ Cleared</span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-1">
-                      <span className="font-bold text-purple-800 dark:text-purple-200 block">3. Parent Digital Sign-Off</span>
-                      <span className="text-purple-600 dark:text-purple-300 text-[11px] block">Receipt of original certificates</span>
-                      <span className="font-black text-purple-700 text-xs">
-                        {exitClearance?.digital_parent_approved ? '✓ Confirmed' : 'Pending Parent Sign'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Digital Signature Action */}
-                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <span className="font-bold text-slate-900 dark:text-white text-xs block">
-                        Guardian Confirmation (Legal Acknowledgment):
-                      </span>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                        &quot;I confirm receipt of original Transfer Certificate, Unit Test Marks Cards, and Bonafide records in good condition.&quot;
-                      </p>
-                    </div>
-
-                    {exitClearance?.digital_parent_approved ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-3.5 py-2 rounded-xl border border-emerald-200">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Digitally Approved by Mr. Rajesh Sharma ✓</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleDigitalSignExit}
-                        className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95"
-                      >
-                        <Stamp className="h-4 w-4" />
-                        <span>Provide Digital Approval</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
           </main>
+
+          {/* Brand Footer */}
+          <Footer className="pb-8" />
         </div>
 
         {/* ========================================================= */}
@@ -1268,6 +1417,109 @@ export default function ParentPage() {
           onDismissNotification={handleDismissNotification}
           onMarkAllAsRead={handleMarkAllAsRead}
         />
+
+        {/* ========================================================= */}
+        {/* 4. HOMEWORK GUIDELINES & NOTEBOOK VERIFICATION MODAL      */}
+        {/* ========================================================= */}
+        {selectedHwModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-5">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase px-2.5 py-0.5">
+                      {selectedHwModal.subject}
+                    </span>
+                    <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold px-2.5 py-0.5">
+                      Due Today ({selectedHwModal.due_time})
+                    </span>
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    {selectedHwModal.title}
+                  </h3>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 block">
+                    Teacher: {selectedHwModal.teacher_name} &bull; Class {selectedHwModal.class_name}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setSelectedHwModal(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Assignment Specs & Instructions */}
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Teacher Instructions &amp; Guidelines:
+                  </span>
+                  <p className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
+                    {selectedHwModal.description}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Evaluation Weightage</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                      {selectedHwModal.weightage || 'Weekly Assessment'}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Maximum Marks</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                      {selectedHwModal.max_marks} Points
+                    </span>
+                  </div>
+                </div>
+
+                {/* Parent Home Check Guidance */}
+                <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Parent Inspection Checklist:
+                  </span>
+                  <p className="text-xs text-amber-900 dark:text-amber-200 italic leading-relaxed">
+                    &ldquo;Verify that Aarav has completed this work directly into his ruled study notebook with legible handwriting and clean step work before signing verification.&rdquo;
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setSelectedHwModal(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (selectedHwModal) {
+                      setParentHwVerifiedMap(prev => ({
+                        ...prev,
+                        [selectedHwModal.id]: !prev[selectedHwModal.id]
+                      }));
+                      setSelectedHwModal(null);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  <span>
+                    {parentHwVerifiedMap[selectedHwModal.id]
+                      ? 'Mark Notebook Unverified'
+                      : 'Confirm Parent Verification'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </RoleGuard>
