@@ -5,6 +5,7 @@ import datetime
 # --- User Schemas ---
 class UserBase(BaseModel):
     name: str
+    username: Optional[str] = None
     email: str
     role: str
     school_code: Optional[str] = "EDU-GLOBAL-360"
@@ -32,6 +33,7 @@ class SchoolCodeVerifyResponse(BaseModel):
 class UserRegisterRequest(BaseModel):
     school_code: str
     name: str
+    username: Optional[str] = None
     email: str
     password: str
     role: str
@@ -39,7 +41,8 @@ class UserRegisterRequest(BaseModel):
     phone: Optional[str] = None
 
 class UserLoginRequest(BaseModel):
-    email: str
+    username: Optional[str] = None
+    email: Optional[str] = None
     password: str
     school_code: Optional[str] = None
 
@@ -118,28 +121,90 @@ class TriageAlertResponse(TriageAlertBase):
     class Config:
         from_attributes = True
 
-# --- Admin Task Schemas ---
+# --- Admin & Coordinator Operational Task Schemas ---
 class AdminTaskCreate(BaseModel):
     title: str
-    category: str = "urgent"
+    description: Optional[str] = None
+    category: str = "urgent"  # urgent, upcoming
+    domain: Optional[str] = "academic"  # academic, exam, transport, inventory, admissions, finance, executive
     due_date: str
     assigned_to: str
-    priority: str = "High"
+    assigned_to_role: Optional[str] = None
+    created_by_name: Optional[str] = "Administrator"
+    created_by_role: Optional[str] = "admin"
+    priority: str = "High"  # Low, Medium, High, Critical
+    sla_hours: Optional[int] = 48
+    is_auto_generated: Optional[bool] = False
+    trigger_event: Optional[str] = None
 
 class AdminTaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
+    assigned_to: Optional[str] = None
+    assigned_to_role: Optional[str] = None
+    due_date: Optional[str] = None
+    is_escalated: Optional[bool] = None
+    escalation_reason: Optional[str] = None
+    completion_proof_url: Optional[str] = None
 
 class AdminTaskResponse(BaseModel):
     id: int
     title: str
+    description: Optional[str] = None
     category: str
+    domain: Optional[str] = "academic"
     due_date: str
     assigned_to: str
+    assigned_to_role: Optional[str] = None
+    created_by_name: Optional[str] = "Administrator"
+    created_by_role: Optional[str] = "admin"
     status: str
     priority: str
+    sla_hours: Optional[int] = 48
+    is_auto_generated: Optional[bool] = False
+    trigger_event: Optional[str] = None
+    is_escalated: Optional[bool] = False
+    escalation_reason: Optional[str] = None
+    completion_proof_url: Optional[str] = None
+    relief_requested: Optional[bool] = False
+    relief_reason: Optional[str] = None
+    relief_justification: Optional[str] = None
+    suggested_peer_teacher: Optional[str] = None
+    task_type: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
     class Config:
         from_attributes = True
+
+class EscalateTaskRequest(BaseModel):
+    reason: str
+
+class TaskReliefRequest(BaseModel):
+    relief_reason: str  # 'Medical Leave' | 'Academic Workload Surge' | 'Family Emergency'
+    justification: str
+    suggested_peer_teacher: Optional[str] = None
+
+class ApproveReliefRequest(BaseModel):
+    new_assigned_to: str
+    new_sla_hours: Optional[int] = 48
+    notes: Optional[str] = None
+
+class ExtendSlaRequest(BaseModel):
+    additional_hours: int = 24
+    extension_reason: str
+
+class AutoTriggerTaskRequest(BaseModel):
+    event_type: str  # exam_concluded, bus_rto_fitness, absence_streak, stock_low
+    entity_id: Optional[str] = None
+    notes: Optional[str] = None
+
+class TaskExecutiveCockpitResponse(BaseModel):
+    total_open: int
+    critical_escalations: int
+    overdue_count: int
+    auto_generated_count: int
+    department_stats: List[dict]
+    recent_tasks: List[AdminTaskResponse]
 
 # --- CRM Schemas ---
 class AdmissionEnquiryCreate(BaseModel):
@@ -829,3 +894,245 @@ class PTMSlotBookRequest(BaseModel):
     sibling_student_name: Optional[str] = None
     focus_table_agenda: Optional[List[str]] = None
 
+# --- Academic Curriculum Pacing Schemas ---
+class CurriculumPacingItem(BaseModel):
+    id: int
+    class_name: str
+    subject: str
+    teacher_name: str
+    completed_units: int
+    total_units: int
+    calendar_target_units: int
+    completion_pct: float
+    status: str
+    last_lesson_title: str
+    next_milestone_date: str
+
+class LogLessonRequest(BaseModel):
+    units_to_add: int = 1
+    lesson_title: Optional[str] = None
+
+class PTMGovernanceStatus(BaseModel):
+    active_event_title: str
+    event_date: str
+    time_window: str
+    slot_duration_mins: int
+    total_teachers: int
+    published_teachers_count: int
+    readiness_percentage: float
+    unready_teachers: List[str]
+    focus_students_requiring_brief: int
+
+class PTMEventCreate(BaseModel):
+    title: str
+    academic_term: Optional[str] = "Term 1"
+    start_date: str
+    end_date: str
+    start_time: Optional[str] = "09:00 AM"
+    end_time: Optional[str] = "01:00 PM"
+    slot_duration_mins: Optional[int] = 10
+    target_classes: List[str]
+    meeting_format: Optional[str] = "Online & In-Person"
+
+class PTMEventResponse(BaseModel):
+    id: int
+    title: str
+    academic_term: str
+    start_date: str
+    end_date: str
+    start_time: str
+    end_time: str
+    slot_duration_mins: int
+    target_classes: List[str]
+    status: str
+    created_by_name: str
+    created_at: Optional[datetime.datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- AI Parent Study Companion Schemas ---
+class AIStudyAssistantRequest(BaseModel):
+    student_id: int = 1
+    subject_name: Optional[str] = "Mathematics"
+    subject: Optional[str] = None
+    current_exam_score: Optional[Any] = "52%"
+    current_score: Optional[Any] = None
+    diagnosed_misconception: Optional[str] = "Drops negative signs during binomial factoring"
+    weak_concept: Optional[str] = None
+    active_day: Optional[str] = "Day 3"
+
+    @property
+    def resolved_subject(self) -> str:
+        return self.subject_name or self.subject or "Mathematics"
+
+    @property
+    def resolved_score(self) -> str:
+        s = self.current_exam_score or self.current_score or "52%"
+        return str(s)
+
+    @property
+    def resolved_misconception(self) -> str:
+        return self.diagnosed_misconception or self.weak_concept or "Drops negative signs during binomial factoring"
+
+class AIStudyAssistantResponse(BaseModel):
+    plain_english_translation: str
+    tonight_action: str
+    child_motivation_tip: str
+    suggested_teacher_question: str
+    has_backlog: bool = False
+    backlog_count: int = 0
+    source: str = "gemini"
+    model_used: str = "gemini-3.5-flash"
+
+
+# =========================================================================
+# FINANCE & ACCOUNTS COORDINATOR SCHEMAS
+# =========================================================================
+
+class FeeDefaulterBase(BaseModel):
+    student_id: Optional[int] = None
+    student_name: str
+    class_name: str
+    roll_no: Optional[str] = None
+    parent_name: str
+    parent_phone: str
+    milestone_title: str
+    amount_due: float
+    days_overdue: int = 0
+    reminder_sent: bool = False
+    reminder_count: int = 0
+    waiver_amount: float = 0.0
+    waiver_reason: Optional[str] = None
+    waiver_approved_by: Optional[str] = None
+    payment_history_json: Optional[str] = None
+    notes: Optional[str] = None
+    status: str = "Overdue"
+
+class FeeDefaulterCreate(FeeDefaulterBase):
+    pass
+
+class FeeDefaulterUpdate(BaseModel):
+    amount_due: Optional[float] = None
+    days_overdue: Optional[int] = None
+    reminder_sent: Optional[bool] = None
+    reminder_count: Optional[int] = None
+    waiver_amount: Optional[float] = None
+    waiver_reason: Optional[str] = None
+    waiver_approved_by: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+class FeeDefaulterResponse(FeeDefaulterBase):
+    id: int
+    last_reminder_at: Optional[datetime.datetime] = None
+    waiver_approved_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ApplyWaiverRequest(BaseModel):
+    waiver_amount: float
+    reason: str
+    approved_by: str = "Mr. Arvind Krishnan"
+
+class RecordFeePaymentRequest(BaseModel):
+    amount_paid: float
+    payment_method: str = "UPI"  # UPI, Cash, Cheque, NetBanking, Card
+    utr_or_cheque_no: Optional[str] = None
+    notes: Optional[str] = None
+    received_by: str = "Mr. Arvind Krishnan"
+
+class BulkReminderRequest(BaseModel):
+    student_ids: Optional[List[int]] = None
+    aging_tier: Optional[str] = None  # "ALL", "30+", "16-30", "0-15"
+    channel: str = "WhatsApp"  # WhatsApp, SMS, Email
+    custom_message: Optional[str] = None
+
+class VendorInvoiceBase(BaseModel):
+    invoice_no: str
+    vendor_name: str
+    vendor_category: Optional[str] = "Services"
+    invoice_for: str
+    amount: float
+    invoice_date: str
+    due_date: Optional[str] = None
+    status: str = "Pending Approval"
+    notes: Optional[str] = None
+
+class VendorInvoiceCreate(VendorInvoiceBase):
+    pass
+
+class VendorInvoiceUpdate(BaseModel):
+    status: Optional[str] = None
+    authorized_by: Optional[str] = None
+    payment_utr: Optional[str] = None
+    payment_mode: Optional[str] = None
+    notes: Optional[str] = None
+
+class VendorInvoiceResponse(VendorInvoiceBase):
+    id: int
+    authorized_by: Optional[str] = None
+    authorized_at: Optional[datetime.datetime] = None
+    payment_utr: Optional[str] = None
+    paid_at: Optional[datetime.datetime] = None
+    payment_mode: Optional[str] = None
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class PaymentTransactionBase(BaseModel):
+    utr_number: str
+    student_name: str
+    class_name: str
+    parent_name: str
+    amount: float
+    payment_method: str
+    bank_name: Optional[str] = None
+    milestone_title: str
+    status: str = "Success"
+    reconciled: bool = False
+    gateway_ref: Optional[str] = None
+    notes: Optional[str] = None
+
+class PaymentTransactionCreate(PaymentTransactionBase):
+    pass
+
+class PaymentTransactionResponse(PaymentTransactionBase):
+    id: int
+    transaction_date: datetime.datetime
+    reconciled_at: Optional[datetime.datetime] = None
+    reconciled_by: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class FinanceDispatchLogResponse(BaseModel):
+    id: int
+    dispatch_type: str
+    dispatch_scope: Optional[str] = None
+    target_count: int
+    total_amount_targeted: float
+    dispatch_note: Optional[str] = None
+    dispatched_by: str
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class FinanceDashboardStats(BaseModel):
+    total_collected_mtd: float
+    outstanding_arrears: float
+    pending_reconciliation_count: int
+    pending_reconciliation_amount: float
+    pending_vendor_invoices_count: int
+    pending_vendor_invoices_amount: float
+    overdue_students_count: int
+    overdue_tier_15: int
+    overdue_tier_30: int
+    overdue_tier_60: int
+    collection_target_progress_pct: float

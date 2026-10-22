@@ -1,5 +1,6 @@
 import datetime
 import json
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
@@ -7,11 +8,13 @@ from app.core.database import get_db
 from app.models.models import (
     TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
-    StaffMember, InventoryItem
+    StaffMember, InventoryItem, PTMEvent
 )
+from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
     TriageAlertResponse, TriageActionRequest,
     AdminTaskResponse, AdminTaskCreate, AdminTaskUpdate,
+    EscalateTaskRequest, AutoTriggerTaskRequest, TaskExecutiveCockpitResponse,
     AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate,
     StudentResponse, OfficialDocumentResponse, OfficialDocumentCreate,
     ExitClearanceResponse, ExitClearancePhysicalUpload,
@@ -19,7 +22,10 @@ from app.schemas.schemas import (
     VendorEquipmentResponse, VendorEquipmentUpdate,
     SubstitutionSlotResponse, AssignSubstitutionRequest, AvailableFacultyItem,
     SecurityAuditLogResponse, FeeFinancialAnalyticsResponse,
-    AcademicRolloverClassResponse, ExecuteRolloverRequest
+    AcademicRolloverClassResponse, ExecuteRolloverRequest,
+    CurriculumPacingItem, LogLessonRequest,
+    TaskReliefRequest, ApproveReliefRequest, ExtendSlaRequest, PTMGovernanceStatus,
+    PTMEventCreate, PTMEventResponse
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -47,18 +53,105 @@ async def execute_triage_action(alert_id: int, req: TriageActionRequest, db: Asy
         "alert": alert
     }
 
-# --- 2. Admin Task Manager ---
+# --- 2. Admin & Coordinator Operational Task Manager ---
 @router.get("/tasks", response_model=list[AdminTaskResponse])
-async def list_admin_tasks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AdminTask).order_by(AdminTask.status.desc(), AdminTask.id.asc()))
+async def list_admin_tasks(
+    domain: Optional[str] = None,
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    is_escalated: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(AdminTask)
+    if domain and domain.lower() != "all":
+        query = query.where(AdminTask.domain == domain.lower())
+    if status and status.lower() != "all":
+        query = query.where(AdminTask.status == status)
+    if category:
+        query = query.where(AdminTask.category == category)
+    if is_escalated is not None:
+        query = query.where(AdminTask.is_escalated == is_escalated)
+    query = query.order_by(AdminTask.is_escalated.desc(), AdminTask.id.desc())
+    result = await db.execute(query)
     return result.scalars().all()
+
+@router.get("/tasks/executive-cockpit", response_model=TaskExecutiveCockpitResponse)
+async def get_task_executive_cockpit(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).order_by(AdminTask.id.desc()))
+    tasks = result.scalars().all()
+
+    total_open = sum(1 for t in tasks if (t.status or "").lower() not in ["completed", "done"])
+    critical_escalations = sum(1 for t in tasks if t.is_escalated or (t.priority or "").lower() == "critical")
+    overdue_count = sum(1 for t in tasks if "urgent" in (t.category or "").lower() and (t.status or "").lower() not in ["completed", "done"])
+    auto_generated_count = sum(1 for t in tasks if t.is_auto_generated)
+
+    domains = ["academic", "exam", "transport", "inventory", "admissions", "finance", "executive"]
+    domain_labels = {
+        "academic": "Academic & Curriculum",
+        "exam": "Examination Cell",
+        "transport": "Yellow Bus Fleet",
+        "inventory": "Asset & Lab Store",
+        "admissions": "Admissions & CRM",
+        "finance": "Finance & Bursar",
+        "executive": "Executive Mandates"
+    }
+
+    dept_stats = []
+    for d in domains:
+        d_tasks = [t for t in tasks if (t.domain or "academic").lower() == d]
+        open_d = sum(1 for t in d_tasks if (t.status or "").lower() not in ["completed", "done"])
+        completed_d = sum(1 for t in d_tasks if (t.status or "").lower() in ["completed", "done"])
+        total_d = len(d_tasks)
+        rate = round((completed_d / total_d) * 100, 1) if total_d > 0 else 100.0
+        dept_stats.append({
+            "domain": d,
+            "label": domain_labels.get(d, d.title()),
+            "total_tasks": total_d,
+            "open_tasks": open_d,
+            "completed_tasks": completed_d,
+            "completion_rate_pct": rate
+        })
+
+    return TaskExecutiveCockpitResponse(
+        total_open=total_open,
+        critical_escalations=critical_escalations,
+        overdue_count=overdue_count,
+        auto_generated_count=auto_generated_count,
+        department_stats=dept_stats,
+        recent_tasks=tasks[:10]
+    )
 
 @router.post("/tasks", response_model=AdminTaskResponse)
 async def create_admin_task(task_in: AdminTaskCreate, db: AsyncSession = Depends(get_db)):
-    new_task = AdminTask(**task_in.model_dump())
+    task_dict = task_in.model_dump()
+    new_task = AdminTask(**task_dict)
     db.add(new_task)
     await db.commit()
     await db.refresh(new_task)
+
+    # 🔔 Persistent Notification to Assigned Faculty / Role
+    try:
+        assignee = new_task.assigned_to or ""
+        is_teacher = any(term in assignee.lower() for term in ["verma", "teacher", "ananya", "faculty", "math"])
+        role = "teacher" if is_teacher else (new_task.department or "teacher")
+        user_id = 2 if is_teacher else None
+
+        await create_system_notification(
+            db=db,
+            recipient_user_id=user_id,
+            recipient_role=role,
+            sender_name="Prof. Rajeshwari Nair",
+            sender_role="academic_coordinator",
+            title=f"New Task Delegated: {new_task.title}",
+            message=f"You have been assigned: '{new_task.title}'. SLA Target: {new_task.sla_hours} hours. Priority: {new_task.priority}.",
+            notification_type="TASK_ASSIGNED",
+            priority="URGENT" if new_task.priority in ["Critical", "High"] else "NORMAL",
+            action_url=f"/teacher?tab=duties&taskId={new_task.id}",
+            metadata_dict={"task_id": new_task.id, "priority": new_task.priority}
+        )
+    except Exception as e:
+        print(f"Failed to create notification for admin task: {e}")
+
     return new_task
 
 @router.patch("/tasks/{task_id}", response_model=AdminTaskResponse)
@@ -67,10 +160,205 @@ async def update_admin_task(task_id: int, task_up: AdminTaskUpdate, db: AsyncSes
     task = result.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task_up.status is not None:
-        task.status = task_up.status
-    if task_up.priority is not None:
-        task.priority = task_up.priority
+    
+    update_data = task_up.model_dump(exclude_unset=True)
+    for key, val in update_data.items():
+        if val is not None and hasattr(task, key):
+            setattr(task, key, val)
+    
+    task.updated_at = datetime.datetime.utcnow()
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/{task_id}/escalate", response_model=AdminTaskResponse)
+async def escalate_admin_task(task_id: int, req: EscalateTaskRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.is_escalated = True
+    task.escalation_reason = req.reason
+    task.priority = "Critical"
+    task.updated_at = datetime.datetime.utcnow()
+    
+    # Push into Super Admin's Priority Triage Command Center
+    triage_alert = TriageAlert(
+        level="red",
+        category="compliance",
+        title=f"ACADEMIC ESCALATION: {task.title}",
+        description=f"Prof. Rajeshwari Nair escalated task #{task.id}: {req.reason}. Assigned to: {task.assigned_to}.",
+        action_label="Review Academic Breach",
+        action_endpoint=f"/admin?tab=tasks&taskId={task.id}",
+        resolved=False
+    )
+    db.add(triage_alert)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/{task_id}/request-relief", response_model=AdminTaskResponse)
+async def request_task_relief(task_id: int, req: TaskReliefRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.relief_requested = True
+    task.relief_reason = req.relief_reason
+    task.relief_justification = req.justification
+    task.suggested_peer_teacher = req.suggested_peer_teacher
+    task.status = "Relief Requested"
+    task.updated_at = datetime.datetime.utcnow()
+    
+    _add_audit_log(
+        actor_name=task.assigned_to,
+        actor_role="teacher",
+        action_type="TASK_RELIEF_REQUESTED",
+        target_entity=task.title,
+        status="PENDING",
+        details=f"Faculty requested relief due to {req.relief_reason}: {req.justification} (Suggested Peer: {req.suggested_peer_teacher or 'None'})."
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/{task_id}/approve-relief", response_model=AdminTaskResponse)
+async def approve_task_relief(task_id: int, req: ApproveReliefRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    old_assignee = task.assigned_to
+    task.assigned_to = req.new_assigned_to
+    task.assigned_to_role = "teacher"
+    task.relief_requested = False
+    task.status = "Pending"
+    task.sla_hours = req.new_sla_hours or 48
+    task.updated_at = datetime.datetime.utcnow()
+    
+    _add_audit_log(
+        actor_name="Academic Coordinator",
+        actor_role="academic_coordinator",
+        action_type="TASK_MIGRATION_APPROVED",
+        target_entity=task.title,
+        status="VERIFIED",
+        details=f"Reassigned academic mandate from {old_assignee} to {req.new_assigned_to} (SLA: {task.sla_hours}h). Reason: {task.relief_reason or 'Workload Relief'}."
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/{task_id}/extend-sla", response_model=AdminTaskResponse)
+async def extend_task_sla(task_id: int, req: ExtendSlaRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.sla_hours = (task.sla_hours or 24) + req.additional_hours
+    task.status = "Pending"
+    task.relief_requested = False
+    task.updated_at = datetime.datetime.utcnow()
+    
+    _add_audit_log(
+        actor_name="Academic Coordinator",
+        actor_role="academic_coordinator",
+        action_type="TASK_SLA_EXTENDED",
+        target_entity=task.title,
+        status="VERIFIED",
+        details=f"Granted +{req.additional_hours}h SLA extension. Justification: {req.extension_reason}."
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/auto-trigger", response_model=AdminTaskResponse)
+async def auto_trigger_operational_task(req: AutoTriggerTaskRequest, db: AsyncSession = Depends(get_db)):
+    if req.event_type == "exam_concluded":
+        task = AdminTask(
+            title=f"Term 1 Exam Concluded: Publish Grade Moderation & Verification Dossier ({req.entity_id or 'Secondary Tier'})",
+            description=req.notes or "Automated event trigger: Exam cycle ended. Collect all unmoderated subject marks sheets within 5 working days.",
+            category="urgent",
+            domain="exam",
+            due_date="Within 5 Days",
+            assigned_to="Dr. Hemanth Sen (Exam Controller)",
+            assigned_to_role="exam_coordinator",
+            created_by_name="EDU360 Event Engine",
+            created_by_role="system",
+            priority="High",
+            sla_hours=120,
+            is_auto_generated=True,
+            trigger_event="exam_concluded"
+        )
+    elif req.event_type == "bus_rto_fitness":
+        task = AdminTask(
+            title=f"Statutory Fleet Audit: Bus Route #{req.entity_id or '4'} RTO Fitness Certificate Due in 15 Days",
+            description=req.notes or "Automated compliance trigger: Vehicle fitness certificate expires this month. Complete RTO brake, speed governor, and emissions check.",
+            category="urgent",
+            domain="transport",
+            due_date="Within 10 Days",
+            assigned_to="Mr. Vikram Malhotra (Transport Lead)",
+            assigned_to_role="transport_coordinator",
+            created_by_name="EDU360 Event Engine",
+            created_by_role="system",
+            priority="Critical",
+            sla_hours=72,
+            is_auto_generated=True,
+            trigger_event="bus_rto_fitness"
+        )
+    elif req.event_type == "absence_streak":
+        task = AdminTask(
+            title=f"Welfare Intervention: Student #{req.entity_id or 'Roll 15'} Absent 3+ Consecutive Days",
+            description=req.notes or "Automated attendance trigger: Student has missed 3 consecutive class days without parent leave note. Initiate welfare phone check.",
+            category="urgent",
+            domain="academic",
+            due_date="Today, 4:00 PM",
+            assigned_to="Mrs. Ananya Verma (Class Teacher)",
+            assigned_to_role="teacher",
+            created_by_name="EDU360 Event Engine",
+            created_by_role="system",
+            priority="High",
+            sla_hours=8,
+            is_auto_generated=True,
+            trigger_event="absence_streak"
+        )
+    elif req.event_type == "stock_low":
+        task = AdminTask(
+            title=f"Low Stock Reorder Trigger: Chemistry Lab Consumables Below Threshold ({req.entity_id or 'Reagents'})",
+            description=req.notes or "Automated inventory alert: Acid stock and filter papers below minimum reorder buffer. Generate vendor purchase order.",
+            category="upcoming",
+            domain="inventory",
+            due_date="Within 48 Hours",
+            assigned_to="Mrs. Shalini Rao (Store Lead)",
+            assigned_to_role="inventory_coordinator",
+            created_by_name="EDU360 Event Engine",
+            created_by_role="system",
+            priority="Medium",
+            sla_hours=48,
+            is_auto_generated=True,
+            trigger_event="stock_low"
+        )
+    else:
+        task = AdminTask(
+            title=f"Institutional Operations Trigger: {req.event_type}",
+            description=req.notes or f"Triggered from event {req.event_type}",
+            category="upcoming",
+            domain="executive",
+            due_date="Within 48 Hours",
+            assigned_to="Dr. Sunita Kapoor (Principal)",
+            assigned_to_role="admin",
+            created_by_name="EDU360 Event Engine",
+            created_by_role="system",
+            priority="Medium",
+            sla_hours=48,
+            is_auto_generated=True,
+            trigger_event=req.event_type
+        )
+    
+    db.add(task)
     await db.commit()
     await db.refresh(task)
     return task
@@ -311,6 +599,65 @@ async def review_teacher_permission(perm_id: int, req: dict):
     for p in _teacher_permissions:
         if p["id"] == perm_id:
             p["status"] = status
+            
+            # --- CROSS-ROLE INTERLOCK ---
+            # If Admin approves teacher leave, automatically generate:
+            # 1. Unassigned SubstitutionSlot for the Academic Coordinator to assign
+            # 2. High-priority SLA task in Academic Coordinator's task queue
+            # 3. Security Audit Log
+            if status == "Approved":
+                new_slot_id = max([s["id"] for s in _substitutions_slots], default=0) + 1
+                new_slot = {
+                    "id": new_slot_id,
+                    "absent_teacher_id": perm_id,
+                    "absent_teacher_name": p["teacher_name"],
+                    "absent_reason": f"{p['type']} - {p['reason']}",
+                    "date": "Today, 19 Oct 2026",
+                    "period_number": 3,
+                    "time_slot": "10:30 AM - 11:15 AM",
+                    "class_name": "Class 8-B",
+                    "subject": "Mathematics" if "Verma" in p["teacher_name"] else "Physics",
+                    "substitute_teacher_id": None,
+                    "substitute_teacher_name": None,
+                    "status": "Unassigned",
+                    "priority": "High"
+                }
+                _substitutions_slots.insert(0, new_slot)
+                
+                new_task_id = max([t["id"] for t in _in_memory_tasks], default=0) + 1
+                auto_task = {
+                    "id": new_task_id,
+                    "title": f"Assign Proxy Cover: {p['teacher_name']} ({p['type']})",
+                    "description": f"Admin approved {p['type']}. Class 8-B requires immediate proxy teacher coverage for Period 3.",
+                    "category": "urgent",
+                    "domain": "academic",
+                    "due_date": "Today, 10:15 AM",
+                    "assigned_to": "Prof. Rajeshwari Nair",
+                    "assigned_to_role": "academic_coordinator",
+                    "created_by_name": "Dr. Sunita Kapoor",
+                    "created_by_role": "admin",
+                    "status": "Pending",
+                    "priority": "Critical",
+                    "sla_hours": 2,
+                    "is_auto_generated": True,
+                    "trigger_event": "teacher_leave_approved",
+                    "is_escalated": False,
+                    "escalation_reason": None,
+                    "completion_proof_url": None,
+                    "created_at": datetime.datetime.utcnow().isoformat(),
+                    "updated_at": datetime.datetime.utcnow().isoformat()
+                }
+                _in_memory_tasks.insert(0, auto_task)
+                
+                _add_audit_log(
+                    actor_name="Principal & Administrator",
+                    actor_role="admin",
+                    action_type="LEAVE_APPROVED_SUB_MANDATE",
+                    target_entity=f"{p['teacher_name']} ({p['type']})",
+                    status="VERIFIED",
+                    details=f"Leave approved by Principal. Auto-dispatched proxy coverage task to Academic Coordinator."
+                )
+
             return {"success": True, "permission": p}
     raise HTTPException(status_code=404, detail="Permission request not found")
 
@@ -528,9 +875,27 @@ async def assign_substitution(req: AssignSubstitutionRequest):
             slot["substitute_teacher_name"] = req.substitute_teacher_name
             slot["status"] = "Assigned"
             
+            # Sync to proxy teacher's personal schedule
+            try:
+                from app.routers.teacher import inject_substitution_period
+                inject_substitution_period(
+                    period_num=slot["period_number"],
+                    class_name=slot["class_name"],
+                    subject=slot["subject"],
+                    absent_teacher=slot["absent_teacher_name"],
+                    time_slot=slot["time_slot"]
+                )
+            except Exception:
+                pass
+
+            # Auto-complete any pending coordinator tasks for this teacher/slot
+            for task in _in_memory_tasks:
+                if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
+                    task["status"] = "Completed"
+            
             _add_audit_log(
-                actor_name="Academic Vice Principal",
-                actor_role="admin",
+                actor_name="Academic Coordinator",
+                actor_role="academic_coordinator",
                 action_type="SUBSTITUTION_ASSIGN",
                 target_entity=f"Period {slot['period_number']} ({slot['class_name']} {slot['subject']})",
                 status="VERIFIED",
@@ -558,6 +923,23 @@ async def auto_resolve_substitutions():
                 slot["status"] = "Assigned"
                 match["free_periods_today"] -= 1
                 resolved_count += 1
+                
+                try:
+                    from app.routers.teacher import inject_substitution_period
+                    inject_substitution_period(
+                        period_num=slot["period_number"],
+                        class_name=slot["class_name"],
+                        subject=slot["subject"],
+                        absent_teacher=slot["absent_teacher_name"],
+                        time_slot=slot["time_slot"]
+                    )
+                except Exception:
+                    pass
+
+                # Auto-complete matching task
+                for task in _in_memory_tasks:
+                    if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
+                        task["status"] = "Completed"
     
     _add_audit_log(
         actor_name="AI Timetable Governor",
@@ -726,4 +1108,289 @@ async def execute_academic_rollover(req: ExecuteRolloverRequest):
                 "class": c
             }
     raise HTTPException(status_code=404, detail="Class rollover target not found")
+
+# --- 11. Academic Curriculum Pacing Engine ---
+_curriculum_pacing_items = [
+    {
+        "id": 1,
+        "class_name": "Class 8-B",
+        "subject": "Mathematics",
+        "teacher_name": "Mrs. Ananya Verma",
+        "completed_units": 18,
+        "total_units": 22,
+        "calendar_target_units": 18,
+        "completion_pct": 81.8,
+        "status": "On Track",
+        "last_lesson_title": "Linear Equations in Two Variables (Practice Ex 3.4)",
+        "next_milestone_date": "24 Oct 2026 (Unit Assessment 3)"
+    },
+    {
+        "id": 2,
+        "class_name": "Class 8-B",
+        "subject": "Science",
+        "teacher_name": "Dr. Suresh Babu",
+        "completed_units": 14,
+        "total_units": 20,
+        "calendar_target_units": 16,
+        "completion_pct": 70.0,
+        "status": "Lagging (2 Units Behind)",
+        "last_lesson_title": "Light & Reflection Principles",
+        "next_milestone_date": "28 Oct 2026 (Mid-Term Lab Practical)"
+    },
+    {
+        "id": 3,
+        "class_name": "Class 9-A",
+        "subject": "English Literature",
+        "teacher_name": "Mrs. Neha Roy",
+        "completed_units": 16,
+        "total_units": 18,
+        "calendar_target_units": 15,
+        "completion_pct": 88.9,
+        "status": "Ahead (+1 Unit)",
+        "last_lesson_title": "The Road Not Taken - Critical Appreciation",
+        "next_milestone_date": "30 Oct 2026 (Poetry Essay Submission)"
+    },
+    {
+        "id": 4,
+        "class_name": "Class 10-A",
+        "subject": "Social Studies",
+        "teacher_name": "Mr. Arvind Saxena",
+        "completed_units": 21,
+        "total_units": 24,
+        "calendar_target_units": 20,
+        "completion_pct": 87.5,
+        "status": "On Track",
+        "last_lesson_title": "Federalism & Decentralization in India",
+        "next_milestone_date": "05 Nov 2026 (Pre-Board Milestone 1)"
+    },
+    {
+        "id": 5,
+        "class_name": "Class 10-B",
+        "subject": "Physics",
+        "teacher_name": "Dr. Radhika Sen",
+        "completed_units": 19,
+        "total_units": 20,
+        "calendar_target_units": 18,
+        "completion_pct": 95.0,
+        "status": "Ahead (+1 Unit)",
+        "last_lesson_title": "Magnetic Effects of Electric Current",
+        "next_milestone_date": "02 Nov 2026 (Board Numerical Workshop)"
+    },
+    {
+        "id": 6,
+        "class_name": "Class 7-A",
+        "subject": "Hindi",
+        "teacher_name": "Mrs. Rekha Sharma",
+        "completed_units": 12,
+        "total_units": 18,
+        "calendar_target_units": 14,
+        "completion_pct": 66.7,
+        "status": "Lagging (2 Units Behind)",
+        "last_lesson_title": "Grammar: Sandhi and Samas",
+        "next_milestone_date": "26 Oct 2026 (Class Diagnostic Quiz)"
+    }
+]
+
+@router.get("/academic/curriculum-pacing", response_model=list[CurriculumPacingItem])
+async def get_curriculum_pacing():
+    return _curriculum_pacing_items
+
+@router.post("/academic/curriculum-pacing/{item_id}/log-lesson")
+async def log_curriculum_lesson(item_id: int, req: LogLessonRequest):
+    for item in _curriculum_pacing_items:
+        if item["id"] == item_id:
+            new_completed = min(item["total_units"], item["completed_units"] + req.units_to_add)
+            item["completed_units"] = new_completed
+            pct = round((new_completed / item["total_units"]) * 100, 1)
+            item["completion_pct"] = pct
+            
+            diff = new_completed - item["calendar_target_units"]
+            if diff >= 1:
+                item["status"] = f"Ahead (+{diff} Unit{'s' if diff > 1 else ''})"
+            elif diff < 0:
+                item["status"] = f"Lagging ({abs(diff)} Unit{'s' if abs(diff) > 1 else ''} Behind)"
+            else:
+                item["status"] = "On Track"
+                
+            if req.lesson_title:
+                item["last_lesson_title"] = req.lesson_title
+                
+            _add_audit_log(
+                actor_name="Academic Coordinator",
+                actor_role="academic_coordinator",
+                action_type="CURRICULUM_PACING_UPDATE",
+                target_entity=f"{item['class_name']} {item['subject']}",
+                status="VERIFIED",
+                details=f"Logged unit completion: {item['completed_units']}/{item['total_units']} ({item['completion_pct']}%, status: {item['status']})"
+            )
+            return {"success": True, "item": item}
+    raise HTTPException(status_code=404, detail="Curriculum pacing item not found")
+
+@router.post("/academic/curriculum-pacing/{item_id}/intervene")
+async def create_curriculum_intervention(item_id: int):
+    for item in _curriculum_pacing_items:
+        if item["id"] == item_id:
+            new_task_id = max([t["id"] for t in _in_memory_tasks], default=0) + 1
+            intervention_task = {
+                "id": new_task_id,
+                "title": f"Curriculum Remediation: {item['class_name']} {item['subject']}",
+                "description": f"Syllabus pacing is lagging ({item['completed_units']}/{item['total_units']} vs target {item['calendar_target_units']}). Review lesson planner with {item['teacher_name']} and schedule zero-hour catchup session.",
+                "category": "urgent",
+                "domain": "academic",
+                "due_date": "Tomorrow, 4:00 PM",
+                "assigned_to": item["teacher_name"],
+                "assigned_to_role": "teacher",
+                "created_by_name": "Prof. Rajeshwari Nair",
+                "created_by_role": "academic_coordinator",
+                "status": "Pending",
+                "priority": "High",
+                "sla_hours": 48,
+                "is_auto_generated": True,
+                "created_at": "Today, 01:45 PM",
+                "is_escalated": False
+            }
+            _in_memory_tasks.insert(0, intervention_task)
+            
+            _add_audit_log(
+                actor_name="Academic Coordinator",
+                actor_role="academic_coordinator",
+                action_type="CURRICULUM_INTERVENTION_TASK",
+                target_entity=f"{item['class_name']} {item['subject']}",
+                status="VERIFIED",
+                details=f"Created urgent pacing remediation task for faculty {item['teacher_name']}."
+            )
+            return {"success": True, "task": intervention_task, "message": f"Remediation task created for {item['teacher_name']}"}
+    raise HTTPException(status_code=404, detail="Curriculum pacing item not found")
+
+# --- 12. Institutional PTM Governance Engine ---
+_ptm_governance_data = {
+    "active_event_title": "Term-2 Mid-Term Parent-Teacher Meeting",
+    "event_date": "Saturday, 24 Oct 2026",
+    "time_window": "09:00 AM – 01:00 PM",
+    "slot_duration_mins": 10,
+    "total_teachers": 30,
+    "published_teachers_count": 28,
+    "readiness_percentage": 93.3,
+    "unready_teachers": ["Dr. Suresh Babu (Science)", "Mrs. Rekha Sharma (Hindi)"],
+    "focus_students_requiring_brief": 6
+}
+
+_declared_ptm_events = [
+    {
+        "id": 1,
+        "title": "Term-2 Mid-Term Parent-Teacher Meeting",
+        "academic_term": "Term 2",
+        "start_date": "2026-10-24",
+        "end_date": "2026-10-24",
+        "start_time": "09:00 AM",
+        "end_time": "01:00 PM",
+        "slot_duration_mins": 10,
+        "target_classes": ["Class 8-A", "Class 8-B", "Class 9-A", "Class 9-B"],
+        "status": "Open_For_Parents",
+        "created_by_name": "Academic Coordinator",
+        "created_at": datetime.datetime.utcnow()
+    }
+]
+
+@router.get("/ptm/events", response_model=List[PTMEventResponse])
+async def list_ptm_events():
+    return _declared_ptm_events
+
+@router.post("/ptm/events", response_model=PTMEventResponse)
+async def declare_ptm_event(req: PTMEventCreate, db: AsyncSession = Depends(get_db)):
+    new_id = len(_declared_ptm_events) + 1
+    event_dict = {
+        "id": new_id,
+        "title": req.title,
+        "academic_term": req.academic_term or "Term 1",
+        "start_date": req.start_date,
+        "end_date": req.end_date,
+        "start_time": req.start_time or "09:00 AM",
+        "end_time": req.end_time or "01:00 PM",
+        "slot_duration_mins": req.slot_duration_mins or 10,
+        "target_classes": req.target_classes,
+        "status": "Open_For_Parents",
+        "created_by_name": "Prof. Rajeshwari Nair",
+        "created_at": datetime.datetime.utcnow()
+    }
+    _declared_ptm_events.insert(0, event_dict)
+    
+    # Dynamically update governance status
+    _ptm_governance_data["active_event_title"] = req.title
+    _ptm_governance_data["event_date"] = f"{req.start_date} to {req.end_date}" if req.start_date != req.end_date else req.start_date
+    _ptm_governance_data["time_window"] = f"{req.start_time} – {req.end_time}"
+    _ptm_governance_data["slot_duration_mins"] = req.slot_duration_mins or 10
+    _ptm_governance_data["readiness_percentage"] = 85.0
+    _ptm_governance_data["published_teachers_count"] = 25
+    _ptm_governance_data["unready_teachers"] = ["Dr. Suresh Babu (Science)", "Mrs. Rekha Sharma (Hindi)"]
+    
+    # Broadcast Mandate Tasks to Teachers of Declared Classes
+    for teacher_name in ["Mrs. Ananya Verma", "Dr. Suresh Babu", "Mrs. Neha Roy", "Mr. Arvind Saxena"]:
+        mandate_task = AdminTask(
+            title=f"PTM Mandate: Publish Slots for {req.title}",
+            description=f"Institutional PTM declared for {', '.join(req.target_classes)} on {_ptm_governance_data['event_date']} ({_ptm_governance_data['time_window']}). Confirm your {req.slot_duration_mins}-min slots for parent self-booking.",
+            category="urgent",
+            domain="academic",
+            due_date="Thursday, 5:00 PM",
+            assigned_to=teacher_name,
+            assigned_to_role="teacher",
+            created_by_name="Prof. Rajeshwari Nair",
+            created_by_role="academic_coordinator",
+            status="Pending",
+            priority="High",
+            sla_hours=48,
+            is_auto_generated=True,
+            task_type="PTM_SLOT_PUBLISHING"
+        )
+        db.add(mandate_task)
+    await db.commit()
+    
+    _add_audit_log(
+        actor_name="Prof. Rajeshwari Nair",
+        actor_role="academic_coordinator",
+        action_type="PTM_EVENT_DECLARED",
+        target_entity=req.title,
+        status="VERIFIED",
+        details=f"Declared PTM on {req.start_date} for {', '.join(req.target_classes)}. Broadcasted slot opening alerts to faculty and parents."
+    )
+    
+    return event_dict
+
+@router.get("/ptm/governance", response_model=PTMGovernanceStatus)
+async def get_ptm_governance():
+    return _ptm_governance_data
+
+@router.post("/ptm/remind-unready")
+async def remind_unready_ptm_teachers(db: AsyncSession = Depends(get_db)):
+    unready = ["Dr. Suresh Babu", "Mrs. Rekha Sharma"]
+    for t_name in unready:
+        new_task = AdminTask(
+            title=f"URGENT PTM SLA: Publish Available 10-Min Slots",
+            description="The Academic Office has opened PTM slot booking for parents. You must publish your available slots for Saturday 24 Oct immediately.",
+            category="urgent",
+            domain="academic",
+            due_date="Today, 05:00 PM",
+            assigned_to=t_name,
+            assigned_to_role="teacher",
+            created_by_name="Prof. Rajeshwari Nair",
+            created_by_role="academic_coordinator",
+            status="Pending",
+            priority="Critical",
+            sla_hours=6,
+            is_auto_generated=True,
+            task_type="PTM_SLOT_PUBLISHING"
+        )
+        db.add(new_task)
+    await db.commit()
+    
+    _add_audit_log(
+        actor_name="Prof. Rajeshwari Nair",
+        actor_role="academic_coordinator",
+        action_type="PTM_READINESS_REMINDER_BROADCAST",
+        target_entity="Unready Faculty (Dr. Suresh Babu, Mrs. Rekha Sharma)",
+        status="VERIFIED",
+        details="Dispatched urgent 6-hour SLA task to publish PTM slots before parent booking deadline."
+    )
+    return {"success": True, "message": "Dispatched urgent 6-hour SLA task to 2 defaulting teachers"}
+
 

@@ -1,8 +1,138 @@
-export type UserRole = 'admin' | 'teacher' | 'parent' | 'student';
+export type InstitutionalRole = 
+  | 'admin'
+  | 'academic_coordinator'
+  | 'exam_coordinator'
+  | 'transport_coordinator'
+  | 'inventory_coordinator'
+  | 'admissions_coordinator'
+  | 'accounts_coordinator'
+  | 'teacher'
+  | 'parent'
+  | 'student';
+
+export type UserRole = InstitutionalRole;
+
+export type TaskDomain = 
+  | 'academic'
+  | 'exam'
+  | 'transport'
+  | 'inventory'
+  | 'admissions'
+  | 'finance'
+  | 'executive'
+  | 'campus_ops';
+
+export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type AdminTaskStatus = 'Pending' | 'In Progress' | 'Pending Review' | 'Completed';
+
+export interface OperationalTask {
+  id: number;
+  title: string;
+  description?: string;
+  category?: 'urgent' | 'upcoming' | string;
+  domain?: TaskDomain | string;
+  due_date: string;
+  assigned_to: string;
+  assigned_to_role?: string;
+  created_by_name?: string;
+  created_by_role?: string;
+  status: AdminTaskStatus | string;
+  priority: TaskPriority | string;
+  sla_hours?: number;
+  is_auto_generated?: boolean;
+  trigger_event?: string;
+  is_escalated?: boolean;
+  escalation_reason?: string;
+  completion_proof_url?: string;
+  relief_requested?: boolean;
+  relief_reason?: string;
+  relief_justification?: string;
+  suggested_peer_teacher?: string;
+  task_type?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type AdminTask = OperationalTask;
+
+export interface TaskReliefRequest {
+  relief_reason: 'Medical Leave' | 'Academic Workload Surge' | 'Family Emergency' | string;
+  justification: string;
+  suggested_peer_teacher?: string;
+}
+
+export interface ApproveReliefRequest {
+  new_assigned_to: string;
+  new_sla_hours?: number;
+  notes?: string;
+}
+
+export interface ExtendSlaRequest {
+  additional_hours: number;
+  extension_reason: string;
+}
+
+export interface PTMGovernanceStatus {
+  active_event_title: string;
+  event_date: string;
+  time_window: string;
+  slot_duration_mins: number;
+  total_teachers: number;
+  published_teachers_count: number;
+  readiness_percentage: number;
+  unready_teachers: string[];
+  focus_students_requiring_brief: number;
+}
+
+export interface PTMEventCreate {
+  title: string;
+  academic_term?: string;
+  start_date: string;
+  end_date: string;
+  start_time?: string;
+  end_time?: string;
+  slot_duration_mins?: number;
+  target_classes: string[];
+  meeting_format?: string;
+}
+
+export interface PTMEventResponse {
+  id: number;
+  title: string;
+  academic_term: string;
+  start_date: string;
+  end_date: string;
+  start_time: string;
+  end_time: string;
+  slot_duration_mins: number;
+  target_classes: string[];
+  status: string;
+  created_by_name: string;
+  created_at?: string;
+}
+
+export interface DepartmentTaskStat {
+  domain: string;
+  label: string;
+  total_tasks: number;
+  open_tasks: number;
+  completed_tasks: number;
+  completion_rate_pct: number;
+}
+
+export interface TaskExecutiveCockpitResponse {
+  total_open: number;
+  critical_escalations: number;
+  overdue_count: number;
+  auto_generated_count: number;
+  department_stats: DepartmentTaskStat[];
+  recent_tasks: OperationalTask[];
+}
 
 export interface User {
   id: number;
   name: string;
+  username?: string;
   email: string;
   role: UserRole;
   school_code?: string;
@@ -186,15 +316,6 @@ export interface TriageAlert {
   created_at: string;
 }
 
-export interface AdminTask {
-  id: number;
-  title: string;
-  category: 'urgent' | 'upcoming';
-  due_date: string;
-  assigned_to: string;
-  status: 'Pending' | 'In Progress' | 'Completed';
-  priority: 'High' | 'Medium' | 'Low';
-}
 
 export interface AdmissionEnquiry {
   id: number;
@@ -485,15 +606,27 @@ export interface InventoryRecord {
 
 export interface FeeDefaulter {
   id: number;
+  student_id?: number | null;
   student_name: string;
   class_name: string;
-  roll_no: string;
+  roll_no?: string | null;
   parent_name: string;
   parent_phone: string;
   milestone_title: string;
   amount_due: number;
   days_overdue: number;
   reminder_sent: boolean;
+  reminder_count?: number;
+  last_reminder_at?: string | null;
+  waiver_amount?: number;
+  waiver_reason?: string | null;
+  waiver_approved_by?: string | null;
+  waiver_approved_at?: string | null;
+  payment_history_json?: string | null;
+  notes?: string | null;
+  status?: 'Overdue' | 'Partially Paid' | 'Paid' | 'Waived';
+  created_at?: string;
+  updated_at?: string | null;
 }
 
 export interface TeacherScheduleItem {
@@ -737,5 +870,352 @@ export interface PTMSlot {
   focus_table_agenda?: string[];
 }
 
+export interface CurriculumPacingItem {
+  id: number;
+  class_name: string;
+  subject: string;
+  teacher_name: string;
+  completed_units: number;
+  total_units: number;
+  calendar_target_units: number;
+  completion_pct: number;
+  status: string;
+  last_lesson_title: string;
+  next_milestone_date: string;
+}
+
+export interface AIParentStudyGuidanceRequest {
+  student_id: number;
+  subject_name?: string;
+  current_exam_score?: number | string;
+  diagnosed_misconception?: string;
+  active_day?: string;
+}
+
+export interface AIParentStudyGuidanceResponse {
+  plain_english_translation: string;
+  tonight_action: string;
+  child_motivation_tip: string;
+  suggested_teacher_question: string;
+  has_backlog?: boolean;
+  backlog_count?: number;
+  source?: 'gemini' | 'fallback';
+  model_used?: string;
+}
+
+export interface RemedialEarlyWarning {
+  student_id: number;
+  name: string;
+  class_name: string;
+  subject: string;
+  exam_score_pct: number;
+  current_day: number;
+  status: string;
+  weak_concept: string;
+  days_inactive: number;
+  parent_name: string;
+  parent_phone: string;
+  action_required: string;
+}
+
+export interface RemedialAdminOverview {
+  total_remedial_students: number;
+  subject_breakdown: Record<string, number>;
+  section_breakdown: Record<string, number>;
+  overall_recovery_rate: number;
+  active_sprints_on_track: number;
+  early_warning_pacing_triage: RemedialEarlyWarning[];
+}
+
+export interface VisualFormulaCard {
+  title: string;
+  rule: string;
+  explanation: string;
+  visual_steps: string[];
+}
+
+export interface SocraticHintResponse {
+  success: boolean;
+  hint: string;
+  guiding_question: string;
+  source: string;
+  attempt_count?: number;
+  formula_card?: VisualFormulaCard;
+  flagged_for_teacher?: boolean;
+  escalation_message?: string;
+}
+
+export interface PreVerifyResponse {
+  success: boolean;
+  ai_status: 'passed' | 'needs_attention';
+  confidence: number;
+  ai_rubric_match: string;
+  recommendation: string;
+  verified_at: string;
+}
+
+export interface ExamItem {
+  id: number;
+  title: string;
+  subject: string;
+  class_name: string;
+  section: string;
+  term: string;
+  exam_type: string;
+  total_marks: number;
+  pass_marks: number;
+  remedial_threshold_pct: number;
+  exam_date: string;
+  is_published: boolean;
+  published_at: string | null;
+  total_students: number;
+  graded_count: number;
+  remedial_count: number;
+}
+
+export interface ExamSubmissionItem {
+  id: number;
+  student_id: number;
+  student_name: string;
+  roll_no: string;
+  class_name: string;
+  section: string;
+  status: string;
+  paper_file_url?: string;
+  paper_file_name?: string;
+  submitted_at?: string | null;
+  marks_obtained?: number | null;
+  percentage?: number | null;
+  is_remedial_target?: boolean;
+  teacher_feedback?: string | null;
+  graded_at?: string | null;
+}
+
+export interface WhatsAppDispatchResponse {
+  success: boolean;
+  message: string;
+  receipt_id: string;
+  delivery_status: string;
+  parent_phone: string;
+  message_body: string;
+}
+
+export interface QuestionPaperItem {
+  id: number;
+  title: string;
+  exam_name?: string;
+  subject: string;
+  class_name: string;
+  section: string;
+  term: string;
+  blueprint: {
+    total_marks?: number;
+    units?: string[];
+    bloom_taxonomy?: {
+      knowledge_pct?: number;
+      application_pct?: number;
+      hots_pct?: number;
+    };
+    duration_minutes?: number;
+    calculator_allowed?: boolean;
+  };
+  total_marks?: number;
+  duration_minutes?: number;
+  draft_file_url?: string;
+  draft_file_name?: string;
+  answer_key_url?: string;
+  status: 'draft' | 'under_review' | 'revision_requested' | 'approved' | 'sent_to_exam_cell';
+  revision_notes?: string;
+  review_notes?: string;
+  due_date?: string;
+  created_by_teacher_id: number;
+  created_by_teacher_name?: string;
+  teacher_name?: string;
+  reviewed_by_academic_id?: number;
+  handed_over_at?: string | null;
+  created_at?: string;
+}
+
+export interface ExamScheduleItem {
+  id: number;
+  exam_id?: number | null;
+  title: string;
+  exam_name?: string;
+  subject: string;
+  class_name: string;
+  section?: string;
+  exam_date: string;
+  start_time: string;
+  end_time: string;
+  hall_name: string;
+  room_hall?: string;
+  capacity?: number;
+  chief_invigilator_name?: string;
+  invigilator_name?: string;
+  academic_clearance: boolean;
+  academic_clearance_notes?: string;
+}
+
+export interface OcrScanResultItem {
+  student_id: number;
+  roll_no: string;
+  student_name: string;
+  admission_no: string;
+  class_section: string;
+  marks_obtained: number;
+  max_marks: number;
+  percentage: number;
+  confidence: number;
+  confidence_level: 'High' | 'Review Required';
+  is_remedial_target: boolean;
+  pedagogical_remarks: string;
+}
+
+export interface ReportCardGradeDetail {
+  score: number;
+  max: number;
+  grade: string;
+  remedial_flag: boolean;
+  remarks: string;
+}
+
+export interface ReportCardItem {
+  id: number;
+  student_id: number;
+  student_name: string;
+  roll_no: string;
+  class_name: string;
+  section: string;
+  term: string;
+  academic_year: string;
+  grades_grid: Record<string, ReportCardGradeDetail>;
+  total_marks_obtained: number;
+  max_total_marks: number;
+  overall_percentage: number;
+  overall_grade: string;
+  attendance_pct: number;
+  ai_teacher_narrative?: string;
+  is_moderated: boolean;
+  is_published: boolean;
+  published_at?: string | null;
+}
+
+export interface NotificationItem {
+  id: number;
+  recipient_user_id?: number | null;
+  recipient_role?: string | null;
+  sender_name: string;
+  sender_role: string;
+  title: string;
+  message: string;
+  notification_type: string;
+  priority: 'LOW' | 'NORMAL' | 'URGENT';
+  action_url?: string | null;
+  metadata?: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
+  read_at?: string | null;
+}
+
+// =========================================================================
+// FINANCE & ACCOUNTS COORDINATOR TYPES
+// =========================================================================
+
+export interface FeePaymentRecord {
+  date: string;
+  amount: number;
+  method: string;
+  utr_or_cheque: string;
+  received_by?: string;
+  notes?: string;
+}
+
+export type FeeDefaulterItem = FeeDefaulter;
+
+export interface VendorInvoiceItem {
+  id: number;
+  invoice_no: string;
+  vendor_name: string;
+  vendor_category?: string;
+  invoice_for: string;
+  amount: number;
+  invoice_date: string;
+  due_date?: string;
+  status: 'Pending Approval' | 'Audit Clearance Needed' | 'Approved for Wire' | 'Paid' | 'Rejected';
+  authorized_by?: string | null;
+  authorized_at?: string | null;
+  payment_utr?: string | null;
+  paid_at?: string | null;
+  payment_mode?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface PaymentTransactionItem {
+  id: number;
+  utr_number: string;
+  student_name: string;
+  class_name: string;
+  parent_name: string;
+  amount: number;
+  payment_method: string;
+  bank_name?: string | null;
+  milestone_title: string;
+  status: 'Success' | 'Failed' | 'Pending' | 'Refunded';
+  transaction_date: string;
+  reconciled: boolean;
+  reconciled_at?: string | null;
+  reconciled_by?: string | null;
+  gateway_ref?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface FinanceDispatchLogItem {
+  id: number;
+  dispatch_type: string;
+  dispatch_scope?: string | null;
+  target_count: number;
+  total_amount_targeted: number;
+  dispatch_note?: string | null;
+  dispatched_by: string;
+  created_at: string;
+}
+
+export interface FinanceDashboardStats {
+  total_collected_mtd: number;
+  outstanding_arrears: number;
+  pending_reconciliation_count: number;
+  pending_reconciliation_amount: number;
+  pending_vendor_invoices_count: number;
+  pending_vendor_invoices_amount: number;
+  overdue_students_count: number;
+  overdue_tier_15: number;
+  overdue_tier_30: number;
+  overdue_tier_60: number;
+  collection_target_progress_pct: number;
+}
+
+export interface ApplyWaiverPayload {
+  waiver_amount: number;
+  reason: string;
+  approved_by?: string;
+}
+
+export interface RecordFeePaymentPayload {
+  amount_paid: number;
+  payment_method: string;
+  utr_or_cheque_no?: string;
+  notes?: string;
+  received_by?: string;
+}
+
+export interface BulkReminderPayload {
+  student_ids?: number[];
+  aging_tier?: string;
+  channel: string;
+  custom_message?: string;
+}
 
 

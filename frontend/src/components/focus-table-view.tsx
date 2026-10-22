@@ -41,11 +41,14 @@ import {
   PhoneCall,
   MessageSquare,
   Share2,
-  Upload
+  Upload,
+  Heart,
+  Loader2
 } from 'lucide-react';
-import { FocusTable, RevisionDay, HomeworkSubmission, ParentTeacherNote, AcademicCompliance, BacklogEvent } from '@/lib/types';
+import { FocusTable, RevisionDay, HomeworkSubmission, ParentTeacherNote, AcademicCompliance, BacklogEvent, AIParentStudyGuidanceResponse } from '@/lib/types';
 import { api } from '@/lib/api';
 import { HomeworkCanvas } from '@/components/homework-canvas';
+import { downloadWorksheetFile, exportToCsv } from '@/lib/export-utils';
 
 export interface FocusSubjectItem {
   id: string;
@@ -538,6 +541,12 @@ export function FocusTableView({
     table?.status === 'approved' && table?.parent_check_completed ? '13 Oct 2026' : null
   );
 
+  // AI Parent Study Companion State (Gemini 1.5 Flash)
+  const [aiGuidance, setAiGuidance] = useState<AIParentStudyGuidanceResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
+  const [aiDismissed, setAiDismissed] = useState<boolean>(false);
+  const [aiCopied, setAiCopied] = useState<boolean>(false);
+
   // Remedial Practice Solution Submission State (Per Subject)
   const [remedialSubmissions, setRemedialSubmissions] = useState<Record<string, {
     fileName: string;
@@ -712,6 +721,38 @@ export function FocusTableView({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleConsultAIAssistant = async () => {
+    setAiLoading(true);
+    setAiDismissed(false);
+    try {
+      const activeSprintDay = isParent && parentViewMode === 'today_only' ? 'Day 2' : 'Day 3';
+      const res = await api.getAIParentStudyGuidance({
+        student_id: table?.student_id || 1,
+        subject_name: activeSubject.subject,
+        current_exam_score: `${activeSubject.currentMastery}%`,
+        diagnosed_misconception: activeSubject.diagnosticObservation || activeSubject.commonMistake,
+        active_day: activeSprintDay
+      });
+      setAiGuidance(res);
+      triggerNotification('✨ AI Study Guidance generated successfully!');
+    } catch (err) {
+      console.error('Failed to load AI guidance:', err);
+      triggerNotification('Reverted to verified local pedagogical guidance.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleCopyTeacherMessage = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setAiCopied(true);
+    triggerNotification('✓ Teacher message copied to clipboard!');
+    setTimeout(() => {
+      setAiCopied(false);
+    }, 2500);
+  };
+
   const handleGuardianApprove = async () => {
     const nowStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     setGuardianApproved(true);
@@ -736,10 +777,14 @@ export function FocusTableView({
       triggerNotification('Plan must be approved by Guardian before verifying daily notebooks.');
       return;
     }
+    const nextState = !parentCheckedMap[subId];
     setParentCheckedMap(prev => ({
       ...prev,
-      [subId]: !prev[subId]
+      [subId]: nextState
     }));
+    if (nextState) {
+      api.parentVerifyRemedial({ student_id: table?.student_id || 1, day_num: 2 }).catch(() => {});
+    }
     if (onToggleParentCheck) {
       await onToggleParentCheck();
     }
@@ -820,9 +865,196 @@ export function FocusTableView({
       )}
 
       {/* ========================================================= */}
+      {/* 0. AI PARENT STUDY ASSISTANT (GEMINI 1.5 FLASH)           */}
+      {/* ========================================================= */}
+      {isParent && (
+        <div className="rounded-3xl border border-purple-200/90 dark:border-purple-800/80 bg-gradient-to-br from-indigo-50/70 via-purple-50/60 to-pink-50/40 dark:from-slate-900 dark:via-purple-950/25 dark:to-slate-900 p-5 sm:p-6 shadow-sm space-y-5 transition-all">
+          {/* Header Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 text-white px-3 py-1 text-xs font-black shadow-xs">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Parent Study Assistant
+                </span>
+                <span className="rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2.5 py-0.5 text-[11px] font-bold">
+                  {activeSubject.subject} Focus • {activeSubject.currentMastery}% Mastery
+                </span>
+                {aiGuidance?.source === 'gemini' && (
+                  <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Gemini 1.5 Flash Live
+                  </span>
+                )}
+                {aiGuidance?.has_backlog && (
+                  <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2.5 py-0.5 text-[10px] font-bold">
+                    Backlog Context Linked
+                  </span>
+                )}
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                ✨ AI Parent Study Assistant
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                Understand what your child is learning and how to help at home in 10 minutes.
+              </p>
+            </div>
+
+            {/* Action Bar (Ask / Refresh / Dismiss) */}
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+              {aiGuidance && !aiDismissed ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleConsultAIAssistant}
+                    disabled={aiLoading}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-slate-700 text-purple-700 dark:text-purple-300 px-3.5 py-2 text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50 cursor-pointer"
+                    title="Regenerate home guidance"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${aiLoading ? 'animate-spin' : ''}`} />
+                    <span>{aiLoading ? 'Regenerating...' : 'Regenerate'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiDismissed(true)}
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                    title="Minimize assistant card"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConsultAIAssistant}
+                  disabled={aiLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white px-5 py-2.5 text-xs sm:text-sm font-black shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Consulting AI Pedagogical Companion...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 text-amber-300" />
+                      <span>Ask AI: How Can I Help Tonight?</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Inline Loading Indicator Banner */}
+          {aiLoading && (
+            <div className="rounded-2xl border border-purple-200 dark:border-purple-800 bg-white/80 dark:bg-slate-800/80 p-4 flex items-center justify-center gap-3 text-xs font-bold text-purple-700 dark:text-purple-300 animate-pulse">
+              <Loader2 className="h-5 w-5 animate-spin text-purple-600 dark:text-purple-400" />
+              <span>Consulting AI Pedagogical Companion... Translating diagnostic data into simple parent guidance</span>
+            </div>
+          )}
+
+          {/* Dismissed State Helper Banner */}
+          {aiGuidance && aiDismissed && (
+            <div className="rounded-2xl border border-dashed border-purple-300 dark:border-purple-800 bg-white/60 dark:bg-slate-800/60 p-3 flex items-center justify-between gap-3 text-xs">
+              <span className="text-slate-600 dark:text-slate-400">
+                ✨ AI guidance minimized for {activeSubject.subject}.
+              </span>
+              <button
+                type="button"
+                onClick={() => setAiDismissed(false)}
+                className="font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+              >
+                Reopen AI Guidance
+              </button>
+            </div>
+          )}
+
+          {/* Expanded AI Guidance: 4 Sub-Sections */}
+          {aiGuidance && !aiDismissed && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 animate-in fade-in duration-300">
+              
+              {/* 1. What it Means in Simple Words */}
+              <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-900/60 bg-white dark:bg-slate-800/90 p-4 sm:p-5 space-y-2 shadow-2xs">
+                <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-black text-xs uppercase tracking-wider">
+                  <div className="h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center shrink-0">
+                    <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <span>What it Means in Simple Words</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed pt-1">
+                  {aiGuidance.plain_english_translation}
+                </p>
+              </div>
+
+              {/* 2. Tonight's 10-Minute Check */}
+              <div className="rounded-2xl border border-emerald-200/90 dark:border-emerald-900/60 bg-white dark:bg-slate-800/90 p-4 sm:p-5 space-y-2 shadow-2xs">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-black text-xs uppercase tracking-wider">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center shrink-0">
+                    <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span>Tonight&apos;s 10-Minute Check</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed pt-1">
+                  {aiGuidance.tonight_action}
+                </p>
+              </div>
+
+              {/* 3. What to Say to Your Child */}
+              <div className="rounded-2xl border border-rose-200/90 dark:border-rose-900/60 bg-white dark:bg-slate-800/90 p-4 sm:p-5 space-y-2 shadow-2xs">
+                <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-black text-xs uppercase tracking-wider">
+                  <div className="h-7 w-7 rounded-lg bg-rose-100 dark:bg-rose-950 flex items-center justify-center shrink-0">
+                    <Heart className="h-4 w-4 text-rose-500 dark:text-rose-400 fill-rose-500/20" />
+                  </div>
+                  <span>What to Say to Your Child</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed pt-1 italic font-medium">
+                  &ldquo;{aiGuidance.child_motivation_tip}&rdquo;
+                </p>
+              </div>
+
+              {/* 4. Message for the Teacher */}
+              <div className="rounded-2xl border border-purple-200/90 dark:border-purple-900/60 bg-white dark:bg-slate-800/90 p-4 sm:p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-black text-xs uppercase tracking-wider">
+                    <div className="h-7 w-7 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <span>Message for the Teacher</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyTeacherMessage(aiGuidance.suggested_teacher_question)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 text-[11px] font-bold shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    {aiCopied ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-300" />
+                        <span>Copied! ✓</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        <span>Copy Message</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80 p-3 text-xs text-slate-700 dark:text-slate-300 font-mono leading-relaxed select-all">
+                  {aiGuidance.suggested_teacher_question}
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
       {/* 1. SUBJECT FILTER STRIP & QUICK STATS                     */}
       {/* ========================================================= */}
       <div className="rounded-3xl border border-purple-200 dark:border-purple-900/60 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -1367,7 +1599,7 @@ export function FocusTableView({
                   }`}
                 >
                   {parentCheckedMap[activeSubject.id] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                  <span>{parentCheckedMap[activeSubject.id] ? 'Co-Signed & Verified ✓' : 'Mark Daily Notebook Verified'}</span>
+                  <span>{parentCheckedMap[activeSubject.id] ? "I have verified my child's signed rough notebook page for today ✓" : "I have verified my child's signed rough notebook page for today"}</span>
                 </button>
               </div>
             </div>
@@ -1867,10 +2099,10 @@ export function FocusTableView({
               </span>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden bg-white dark:bg-[#0F172A]">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  <thead className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <tr>
                       <th className="p-3">Evidence ID</th>
                       <th className="p-3">Subject &amp; Type</th>
@@ -1899,7 +2131,7 @@ export function FocusTableView({
                         notes: 'Student missed scheduled cutoff. Flagged for parent PTM evidence review.'
                       }
                     ]).map((ev) => (
-                      <tr key={ev.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <tr key={ev.id} className="hover:bg-blue-50/40 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="p-3 font-mono font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap">
                           {ev.evidence_code}
                         </td>
@@ -2341,7 +2573,10 @@ export function FocusTableView({
                   </button>
                 )}
                 <button
-                  onClick={() => triggerNotification(`Downloading ${selectedSubjectModal.practicePdfName}...`)}
+                  onClick={() => {
+                    downloadWorksheetFile(selectedSubjectModal.practicePdfName, selectedSubjectModal.subject, 'Aarav Sharma');
+                    triggerNotification(`Downloaded worksheet: ${selectedSubjectModal.practicePdfName}`);
+                  }}
                   className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -2476,25 +2711,17 @@ export function FocusTableView({
                 </button>
                 <button
                   onClick={() => {
-                    const csvRows = [
-                      ['Evidence Code', 'Subject', 'Title', 'Scheduled Deadline', 'Status', 'Teacher'],
-                      ...(complianceData?.itemized_backlogs || []).map(b => [
-                        b.evidence_code,
-                        b.subject,
-                        `"${b.title}"`,
-                        `${b.due_date} ${b.due_time}`,
-                        b.status,
-                        `"${b.teacher_name || ''}"`
-                      ])
-                    ];
-                    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map(e => e.join(',')).join('\n');
-                    const encodedUri = encodeURI(csvContent);
-                    const link = document.createElement('a');
-                    link.setAttribute('href', encodedUri);
-                    link.setAttribute('download', 'Aarav_Sharma_Academic_Compliance_Report.csv');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    const headers = ['Evidence Code', 'Subject', 'Title', 'Scheduled Deadline', 'Status', 'Teacher'];
+                    const rows = (complianceData?.itemized_backlogs || []).map((b: BacklogEvent) => [
+                      b.evidence_code,
+                      b.subject,
+                      b.title,
+                      `${b.due_date} ${b.due_time}`,
+                      b.status,
+                      b.teacher_name || ''
+                    ]);
+                    exportToCsv('Aarav_Sharma_Academic_Compliance_Report', headers, rows);
+                    triggerNotification('Academic Compliance Report exported to CSV.');
                   }}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-all"
                 >

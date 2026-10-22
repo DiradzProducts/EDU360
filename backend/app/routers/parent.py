@@ -5,18 +5,71 @@ from sqlalchemy import select, update
 from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
-    LeaveRequest, ExitClearance, Homework
+    LeaveRequest, ExitClearance, Homework, FeeDefaulter, PaymentTransaction
 )
+from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
     FocusTableResponse, HomeworkSubmissionResponse, BusRouteResponse,
     FeeMilestoneResponse, FeePayRequest,
     LeaveRequestCreate, LeaveRequestResponse,
     ExitClearanceResponse, ExitClearanceDigitalSign,
-    AcademicComplianceResponse, HomeworkResponse
+    AcademicComplianceResponse, HomeworkResponse,
+    AIStudyAssistantRequest, AIStudyAssistantResponse
 )
 from app.services.backlog_engine import BacklogEngine
+from app.services.gemini_study_assistant import consult_gemini_study_assistant
 
 router = APIRouter(prefix="/api/parent", tags=["parent"])
+
+# --- AI Parent Study Assistant (Google Gemini 1.5 Flash + BacklogEngine) ---
+@router.post("/ai-study-assistant", response_model=AIStudyAssistantResponse)
+async def get_parent_ai_study_assistant(
+    req: AIStudyAssistantRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Translates academic diagnostic data into simple, actionable home guidance for parents
+    using Google's Gemini 1.5 Flash API with BacklogEngine integration and verified local fallback.
+    """
+    subject = req.resolved_subject
+    score = req.resolved_score
+    misconception = req.resolved_misconception
+    active_day = req.active_day or "Day 3"
+
+    # Query BacklogEngine for student's homework backlog status
+    has_backlog = False
+    backlog_count = 0
+    backlog_summary = ""
+    try:
+        dossier = await BacklogEngine.get_compliance_dossier(db, req.student_id)
+        backlog_count = dossier.get("backlog_count", 0)
+        itemized = dossier.get("itemized_backlogs", [])
+        unresolved = [
+            b for b in itemized
+            if (b.get("status") if isinstance(b, dict) else getattr(b, "status", None)) == "UNRESOLVED"
+        ]
+        has_backlog = len(unresolved) > 0 or backlog_count > 0
+        backlog_titles = []
+        for b in unresolved[:2]:
+            subj = b.get("subject") if isinstance(b, dict) else getattr(b, "subject", "")
+            title = b.get("title") if isinstance(b, dict) else getattr(b, "title", "")
+            backlog_titles.append(f"{subj}: {title}")
+        backlog_summary = ", ".join(backlog_titles)
+    except Exception as e:
+        pass
+
+    result = await consult_gemini_study_assistant(
+        student_id=req.student_id,
+        subject=subject,
+        exam_score=score,
+        misconception=misconception,
+        active_day=active_day,
+        has_backlog=has_backlog,
+        backlog_count=backlog_count,
+        backlog_summary=backlog_summary
+    )
+    return result
+
 
 # --- 1. Moving Slider Banners (Anti-Spam High-Signal Engine) ---
 @router.get("/banners")
@@ -173,10 +226,96 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
     if not milestone:
         raise HTTPException(status_code=404, detail="Fee milestone not found")
     
+    receipt_num = f"REC-2026-FEE-{milestone_id + 5821}"
+    paid_time_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+    utr_code = f"UPI/{int(datetime.datetime.utcnow().timestamp())}{milestone_id}/HDFC"
+
     milestone.status = "Paid"
-    milestone.paid_at = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+    milestone.paid_at = paid_time_str
     milestone.payment_method = req.payment_method
-    milestone.receipt_no = f"REC-2026-FEE-{milestone_id + 5821}"
+    milestone.receipt_no = receipt_num
+
+    # 1. Fetch student info to link records
+    student_res = await db.execute(select(Student).where(Student.id == milestone.student_id))
+    student = student_res.scalars().first()
+    student_name = student.name if student else "Student"
+    class_name = f"{student.class_name}-{student.section}" if student else "Class 8-B"
+    parent_name = student.guardian_name if student else "Guardian"
+
+    # 2. Update FeeDefaulter if an overdue record exists
+    defaulter_res = await db.execute(
+        select(FeeDefaulter).where(
+            FeeDefaulter.student_id == milestone.student_id,
+            FeeDefaulter.status.in_(["Overdue", "Partially Paid"])
+        )
+    )
+    defaulter = defaulter_res.scalars().first()
+    if defaulter:
+        defaulter.status = "Paid"
+        defaulter.amount_due = 0.0
+        history = []
+        if defaulter.payment_history_json:
+            try:
+                import json
+                history = json.loads(defaulter.payment_history_json)
+            except Exception:
+                history = []
+        history.append({
+            "date": paid_time_str,
+            "amount": milestone.amount,
+            "method": req.payment_method,
+            "utr_or_cheque": utr_code,
+            "received_by": "Parent Online Gateway",
+            "notes": f"Settled via Parent Portal (Receipt: {receipt_num})"
+        })
+        import json
+        defaulter.payment_history_json = json.dumps(history)
+
+    # 3. Create an online PaymentTransaction ledger entry for the Accounts Coordinator to reconcile
+    new_tx = PaymentTransaction(
+        utr_number=utr_code,
+        student_name=student_name,
+        class_name=class_name,
+        parent_name=parent_name,
+        amount=milestone.amount,
+        payment_method=req.payment_method or "UPI",
+        bank_name="HDFC Bank Gateway",
+        milestone_title=milestone.title,
+        status="Success",
+        reconciled=False,
+        gateway_ref=f"pay_online_{milestone_id}_{int(datetime.datetime.utcnow().timestamp())}",
+        notes=f"Online payment receipt {receipt_num}"
+    )
+    db.add(new_tx)
+
+    # 4. Trigger system notifications across roles
+    # To Accounts Coordinator
+    await create_system_notification(
+        db=db,
+        sender_name="Parent Gateway",
+        sender_role="system",
+        recipient_role="accounts_coordinator",
+        title=f"Online Fee Payment: ₹{milestone.amount:,.0f}",
+        message=f"{parent_name} paid ₹{milestone.amount:,.0f} for {student_name} ({class_name}) - {milestone.title}. Ready for bank statement reconciliation.",
+        notification_type="PAYMENT_RECEIVED",
+        priority="NORMAL",
+        action_url="/accounts_coordinator",
+        metadata_dict={"student_name": student_name, "amount": milestone.amount, "utr": utr_code}
+    )
+
+    # Confirmation to Parent
+    await create_system_notification(
+        db=db,
+        sender_name="Mr. Arvind Krishnan",
+        sender_role="accounts_coordinator",
+        recipient_role="parent",
+        title=f"Payment Receipt: {receipt_num}",
+        message=f"Thank you. We have received payment of ₹{milestone.amount:,.0f} for {milestone.title}. Official receipt {receipt_num} is ready.",
+        notification_type="PAYMENT_RECEIPT",
+        priority="NORMAL",
+        action_url="/parent",
+        metadata_dict={"receipt_no": receipt_num, "amount": milestone.amount}
+    )
     
     await db.commit()
     await db.refresh(milestone)

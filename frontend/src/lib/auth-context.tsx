@@ -19,15 +19,77 @@ const defaultUsers: Record<UserRole, User> = {
   admin: {
     id: 1,
     name: 'Dr. Sunita Kapoor',
+    username: 'admin',
     email: 'principal@edu360.internal',
     role: 'admin',
     school_code: 'EDU-GLOBAL-360',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
     phone: '+91 98111 00001'
   },
+  academic_coordinator: {
+    id: 6,
+    name: 'Prof. Rajeshwari Nair',
+    username: 'academic_coord',
+    email: 'academic.coord@edu360.internal',
+    role: 'academic_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150',
+    phone: '+91 98111 00006'
+  },
+  exam_coordinator: {
+    id: 8,
+    name: 'Dr. Hemanth Sen',
+    username: 'exam_coord',
+    email: 'exam.cell@edu360.internal',
+    role: 'exam_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    phone: '+91 98111 00008'
+  },
+  transport_coordinator: {
+    id: 7,
+    name: 'Mr. Vikram Malhotra',
+    username: 'transport_coord',
+    email: 'transport.lead@edu360.internal',
+    role: 'transport_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+    phone: '+91 98111 00007'
+  },
+  inventory_coordinator: {
+    id: 9,
+    name: 'Mrs. Shalini Rao',
+    username: 'inventory_coord',
+    email: 'inventory.store@edu360.internal',
+    role: 'inventory_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150',
+    phone: '+91 98111 00009'
+  },
+  admissions_coordinator: {
+    id: 10,
+    name: 'Ms. Sneha Kulkarni',
+    username: 'admissions_coord',
+    email: 'admissions.crm@edu360.internal',
+    role: 'admissions_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    phone: '+91 98111 00010'
+  },
+  accounts_coordinator: {
+    id: 11,
+    name: 'Mr. Arvind Krishnan',
+    username: 'accounts_coord',
+    email: 'accounts.bursar@edu360.internal',
+    role: 'accounts_coordinator',
+    school_code: 'EDU-GLOBAL-360',
+    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150',
+    phone: '+91 98111 00011'
+  },
   teacher: {
     id: 2,
     name: 'Mrs. Ananya Verma',
+    username: 'teacher_mat',
     email: 'ananya.verma@edu360.internal',
     role: 'teacher',
     school_code: 'EDU-GLOBAL-360',
@@ -37,6 +99,7 @@ const defaultUsers: Record<UserRole, User> = {
   parent: {
     id: 3,
     name: 'Mr. Rajesh Sharma',
+    username: 'parent',
     email: 'rajesh.sharma@example.com',
     role: 'parent',
     school_code: 'EDU-GLOBAL-360',
@@ -46,6 +109,7 @@ const defaultUsers: Record<UserRole, User> = {
   student: {
     id: 4,
     name: 'Aarav Sharma',
+    username: 'sr_student',
     email: 'aarav.sharma@student.edu360.internal',
     role: 'student',
     school_code: 'EDU-GLOBAL-360',
@@ -106,19 +170,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, mounted]);
 
+  const getRoleRoute = (targetRole: UserRole): string => {
+    return `/${targetRole}`;
+  };
+
   const loginAs = (role: UserRole) => {
     const selected = defaultUsers[role];
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(role);
-    router.push(`/${role}`);
+    router.push(getRoleRoute(role));
   };
 
   const loginWithCredentials = (newUser: User) => {
     setUser(newUser);
     localStorage.setItem('edu360_active_user', JSON.stringify(newUser));
     syncSessionCookie(newUser.role);
-    router.push(`/${newUser.role}`);
+    router.push(getRoleRoute(newUser.role));
   };
 
   const logout = () => {
@@ -133,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(newRole);
-    router.push(`/${newRole}`);
+    router.push(getRoleRoute(newRole));
   };
 
   const role: UserRole = user ? user.role : 'teacher';

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.routers import auth, admin, teacher, parent, student
+from app.routers import auth, admin, teacher, parent, student, remedial, exams, notifications, finance
 from app.seed import seed_data
 
 import asyncio
@@ -56,6 +56,11 @@ app.include_router(admin.router)
 app.include_router(teacher.router)
 app.include_router(parent.router)
 app.include_router(student.router)
+app.include_router(remedial.router)
+app.include_router(exams.router)
+app.include_router(notifications.router)
+app.include_router(finance.router)
+
 
 @app.get("/api/health")
 async def health_check():

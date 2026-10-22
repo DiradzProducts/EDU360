@@ -18,6 +18,13 @@ export interface WeekFocusProblem {
   question_text: string;
   rubric_key: string;
   expected_solution?: string;
+  formula_card?: {
+    title: string;
+    rule: string;
+    explanation: string;
+    visual_steps: string[];
+  };
+  flagged_for_teacher?: boolean;
 }
 
 export interface WeekFocusDay {
@@ -63,15 +70,27 @@ export interface FocusRosterItem {
     weak_concept: string;
     diagnostic_summary: string;
     recommended_focus: string;
+    sub_topics?: string[];
+    backlog_correlation?: string;
   };
   
-  // 1-WEEK (7-DAY) SPRINT
+  // 1-WEEK (7-DAY) SPRINT & MULTI-SUBJECT QUEUE
   current_day: number; // 1 to 7
   total_days: number; // 7 (Full 1-Week Focus Plan)
+  sprint_status?: 'active' | 'queued' | 'completed';
+  priority_rank?: number; // 1 = highest deficit subject (lowest score)
+  queued_subjects?: Array<{ subject: string; score_pct: number; priority: number }>;
   plan_days: WeekFocusDay[];
   
-  // DAILY SUBMISSION & VERIFICATION
+  // DAILY SUBMISSION, AI PRE-VERIFICATION & TEACHER REVIEW
   submission_status: 'Submitted' | 'Pending' | 'Verified' | 'Needs Revision';
+  ai_pre_verification?: {
+    status: 'passed' | 'needs_attention';
+    confidence: number;
+    ai_rubric_match: string;
+    recommendation: string;
+    verified_at?: string;
+  };
   submitted_file?: {
     name: string;
     size: string;
@@ -88,6 +107,40 @@ export interface FocusRosterItem {
   parent_status: 'Parent Verified ✓' | 'Pending Parent Review ⏳';
   parent_call_script: string;
   teacher_action: string;
+
+  // AI MULTI-SOURCE ARTIFACT SCAN & TEACHER STRATEGY
+  scanned_artifacts?: {
+    exam_paper?: {
+      exam_title: string;
+      score_pct: number;
+      flagged_questions: string;
+      loss_points: string;
+    };
+    homework_backlogs?: Array<{
+      code: string;
+      title: string;
+      status: string;
+      due_date: string;
+      score_impact?: string;
+    }>;
+    assignments?: Array<{
+      title: string;
+      completion_pct: number;
+      milestone_status: string;
+    }>;
+  };
+  teacher_strategy?: {
+    root_lag_location: string;
+    classroom_action: string;
+    zero_period_clinic: string;
+    guided_questioning_prompt: string;
+  };
+  extracted_papers_ocr?: {
+    exam_paper_transcript?: string;
+    homework_paper_transcript?: string;
+    identified_errors?: string[];
+    calculated_score_pct?: number;
+  };
 }
 
 export interface SectionMetrics {
@@ -1200,10 +1253,117 @@ export const INITIAL_FOCUS_ROSTER: FocusRosterItem[] = [
         parent_checklist: "Teacher exit sign-off."
       }
     ]
+  },
+  {
+    id: 10,
+    student_id: 10,
+    roll_no: "07",
+    name: "Arjun Patel",
+    class_name: "Class 8-B",
+    subject: "Mathematics",
+    category: "Critical Remedial",
+    exam_name: "Unscanned — Pending Paper Upload",
+    exam_score_pct: 0,
+    current_score_pct: 0,
+    weak_concept: "Pending Document Upload & AI Multi-Source Scan",
+    target_score_pct: 75,
+    exam_total_marks: 100,
+    exam_marks_obtained: 0,
+    ai_exam_scan: {
+      scanned_at: "Not Scanned Yet",
+      questions_flagged: "None — awaiting exam paper upload",
+      weak_concept: "Pending Document Upload & AI Multi-Source Scan",
+      diagnostic_summary: "Arjun has no recorded exam scores or homework evaluations yet. Upload his exam paper and homework worksheet to run the AI Pedagogical Scan.",
+      recommended_focus: "Upload student documents to generate diagnostic profile and 7-day plan.",
+      sub_topics: [],
+      backlog_correlation: "No backlogs or homework submitted yet."
+    },
+    current_day: 1,
+    total_days: 7,
+    submission_status: "Pending",
+    parent_name: "Mr. Suresh Patel",
+    parent_phone: "+91 98450 99887",
+    parent_status: "Pending Parent Review ⏳",
+    parent_call_script: "Arjun is awaiting paper scan and diagnostic evaluation.",
+    teacher_action: "Upload student exam paper & homework worksheet to initiate AI multi-source diagnostic.",
+    plan_days: [
+      {
+        day_num: 1,
+        day_label: "Day 1 (Mon)",
+        title: "Pending Document Upload",
+        focus_task: "Upload exam paper and homework sheet to generate personalized Day 1 task.",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: true,
+        parent_checklist: "Awaiting plan generation.",
+        questions: [],
+        student_solution_steps: []
+      },
+      {
+        day_num: 2,
+        day_label: "Day 2 (Tue)",
+        title: "Pending Document Upload",
+        focus_task: "Awaiting AI Scan",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: true,
+        parent_checklist: "Awaiting plan generation."
+      },
+      {
+        day_num: 3,
+        day_label: "Day 3 (Wed)",
+        title: "Pending Document Upload",
+        focus_task: "Awaiting AI Scan",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: true,
+        parent_checklist: "Awaiting plan generation."
+      },
+      {
+        day_num: 4,
+        day_label: "Day 4 (Thu)",
+        title: "Pending Document Upload",
+        focus_task: "Awaiting AI Scan",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: true,
+        parent_checklist: "Awaiting plan generation."
+      },
+      {
+        day_num: 5,
+        day_label: "Day 5 (Fri)",
+        title: "Pending Document Upload",
+        focus_task: "Awaiting AI Scan",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: true,
+        parent_checklist: "Awaiting plan generation."
+      },
+      {
+        day_num: 6,
+        day_label: "Day 6 (Sat)",
+        title: "Pending Document Upload",
+        focus_task: "Awaiting AI Scan",
+        resource: "Awaiting AI Generation",
+        status: "Pending",
+        submission_required: false,
+        parent_checklist: "Awaiting plan generation."
+      },
+      {
+        day_num: 7,
+        day_label: "Day 7 (Sun)",
+        title: "Faculty Clearance Review",
+        focus_task: "Awaiting AI Scan",
+        resource: "Exit Rubric",
+        status: "Pending",
+        submission_required: false,
+        parent_checklist: "Teacher clearance."
+      }
+    ]
   }
 ];
 
-const STORAGE_KEY = 'edu360_focus_roster_cache_v4';
+const STORAGE_KEY = 'edu360_focus_roster_cache_v5';
 
 export function getStoredFocusRoster(): FocusRosterItem[] {
   if (typeof window === 'undefined') return INITIAL_FOCUS_ROSTER;

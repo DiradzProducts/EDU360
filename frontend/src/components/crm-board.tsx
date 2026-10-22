@@ -51,54 +51,54 @@ export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBo
           const stageEnquiries = enquiries.filter(e => e.stage === stage.id);
 
           return (
-            <div key={stage.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div key={stage.id} className="flex flex-col rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-4 shadow-sm space-y-3">
               {/* Column Header */}
-              <div className={`p-3.5 border-b border-slate-200 ${stage.color} flex items-center justify-between`}>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-800">{stage.label}</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{stage.label}</span>
                 </div>
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-bold text-slate-700 shadow-sm">
+                <span className="flex h-5 px-2 items-center justify-center rounded-full bg-white dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 shadow-xs">
                   {stageEnquiries.length}
                 </span>
               </div>
 
               {/* Cards in column */}
-              <div className="p-3 space-y-3 flex-1 min-h-[220px] bg-slate-50/40">
+              <div className="space-y-3 flex-1 min-h-[220px]">
                 {stageEnquiries.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400 italic py-8">
+                  <div className="h-full flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 italic py-8">
                     No leads in this stage
                   </div>
                 ) : (
                   stageEnquiries.map((enquiry) => (
                     <div 
                       key={enquiry.id} 
-                      className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm hover:shadow-md transition-all duration-200 space-y-2.5"
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-3.5 shadow-sm hover:shadow-md transition-all duration-200 space-y-2.5"
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
                           <Link 
                             href={`/admin/leads/${enquiry.id}`}
-                            className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors flex items-center gap-1 group"
+                            className="text-xs font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1 group"
                           >
                             <span>{enquiry.student_name}</span>
                             <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </Link>
-                          <span className="text-[11px] text-slate-500 block">{enquiry.target_grade}</span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 block">{enquiry.target_grade}</span>
                         </div>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600">
+                        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[9px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
                           Parent: {enquiry.parent_name}
                         </span>
                       </div>
 
-                      <p className="text-[11px] text-slate-600 line-clamp-2 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        "{enquiry.notes || 'Inquired about admission criteria & fee milestones.'}"
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2 italic bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
+                        &quot;{enquiry.notes || 'Inquired about admission criteria & fee milestones.'}&quot;
                       </p>
 
                       {/* Action buttons */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5">
                         <Link
                           href={`/admin/leads/${enquiry.id}`}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded-lg transition-colors"
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-1 rounded-lg transition-colors"
                           title="Open full lead dossier & AI chat log"
                         >
                           <Eye className="h-3 w-3" />
@@ -110,14 +110,14 @@ export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBo
                             type="button"
                             onClick={() => handleConvert(enquiry.id)}
                             disabled={convertingId === enquiry.id}
-                            className="ml-auto flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg shadow-sm"
+                            className="ml-auto flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg shadow-sm cursor-pointer"
                             title="Enroll directly into Student Information System"
                           >
                             <UserCheck className="h-3 w-3" />
                             <span>{convertingId === enquiry.id ? 'Enrolling...' : 'Convert to SIS'}</span>
                           </button>
                         ) : (
-                          <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                          <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-lg">
                             <CheckCircle2 className="h-3 w-3" />
                             Active Student
                           </span>

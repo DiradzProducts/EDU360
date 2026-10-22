@@ -25,7 +25,8 @@ Based on how school stakeholders actually work, EDU360 follows a **Role-Optimize
 
 | User Role | Primary Platform | Secondary Platform | Reason |
 | :--- | :--- | :--- | :--- |
-| **Administration / Management** | **Web App (Desktop/Laptop)** | Mobile Web / App (for quick alerts) | Needs large screens for priority triage, admissions CRM, fee tables, inventory, staff salaries, and event/vendor tracking. |
+| **Super Administration / Principal** | **Web App (Desktop/Laptop)** | Mobile Web / App (for urgent approvals) | Needs large screens for priority triage, cross-department SLA cockpit, fee realization, staff salaries, compliance audits, and event command. |
+| **Institutional Coordinators** *(Academic, Exam, Transport, Inventory, Admissions, Accounts)* | **Web App (Desktop/Laptop/Tablet)** | Mobile Web (field checks / gate) | Needs domain-scoped consoles for fleet tracking, lead CRM pipelines, marks approval, stock audits, and departmental task delegation. |
 | **Teachers** | **Web App (Desktop/Tablet)** | Mobile App (for leave/quick chat) | Needs a comfortable screen to host live classes, annotate/correct student homework inline, and manage student Focus Tables. |
 | **Students** | **Web App (Desktop/Tablet)** | Mobile App (for timetable/alerts) | Needs a larger screen to attend live online classes, watch class recordings, take online exams, and upload homework/achievements. |
 | **Parents** | **Mobile App (Android & iOS)** | Web Portal (optional) | Parents check updates on the go—viewing moving dashboard banners, tracking the school bus via GPS, paying fees, and checking their child's Focus Table. |
@@ -35,22 +36,24 @@ Based on how school stakeholders actually work, EDU360 follows a **Role-Optimize
 ## 3. User Roles & Permission Matrix
 
 > [!IMPORTANT]
-> **Strict Document Security Rule:** Official student documents in the Student Information System (SIS) can **ONLY** be uploaded, edited, or replaced by **Administration**. Teachers, Parents, and Students have **View/Download-Only** access.
+> **Strict Governance & Scope-Fencing Principle:**
+> 1. Official student documents in the Student Information System (SIS) can **ONLY** be uploaded, edited, or replaced by **Super Administration** and authorized compliance officers.
+> 2. Institutional Coordinators have **full delegation authority within their functional domain** (e.g., Transport Lead manages routes & bus tasks; Exam Cell manages exam dates & marks submission deadlines), but are **scope-fenced** from modifying outside domains (e.g., Transport cannot edit fee ledgers or student marks).
+> 3. The **Super Admin** never acts as a manual data-entry bottleneck, but retains global visibility, task reassignment, and executive override authority.
 
-| Module / Capability | Administration | Teacher | Parent | Student |
-| :--- | :---: | :---: | :---: | :---: |
-| **SIS Official Documents** | Create / Edit / Delete | View Only | View Only | View Only |
-| **Student SIS Profile & Analytics** | Full Access | View Assigned Students | View Own Child | View Own Profile |
-| **Live Online Classes & Recordings** | Monitor / View | Host / Record | View Schedule | Join Class / Watch Recordings |
-| **Attendance** | Full Access + Override | Auto-Capture + Edit Class | View + Submit Leave | View Own Attendance |
-| **Homework & Assignments** | View / Audit | Create + Inline Grade/Remark | View Remarks & Status | Upload Submission + View Corrected Doc |
-| **Student "Focus Table"** | View All | Create / Edit / Track | View / Co-Track with Teacher | View Study Plan |
-| **Exams & Marks** | Publish Results + Email Trigger | Enter / Bulk Upload Marks | View + Receive on Email | Attend Exam + View Results |
-| **Fees & Receipts** | Set Milestones + Raise Alerts | View Status (Context Only) | Pay Online + Email Receipt | View Status |
-| **Staff, Salaries & Vendors** | Full Access | View Own Profile / Apply Leave | No Access | No Access |
-| **Inventory & School Assets** | Full Access | Request / View Assigned | No Access | No Access |
-| **Events (Annual Day, etc.)** | Create + Assign Staff/Students/Vendors | View + Manage Assigned Tasks | View Event Banner & Child Role | View Event Banner & Assigned Tasks |
-| **Entry/Exit & TC Clearance** | Full Control + Verify Signatures | No Access | Digital Sign-Off + Physical Sign | View Status |
+| Module / Operational Capability | Super Admin | Academic Coord. | Exam Coord. | Transport Coord. | Inventory Coord. | Admissions Coord. | Accounts Coord. | Teacher | Parent | Student |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **SIS Official Document Vault** | Full Control | View | View | View (Bus IDs) | No Access | Verify / Upload | View (Receipts) | View Assigned | View Own | View Own |
+| **Student SIS & Analytics** | Full Access | Full Academic | Grade Reports | Route Stops | No Access | Prospect Leads | Fee Balances | Assigned Class | Own Child | Own Profile |
+| **Curriculum & Substitutions** | Full / Override | **Primary Owner** | Read-Only | No Access | No Access | No Access | No Access | View / Accept | No Access | View Schedule |
+| **Exams, Marks & Moderation** | Publish / Lock | Review Pacing | **Primary Owner** | No Access | No Access | No Access | No Access | Enter / Bulk | View Published | Attend / View |
+| **Fleet & Live Bus Radar** | Global Monitor | View Timings | View Schedule | **Primary Owner** | No Access | Route Inquiries | Fleet Invoices | View Own Bus | Live Track | Live Track |
+| **Asset & Stock Management** | Full / Audit | Lab Requests | Exam Supplies | Vehicle Parts | **Primary Owner** | Office Supplies | Purchase Audits| Dept Request | No Access | No Access |
+| **Admissions CRM Pipeline** | Executive View | Assessment Sign | Test Results | Route Feasibility| Uniform Stock | **Primary Owner** | Fee Onboarding | No Access | No Access | No Access |
+| **Fees, Receipts & Concessions**| Approvals / Override| No Access | No Access | Transport Dues | No Access | Admission Fees | **Primary Owner** | View Status | Pay Online | View Status |
+| **Operational Task Delegation**| **Global / Override** | **Academic Scope** | **Exam Scope** | **Transport Scope**| **Inventory Scope**| **Admissions Scope**| **Finance Scope** | Classroom Tasks| View Actionable| View Quests |
+| **Student "Focus Table" (1-Wk)** | Executive View | Quality Audit | Score Correlation | No Access | No Access | No Access | No Access | **Create / Track** | **Co-Track** | Execute Plan |
+| **Live Classes & Auto-Attend** | Monitor / View | Timetable Audit | Attendance Pct | No Access | No Access | No Access | No Access | Host / Record | View Schedule | Join / Replay |
 
 ---
 
@@ -230,6 +233,53 @@ Based on how school stakeholders actually work, EDU360 follows a **Role-Optimize
 
 ---
 
+### 4.5 Role 5: Institutional Coordinators & Decentralized Task Operations Center
+
+To resolve the operational bottleneck where a Super Administrator is overwhelmed with ground-level logistics, EDU360 introduces **Domain-Scoped Institutional Coordinators**. These roles possess full delegation, assignment, and operational execution capabilities within their dedicated vertical, governed by strict **Scope Fencing**.
+
+#### 1. The 6 Specialized Institutional Coordinator Personas
+1. **Academic Coordinator / Dean of Studies**
+   * **Scope:** Curriculum delivery, period substitutions, teacher lesson plan tracking, academic calendar deadlines.
+   * **Task Authority:** Can assign tasks to Teaching Faculty (e.g., *"Submit Term-2 Lesson Plans"*, *"Cover Period 4 Grade 8-A Mathematics"*).
+2. **Examination Coordinator / Exam Cell Lead**
+   * **Scope:** Internal assessments, board exam registrations, hall ticket generation, question paper vetting, marks submission deadlines, report card releases.
+   * **Task Authority:** Can assign tasks to Subject Teachers & HODs (e.g., *"Upload Grade 9 Chemistry Marks by Oct 25"*, *"Review Moderation Sheets"*).
+3. **Transport & Fleet Coordinator / Bus In-Charge**
+   * **Scope:** Fleet GPS telemetry, route stops, driver & attendant roster, vehicle RTO fitness, insurance renewals, breakdown alerts.
+   * **Task Authority:** Can assign tasks to Drivers, Attendants, and Mechanics (e.g., *"Vehicle #4 Tyre Replacement"*, *"Update Route 12 GPS Beacon"*, *"RTO Fitness Renewal Checklist"*).
+4. **Inventory & Assets Coordinator / Store In-Charge**
+   * **Scope:** Science lab consumables, sports gear, library books, uniform stock, smart classroom hardware, store asset logs.
+   * **Task Authority:** Can assign tasks to Department In-charges & Store Clerks (e.g., *"Conduct Annual Lab Stock Verification"*, *"Restock Grade 10 Physics Apparatus"*).
+5. **Admissions & Front-Desk Coordinator / CRM Lead**
+   * **Scope:** Admissions lead funnel (Enquiry ➔ Assessment ➔ Interview ➔ Document Verification ➔ Fee Payment ➔ Enrollment), campus tours, public grievance desk.
+   * **Task Authority:** Can assign tasks to Admissions Officers & Front-Desk Staff (e.g., *"Follow up with Parent of Kabir Sharma"*, *"Schedule 5 Campus Tours for Grade 1"*).
+6. **Accounts & Finance Coordinator / Bursar**
+   * **Scope:** Tuition fee collection, aging buckets (0–15d, 16–30d, 30+d), waiver/concession verifications, vendor invoice audits.
+   * **Task Authority:** Can assign tasks to Billing Clerks (e.g., *"Dispatch 30+ Day Overdue WhatsApp Notices"*, *"Verify EWS Concession Submissions"*).
+
+#### 2. Decentralized Task Operations & Delegation Model
+
+Every task in the EDU360 ecosystem operates on a **Decentralized Lifecycle with Centralized Executive Governance**:
+
+| Task Dimension | Coordinator Scope | Super Administrator Scope |
+| :--- | :--- | :--- |
+| **Task Creation** | Can create tasks strictly within own domain (`transport`, `academic`, `exam`, `inventory`, `admissions`, `finance`). | Can create institutional tasks across **any** domain or cross-departmental committees. |
+| **Assignee Targeting**| Can assign to staff members belonging to that department or teachers linked to relevant classes. | Can assign to any staff member, coordinator, teacher, or self. |
+| **SLA & Escalation** | Monitors task turnaround; receives alert at 75% SLA expiry. | Receives **Critical Triage Alert** if SLA breaches 100% (Intervene-by-Exception). |
+| **Task Status Cycle** | `Created` ➔ `In-Progress` ➔ `Pending Review` ➔ `Completed` / `Blocked`. | Full rights to `Reassign`, `Force Close`, `Escalate`, or `Audit History`. |
+
+#### 3. The 3-Tier Task Generation Architecture
+1. **Tier 1 — Event-Triggered (Zero-Touch Automation):**
+   * *Exam Period Ends* ➔ System auto-spawns "Marks Entry" tasks for teachers with a 5-day SLA.
+   * *Vehicle Fitness Expiry < 30 Days* ➔ System auto-spawns "RTO Compliance Renewal" task for Transport Lead.
+   * *Student Absent 3+ Consecutive Days* ➔ System auto-spawns "Parent Welfare Check" task for Class Teacher.
+2. **Tier 2 — Departmental Lead Delegated Tasks:**
+   * Ground-level tasks created manually by coordinators based on daily school requirements.
+3. **Tier 3 — Executive Directives:**
+   * High-priority institutional mandates broadcast by the Super Admin / Principal.
+
+---
+
 ## 5. Key System Workflows (Cross-Role Connections)
 
 ### 5.1 Online Class Auto-Attendance & Consecutive Absence Triage
@@ -267,14 +317,31 @@ flowchart TD
     E5 --> E6["Record Locked in Permanent Legal Archive"]
 ```
 
+### 5.4 Decentralized Task Delegation & Automated SLA Escalation Flow
+```mermaid
+flowchart TD
+    T0["Trigger: Event Occurs OR Coordinator/Admin Creates Task"] --> T1["Scope Fencing Validation (Domain Check)"]
+    T1 --> T2["Task Assigned to Staff/Teacher with SLA Deadline"]
+    T2 --> T3["Notification Dispatched (In-App + WhatsApp/Email)"]
+    T3 --> T4{"Action Taken Before 75% SLA?"}
+    T4 -- "Yes (In Progress)" --> T5["Staff Submits Deliverable / Proof"]
+    T4 -- "No (75% Elapsed)" --> T6["Amber Warning to Assignee & Coordinator"]
+    T6 --> T7{"Action Before 100% SLA?"}
+    T7 -- "No (SLA Breached)" --> T8["🔴 Auto-Escalate to Super-Admin Triage Cockpit"]
+    T8 --> T9["Admin 1-Click Reassign OR Executive Intervene"]
+    T5 --> T10["Coordinator Reviews & Marks Done"]
+    T10 --> T11["Event Logged to Audit Ledger with SHA-256 Seal"]
+```
+
 ---
 
 ## 6. UI/UX Screen Checklist (What Designers Need to Create in Figma)
 
 ### A. Web Application Screens (Desktop / Tablet Layout)
 1. **Common:** Login / Role Switcher, Global Search, Notification Drawer.
-2. **Admin Screens:**
+2. **Super Admin Screens:**
    * **Priority Command Center (Home):** 🔴/🟠/🟢 Triage Cards + Urgent & Upcoming Task Widgets + Moving Event Banner.
+   * **Executive Task Oversight Cockpit:** Cross-department Kanban, Overdue SLA alerts, Department breakdown.
    * **Admissions CRM:** Chatbot Transcript Viewer, Enquiry Pipeline table, Follow-up Call Logger.
    * **SIS & Document Vault:** Student Directory, 360° Student Profile, Document Manager (with Admin Edit lock).
    * **Fee Management:** Milestone Configurator, Defaulters List, 1-Click Reminder Trigger, Receipt Logs.
@@ -282,6 +349,15 @@ flowchart TD
    * **Inventory Manager:** Stock Dashboard (Books, Equipment, Resources), Issue/Return Log.
    * **Event Command Center:** Event Creator, Staff-to-Student Assignment Tree, Equipment & Vendor Handover Timestamp Tracker.
    * **Entry/Exit & TC Clearance:** Gate Log, Student Exit Checklist, Dual-Signature (Digital + Physical Scan) Upload Modal.
+
+3. **Institutional Coordinator Workspaces (Domain-Scoped):**
+   * **Academic Coordinator Workspace:** Timetable grid, Period substitution auto-matcher, Teacher lesson plan tracking, Curriculum pacing tasks.
+   * **Exam Coordinator Workspace:** Exam schedule builder, Question paper vault, Marks entry submission monitor, Moderation sheet.
+   * **Transport Coordinator Workspace:** Yellow Bus fleet radar (live GPS), Route editor, Driver/Attendant roster, Vehicle RTO/insurance compliance tasks.
+   * **Inventory Coordinator Workspace:** Asset & stock ledger, Low-stock alerts, Consumables request approvals, Vendor procurement tracker.
+   * **Admissions Coordinator Workspace:** Admissions CRM funnel, Enquiry triage, Campus tour bookings, Document verification queue.
+   * **Accounts Coordinator Workspace:** Fee collection aging buckets (0–15d, 16–30d, 30+d), Concession approvals, Payment gateway ledger.
+   * **Universal Departmental Task Board:** Domain-scoped Kanban (`Backlog`, `In Progress`, `Pending Review`, `Done`), "Create Task" modal with role-fenced assignees.
 3. **Teacher Screens:**
    * **Teacher Home Dashboard:** Today's Classes, Pending Homework Queue, Leave/Permission Request Form.
    * **Live Class Studio:** Video Classroom View + Auto-Attendance Roster (showing join times & 10-min rule status).
@@ -325,9 +401,10 @@ flowchart TD
 
 To deliver fast without bugs, the engineering and design teams should build EDU360 in **3 focused milestones**:
 
-### Milestone 1: Core Foundation, SIS & Admin Control (Weeks 1–5)
-* Authentication & Role-Based Access Control (Admin, Teacher, Parent, Student).
+### Milestone 1: Core Foundation, SIS, Multi-Tier RBAC & Task Operations (Weeks 1–5)
+* Authentication & Multi-Tier Role-Based Access Control (Super Admin, 6 Institutional Coordinators, Teacher, Parent, Student).
 * Central Student Information System (SIS) + **Admin-only Document Vault lock**.
+* **Decentralized Task Operations Center** with domain scope fencing and 3-tier task generation (Automated, Delegated, Directive).
 * Admissions Enquiry CRM (Lead logging + Follow-up call tracker) & Fee Milestones with **automated email PDF receipts**.
 * Staff, Salary, Inventory, and Gate/TC Exit Clearance (with Digital + Physical signature upload).
 

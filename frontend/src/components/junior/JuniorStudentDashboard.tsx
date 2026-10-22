@@ -43,6 +43,7 @@ import {
   HomeworkSubmission,
   OfficialDocument
 } from '@/lib/types';
+import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 import { api } from '@/lib/api';
 import { JuniorSidebar, JuniorTab } from './JuniorSidebar';
 import { LiveLaunchpad } from './LiveLaunchpad';
@@ -790,7 +791,10 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
                     <span className="text-[10px] text-slate-500 block mt-0.5">{doc.type} • {doc.date}</span>
                   </div>
                   <button
-                    onClick={() => triggerToast(`Downloading verified ${doc.title}`)}
+                    onClick={() => {
+                      downloadOfficialDocumentFile(doc.title, user.name);
+                      triggerToast(`Downloaded verified ${doc.title}`);
+                    }}
                     className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                   >
                     <Download className="h-3.5 w-3.5" />

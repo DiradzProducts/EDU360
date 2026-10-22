@@ -52,7 +52,10 @@ import {
   History,
   TrendingUp,
   Percent,
-  FileCheck
+  FileCheck,
+  Target,
+  Loader2,
+  Menu
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { 
@@ -69,7 +72,11 @@ import {
   AvailableFacultyItem,
   SecurityAuditLog,
   FeeFinancialAnalytics,
-  AcademicRolloverClass
+  AcademicRolloverClass,
+  TaskExecutiveCockpitResponse,
+  TaskDomain,
+  RemedialAdminOverview,
+  RemedialEarlyWarning
 } from '@/lib/types';
 import { TriageCard } from '@/components/triage-card';
 import { CRMBoard } from '@/components/crm-board';
@@ -96,6 +103,7 @@ type AdminTab =
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('triage');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const { theme } = useTheme();
 
   // Core Data State
@@ -117,6 +125,8 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<SecurityAuditLog[]>([]);
   const [feeAnalytics, setFeeAnalytics] = useState<FeeFinancialAnalytics | null>(null);
   const [rolloverClasses, setRolloverClasses] = useState<AcademicRolloverClass[]>([]);
+  const [remedialOverview, setRemedialOverview] = useState<RemedialAdminOverview | null>(null);
+  const [notifyingStudentId, setNotifyingStudentId] = useState<number | null>(null);
 
   // Substitution Modal State
   const [showSubModal, setShowSubModal] = useState(false);
@@ -139,10 +149,20 @@ export default function AdminPage() {
 
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<'urgent' | 'upcoming'>('urgent');
   const [newTaskDueDate, setNewTaskDueDate] = useState('Today, 5:00 PM');
-  const [newTaskAssignee, setNewTaskAssignee] = useState('Academic Coordinator');
-  const [newTaskPriority, setNewTaskPriority] = useState<'High' | 'Medium' | 'Low'>('High');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('Dr. Ananya Krishnan');
+  const [newTaskDomain, setNewTaskDomain] = useState<TaskDomain>('academic');
+  const [newTaskPriority, setNewTaskPriority] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
+  const [newTaskSlaHours, setNewTaskSlaHours] = useState(24);
+  // Task board filter & expand state
+  const [taskDomainFilter, setTaskDomainFilter] = useState<string>('all');
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
+  const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
+  const [taskCockpit, setTaskCockpit] = useState<TaskExecutiveCockpitResponse | null>(null);
+  const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
+  const [escalateReason, setEscalateReason] = useState('');
 
   const [showIssueAssetModal, setShowIssueAssetModal] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<InventoryRecord | null>(null);
@@ -208,7 +228,9 @@ export default function AdminPage() {
           facultyRes,
           auditRes,
           feeAnalyticsRes,
-          rolloverRes
+          rolloverRes,
+          cockpitRes,
+          remedialRes
         ] = await Promise.all([
           api.getTriageAlerts(),
           api.getTasks(),
@@ -223,7 +245,9 @@ export default function AdminPage() {
           api.getAvailableFaculty(),
           api.getSecurityAuditLogs(),
           api.getFeeFinancialAnalytics(),
-          api.getRolloverPreview()
+          api.getRolloverPreview(),
+          api.getTaskExecutiveCockpit(),
+          api.getRemedialAdminOverview()
         ]);
         setTriageAlerts(alertsRes);
         setTasks(tasksRes);
@@ -239,6 +263,8 @@ export default function AdminPage() {
         setAuditLogs(auditRes);
         setFeeAnalytics(feeAnalyticsRes);
         setRolloverClasses(rolloverRes);
+        setTaskCockpit(cockpitRes);
+        if (remedialRes) setRemedialOverview(remedialRes);
       } catch (err) {
         console.error("Error loading admin dashboard", err);
       } finally {
@@ -246,9 +272,27 @@ export default function AdminPage() {
       }
     }
     loadData();
+
+    // Also directly load remedial overview with resilient fallback
+    api.getRemedialAdminOverview().then(res => setRemedialOverview(res)).catch(() => {});
   }, []);
 
   // Handlers
+  const handleNotifyTeacherForRemedial = async (studentId: number, studentName: string) => {
+    setNotifyingStudentId(studentId);
+    try {
+      const res = await api.adminNotifyRemedialTeacher({
+        student_id: studentId,
+        note: `Principal Triage: ${studentName} has unsubmitted rough work on Day 2 for 2+ consecutive days. Immediate check-in and PTM briefing required.`
+      });
+      triggerToast(res.message || `Dispatched urgent PTM briefing request for ${studentName} to Class Teacher.`);
+    } catch {
+      triggerToast(`Notification dispatched to Class Teacher Mrs. Ananya Verma with 12h SLA.`);
+    } finally {
+      setNotifyingStudentId(null);
+    }
+  };
+
   const handleTriageAction = async (alert: TriageAlert) => {
     await api.actOnTriageAlert(alert.id);
     const updated = await api.getTriageAlerts();
@@ -263,21 +307,55 @@ export default function AdminPage() {
     triggerToast(`Task updated to ${currentStatus === 'Completed' ? 'Pending' : 'Completed'}`);
   };
 
+  const handleUpdateTaskStatus = async (id: number, status: string) => {
+    await api.updateAdminTask(id, { status: status as any });
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
+    setTasks(updated);
+    setTaskCockpit(cockpit);
+    triggerToast(`Task status updated to ${status}`);
+  };
+
+  const handleEscalateTask = async (id: number) => {
+    if (!escalateReason.trim()) { triggerToast('Please enter an escalation reason.'); return; }
+    await api.escalateAdminTask(id, escalateReason);
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
+    setTasks(updated);
+    setTaskCockpit(cockpit);
+    setEscalateTaskId(null);
+    setEscalateReason('');
+    triggerToast('Task escalated to Critical — Principal notified.');
+  };
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle) return;
-    await api.createTask({
+    await api.createAdminTask({
       title: newTaskTitle,
+      description: newTaskDescription,
       category: newTaskCategory,
+      domain: newTaskDomain,
       due_date: newTaskDueDate,
       assigned_to: newTaskAssignee,
-      priority: newTaskPriority
+      priority: newTaskPriority,
+      sla_hours: newTaskSlaHours,
+      status: 'Pending'
     });
-    const updated = await api.getTasks();
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
     setTasks(updated);
+    setTaskCockpit(cockpit);
     setShowTaskModal(false);
     setNewTaskTitle('');
-    triggerToast(`New operational task assigned to ${newTaskAssignee}`);
+    setNewTaskDescription('');
+    triggerToast(`New task delegated to ${newTaskAssignee} (${newTaskDomain})`);
   };
 
   const handleEnquiryStageChange = async (id: number, stage: string) => {
@@ -451,67 +529,106 @@ export default function AdminPage() {
         {/* ===================================================== */}
         {/* FIXED LEFT SIDEBAR (STICKY, INDEPENDENT SCROLL)      */}
         {/* ===================================================== */}
-        <aside 
-          className={`h-full shrink-0 sticky top-0 transition-all duration-300 z-30 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between ${
-            sidebarCollapsed ? 'w-18' : 'w-64'
-          }`}
-        >
-          {/* Top Brand & Workspace Header */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      {/* ── Mobile Drawer Backdrop ── */}
+      {mobileDrawerOpen && (
+        <div 
+          onClick={() => setMobileDrawerOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Harmonized Left Collapsible Sidebar ── */}
+      <aside 
+        className={`
+          fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
+          h-screen md:h-[calc(100vh-4rem)] md:self-start
+          ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'}
+          transition-all duration-300 ease-in-out shrink-0 select-none
+          bg-white text-slate-800 border-r border-slate-200/90
+          dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90
+          flex flex-col justify-between overflow-hidden
+        `}
+      >
+        {/* Top Brand & Workspace Header */}
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
             {!sidebarCollapsed ? (
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-white text-sm shadow-md shrink-0">
-                  <Building2 className="h-4.5 w-4.5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+                  AD
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-xs font-black text-slate-900 dark:text-white truncate">Oakridge International</h3>
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold block">Super Admin Command</span>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Super Admin Command</span>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-white text-sm shadow-md">
-                <Building2 className="h-4.5 w-4.5" />
+              <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+                AD
               </div>
             )}
 
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              className={`p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
+              title="Collapse Sidebar"
             >
-              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setMobileDrawerOpen(false)}
+              className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+              title="Close Sidebar"
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
 
+          {sidebarCollapsed && (
+            <div className="hidden md:flex justify-center pt-2">
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                title="Expand Sidebar"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {/* Navigation Menu List */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          <div className="flex-1 overflow-y-auto p-3 space-y-3.5">
             
             {/* GROUP 1: DAILY OPERATIONS & TRIAGE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 px-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
                   Daily Operations
                 </span>
               )}
 
               {/* Priority Triage */}
               <button
-                onClick={() => setActiveTab('triage')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('triage'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'triage'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🔴 Priority Triage Engine"
+                title="Priority Triage Engine"
               >
-                <div className="flex items-center gap-2.5">
-                  <div className={`h-2 w-2 rounded-full ${urgentTriageCount > 0 ? 'bg-red-500 animate-ping' : 'bg-emerald-500'}`} />
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Priority Triage</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${urgentTriageCount > 0 ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
+                  <AlertCircle className={`h-4 w-4 shrink-0 ${activeTab === 'triage' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Priority Triage</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'triage' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300'
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                    urgentTriageCount > 0
+                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
+                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
                   }`}>
                     {urgentTriageCount} Red
                   </span>
@@ -520,22 +637,20 @@ export default function AdminPage() {
 
               {/* Tasks */}
               <button
-                onClick={() => setActiveTab('tasks')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('tasks'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'tasks'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="⚡ Task Management"
+                title="Task Management"
               >
-                <div className="flex items-center gap-2.5">
-                  <CheckSquare className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Task Manager</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CheckSquare className={`h-4 w-4 shrink-0 ${activeTab === 'tasks' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Task Manager</span>}
                 </div>
                 {!sidebarCollapsed && pendingTasksCount > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'tasks' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {pendingTasksCount}
                   </span>
                 )}
@@ -543,22 +658,20 @@ export default function AdminPage() {
 
               {/* Admissions CRM */}
               <button
-                onClick={() => setActiveTab('crm')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('crm'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'crm'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="📋 Admissions CRM Pipeline"
+                title="Admissions CRM Pipeline"
               >
-                <div className="flex items-center gap-2.5">
-                  <UserPlus className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Admissions CRM</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <UserPlus className={`h-4 w-4 shrink-0 ${activeTab === 'crm' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Admissions CRM</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'crm' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                     {enquiries.length} Leads
                   </span>
                 )}
@@ -566,22 +679,20 @@ export default function AdminPage() {
 
               {/* SIS Document Vault */}
               <button
-                onClick={() => setActiveTab('sis')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('sis'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'sis'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🔒 SIS Document Vault"
+                title="SIS Document Vault"
               >
-                <div className="flex items-center gap-2.5">
-                  <Lock className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>SIS Vault</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Lock className={`h-4 w-4 shrink-0 ${activeTab === 'sis' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">SIS Vault</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'sis' ? 'bg-white/20 text-white' : 'bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                     Strict Lock
                   </span>
                 )}
@@ -591,32 +702,30 @@ export default function AdminPage() {
             {/* GROUP 2: FACULTY & ACADEMIC GOVERNANCE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 px-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
                   Faculty &amp; Academics
                 </span>
               )}
 
               {/* Substitution & Cover */}
               <button
-                onClick={() => setActiveTab('substitutions')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('substitutions'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'substitutions'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🔄 Timetable Substitution & Period Cover Engine"
+                title="Timetable Substitution & Period Cover Engine"
               >
-                <div className="flex items-center gap-2.5">
-                  <Shuffle className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Substitution &amp; Cover</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Shuffle className={`h-4 w-4 shrink-0 ${activeTab === 'substitutions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Substitution &amp; Cover</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'substitutions' 
-                      ? 'bg-white/20 text-white' 
-                      : unassignedSubCount > 0 
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                    unassignedSubCount > 0 
+                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 animate-pulse'
+                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
                   }`}>
                     {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered'}
                   </span>
@@ -625,22 +734,20 @@ export default function AdminPage() {
 
               {/* Staff & Vendors */}
               <button
-                onClick={() => setActiveTab('staff')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('staff'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'staff'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="👥 Staff, Salaries & Permissions"
+                title="Staff, Salaries & Permissions"
               >
-                <div className="flex items-center gap-2.5">
-                  <Users className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Staff &amp; Payroll</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Users className={`h-4 w-4 shrink-0 ${activeTab === 'staff' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Staff &amp; Payroll</span>}
                 </div>
                 {!sidebarCollapsed && pendingPermissionCount > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'staff' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {pendingPermissionCount} Req
                   </span>
                 )}
@@ -648,22 +755,20 @@ export default function AdminPage() {
 
               {/* Academic Rollover */}
               <button
-                onClick={() => setActiveTab('rollover')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('rollover'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'rollover'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="📈 Annual Student Promotion & Academic Rollover"
+                title="Annual Student Promotion & Academic Rollover"
               >
-                <div className="flex items-center gap-2.5">
-                  <TrendingUp className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Academic Rollover</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <TrendingUp className={`h-4 w-4 shrink-0 ${activeTab === 'rollover' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Academic Rollover</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'rollover' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                     2027–28
                   </span>
                 )}
@@ -673,29 +778,27 @@ export default function AdminPage() {
             {/* GROUP 3: FINANCE & INSTITUTIONAL ASSETS */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 px-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
                   Finance &amp; Logistics
                 </span>
               )}
 
               {/* Fee Milestones & Receipts */}
               <button
-                onClick={() => setActiveTab('fees')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('fees'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'fees'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="💳 Fee Milestones & Defaulters"
+                title="Fee Milestones & Defaulters"
               >
-                <div className="flex items-center gap-2.5">
-                  <CreditCard className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Fee Milestones</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'fees' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Fee Milestones</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'fees' ? 'bg-white/20 text-white' : 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {overdueDefaultersCount} Due
                   </span>
                 )}
@@ -703,38 +806,36 @@ export default function AdminPage() {
 
               {/* Inventory & Assets */}
               <button
-                onClick={() => setActiveTab('inventory')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('inventory'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'inventory'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="📦 Inventory & Asset Management"
+                title="Inventory & Asset Management"
               >
-                <div className="flex items-center gap-2.5">
-                  <Package className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Inventory &amp; Assets</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Package className={`h-4 w-4 shrink-0 ${activeTab === 'inventory' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Inventory &amp; Assets</span>}
                 </div>
               </button>
 
               {/* Event Command Center */}
               <button
-                onClick={() => setActiveTab('events')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('events'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'events'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🎭 Event Command Center (Annual Day 2026)"
+                title="Event Command Center (Annual Day 2026)"
               >
-                <div className="flex items-center gap-2.5">
-                  <Sparkles className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Event Center</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'events' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Event Center</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'events' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
                     Active
                   </span>
                 )}
@@ -744,29 +845,27 @@ export default function AdminPage() {
             {/* GROUP 4: REGULATORY, SECURITY & LEGAL */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 px-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
                   Regulatory &amp; Legal
                 </span>
               )}
 
               {/* Exit & TC Clearance */}
               <button
-                onClick={() => setActiveTab('exit')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('exit'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'exit'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🎓 Student Exit & TC Handover"
+                title="Student Exit & TC Handover"
               >
-                <div className="flex items-center gap-2.5">
-                  <GraduationCap className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Exit Clearance</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <GraduationCap className={`h-4 w-4 shrink-0 ${activeTab === 'exit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Exit Clearance</span>}
                 </div>
                 {!sidebarCollapsed && pendingExitCount > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'exit' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {pendingExitCount} Pending
                   </span>
                 )}
@@ -774,22 +873,20 @@ export default function AdminPage() {
 
               {/* Security Audit Trail */}
               <button
-                onClick={() => setActiveTab('audit')}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => { setActiveTab('audit'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                   activeTab === 'audit'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="🛡️ Institutional Security & Compliance Audit Trail"
+                title="Institutional Security & Compliance Audit Trail"
               >
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Security Audit</span>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <ShieldCheck className={`h-4 w-4 shrink-0 ${activeTab === 'audit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Security Audit</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'audit' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                  }`}>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
                     CBSE/FERPA
                   </span>
                 )}
@@ -797,53 +894,68 @@ export default function AdminPage() {
             </div>
 
           </div>
+        </div>
 
-          {/* Bottom Footer Session Info */}
-          <div className="p-3 border-t border-slate-200 dark:border-slate-800">
-            {!sidebarCollapsed ? (
-              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="font-semibold">CBSE 2026–27</span>
-                <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                  Telemetry Live
-                </span>
-              </div>
-            ) : (
-              <div className="h-2 w-2 rounded-full bg-emerald-500 mx-auto" title="Telemetry Live" />
-            )}
-          </div>
-        </aside>
-
-        {/* ===================================================== */}
-        {/* RIGHT SCROLLABLE MAIN CONTENT CANVAS                  */}
-        {/* ===================================================== */}
-        <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-          
-          {/* TOAST FEEDBACK NOTIFICATION */}
-          {toastMessage && (
-            <div className="fixed top-16 right-6 z-50 flex items-center gap-2 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span>{toastMessage}</span>
-              <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
-                <X className="h-3.5 w-3.5" />
-              </button>
+        {/* Bottom Status Footer */}
+        <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
+          {!sidebarCollapsed ? (
+            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                Academic Term 2
+              </span>
+              <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
+            </div>
+          ) : (
+            <div className="flex justify-center py-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
             </div>
           )}
+        </div>
+      </aside>
 
-{/* ===================================================== */}
-          {/* 1. SUPER ADMINISTRATOR COMMAND CENTER HEADER        */}
-          {/* ===================================================== */}
-          <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 sm:p-6 shadow-xs relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-500/10 via-indigo-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-1/3 w-64 h-32 bg-gradient-to-t from-emerald-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
+      {/* ===================================================== */}
+      {/* RIGHT SCROLLABLE MAIN CONTENT CANVAS                  */}
+      {/* ===================================================== */}
+      <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        
+        {/* Mobile Drawer Trigger (md:hidden) */}
+        <div className="flex md:hidden items-center justify-between pb-1">
+          <button
+            onClick={() => setMobileDrawerOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B101B] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-xs"
+          >
+            <Menu className="h-4 w-4" />
+            <span>Menu</span>
+          </button>
+          <span className="text-xs font-bold text-slate-500">Admin Portal</span>
+        </div>
 
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-              <div className="space-y-3 max-w-2xl">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 px-3 py-1 text-xs font-semibold">
-                    <Building2 className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Executive Command Center • Academic Year 2026–27</span>
-                  </span>
+        {/* TOAST FEEDBACK NOTIFICATION */}
+        {toastMessage && (
+          <div className="fixed top-16 right-6 z-50 flex items-center gap-2 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* ===================================================== */}
+        {/* 1. SUPER ADMINISTRATOR COMMAND CENTER HEADER        */}
+        {/* ===================================================== */}
+        <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 sm:p-6 shadow-xs relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-500/10 via-indigo-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-1/3 w-64 h-32 bg-gradient-to-t from-emerald-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 px-3 py-1 text-xs font-semibold">
+                  <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Executive Command Center • Academic Year 2026–27</span>
+                </span>
 
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2.5 py-1 text-xs font-semibold">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -919,29 +1031,29 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {/* 2. 4 EXECUTIVE CAMPUS PULSE METRIC CARDS             */}
           {/* ===================================================== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* 1. Priority Operational Triage */}
             <div
               onClick={() => setActiveTab('triage')}
-              className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-rose-300 dark:hover:border-rose-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     Priority Operations Triage
                   </span>
-                  <div className="h-9 w-9 rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                    <AlertCircle className="h-4 w-4" />
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <AlertCircle className="h-5 w-5" />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
                       {urgentTriageCount} Critical Fires
                     </h3>
-                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
                       Action Required
                     </span>
                   </div>
@@ -956,7 +1068,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-rose-600 dark:text-rose-400 group-hover:translate-x-0.5 transition-transform">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
                 <span>Open Triage Action Engine</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
@@ -965,24 +1077,24 @@ export default function AdminPage() {
             {/* 2. Faculty Presence & Substitutions */}
             <div
               onClick={() => setActiveTab('substitutions')}
-              className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     Faculty &amp; Substitutions
                   </span>
-                  <div className="h-9 w-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                    <Shuffle className="h-4 w-4" />
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <Shuffle className="h-5 w-5" />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
                       {unassignedSubCount > 0 ? `${unassignedSubCount} Open Slot` : 'All Covered'}
                     </h3>
-                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
                       3 on Leave
                     </span>
                   </div>
@@ -997,7 +1109,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
                 <span>Manage Faculty Coverage</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
@@ -1006,24 +1118,24 @@ export default function AdminPage() {
             {/* 3. Fee Collections Milestone 2 */}
             <div
               onClick={() => setActiveTab('fees')}
-              className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     Fee Milestone 2 Health
                   </span>
-                  <div className="h-9 w-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                    <CreditCard className="h-4 w-4" />
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <CreditCard className="h-5 w-5" />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
                       ₹18.5L / ₹24.0L
                     </h3>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
                       77.1%
                     </span>
                   </div>
@@ -1038,7 +1150,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
                 <span>Inspect Accounts Ledger</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
@@ -1047,24 +1159,24 @@ export default function AdminPage() {
             {/* 4. Student SIS & Exit Clearances */}
             <div
               onClick={() => setActiveTab('exit')}
-              className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700/60 transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     SIS &amp; Exit Clearances
                   </span>
-                  <div className="h-9 w-9 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                    <GraduationCap className="h-4 w-4" />
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <GraduationCap className="h-5 w-5" />
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
                       {pendingExitCount} TC Pending
                     </h3>
-                    <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/60">
                       Dual Sign TC
                     </span>
                   </div>
@@ -1079,7 +1191,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-400 group-hover:translate-x-0.5 transition-transform">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
                 <span>Review TC Applications</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
@@ -1093,70 +1205,70 @@ export default function AdminPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setActiveTab('triage')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'triage'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <AlertCircle className="h-3.5 w-3.5" />
               <span>Priority Triage</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'triage' ? 'bg-white/20 text-white' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'triage' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {urgentTriageCount}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('substitutions')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'substitutions'
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Shuffle className="h-3.5 w-3.5" />
               <span>Substitutions</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'substitutions' ? 'bg-white/20 text-white' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'substitutions' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered'}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('crm')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'crm'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <UserPlus className="h-3.5 w-3.5" />
               <span>Admissions CRM</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'crm' ? 'bg-white/20 text-white' : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'crm' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {enquiries.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('fees')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'fees'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <CreditCard className="h-3.5 w-3.5" />
               <span>Fee Milestones</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'fees' ? 'bg-white/20 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'fees' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 77%
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('sis')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'sis'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Lock className="h-3.5 w-3.5" />
@@ -1165,55 +1277,55 @@ export default function AdminPage() {
 
             <button
               onClick={() => setActiveTab('tasks')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'tasks'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <CheckSquare className="h-3.5 w-3.5" />
               <span>Tasks Queue</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'tasks' ? 'bg-white/20 text-white' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'tasks' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {pendingTasksCount}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('staff')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'staff'
-                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Users className="h-3.5 w-3.5" />
               <span>Staff &amp; Payroll</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'staff' ? 'bg-white/20 text-white' : 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'staff' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {staffMembers.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('exit')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'exit'
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <GraduationCap className="h-3.5 w-3.5" />
               <span>Exit TC</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${activeTab === 'exit' ? 'bg-white/20 text-white' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'}`}>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'exit' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
                 {pendingExitCount}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('audit')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'audit'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <ShieldCheck className="h-3.5 w-3.5" />
@@ -1222,10 +1334,10 @@ export default function AdminPage() {
 
             <button
               onClick={() => setActiveTab('inventory')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'inventory'
-                  ? 'bg-slate-700 text-white shadow-md shadow-slate-700/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Package className="h-3.5 w-3.5" />
@@ -1234,10 +1346,10 @@ export default function AdminPage() {
 
             <button
               onClick={() => setActiveTab('rollover')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'rollover'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -1251,6 +1363,153 @@ export default function AdminPage() {
           {activeTab === 'triage' && (
             <div className="space-y-6">
               
+              {/* SCHOOL-WIDE REMEDIAL OVERSIGHT COCKPIT */}
+              {remedialOverview && (
+                <div className="rounded-3xl border border-amber-200/90 dark:border-amber-800/80 bg-gradient-to-br from-amber-50/60 via-white to-amber-50/20 dark:from-slate-900 dark:via-slate-900/95 dark:to-amber-950/25 p-5 sm:p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-100 dark:border-amber-900/40 pb-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 px-3 py-1 text-xs font-bold">
+                          <Target className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Academic Outcomes &bull; 1-Week Remedial Oversight Cockpit</span>
+                        </span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                          Mastery Threshold: &le; 70%
+                        </span>
+                      </div>
+                      <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                        School-Wide Remedial Focus Health &amp; Improvement Batches
+                      </h2>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        Targeted 7-day remedial sprints for students scoring &le;70% in term assessments. Baseline mastery (&gt;70%) students are exempt.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black border border-emerald-300 dark:border-emerald-800">
+                        {remedialOverview.overall_recovery_rate}% Recovery Rate
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4 Executive Metric Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Total on Focus Plans</span>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-2xl font-black text-slate-900 dark:text-white">
+                          {remedialOverview.total_remedial_students} Students
+                        </span>
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                          {remedialOverview.active_sprints_on_track} On Track
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Across 4 Class Sections</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Section Breakdown</span>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {Object.entries(remedialOverview.section_breakdown).map(([sec, cnt]) => (
+                          <span key={sec} className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                            {sec}: <strong>{cnt}</strong>
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Class 8-B, 8-A, 9-A, 9-B</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Highest Concentration</span>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-lg font-black text-purple-700 dark:text-purple-300">Mathematics</span>
+                        <span className="text-xs font-bold text-purple-600 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded">
+                          {remedialOverview.subject_breakdown['Mathematics'] || 8} Students
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Algebraic Factoring &amp; Fractions</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Early Warning Pacing</span>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-2xl font-black text-orange-600 dark:text-orange-400">
+                          {remedialOverview.early_warning_pacing_triage.length} Flagged
+                        </span>
+                        <span className="text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-950 px-1.5 py-0.5 rounded">
+                          2+ Days Inactive
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Pending Rough Work Review</span>
+                    </div>
+                  </div>
+
+                  {/* EARLY WARNING PACING TRIAGE WIDGET */}
+                  {remedialOverview.early_warning_pacing_triage.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-amber-100 dark:border-amber-900/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-orange-500 animate-ping" />
+                          <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 dark:text-orange-300">
+                            🟠 Early Warning Pacing Triage: Students Inactive for 2+ Days on Day 2
+                          </h3>
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          Requires Principal PTM Briefing &amp; Class Teacher Notice
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {remedialOverview.early_warning_pacing_triage.map((warn) => (
+                          <div
+                            key={warn.student_id}
+                            className="rounded-2xl border border-orange-200/80 dark:border-orange-900/60 bg-white dark:bg-slate-800 p-4 space-y-3 shadow-2xs flex flex-col justify-between"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-900 dark:text-white">
+                                  {warn.name}
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
+                                  {warn.class_name}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                <span>{warn.subject}: <strong>{warn.exam_score_pct}%</strong></span>
+                                <span className="text-orange-600 font-bold">Day {warn.current_day} ({warn.days_inactive}d Inactive)</span>
+                              </div>
+
+                              <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
+                                <strong>Bottleneck:</strong> {warn.weak_concept}
+                              </p>
+
+                              <div className="pt-1 text-[10px] text-slate-400">
+                                Parent: <strong className="text-slate-600 dark:text-slate-300">{warn.parent_name}</strong> ({warn.parent_phone})
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={notifyingStudentId === warn.student_id}
+                              onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
+                              className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                            >
+                              {notifyingStudentId === warn.student_id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Bell className="h-3 w-3" />
+                              )}
+                              <span>Notify Class Teacher &amp; Request PTM Briefing</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Daily Action Engine Cards */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -1419,21 +1678,22 @@ export default function AdminPage() {
             <div className="space-y-6">
               
               {/* Strict Security Banner */}
-              <div className="rounded-2xl border-2 border-red-500/40 bg-red-50/60 dark:bg-red-950/30 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs relative overflow-hidden">
+                <div className="flex items-start gap-3.5">
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0">
                     <Lock className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-red-900 dark:text-red-200">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                         Strict Document Security Rule Active
                       </h3>
-                      <span className="rounded-full bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200 px-2 py-0.5 text-[9px] font-black uppercase">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 text-[10px] font-bold">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                         Admin Edit Only
                       </span>
                     </div>
-                    <p className="text-xs text-red-800 dark:text-red-300/90 mt-0.5 leading-relaxed">
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                       Official certificates (Bonafide, Transfer Certificate, Marks Cards) can <b>ONLY</b> be uploaded and edited by Administration. Teachers, Parents, and Students have strictly <b>View/Download-Only</b> access.
                     </p>
                   </div>
@@ -1441,7 +1701,7 @@ export default function AdminPage() {
 
                 <button
                   onClick={() => setShowDocModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
                 >
                   <Upload className="h-4 w-4" />
                   <span>Upload Official Certificate</span>
@@ -1838,21 +2098,22 @@ export default function AdminPage() {
                   <span className="text-[11px] text-slate-500 block">Collected: ₹33.88 Lakhs</span>
                 </div>
 
-                <div className="rounded-2xl border-2 border-red-400/80 bg-red-50/20 dark:bg-red-950/20 p-4.5 space-y-3">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3 relative shadow-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                       Milestone 2 • Overdue
                     </span>
-                    <span className="text-xs font-bold text-red-600">30 Overdue</span>
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400">30 Overdue</span>
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Transport</h4>
-                    <span className="text-xs text-slate-500">Due: 25 Oct 2026 • ₹18,500 / student</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Due: 25 Oct 2026 • ₹18,500 / student</span>
                   </div>
                   <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
                     <div className="bg-amber-500 h-2 rounded-full w-[78.2%]" />
                   </div>
-                  <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold block">Pending: ₹5,55,000 across 30 students</span>
+                  <span className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold block">Pending: ₹5,55,000 across 30 students</span>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
@@ -2332,91 +2593,307 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {/* TAB 9: DEDICATED TASK MANAGEMENT                      */}
           {/* ===================================================== */}
-          {activeTab === 'tasks' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-blue-100 text-blue-800 px-2.5 py-0.5 text-xs font-bold border border-blue-200">
-                      Operations Management
-                    </span>
-                    <span className="text-xs text-slate-500">Task Delegation &amp; Accountability Queue</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Administrative Action &amp; Deadline Task Tracker
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Assign, schedule, and track administrative deadlines across exams, event logistics, and institutional compliance.
-                  </p>
-                </div>
+          {activeTab === 'tasks' && (() => {
+            const DOMAIN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+              academic:   { label: 'Academic & Curriculum', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', icon: '📚' },
+              exam:       { label: 'Examination Cell',      color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800', icon: '📝' },
+              transport:  { label: 'Yellow Bus Fleet',      color: 'text-amber-700 dark:text-amber-300',   bg: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',   icon: '🚌' },
+              inventory:  { label: 'Asset & Lab Store',     color: 'text-teal-700 dark:text-teal-300',     bg: 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800',       icon: '📦' },
+              admissions: { label: 'Admissions & CRM',      color: 'text-sky-700 dark:text-sky-300',       bg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',           icon: '🎓' },
+              finance:    { label: 'Finance & Bursar',      color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
+              executive:  { label: 'Executive Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
+              campus_ops: { label: 'Campus Operations',     color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800', icon: '🏫' },
+            };
+            const PRIORITY_BADGE: Record<string, string> = {
+              Critical: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
+              High:     'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
+              Medium:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+              Low:      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+            };
+            const STATUS_BADGE: Record<string, string> = {
+              'Pending':        'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
+              'In Progress':    'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
+              'Pending Review': 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+              'Completed':      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+            };
 
-                <button
-                  onClick={() => setShowTaskModal(true)}
-                  className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Assign New Task</span>
-                </button>
-              </div>
+            const filteredTasks = tasks.filter(t => {
+              const domainMatch = taskDomainFilter === 'all' || t.domain === taskDomainFilter;
+              const statusMatch = taskStatusFilter === 'all' || t.status === taskStatusFilter;
+              return domainMatch && statusMatch;
+            });
 
-              {/* Tasks List */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    All Active Tasks ({tasks.length})
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Click any task to toggle between Pending and Completed
-                  </span>
-                </div>
+            const openCount   = tasks.filter(t => t.status !== 'Completed').length;
+            const criticalCount = tasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
+            const overdueCount = tasks.filter(t => t.category === 'urgent' && t.status !== 'Completed').length;
+            const autoCount   = tasks.filter(t => t.is_auto_generated).length;
 
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => handleToggleTask(task.id, task.status)}
-                      className="py-3 flex items-start justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 p-2 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={task.status === 'Completed'}
-                          onChange={() => {}}
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                        <div>
-                          <span className={`text-xs font-bold block ${
-                            task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'
-                          }`}>
-                            {task.title}
-                          </span>
-                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                            <span>Assigned to: <b className="text-slate-700 dark:text-slate-300">{task.assigned_to}</b></span>
-                            <span>•</span>
-                            <span>Due: {task.due_date}</span>
-                            <span>•</span>
-                            <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 text-[9px] font-bold uppercase">
-                              {task.priority} Priority
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                        task.status === 'Completed'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : task.category === 'urgent'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                      }`}>
-                        {task.status}
+            return (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* ── Header ── */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                        Decentralized Operations Center
                       </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">6 Coordinator Domains · SLA-Tracked</span>
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                      Institutional Task Operations Board
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Domain-scoped task delegation, SLA enforcement, auto-triggered operations and executive escalation.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowTaskModal(true)}
+                    className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Delegate New Task</span>
+                  </button>
+                </div>
+
+                {/* ── Executive Cockpit KPIs ── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Open Tasks',      value: openCount,    color: 'text-blue-700 dark:text-blue-300',    bg: 'bg-blue-50 dark:bg-blue-950/30',    icon: <ClipboardCheck className="h-4 w-4" /> },
+                    { label: 'Escalated / Critical', value: criticalCount, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50 dark:bg-rose-950/30', icon: <AlertTriangle className="h-4 w-4" /> },
+                    { label: 'Urgent Overdue',  value: overdueCount, color: 'text-amber-700 dark:text-amber-300',  bg: 'bg-amber-50 dark:bg-amber-950/30',  icon: <Clock className="h-4 w-4" /> },
+                    { label: 'Auto-Triggered',  value: autoCount,    color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/30', icon: <Sparkles className="h-4 w-4" /> },
+                  ].map((kpi) => (
+                    <div key={kpi.label} className={`rounded-2xl border border-slate-200 dark:border-slate-800 ${kpi.bg} p-4 flex items-center gap-3`}>
+                      <span className={`${kpi.color}`}>{kpi.icon}</span>
+                      <div>
+                        <div className={`text-xl font-black ${kpi.color}`}>{kpi.value}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{kpi.label}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
+
+                {/* ── Department SLA Progress Strip ── */}
+                {taskCockpit?.department_stats && taskCockpit.department_stats.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Activity className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                        Live Department Resolution &amp; SLA Compliance Rates
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Database Synced</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                      {taskCockpit.department_stats.map((dept: any) => {
+                        const meta = DOMAIN_META[dept.domain];
+                        const rate = dept.completion_rate_pct ?? 100;
+                        return (
+                          <div 
+                            key={dept.domain} 
+                            onClick={() => setTaskDomainFilter(dept.domain)}
+                            className={`rounded-xl border p-2 cursor-pointer transition-all hover:scale-[1.02] ${
+                              taskDomainFilter === dept.domain 
+                                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-1 ring-blue-500' 
+                                : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-[11px] font-bold">
+                              <span className="truncate text-slate-800 dark:text-slate-200">{meta?.icon || '•'} {dept.domain.slice(0, 5).toUpperCase()}</span>
+                              <span className={`text-[10px] font-black ${rate === 100 ? 'text-emerald-600 dark:text-emerald-400' : rate < 50 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                {rate}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1.5">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  rate === 100 ? 'bg-emerald-500' : rate < 50 ? 'bg-rose-500' : 'bg-amber-500'
+                                }`} 
+                                style={{ width: `${Math.max(5, rate)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 mt-1">
+                              <span>{dept.open_tasks} open</span>
+                              <span>{dept.total_tasks} total</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Domain Filter Bar ── */}
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mr-1">Domain</span>
+                  {['all', 'academic', 'exam', 'transport', 'inventory', 'admissions', 'finance', 'executive'].map(d => {
+                    const meta = DOMAIN_META[d];
+                    const active = taskDomainFilter === d;
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => setTaskDomainFilter(d)}
+                        className={`rounded-full px-3 py-1 text-[10px] font-bold border transition-all cursor-pointer ${
+                          active
+                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {d === 'all' ? 'All Domains' : `${meta?.icon} ${meta?.label}`}
+                      </button>
+                    );
+                  })}
+                  <div className="ml-auto flex items-center gap-2">
+                    <select
+                      value={taskStatusFilter}
+                      onChange={e => setTaskStatusFilter(e.target.value)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[11px] font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Pending Review">Pending Review</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* ── Task Cards ── */}
+                <div className="space-y-3">
+                  {filteredTasks.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-10 text-center">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-3" />
+                      <p className="text-sm font-bold text-slate-600 dark:text-slate-400">No tasks match this filter.</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">Try a different domain or status filter.</p>
+                    </div>
+                  )}
+                  {filteredTasks.map((task) => {
+                    const meta = DOMAIN_META[task.domain as string] || DOMAIN_META['executive'];
+                    const isExpanded = taskExpandedId === task.id;
+                    const priorityClass = PRIORITY_BADGE[task.priority as string] || PRIORITY_BADGE['Low'];
+                    const statusClass = STATUS_BADGE[task.status as string] || STATUS_BADGE['Pending'];
+                    return (
+                      <div
+                        key={task.id}
+                        className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-sm transition-all overflow-hidden ${
+                          task.is_escalated
+                            ? 'border-rose-300 dark:border-rose-700 ring-1 ring-rose-200 dark:ring-rose-900'
+                            : 'border-slate-200 dark:border-slate-800'
+                        }`}
+                      >
+                        {/* Card Top Row */}
+                        <div
+                          className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                          onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
+                        >
+                          {/* Domain Icon Badge */}
+                          <div className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-black ${meta.bg}`}>
+                            {meta.icon}
+                          </div>
+
+                          {/* Main Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
+                                {meta.label}
+                              </span>
+                              {task.is_auto_generated && (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                                  ⚡ Auto-Triggered
+                                </span>
+                              )}
+                              {task.is_escalated && (
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800 animate-pulse">
+                                  🔺 ESCALATED
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-xs font-bold ${ task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white' }`}>
+                              {task.title}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                              <span>👤 {task.assigned_to}</span>
+                              <span>•</span>
+                              <span>🕐 {task.due_date}</span>
+                              {task.sla_hours && <><span>•</span><span>SLA {task.sla_hours}h</span></>}
+                              {task.created_by_name && <><span>•</span><span>By {task.created_by_name}</span></>}
+                            </div>
+                          </div>
+
+                          {/* Right: Status + Priority */}
+                          <div className="shrink-0 flex flex-col items-end gap-1.5">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${statusClass}`}>
+                              {task.status}
+                            </span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${priorityClass}`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Expanded Detail Panel */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3 bg-slate-50/60 dark:bg-slate-800/20">
+                            {task.description && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{task.description}</p>
+                            )}
+                            {task.escalation_reason && (
+                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 px-3 py-2">
+                                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">🔺 Escalation Reason: {task.escalation_reason}</p>
+                              </div>
+                            )}
+
+                            {/* Action Buttons Row */}
+                            <div className="flex flex-wrap gap-2">
+                              {['Pending','In Progress','Pending Review','Completed'].map(s => (
+                                <button
+                                  key={s}
+                                  onClick={() => handleUpdateTaskStatus(task.id, s)}
+                                  disabled={task.status === s}
+                                  className={`rounded-xl px-3 py-1.5 text-[10px] font-bold border transition-all cursor-pointer ${
+                                    task.status === s
+                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-blue-500 hover:text-blue-600'
+                                  }`}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                              {!task.is_escalated && (
+                                <button
+                                  onClick={() => { setEscalateTaskId(task.id); setEscalateReason(''); }}
+                                  className="rounded-xl px-3 py-1.5 text-[10px] font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer ml-auto"
+                                >
+                                  🔺 Escalate to Principal
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Inline Escalation Form */}
+                            {escalateTaskId === task.id && (
+                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 p-3 space-y-2">
+                                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">Enter escalation reason:</p>
+                                <textarea
+                                  rows={2}
+                                  value={escalateReason}
+                                  onChange={e => setEscalateReason(e.target.value)}
+                                  placeholder="e.g. Vendor threatens to pull out 48 hrs before Annual Day..."
+                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-[11px] text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                />
+                                <div className="flex gap-2 justify-end">
+                                  <button onClick={() => setEscalateTaskId(null)} className="text-[10px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 cursor-pointer">Cancel</button>
+                                  <button onClick={() => handleEscalateTask(task.id)} className="text-[10px] px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer">Confirm Escalation</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ===================================================== */}
           {/* TAB 8: SUBSTITUTION & TIMETABLE COVERAGE ENGINE        */}
@@ -2980,25 +3457,51 @@ export default function AdminPage() {
                 </div>
 
                 <form onSubmit={handleCreateTask} className="space-y-4">
+                  {/* Title */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Task Description / Title
-                    </label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Task Title *</label>
                     <input
-                      type="text"
-                      required
-                      placeholder="e.g. Inspect Stage Audio & Lighting Rigging"
+                      type="text" required
+                      placeholder="e.g. Audit Lab Inventory for Pre-Board Practicals"
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
+                  {/* Description */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description / Instructions</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Brief context, dependencies, or action steps..."
+                      value={newTaskDescription}
+                      onChange={(e) => setNewTaskDescription(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Domain + Category */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Category
-                      </label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Department Domain *</label>
+                      <select
+                        value={newTaskDomain}
+                        onChange={(e) => setNewTaskDomain(e.target.value as TaskDomain)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="academic">📚 Academic & Curriculum</option>
+                        <option value="exam">📝 Examination Cell</option>
+                        <option value="transport">🚌 Yellow Bus Fleet</option>
+                        <option value="inventory">📦 Asset & Lab Store</option>
+                        <option value="admissions">🎓 Admissions & CRM</option>
+                        <option value="finance">₹ Finance & Bursar</option>
+                        <option value="executive">⚡ Executive Mandates</option>
+                        <option value="campus_ops">🏫 Campus Operations</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
                       <select
                         value={newTaskCategory}
                         onChange={(e) => setNewTaskCategory(e.target.value as any)}
@@ -3008,65 +3511,71 @@ export default function AdminPage() {
                         <option value="upcoming">Upcoming Operational</option>
                       </select>
                     </div>
+                  </div>
 
+                  {/* Coordinator + Priority */}
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Priority Level
-                      </label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Assign To Coordinator *</label>
+                      <select
+                        value={newTaskAssignee}
+                        onChange={(e) => setNewTaskAssignee(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Dr. Ananya Krishnan">Dr. Ananya Krishnan — Academic</option>
+                        <option value="Ms. Rekha Iyer">Ms. Rekha Iyer — Exam Cell</option>
+                        <option value="Mr. Suresh Pillai">Mr. Suresh Pillai — Transport</option>
+                        <option value="Mr. Vikram Rao">Mr. Vikram Rao — Inventory</option>
+                        <option value="Ms. Priya Nair">Ms. Priya Nair — Admissions</option>
+                        <option value="Mrs. Lakshmi Narayan">Mrs. Lakshmi Narayan — Finance</option>
+                        <option value="Principal Sharma">Principal Sharma — Executive</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority Level</label>
                       <select
                         value={newTaskPriority}
                         onChange={(e) => setNewTaskPriority(e.target.value as any)}
                         className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
+                        <option value="Critical">🔴 Critical</option>
+                        <option value="High">🟠 High</option>
+                        <option value="Medium">🟡 Medium</option>
+                        <option value="Low">⚪ Low</option>
                       </select>
                     </div>
                   </div>
 
+                  {/* Deadline + SLA */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Assigned To
-                      </label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deadline</label>
                       <input
-                        type="text"
-                        required
-                        value={newTaskAssignee}
-                        onChange={(e) => setNewTaskAssignee(e.target.value)}
+                        type="text" required
+                        value={newTaskDueDate}
+                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        placeholder="e.g. Today, 5:00 PM"
                         className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
-
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Deadline
-                      </label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">SLA Hours</label>
                       <input
-                        type="text"
-                        required
-                        value={newTaskDueDate}
-                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        type="number" min={1} max={720}
+                        value={newTaskSlaHours}
+                        onChange={(e) => setNewTaskSlaHours(Number(e.target.value))}
                         className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setShowTaskModal(false)}
+                    <button type="button" onClick={() => setShowTaskModal(false)}
                       className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
+                    >Cancel</button>
+                    <button type="submit"
                       className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm cursor-pointer"
-                    >
-                      Assign Task
-                    </button>
+                    >Delegate Task</button>
                   </div>
                 </form>
               </div>

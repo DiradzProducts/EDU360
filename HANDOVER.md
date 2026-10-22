@@ -89,9 +89,18 @@ e:\Diradz\EDU360/
 * **Assigned Diagnostic Practice Questions**: The rough notebook review section displays the exact mathematical problems and teacher rubric checkpoints right above the student's solution steps.
 * **Removal of Call Script**: Redundant telephonic call script card and "Copy Call Script" button removed; replaced by instant 1-click WhatsApp progress dispatch and PTM conference scheduling.
 
-### 3. Client Prototype vs. Planned Backend
-* **Frontend Store**: Currently managed in [frontend/src/lib/focus-data.ts](file:///e:/Diradz/EDU360/frontend/src/lib/focus-data.ts) with `localStorage` key `edu360_focus_roster_cache_v4`.
-* **Planned Backend Work**: Creating database tables (`FocusRoster`, `RemedialDay`, `RoughWorkSubmission`) in FastAPI with REST endpoints to replace the client cache.
+### 4. Academic Coordinator Workflows & Teacher Cross-Role Interlocks (v4.1.0)
+* **Curriculum Syllabus Delivery**: Clerical `+1 Unit Delivered` removed from Academic Coordinator portal (`/academic_coordinator`). Pacing checkoff is self-serviced directly by assigned teachers in the Teacher Portal (`/teacher`) via `POST /api/teacher/curriculum/log-unit`. Academic Coordinator retains surveillance and 1-click Remedial Task dispatch (48h SLA).
+* **Human-in-the-Loop SLA Breach Governance**: Never auto-escalates SLA countdown breaches to the Principal. Notifies the Academic Coordinator first with 3 action choices:
+  * `[Grant Extension]` (+12h, +24h, +48h, +72h) via `POST /api/admin/tasks/{id}/extend-sla`.
+  * `[Migrate Task]` to peer faculty with zero penalty on original teacher via `POST /api/admin/tasks/{id}/approve-relief`.
+  * `[⚠️ Escalate to Principal]` with rationale via `POST /api/admin/tasks/{id}/escalate`.
+* **Task Relief & Workload Rebalancing**: Teachers experiencing medical emergencies or exam workload surges click `[Request Task Relief / Migration]` on any task in `/teacher`. This pauses the SLA and alerts the Academic Coordinator.
+* **Timetable Substitution Sync**: Assigning a substitute teacher in `/academic_coordinator` dynamically calls `inject_substitution_period` in FastAPI, auto-badging a `SUBSTITUTION_COVER` period in the substitute's daily personal schedule in `/teacher`.
+* **Institutional PTM Event Governance**:
+  * Coordinator monitors school-wide faculty readiness (`readiness_percentage%`), published slots, and remedial focus table briefs via `GET /api/admin/ptm/governance`.
+  * 1-click `[📢 Remind Defaulting Teachers]` broadcasts urgent 6-hour SLA publishing tasks via `POST /api/admin/ptm/remind-unready`.
+  * Parents self-book 10-minute sliding slots without teacher phone calls.
 
 ---
 

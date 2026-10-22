@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="100%" height="100%">
+  <!-- Paper Background with lined notebook pattern -->
+  <rect width="600" height="800" fill="#fdfbf7" />
+  <line x1="70" y1="0" x2="70" y2="800" stroke="#fca5a5" stroke-width="1.5" />
+  
+  <!-- Horizontal notebook lines -->
+  <defs>
+    <pattern id="lines" width="600" height="28" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="28" x2="600" y2="28" stroke="#e2e8f0" stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="600" height="800" fill="url(#lines)" />
+
+  <!-- Header: Exam Information -->
+  <text x="90" y="45" font-family="monospace" font-size="14" font-weight="bold" fill="#334155">EDU360 SECULAR HIGH SCHOOL • MID-TERM EXAM</text>
+  <text x="90" y="68" font-family="sans-serif" font-size="12" fill="#475569">Subject: Mathematics (Class 8-B) • Student: Arjun Patel (Roll #07)</text>
+  <text x="480" y="68" font-family="sans-serif" font-size="12" font-weight="bold" fill="#dc2626">Score: 24/50 (48%)</text>
+  <line x1="70" y1="82" x2="560" y2="82" stroke="#94a3b8" stroke-width="1.5" />
+
+  <!-- Question 1: Linear Equation (Correct) -->
+  <text x="90" y="112" font-family="sans-serif" font-size="13" font-weight="bold" fill="#1e293b">Q1. Solve for x: 4x + 7 = 31</text>
+  <text x="110" y="140" font-family="monospace" font-size="13" fill="#0f172a">4x = 31 - 7</text>
+  <text x="110" y="168" font-family="monospace" font-size="13" fill="#0f172a">4x = 24  =>  x = 6</text>
+  <!-- Teacher checkmark -->
+  <path d="M 280 155 L 295 170 L 325 140" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" />
+  <text x="335" y="160" font-family="sans-serif" font-size="12" font-weight="bold" fill="#16a34a">[3/3 Marks ✓]</text>
+
+  <!-- Question 2: Algebraic Fraction with Negative Expansion (FAILED - ROOT LAG) -->
+  <text x="90" y="224" font-family="sans-serif" font-size="13" font-weight="bold" fill="#dc2626">Q2. Simplify: (5x + 2)/3 - (2x - 4)/2 = 3</text>
+  <text x="110" y="252" font-family="monospace" font-size="13" fill="#0f172a">LCM of 3 and 2 is 6.</text>
+  <text x="110" y="280" font-family="monospace" font-size="13" fill="#0f172a">2(5x + 2) - 3(2x - 4) = 18</text>
+  
+  <!-- Error step highlighted in red circle -->
+  <text x="110" y="308" font-family="monospace" font-size="13" fill="#b91c1c" font-weight="bold">10x + 4 - 6x - 12 = 18</text>
+  <!-- Red ellipse around -12 -->
+  <ellipse cx="230" cy="304" rx="35" ry="14" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="3,3" />
+  <text x="280" y="308" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ef4444">&lt;-- ERROR: -3 * -4 is +12, not -12!</text>
+
+  <text x="110" y="336" font-family="monospace" font-size="13" fill="#0f172a">4x - 8 = 18 => 4x = 26 => x = 6.5 (INCORRECT)</text>
+  <path d="M 430 325 L 450 345 M 450 325 L 430 345" fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="round" />
+  <text x="460" y="340" font-family="sans-serif" font-size="12" font-weight="bold" fill="#dc2626">[1/5 Marks ✗]</text>
+
+  <!-- Question 3: Quadratic Factoring by Middle-Term Splitting (FAILED) -->
+  <text x="90" y="420" font-family="sans-serif" font-size="13" font-weight="bold" fill="#dc2626">Q3. Factorize: x² - 5x - 24 = 0</text>
+  <text x="110" y="448" font-family="monospace" font-size="13" fill="#0f172a">Need factors of -24 that sum to -5.</text>
+  <text x="110" y="476" font-family="monospace" font-size="13" fill="#b91c1c">x² - 3x - 8x - 24 = 0</text>
+  <!-- Red arrow -->
+  <ellipse cx="170" cy="472" rx="60" ry="14" fill="none" stroke="#ef4444" stroke-width="2" />
+  <text x="240" y="476" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ef4444">&lt;-- WRONG SIGNS: (-3) + (-8) = -11, not -5!</text>
+  <text x="110" y="504" font-family="monospace" font-size="13" fill="#0f172a">x(x - 3) - 8(x + 3) = 0 (STUCK)</text>
+  <path d="M 330 495 L 350 515 M 350 495 L 330 515" fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="round" />
+  <text x="360" y="510" font-family="sans-serif" font-size="12" font-weight="bold" fill="#dc2626">[0/5 Marks ✗]</text>
+
+  <!-- Question 4: Word Problem (Partially Correct) -->
+  <text x="90" y="588" font-family="sans-serif" font-size="13" font-weight="bold" fill="#1e293b">Q4. A number is multiplied by 3 and 10 is subtracted...</text>
+  <text x="110" y="616" font-family="monospace" font-size="13" fill="#0f172a">3y - 10 = 26 => 3y = 36 => y = 12</text>
+  <path d="M 320 605 L 335 620 L 365 590" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" />
+  <text x="375" y="610" font-family="sans-serif" font-size="12" font-weight="bold" fill="#16a34a">[4/4 Marks ✓]</text>
+
+  <!-- Teacher Diagnostic Stamp at bottom -->
+  <rect x="90" y="670" width="470" height="90" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5" />
+  <text x="105" y="695" font-family="sans-serif" font-size="13" font-weight="bold" fill="#991b1b">TEACHER EVALUATION &amp; EXAM CELL AUDIT:</text>
+  <text x="105" y="720" font-family="sans-serif" font-size="11" fill="#7f1d1d">"Arjun struggles with Distributive Negative Sign multiplication: -(ax - b) becomes -ax - b.</text>
+  <text x="105" y="740" font-family="sans-serif" font-size="11" fill="#7f1d1d">Flagged for 1-Week Remedial Focus Table. Needs intensive parentheses drills." — Mrs. Ananya Verma</text>
+</svg>

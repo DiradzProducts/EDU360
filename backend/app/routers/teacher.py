@@ -754,39 +754,46 @@ _ptm_slots = [
         "teacher_id": "ananya",
         "start_time": "09:00 AM",
         "end_time": "09:10 AM",
-        "status": "AVAILABLE",
+        "status": "BOOKED",
         "interaction_scope": "HOMEROOM_CLASS",
-        "booked_student_id": None,
-        "booked_student_name": None,
-        "booked_class": None,
-        "booked_parent_id": None,
-        "booked_parent_name": None,
-        "subject_name": None,
+        "booked_student_id": 1,
+        "booked_student_name": "Aarav Sharma",
+        "booked_class": "8-B",
+        "booked_parent_id": "rajesh_sharma",
+        "booked_parent_name": "Mr. Rajesh Sharma",
+        "subject_name": "Mathematics & Class 8-B Homeroom",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
-        "meeting_url": "https://meet.google.com/edu-ptm-slot-01",
-        "focus_table_agenda": []
+        "meeting_url": "https://meet.google.com/edu-ptm-aarav-8b",
+        "focus_table_agenda": [
+            "Review Mid-Term Exam (52%) Q7 & Q9 Sign Errors",
+            "Worksheet #4 Backlog Evidence (#EVD-BKLOG-884)",
+            "Day 3 Rough Notebook Parent Sign-off Inspection"
+        ]
     },
     {
         "id": "slot-02",
         "event_id": "ptm-conf-2026-term1",
-        "teacher_id": "ananya",
+        "teacher_id": "raman",
         "start_time": "09:12 AM",
         "end_time": "09:22 AM",
-        "status": "HELD",
+        "status": "BOOKED",
         "interaction_scope": "SUBJECT_SPECIFIC",
-        "booked_student_id": 5,
-        "booked_student_name": "Rohan Deshmukh",
-        "booked_class": "9-A",
-        "booked_parent_id": "suresh_deshmukh",
-        "booked_parent_name": "Mr. Suresh Deshmukh",
-        "subject_name": "Mathematics",
+        "booked_student_id": 1,
+        "booked_student_name": "Aarav Sharma",
+        "booked_class": "8-B",
+        "booked_parent_id": "rajesh_sharma",
+        "booked_parent_name": "Mr. Rajesh Sharma",
+        "subject_name": "Physics (Dr. K. Raman)",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
-        "meeting_url": "https://meet.google.com/edu-ptm-slot-02",
-        "focus_table_agenda": ["Coordinate geometry assessment"]
+        "meeting_url": "https://meet.google.com/edu-ptm-aarav-physics",
+        "focus_table_agenda": [
+            "Optics Ray Tracing Lab Backlog (#EVD-BKLOG-902)",
+            "Mid-Term Q3 Concave Mirror Focal Point Reflection Error"
+        ]
     },
     {
         "id": "slot-03",
@@ -796,20 +803,20 @@ _ptm_slots = [
         "end_time": "09:34 AM",
         "status": "BOOKED",
         "interaction_scope": "HOMEROOM_CLASS",
-        "booked_student_id": 1,
-        "booked_student_name": "Aarav Sharma",
+        "booked_student_id": 2,
+        "booked_student_name": "Kabir Mehta",
         "booked_class": "8-B",
-        "booked_parent_id": "rajesh_sharma",
-        "booked_parent_name": "Mr. Rajesh Sharma",
-        "subject_name": "Mathematics & Class 8B Homeroom",
+        "booked_parent_id": "rekha_mehta",
+        "booked_parent_name": "Mrs. Rekha Mehta",
+        "subject_name": "Mathematics",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
-        "meeting_url": "https://meet.google.com/edu-sharma-ananya-ptm",
+        "meeting_url": "https://meet.google.com/edu-ptm-kabir-math",
         "focus_table_agenda": [
-            "Review Unit Test 2 quadratic factoring error patterns",
-            "Discuss zero-period doubt clearance attendance",
-            "Establish home revision routine"
+            "Review Exam Score 48% (Flagged Q3, Q5, Q8)",
+            "Linear Inequalities Backlog (#EVD-BKLOG-715)",
+            "Negative Division Sign Inversion Rule"
         ]
     },
     {
@@ -820,40 +827,89 @@ _ptm_slots = [
         "end_time": "09:56 AM",
         "status": "BOOKED",
         "interaction_scope": "HOMEROOM_CLASS",
-        "booked_student_id": 2,
-        "booked_student_name": "Tanvi Deshmukh",
+        "booked_student_id": 1,
+        "booked_student_name": "Aarav Sharma",
         "booked_class": "8-B",
-        "booked_parent_id": "priya_deshmukh",
-        "booked_parent_name": "Mrs. Priya Deshmukh",
-        "subject_name": "Homeroom 8B + Junior Explorer Math",
+        "booked_parent_id": "rajesh_sharma",
+        "booked_parent_name": "Mr. Rajesh Sharma",
+        "subject_name": "Class 8-B Homeroom & Junior Sibling Consultation",
         "is_sibling_combo": True,
-        "sibling_student_id": 6,
-        "sibling_student_name": "Kabir Deshmukh (Class 3-A Junior)",
-        "meeting_url": "https://meet.google.com/edu-deshmukh-family-ptm",
+        "sibling_student_id": 8,
+        "sibling_student_name": "Aarav Kumar (Class 3-A Junior)",
+        "meeting_url": "https://meet.google.com/edu-sharma-sibling-ptm",
         "focus_table_agenda": [
-            "Tanvi's Math Olympiad preparation roadmap",
-            "Kabir's reading comprehension in Junior School"
+            "Aarav's 1-Week Remedial Pacing & Zero-period Support",
+            "Aarav Junior's Phonics Reading Booster & Magic Chest Stars"
         ]
     },
     {
         "id": "slot-05",
         "event_id": "ptm-conf-2026-term1",
-        "teacher_id": "ananya",
+        "teacher_id": "sen",
         "start_time": "10:00 AM",
         "end_time": "10:10 AM",
-        "status": "AVAILABLE",
+        "status": "BOOKED",
         "interaction_scope": "SUBJECT_SPECIFIC",
-        "booked_student_id": None,
-        "booked_student_name": None,
-        "booked_class": None,
-        "booked_parent_id": None,
-        "booked_parent_name": None,
+        "booked_student_id": 2,
+        "booked_student_name": "Kabir Mehta",
+        "booked_class": "8-B",
+        "booked_parent_id": "rekha_mehta",
+        "booked_parent_name": "Mrs. Rekha Mehta",
+        "subject_name": "Chemistry (Mrs. S. Sen)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-kabir-chem",
+        "focus_table_agenda": [
+            "Redox Equations Balancing Practice Backlog (#EVD-BKLOG-716)",
+            "Stoichiometric Balancing Deficit"
+        ]
+    },
+    {
+        "id": "slot-05b",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "sunitha",
+        "start_time": "10:12 AM",
+        "end_time": "10:22 AM",
+        "status": "BOOKED",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": 4,
+        "booked_student_name": "Siddharth Verma",
+        "booked_class": "8-A",
+        "booked_parent_id": "alok_verma",
+        "booked_parent_name": "Mr. Alok Verma",
+        "subject_name": "English Literature (Mrs. Sunitha Rao)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-siddharth-english",
+        "focus_table_agenda": [
+            "The Merchant of Venice Essay Backlog (#EVD-BKLOG-821)",
+            "Act IV Scene 1 Textual Citations"
+        ]
+    },
+    {
+        "id": "slot-05c",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "ananya",
+        "start_time": "10:24 AM",
+        "end_time": "10:34 AM",
+        "status": "BOOKED",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": 4,
+        "booked_student_name": "Siddharth Verma",
+        "booked_class": "8-A",
+        "booked_parent_id": "alok_verma",
+        "booked_parent_name": "Mr. Alok Verma",
         "subject_name": "Mathematics",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
-        "meeting_url": "https://meet.google.com/edu-ptm-slot-05",
-        "focus_table_agenda": []
+        "meeting_url": "https://meet.google.com/edu-ptm-siddharth-math",
+        "focus_table_agenda": [
+            "Arithmetic Progressions Common Difference Backlog (#EVD-BKLOG-820)",
+            "Exam Score 44% Decreasing Sequence Diagnostic"
+        ]
     },
     {
         "id": "slot-break-tea",
@@ -988,5 +1044,62 @@ async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_
 
             return slot
     raise HTTPException(status_code=404, detail="PTM slot not found")
+
+# --- 14. Teacher Curriculum Delivery & Timetable Proxy Sync ---
+def inject_substitution_period(period_num: int, class_name: str, subject: str, absent_teacher: str, time_slot: str):
+    for p in _personal_schedule:
+        if p["period_number"] == period_num:
+            p["activity_type"] = "SUBSTITUTION_COVER"
+            p["class_grade"] = class_name
+            p["subject_name"] = f"{subject} (Proxy Cover)"
+            p["notes"] = f"Covering for absent faculty {absent_teacher} (Leave Approved)"
+            return
+    _personal_schedule.append({
+        "id": f"sub-cover-{period_num}",
+        "period_number": period_num,
+        "start_time": time_slot.split("-")[0].strip() if "-" in time_slot else "10:30 AM",
+        "end_time": time_slot.split("-")[1].strip() if "-" in time_slot else "11:15 AM",
+        "day_of_week": "Today",
+        "activity_type": "SUBSTITUTION_COVER",
+        "class_grade": class_name,
+        "section": "B",
+        "subject_name": f"{subject} (Proxy Cover)",
+        "room_number": "Room 204",
+        "is_current_active_period": False,
+        "notes": f"Covering for absent faculty {absent_teacher} (Leave Approved)"
+    })
+
+@router.post("/curriculum/log-unit")
+async def teacher_log_curriculum_unit(req: dict):
+    from app.routers.admin import _curriculum_pacing_items, _add_audit_log
+    class_name = req.get("class_name", "Class 8-B")
+    subject = req.get("subject", "Mathematics")
+    units_to_add = req.get("units_to_add", 1)
+    lesson_title = req.get("lesson_title")
+    
+    for item in _curriculum_pacing_items:
+        if item["class_name"] == class_name and item["subject"] == subject:
+            item["completed_units"] = min(item["total_units"], item["completed_units"] + units_to_add)
+            item["completion_pct"] = round((item["completed_units"] / item["total_units"]) * 100, 1)
+            diff = item["completed_units"] - item["calendar_target_units"]
+            if diff >= 1:
+                item["status"] = f"Ahead (+{diff} Unit{'s' if diff > 1 else ''})"
+            elif diff < 0:
+                item["status"] = f"Lagging ({abs(diff)} Unit{'s' if abs(diff) > 1 else ''} Behind)"
+            else:
+                item["status"] = "On Track"
+            if lesson_title:
+                item["last_lesson_title"] = lesson_title
+            
+            _add_audit_log(
+                actor_name=item["teacher_name"],
+                actor_role="teacher",
+                action_type="LESSON_DELIVERY_CHECKOFF",
+                target_entity=f"{item['class_name']} {item['subject']}",
+                status="VERIFIED",
+                details=f"Faculty checked off unit delivery: {item['completed_units']}/{item['total_units']} ({item['completion_pct']}%)."
+            )
+            return {"success": True, "item": item}
+    raise HTTPException(status_code=404, detail="Course not found in curriculum tracker")
 
 

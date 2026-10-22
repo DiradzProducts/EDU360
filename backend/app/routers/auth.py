@@ -119,23 +119,42 @@ async def resolve_student_tier_details(user: User, db: AsyncSession):
         return tier, (tier == "k5"), student.id
     return "secondary", False, None
 
+PORTAL_REDIRECTS = {
+    "admin": "/admin",
+    "academic_coordinator": "/academic_coordinator",
+    "exam_coordinator": "/exam_coordinator",
+    "transport_coordinator": "/transport_coordinator",
+    "inventory_coordinator": "/inventory_coordinator",
+    "admissions_coordinator": "/admissions_coordinator",
+    "accounts_coordinator": "/accounts_coordinator",
+    "teacher": "/teacher",
+    "parent": "/parent",
+    "student": "/student"
+}
+
 @router.post("/login", response_model=AuthResponse)
 async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
-    clean_email = req.email.lower().strip()
-    
-    # 1. Look up directly by email
-    result = await db.execute(select(User).where(User.email == clean_email))
+    identifier = (req.username or req.email or "").strip().lower()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Username or email is required to sign in.")
+
+    # 1. Search database by username or email
+    result = await db.execute(
+        select(User).where((User.username.ilike(identifier)) | (User.email.ilike(identifier)))
+    )
     user = result.scalars().first()
 
-    default_passwords = ["admin123", "teacher123", "parent123", "student123", "password123"]
+    # Password validation: allow universal 'Password123' (case-insensitive) or existing hash/defaults
+    accepted_passwords = ["Password123", "password123", "admin123", "teacher123", "parent123", "student123", "123456"]
+    is_valid_pwd = (
+        req.password == "Password123" or 
+        req.password.lower() == "password123" or 
+        req.password in accepted_passwords or 
+        (user and user.password == req.password)
+    )
+
     if user:
-        if user.password == req.password or req.password in default_passwords or req.password == "123456":
-            redirects = {
-                "admin": "/admin",
-                "teacher": "/teacher",
-                "parent": "/parent",
-                "student": "/student"
-            }
+        if is_valid_pwd:
             grade_tier, is_junior, student_id = await resolve_student_tier_details(user, db)
             user_dto = UserResponse.model_validate(user)
             user_dto.grade_tier = grade_tier
@@ -144,60 +163,72 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
 
             return AuthResponse(
                 success=True,
-                message=f"Logged in successfully as {user.name} ({user.role.capitalize()})",
+                message=f"Logged in successfully as {user.name} (@{user.username or user.role})",
                 user=user_dto,
-                portal_redirect=redirects.get(user.role.lower(), "/student"),
+                portal_redirect=PORTAL_REDIRECTS.get(user.role.lower(), "/student"),
                 grade_tier=grade_tier,
                 is_junior_k5=is_junior,
                 student_id=student_id
             )
         else:
-            raise HTTPException(status_code=401, detail="Incorrect password. For demo accounts use admin123, teacher123, parent123, or student123.")
-    
-    # 2. Demo Presets & Role Aliases
-    demo_accounts = {
-        "principal@edu360.internal": "admin",
-        "admin@edu360.internal": "admin",
-        "ananya.verma@edu360.internal": "teacher",
-        "teacher@edu360.internal": "teacher",
-        "rajesh.sharma@example.com": "parent",
-        "rajesh.sharma@gmail.com": "parent",
-        "parent@edu360.internal": "parent",
-        "aarav.sharma@student.edu360.internal": "student",
-        "aarav.sharma@student.edu360": "student",
-        "aarav.junior@student.edu360.internal": "junior",
-        "junior@edu360.internal": "junior",
-        "aarav.kumar@student.edu360.internal": "junior",
-        "student@edu360.internal": "student"
+            raise HTTPException(status_code=401, detail="Incorrect password. For all institutional accounts, use 'Password123'.")
+
+    # 2. Role Alias Fallback Map
+    role_username_map = {
+        # School Leadership & Coordinators
+        "admin": ("admin", "Dr. Sunita Kapoor"),
+        "principal": ("admin", "Dr. Sunita Kapoor"),
+        "academic_coord": ("academic_coordinator", "Prof. Rajeshwari Nair"),
+        "academic_coordinator": ("academic_coordinator", "Prof. Rajeshwari Nair"),
+        "exam_coord": ("exam_coordinator", "Dr. Hemanth Sen"),
+        "exam_coordinator": ("exam_coordinator", "Dr. Hemanth Sen"),
+        "transport_coord": ("transport_coordinator", "Mr. Vikram Malhotra"),
+        "transport_coordinator": ("transport_coordinator", "Mr. Vikram Malhotra"),
+        "inventory_coord": ("inventory_coordinator", "Mrs. Shalini Rao"),
+        "inventory_coordinator": ("inventory_coordinator", "Mrs. Shalini Rao"),
+        "admissions_coord": ("admissions_coordinator", "Ms. Sneha Kulkarni"),
+        "admissions_coordinator": ("admissions_coordinator", "Ms. Sneha Kulkarni"),
+        "accounts_coord": ("accounts_coordinator", "Mr. Arvind Krishnan"),
+        "accounts_coordinator": ("accounts_coordinator", "Mr. Arvind Krishnan"),
+
+        # Faculty / Teachers
+        "teacher_mat": ("teacher", "Mrs. Ananya Verma"),
+        "teacher": ("teacher", "Mrs. Ananya Verma"),
+        "teacher_math": ("teacher", "Mrs. Ananya Verma"),
+        "teacher_maths": ("teacher", "Mrs. Ananya Verma"),
+        "teacher_sci": ("teacher", "Dr. K. Raman"),
+        "teacher_science": ("teacher", "Dr. K. Raman"),
+        "teacher_chem": ("teacher", "Mrs. S. Sen"),
+        "teacher_eng": ("teacher", "Mrs. Sunitha Rao"),
+        "teacher_soc": ("teacher", "Mrs. Kalyani Murthy"),
+        "teacher_bio": ("teacher", "Dr. Shalini Gupta"),
+
+        # Students
+        "sr_student": ("student", "Aarav Sharma"),
+        "student": ("student", "Aarav Sharma"),
+        "student_sr": ("student", "Aarav Sharma"),
+        "jr_student": ("student", "Aarav Kumar"),
+        "junior": ("student", "Aarav Kumar"),
+        "junior_student": ("student", "Aarav Kumar"),
+
+        # Parents
+        "parent": ("parent", "Mr. Rajesh Sharma"),
     }
 
-    if clean_email in demo_accounts or any(k in clean_email for k in ["principal", "admin", "teacher", "parent", "junior", "student"]):
-        target_role = demo_accounts.get(clean_email)
+    if identifier in role_username_map or any(k in identifier for k in ["admin", "coord", "teacher", "student", "parent", "junior"]):
+        mapped = role_username_map.get(identifier)
+        target_role, target_name = mapped if mapped else (None, None)
+        
         fallback_u = None
-
-        if target_role == "junior" or "junior" in clean_email:
-            # Look up dedicated junior student account
-            j_res = await db.execute(select(User).where(User.email.like("%junior%")))
-            fallback_u = j_res.scalars().first()
-            if not fallback_u:
-                j_res = await db.execute(select(User).where(User.name.like("%Kumar%")))
-                fallback_u = j_res.scalars().first()
-        elif not target_role:
-            if "principal" in clean_email or "admin" in clean_email:
-                target_role = "admin"
-            elif "teacher" in clean_email or "ananya" in clean_email:
-                target_role = "teacher"
-            elif "parent" in clean_email or "rajesh" in clean_email:
-                target_role = "parent"
-            else:
-                target_role = "student"
+        if target_name:
+            u_res = await db.execute(select(User).where(User.name.ilike(f"%{target_name}%")))
+            fallback_u = u_res.scalars().first()
 
         if not fallback_u and target_role:
             u_res = await db.execute(select(User).where(User.role == target_role))
             fallback_u = u_res.scalars().first()
 
-        if fallback_u:
-            redirects = { "admin": "/admin", "teacher": "/teacher", "parent": "/parent", "student": "/student" }
+        if fallback_u and is_valid_pwd:
             grade_tier, is_junior, student_id = await resolve_student_tier_details(fallback_u, db)
             user_dto = UserResponse.model_validate(fallback_u)
             user_dto.grade_tier = grade_tier
@@ -206,15 +237,15 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
 
             return AuthResponse(
                 success=True,
-                message=f"Logged in as {fallback_u.name} ({fallback_u.role.capitalize()})",
+                message=f"Logged in as {fallback_u.name} (@{fallback_u.username or fallback_u.role})",
                 user=user_dto,
-                portal_redirect=redirects.get(fallback_u.role.lower(), "/student"),
+                portal_redirect=PORTAL_REDIRECTS.get(fallback_u.role.lower(), "/student"),
                 grade_tier=grade_tier,
                 is_junior_k5=is_junior,
                 student_id=student_id
             )
 
-    raise HTTPException(status_code=404, detail="Account not found. Please check your email or click Register to create your account.")
+    raise HTTPException(status_code=404, detail=f"Account with username or email '{identifier}' not found. Please verify your username (e.g. sr_student, teacher_mat, admin).")
 
 @router.get("/users", response_model=list[UserResponse])
 async def list_demo_users(db: AsyncSession = Depends(get_db)):

@@ -5,14 +5,26 @@ import {
   FocusTable, LeaveRequest, FeeMilestone, BusRoute,
   StudentPortfolio, ClassRecording,
   StaffMemberItem, TeacherPermissionRequest, InventoryRecord, FeeDefaulter,
+  FeeDefaulterItem, VendorInvoiceItem, PaymentTransactionItem, FinanceDispatchLogItem,
+  FinanceDashboardStats, ApplyWaiverPayload, RecordFeePaymentPayload, BulkReminderPayload,
   TeacherScheduleItem, TeacherDutyItem, TeacherStudentRosterItem,
   JuniorDashboardOverview, GamificationProfile, DailyQuest, MagicBoosterChest,
   AdventureTimetableItem, JuniorBusRadar, ChestUnlockResponse,
   SubstitutionSlot, AvailableFacultyItem, SecurityAuditLog, FeeFinancialAnalytics, AcademicRolloverClass,
   PeriodActivityType, TeacherPersonalScheduleItem, FacultyDutyCategory, FacultyDutyTask,
   InteractionScope, ParentTeacherNote, PTMEventConfig, PTMSlot,
-  TaskType, TaskStatus, BacklogEvent, AcademicCompliance
+  TaskType, TaskStatus, BacklogEvent, AcademicCompliance,
+  TaskExecutiveCockpitResponse, CurriculumPacingItem,
+  TaskReliefRequest, ApproveReliefRequest, ExtendSlaRequest, PTMGovernanceStatus,
+  PTMEventCreate, PTMEventResponse,
+  AIParentStudyGuidanceRequest, AIParentStudyGuidanceResponse,
+  RemedialEarlyWarning, RemedialAdminOverview, SocraticHintResponse,
+  ExamItem, ExamSubmissionItem, WhatsAppDispatchResponse,
+  PreVerifyResponse, VisualFormulaCard,
+  QuestionPaperItem, ExamScheduleItem, OcrScanResultItem, ReportCardItem
 } from './types';
+import { FocusRosterItem, getFocusStudentById, updateFocusStudent, INITIAL_FOCUS_ROSTER } from './focus-data';
+
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -81,10 +93,135 @@ let fallbackTriage: TriageAlert[] = [
 ];
 
 let fallbackTasks: AdminTask[] = [
-  { id: 1, title: "Submit Class 10 Board Exam LOC to CBSE Portal", category: "urgent", due_date: "Today, 5:00 PM", assigned_to: "Academic Coordinator", status: "In Progress", priority: "High" },
-  { id: 2, title: "Inspect Stage Audio & LED Wall Setup for Annual Day", category: "urgent", due_date: "Today, 6:30 PM", assigned_to: "Estate Manager", status: "Pending", priority: "High" },
-  { id: 3, title: "Audit Term 2 Fee Defaulters & Dispatch SMS Digest", category: "upcoming", due_date: "Tomorrow, 11:00 AM", assigned_to: "Accounts Office", status: "Pending", priority: "Medium" },
-  { id: 4, title: "Review 8 New Admission Enquiries from AI Chatbot", category: "upcoming", due_date: "15 Oct, 2:00 PM", assigned_to: "Admissions Head", status: "Pending", priority: "Medium" }
+  {
+    id: 1,
+    title: "Submit Class 10 Board Exam LOC to CBSE Portal",
+    description: "List of Candidates for Board Exams due to CBSE Delhi portal by 5 PM. 312 students registered across Science & Commerce streams.",
+    category: "urgent",
+    domain: "exam",
+    due_date: "Today, 5:00 PM",
+    assigned_to: "Ms. Rekha Iyer",
+    assigned_to_role: "exam_coordinator",
+    created_by_name: "Principal Sharma",
+    created_by_role: "admin",
+    status: "In Progress",
+    priority: "Critical",
+    sla_hours: 8,
+    is_auto_generated: false,
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    title: "Inspect Bus #7 Brake System Before Tomorrow's Route",
+    description: "Driver Ramesh flagged brake sensitivity on Bus #7 (Route 3 — Whitefield corridor). Mechanical inspection + sign-off mandatory before 6 AM departure.",
+    category: "urgent",
+    domain: "transport",
+    due_date: "Today, 7:00 PM",
+    assigned_to: "Mr. Suresh Pillai",
+    assigned_to_role: "transport_coordinator",
+    created_by_name: "System Auto-Trigger",
+    created_by_role: "admin",
+    status: "Pending",
+    priority: "Critical",
+    sla_hours: 6,
+    is_auto_generated: true,
+    trigger_event: "bus_maintenance_flag",
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    title: "Audit Term 2 Fee Defaulters & Dispatch SMS Digest",
+    description: "30 students overdue on Milestone 2 (₹5,55,000 pending). Generate defaulter report, categorize by severity, and dispatch targeted SMS reminders.",
+    category: "upcoming",
+    domain: "finance",
+    due_date: "Tomorrow, 11:00 AM",
+    assigned_to: "Mrs. Lakshmi Narayan",
+    assigned_to_role: "accounts_coordinator",
+    created_by_name: "Principal Sharma",
+    created_by_role: "admin",
+    status: "Pending",
+    priority: "High",
+    sla_hours: 24,
+    is_auto_generated: false,
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 4,
+    title: "Review 8 New Admission Enquiries from AI Chatbot",
+    description: "8 inbound leads from school website chatbot qualify for follow-up. 3 are campus visit bookings for this week. CRM update required.",
+    category: "upcoming",
+    domain: "admissions",
+    due_date: "19 Oct, 2:00 PM",
+    assigned_to: "Ms. Priya Nair",
+    assigned_to_role: "admissions_coordinator",
+    created_by_name: "System Auto-Trigger",
+    created_by_role: "admin",
+    status: "Completed",
+    priority: "Medium",
+    sla_hours: 48,
+    is_auto_generated: true,
+    trigger_event: "crm_lead_batch",
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 5,
+    title: "Approve Term 2 Syllabus Revision for Class 9 Science",
+    description: "Academic Coordinator submitted revised syllabus mapping removing 2 deleted NCERT chapters. Requires Principal sign-off before distribution to teachers.",
+    category: "upcoming",
+    domain: "academic",
+    due_date: "20 Oct, 12:00 PM",
+    assigned_to: "Dr. Ananya Krishnan",
+    assigned_to_role: "academic_coordinator",
+    created_by_name: "Dr. Ananya Krishnan",
+    created_by_role: "academic_coordinator",
+    status: "Pending Review",
+    priority: "Medium",
+    sla_hours: 72,
+    is_auto_generated: false,
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 6,
+    title: "Audit Lab Inventory: Class 10 Chemistry Practicals",
+    description: "Pre-board practical exams start Nov 5. Inventory coordinator must verify reagent stock, broken equipment list, and safety kit availability across Chem & Bio labs.",
+    category: "upcoming",
+    domain: "inventory",
+    due_date: "21 Oct, 5:00 PM",
+    assigned_to: "Mr. Vikram Rao",
+    assigned_to_role: "inventory_coordinator",
+    created_by_name: "Ms. Rekha Iyer",
+    created_by_role: "exam_coordinator",
+    status: "Pending",
+    priority: "High",
+    sla_hours: 96,
+    is_auto_generated: false,
+    is_escalated: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 7,
+    title: "Annual Day Budget Approval — Vendor Payments Pending",
+    description: "3 vendors (Audio-Visual, Decorators, Catering) submitted invoices totalling ₹2,40,000. Requires Principal approval before accounts processes NEFT.",
+    category: "urgent",
+    domain: "executive",
+    due_date: "Today, 6:00 PM",
+    assigned_to: "Principal Sharma",
+    assigned_to_role: "admin",
+    created_by_name: "Mrs. Lakshmi Narayan",
+    created_by_role: "accounts_coordinator",
+    status: "Pending Review",
+    priority: "High",
+    sla_hours: 12,
+    is_auto_generated: false,
+    is_escalated: true,
+    escalation_reason: "Vendors threatening to withdraw services 48 hrs before event",
+    created_at: new Date().toISOString()
+  }
 ];
 
 let fallbackEnquiries: AdmissionEnquiry[] = [
@@ -407,6 +544,23 @@ let fallbackBacklogEvents: BacklogEvent[] = [
     late_submission: false,
     teacher_name: 'Mrs. Ananya Verma',
     notes: 'Student missed scheduled cutoff (15 Oct 2026, 05:00 PM). Automatically transitioned to Backlog for parent PTM evidence review.'
+  },
+  {
+    id: 2,
+    student_id: 1,
+    homework_id: 7,
+    focus_table_id: 1,
+    evidence_code: '#EVD-BKLOG-902',
+    subject: 'Physics',
+    title: 'Optics & Convex Lens: Ray Tracing Lab Sheet',
+    task_type: 'DAILY_HOMEWORK',
+    due_date: '2026-10-17',
+    due_time: '17:00',
+    status: 'UNRESOLVED',
+    detected_at: '2026-10-17T17:20:00Z',
+    late_submission: false,
+    teacher_name: 'Dr. K. Raman',
+    notes: 'Optics ray tracing lab sheet unsubmitted after cutoff. Teacher flagged for Parent-Teacher conference.'
   }
 ];
 
@@ -416,8 +570,8 @@ let fallbackAcademicCompliance: AcademicCompliance = {
   total_assigned: 9,
   on_time_submissions: 2,
   late_submissions: 0,
-  backlog_count: 1,
-  compliance_pct: 88.9,
+  backlog_count: 2,
+  compliance_pct: 77.8,
   itemized_backlogs: fallbackBacklogEvents
 };
 
@@ -556,6 +710,87 @@ let fallbackAvailableFaculty: AvailableFacultyItem[] = [
   { id: 5, name: "Ms. Sunita Roy", department: "Sciences & Biology", free_periods_today: 2, is_subject_match: true, current_status: "Free (Period 4 & 6)" },
   { id: 6, name: "Mr. Arvind Swamy", department: "Mathematics", free_periods_today: 4, is_subject_match: true, current_status: "Free (Period 2 & 5)" },
   { id: 7, name: "Mrs. Shalini Nair", department: "Computer Science", free_periods_today: 2, is_subject_match: false, current_status: "Free (Period 4 & 6)" }
+];
+
+let fallbackCurriculumPacing: CurriculumPacingItem[] = [
+  {
+    id: 1,
+    class_name: "Class 8-B",
+    subject: "Mathematics",
+    teacher_name: "Mrs. Ananya Verma",
+    completed_units: 18,
+    total_units: 22,
+    calendar_target_units: 18,
+    completion_pct: 81.8,
+    status: "On Track",
+    last_lesson_title: "Linear Equations in Two Variables (Practice Ex 3.4)",
+    next_milestone_date: "24 Oct 2026 (Unit Assessment 3)"
+  },
+  {
+    id: 2,
+    class_name: "Class 8-B",
+    subject: "Science",
+    teacher_name: "Dr. Suresh Babu",
+    completed_units: 14,
+    total_units: 20,
+    calendar_target_units: 16,
+    completion_pct: 70.0,
+    status: "Lagging (2 Units Behind)",
+    last_lesson_title: "Light & Reflection Principles",
+    next_milestone_date: "28 Oct 2026 (Mid-Term Lab Practical)"
+  },
+  {
+    id: 3,
+    class_name: "Class 9-A",
+    subject: "English Literature",
+    teacher_name: "Mrs. Neha Roy",
+    completed_units: 16,
+    total_units: 18,
+    calendar_target_units: 15,
+    completion_pct: 88.9,
+    status: "Ahead (+1 Unit)",
+    last_lesson_title: "The Road Not Taken - Critical Appreciation",
+    next_milestone_date: "30 Oct 2026 (Poetry Essay Submission)"
+  },
+  {
+    id: 4,
+    class_name: "Class 10-A",
+    subject: "Social Studies",
+    teacher_name: "Mr. Arvind Saxena",
+    completed_units: 21,
+    total_units: 24,
+    calendar_target_units: 20,
+    completion_pct: 87.5,
+    status: "On Track",
+    last_lesson_title: "Federalism & Decentralization in India",
+    next_milestone_date: "05 Nov 2026 (Pre-Board Milestone 1)"
+  },
+  {
+    id: 5,
+    class_name: "Class 10-B",
+    subject: "Physics",
+    teacher_name: "Dr. Radhika Sen",
+    completed_units: 19,
+    total_units: 20,
+    calendar_target_units: 18,
+    completion_pct: 95.0,
+    status: "Ahead (+1 Unit)",
+    last_lesson_title: "Magnetic Effects of Electric Current",
+    next_milestone_date: "02 Nov 2026 (Board Numerical Workshop)"
+  },
+  {
+    id: 6,
+    class_name: "Class 7-A",
+    subject: "Hindi",
+    teacher_name: "Mrs. Rekha Sharma",
+    completed_units: 12,
+    total_units: 18,
+    calendar_target_units: 14,
+    completion_pct: 66.7,
+    status: "Lagging (2 Units Behind)",
+    last_lesson_title: "Grammar: Sandhi and Samas",
+    next_milestone_date: "26 Oct 2026 (Class Diagnostic Quiz)"
+  }
 ];
 
 let fallbackTeacherPersonalSchedule: TeacherPersonalScheduleItem[] = [
@@ -917,24 +1152,37 @@ let fallbackPTMSlots: PTMSlot[] = [
     booked_student_id: 1,
     booked_student_name: "Aarav Sharma",
     booked_class: "8-B",
-    booked_parent_id: "par-01",
+    booked_parent_id: "rajesh_sharma",
     booked_parent_name: "Mr. Rajesh Sharma",
-    subject_name: "Homeroom Class Review (8-B)",
+    subject_name: "Mathematics & Class 8-B Homeroom",
     is_sibling_combo: false,
     meeting_url: "https://meet.google.com/edu-ptm-aarav-8b",
-    focus_table_agenda: ["Algebraic Word Problems", "Attendance Stability"]
+    focus_table_agenda: [
+      "Review Mid-Term Exam (52%) Q7 & Q9 Sign Errors",
+      "Worksheet #4 Backlog Evidence (#EVD-BKLOG-884)",
+      "Day 3 Rough Notebook Parent Sign-off Inspection"
+    ]
   },
   {
     id: "slot-02",
     event_id: "ptm-conf-2026-term1",
-    teacher_id: "ananya",
+    teacher_id: "raman",
     start_time: "09:12 AM",
     end_time: "09:22 AM",
-    status: "AVAILABLE",
-    interaction_scope: "HOMEROOM_CLASS",
-    booked_student_id: undefined,
-    meeting_url: "https://meet.google.com/edu-ptm-slot-02",
-    focus_table_agenda: []
+    status: "BOOKED",
+    interaction_scope: "SUBJECT_SPECIFIC",
+    booked_student_id: 1,
+    booked_student_name: "Aarav Sharma",
+    booked_class: "8-B",
+    booked_parent_id: "rajesh_sharma",
+    booked_parent_name: "Mr. Rajesh Sharma",
+    subject_name: "Physics (Dr. K. Raman)",
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-aarav-physics",
+    focus_table_agenda: [
+      "Optics Ray Tracing Lab Backlog (#EVD-BKLOG-902)",
+      "Mid-Term Q3 Concave Mirror Focal Point Reflection Error"
+    ]
   },
   {
     id: "slot-03",
@@ -942,15 +1190,21 @@ let fallbackPTMSlots: PTMSlot[] = [
     teacher_id: "ananya",
     start_time: "09:24 AM",
     end_time: "09:34 AM",
-    status: "HELD",
-    interaction_scope: "SUBJECT_SPECIFIC",
-    subject_name: "Mathematics",
+    status: "BOOKED",
+    interaction_scope: "HOMEROOM_CLASS",
     booked_student_id: 2,
-    booked_student_name: "Rohan Deshmukh",
-    booked_class: "8-A",
-    booked_parent_name: "Dr. Amit Deshmukh",
-    meeting_url: "https://meet.google.com/edu-ptm-slot-03",
-    focus_table_agenda: ["Quadratic Equations"]
+    booked_student_name: "Kabir Mehta",
+    booked_class: "8-B",
+    booked_parent_id: "rekha_mehta",
+    booked_parent_name: "Mrs. Rekha Mehta",
+    subject_name: "Mathematics",
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-kabir-math",
+    focus_table_agenda: [
+      "Review Exam Score 48% (Flagged Q3, Q5, Q8)",
+      "Linear Inequalities Backlog (#EVD-BKLOG-715)",
+      "Negative Division Sign Inversion Rule"
+    ]
   },
   {
     id: "slot-04",
@@ -960,54 +1214,83 @@ let fallbackPTMSlots: PTMSlot[] = [
     end_time: "09:56 AM",
     status: "BOOKED",
     interaction_scope: "HOMEROOM_CLASS",
-    booked_student_id: 3,
-    booked_student_name: "Meera Nambiar",
+    booked_student_id: 1,
+    booked_student_name: "Aarav Sharma",
     booked_class: "8-B",
-    booked_parent_name: "Mrs. Shobha Nambiar",
+    booked_parent_id: "rajesh_sharma",
+    booked_parent_name: "Mr. Rajesh Sharma",
+    subject_name: "Class 8-B Homeroom & Junior Sibling Consultation",
     is_sibling_combo: true,
-    sibling_student_id: 5,
-    sibling_student_name: "Kavya Nambiar (Class 5-A)",
-    meeting_url: "https://meet.google.com/edu-ptm-sibling-combo-04",
-    focus_table_agenda: ["Holistic Report Card", "Sibling Co-curricular Alignment"]
+    sibling_student_id: 8,
+    sibling_student_name: "Aarav Kumar (Class 3-A Junior)",
+    meeting_url: "https://meet.google.com/edu-sharma-sibling-ptm",
+    focus_table_agenda: [
+      "Aarav's 1-Week Remedial Pacing & Zero-period Support",
+      "Aarav Junior's Phonics Reading Booster & Magic Chest Stars"
+    ]
   },
   {
     id: "slot-05",
     event_id: "ptm-conf-2026-term1",
-    teacher_id: "ananya",
-    start_time: "10:10 AM",
-    end_time: "10:20 AM",
+    teacher_id: "sen",
+    start_time: "10:00 AM",
+    end_time: "10:10 AM",
     status: "BOOKED",
     interaction_scope: "SUBJECT_SPECIFIC",
-    subject_name: "Mathematics",
-    booked_student_id: 8,
-    booked_student_name: "Tanvi Deshmukh",
-    booked_class: "7-A",
-    booked_parent_name: "Dr. Alok Deshmukh",
-    locked_by_class: "Class 7-A Parent",
-    meeting_url: "https://meet.google.com/edu-ptm-cross-class-lock",
-    focus_table_agenda: ["Algebra Foundation", "Cross-Class PTM Locking"]
+    booked_student_id: 2,
+    booked_student_name: "Kabir Mehta",
+    booked_class: "8-B",
+    booked_parent_id: "rekha_mehta",
+    booked_parent_name: "Mrs. Rekha Mehta",
+    subject_name: "Chemistry (Mrs. S. Sen)",
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-kabir-chem",
+    focus_table_agenda: [
+      "Redox Equations Balancing Practice Backlog (#EVD-BKLOG-716)",
+      "Stoichiometric Balancing Deficit"
+    ]
   },
   {
     id: "slot-05b",
     event_id: "ptm-conf-2026-term1",
-    teacher_id: "ananya",
-    start_time: "10:20 AM",
-    end_time: "10:30 AM",
-    status: "AVAILABLE",
+    teacher_id: "sunitha",
+    start_time: "10:12 AM",
+    end_time: "10:22 AM",
+    status: "BOOKED",
     interaction_scope: "SUBJECT_SPECIFIC",
-    subject_name: "Mathematics",
-    meeting_url: "https://meet.google.com/edu-ptm-slot-05b"
+    booked_student_id: 4,
+    booked_student_name: "Siddharth Verma",
+    booked_class: "8-A",
+    booked_parent_id: "alok_verma",
+    booked_parent_name: "Mr. Alok Verma",
+    subject_name: "English Literature (Mrs. Sunitha Rao)",
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-siddharth-english",
+    focus_table_agenda: [
+      "The Merchant of Venice Essay Backlog (#EVD-BKLOG-821)",
+      "Act IV Scene 1 Textual Citations"
+    ]
   },
   {
     id: "slot-05c",
     event_id: "ptm-conf-2026-term1",
     teacher_id: "ananya",
-    start_time: "10:30 AM",
-    end_time: "10:40 AM",
-    status: "AVAILABLE",
+    start_time: "10:24 AM",
+    end_time: "10:34 AM",
+    status: "BOOKED",
     interaction_scope: "SUBJECT_SPECIFIC",
+    booked_student_id: 4,
+    booked_student_name: "Siddharth Verma",
+    booked_class: "8-A",
+    booked_parent_id: "alok_verma",
+    booked_parent_name: "Mr. Alok Verma",
     subject_name: "Mathematics",
-    meeting_url: "https://meet.google.com/edu-ptm-slot-05c"
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-siddharth-math",
+    focus_table_agenda: [
+      "Arithmetic Progressions Common Difference Backlog (#EVD-BKLOG-820)",
+      "Exam Score 44% Decreasing Sequence Diagnostic"
+    ]
   },
   {
     id: "slot-break-tea",
@@ -1224,61 +1507,152 @@ export const api = {
       affiliation: 'CBSE Affiliation #883921'
     });
   },
-  login: async (email: string, password?: string, schoolCode?: string) => {
-    const normEmail = (email || '').toLowerCase().trim();
+  login: async (usernameOrEmail: string, password?: string, schoolCode?: string) => {
+    const norm = (usernameOrEmail || '').toLowerCase().trim();
     let userRole = 'student';
     let userName = 'Aarav Sharma';
+    let username = 'sr_student';
     let redirect = '/student';
     let avatar = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150';
     let userId = 4;
     let phone = '+91 98111 00004';
+    let gradeTier = 'secondary';
+    let isJunior = false;
 
-    if (normEmail.includes('principal') || normEmail.includes('admin')) {
+    if (norm === 'admin' || norm.includes('principal') || norm.includes('kapoor')) {
       userRole = 'admin';
       userName = 'Dr. Sunita Kapoor';
+      username = 'admin';
       redirect = '/admin';
       avatar = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150';
       userId = 1;
       phone = '+91 98111 00001';
-    } else if (normEmail.includes('teacher') || normEmail.includes('ananya')) {
+    } else if (norm === 'academic_coord' || norm.includes('academic')) {
+      userRole = 'academic_coordinator';
+      userName = 'Prof. Rajeshwari Nair';
+      username = 'academic_coord';
+      redirect = '/academic_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150';
+      userId = 6;
+      phone = '+91 98111 00006';
+    } else if (norm === 'exam_coord' || norm.includes('exam')) {
+      userRole = 'exam_coordinator';
+      userName = 'Dr. Hemanth Sen';
+      username = 'exam_coord';
+      redirect = '/exam_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150';
+      userId = 8;
+      phone = '+91 98111 00008';
+    } else if (norm === 'transport_coord' || norm.includes('transport')) {
+      userRole = 'transport_coordinator';
+      userName = 'Mr. Vikram Malhotra';
+      username = 'transport_coord';
+      redirect = '/transport_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150';
+      userId = 7;
+      phone = '+91 98111 00007';
+    } else if (norm === 'inventory_coord' || norm.includes('inventory')) {
+      userRole = 'inventory_coordinator';
+      userName = 'Mrs. Shalini Rao';
+      username = 'inventory_coord';
+      redirect = '/inventory_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150';
+      userId = 9;
+      phone = '+91 98111 00009';
+    } else if (norm === 'admissions_coord' || norm.includes('admission')) {
+      userRole = 'admissions_coordinator';
+      userName = 'Ms. Sneha Kulkarni';
+      username = 'admissions_coord';
+      redirect = '/admissions_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+      userId = 10;
+      phone = '+91 98111 00010';
+    } else if (norm === 'accounts_coord' || norm.includes('account')) {
+      userRole = 'accounts_coordinator';
+      userName = 'Mr. Arvind Krishnan';
+      username = 'accounts_coord';
+      redirect = '/accounts_coordinator';
+      avatar = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150';
+      userId = 11;
+      phone = '+91 98111 00011';
+    } else if (norm === 'teacher_sci' || norm.includes('raman')) {
+      userRole = 'teacher';
+      userName = 'Dr. K. Raman';
+      username = 'teacher_sci';
+      redirect = '/teacher';
+      avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
+      userId = 12;
+      phone = '+91 98111 22332';
+    } else if (norm === 'teacher_eng' || norm.includes('sunitha')) {
+      userRole = 'teacher';
+      userName = 'Mrs. Sunitha Rao';
+      username = 'teacher_eng';
+      redirect = '/teacher';
+      avatar = 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150';
+      userId = 14;
+      phone = '+91 98111 22331';
+    } else if (norm === 'teacher_soc' || norm.includes('kalyani')) {
+      userRole = 'teacher';
+      userName = 'Mrs. Kalyani Murthy';
+      username = 'teacher_soc';
+      redirect = '/teacher';
+      avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+      userId = 15;
+      phone = '+91 98111 22335';
+    } else if (norm.startsWith('teacher') || norm.includes('ananya')) {
       userRole = 'teacher';
       userName = 'Mrs. Ananya Verma';
+      username = 'teacher_mat';
       redirect = '/teacher';
       avatar = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150';
       userId = 2;
       phone = '+91 98111 00002';
-    } else if (normEmail.includes('parent') || normEmail.includes('rajesh')) {
+    } else if (norm === 'parent' || norm.includes('rajesh')) {
       userRole = 'parent';
       userName = 'Mr. Rajesh Sharma';
+      username = 'parent';
       redirect = '/parent';
       avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
       userId = 3;
       phone = '+91 98111 00003';
-    } else if (normEmail.includes('junior')) {
+    } else if (norm === 'jr_student' || norm.includes('junior')) {
       userRole = 'student';
       userName = 'Aarav Kumar';
+      username = 'jr_student';
       redirect = '/student';
-      avatar = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150';
-      userId = 6;
-      phone = '+91 98111 00006';
+      avatar = 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150';
+      userId = 5;
+      phone = '+91 98111 00005';
+      gradeTier = 'k5';
+      isJunior = true;
     }
 
     return fetchWithFallback<any>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password, school_code: schoolCode })
+      body: JSON.stringify({ 
+        username: usernameOrEmail, 
+        email: usernameOrEmail, 
+        password: password || 'Password123', 
+        school_code: schoolCode 
+      })
     }, {
       success: true,
-      message: 'Login successful',
+      message: `Login successful as ${userName}`,
       user: {
         id: userId,
         name: userName,
-        email,
+        username,
+        email: usernameOrEmail.includes('@') ? usernameOrEmail : `${username}@edu360.internal`,
         role: userRole as any,
         school_code: schoolCode || 'EDU-GLOBAL-360',
         avatar,
-        phone
+        phone,
+        grade_tier: gradeTier,
+        is_junior_k5: isJunior
       },
-      portal_redirect: redirect
+      portal_redirect: redirect,
+      grade_tier: gradeTier,
+      is_junior_k5: isJunior
     });
   },
   register: async (data: { school_code: string; name: string; email: string; password: string; role: string; identifier?: string; phone?: string }) => {
@@ -1411,6 +1785,7 @@ export const api = {
         id: fallbackTasks.length + 1,
         title: task.title,
         category: task.category,
+        domain: 'executive',
         due_date: task.due_date,
         assigned_to: task.assigned_to,
         priority: task.priority,
@@ -1448,14 +1823,25 @@ export const api = {
   getInventory: async () => {
     return fetchWithFallback<InventoryRecord[]>('/api/admin/inventory', undefined, fallbackInventory);
   },
-  getFeeDefaulters: async () => {
-    return fetchWithFallback<FeeDefaulter[]>('/api/admin/fees/defaulters', undefined, fallbackFeeDefaulters);
-  },
-  sendFeeReminder: async (defaulterId: number) => {
+  getFeeDefaulters: async (params?: { aging_tier?: string; status?: string; class_name?: string; search?: string }): Promise<FeeDefaulter[]> => {
     try {
-      return await fetchWithFallback(`/api/admin/fees/defaulters/${defaulterId}/remind`, { method: 'POST' });
+      const q = new URLSearchParams();
+      if (params?.aging_tier) q.set('aging_tier', params.aging_tier);
+      if (params?.status) q.set('status', params.status);
+      if (params?.class_name) q.set('class_name', params.class_name);
+      if (params?.search) q.set('search', params.search);
+      const url = `/api/finance/defaulters${q.toString() ? '?' + q.toString() : ''}`;
+      const res = await fetchWithFallback<FeeDefaulter[]>(url, undefined, fallbackFeeDefaulters);
+      return Array.isArray(res) ? res : [];
     } catch {
-      fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => d.id === defaulterId ? { ...d, reminder_sent: true } : d);
+      return fallbackFeeDefaulters;
+    }
+  },
+  sendFeeReminder: async (id: number, channel: string = 'WhatsApp'): Promise<any> => {
+    try {
+      return await fetchWithFallback(`/api/finance/defaulters/${id}/reminder?channel=${encodeURIComponent(channel)}`, { method: 'POST' });
+    } catch {
+      fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => d.id === id ? { ...d, reminder_sent: true } : d);
       return { success: true };
     }
   },
@@ -1502,6 +1888,44 @@ export const api = {
         return s;
       });
       return { success: true, message: 'Auto-resolved all unassigned periods', slots: fallbackSubstitutions };
+    }
+  },
+
+  // Academic Curriculum Pacing Engine
+  getCurriculumPacing: async () => {
+    return fetchWithFallback<CurriculumPacingItem[]>('/api/admin/academic/curriculum-pacing', undefined, fallbackCurriculumPacing);
+  },
+  logCurriculumLesson: async (itemId: number, unitsToAdd: number = 1, lessonTitle?: string) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; item: CurriculumPacingItem }>(`/api/admin/academic/curriculum-pacing/${itemId}/log-lesson`, {
+        method: 'POST',
+        body: JSON.stringify({ units_to_add: unitsToAdd, lesson_title: lessonTitle })
+      });
+    } catch {
+      fallbackCurriculumPacing = fallbackCurriculumPacing.map(item => {
+        if (item.id === itemId) {
+          const completed = Math.min(item.total_units, item.completed_units + unitsToAdd);
+          const pct = Math.round((completed / item.total_units) * 1000) / 10;
+          return {
+            ...item,
+            completed_units: completed,
+            completion_pct: pct,
+            last_lesson_title: lessonTitle || item.last_lesson_title
+          };
+        }
+        return item;
+      });
+      const updated = fallbackCurriculumPacing.find(i => i.id === itemId)!;
+      return { success: true, item: updated };
+    }
+  },
+  interveneCurriculumPacing: async (itemId: number) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string }>(`/api/admin/academic/curriculum-pacing/${itemId}/intervene`, {
+        method: 'POST'
+      });
+    } catch {
+      return { success: true, message: 'Created remediation task for faculty' };
     }
   },
 
@@ -2028,6 +2452,33 @@ export const api = {
     }
   },
 
+  getAIParentStudyGuidance: async (req: AIParentStudyGuidanceRequest): Promise<AIParentStudyGuidanceResponse> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/parent/ai-study-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback below
+    }
+    const subj = req.subject_name || 'Mathematics';
+    const day = req.active_day || 'Day 3';
+    return {
+      plain_english_translation: `In ${subj}, your child understands the core steps, but tends to drop or mix up minus signs when expanding brackets across multiple terms. Think of it like baking a great cake but forgetting the pinch of salt at the end—a simple habit to fix once noticed!`,
+      tonight_action: `Open their rough notebook to tonight's ${day} practice. Ask them to solve '-(3x - 5)' out loud and explain what happens to the minus sign. Check that they write '-3x + 5' instead of '-3x - 5'.`,
+      child_motivation_tip: "You've already mastered the hard algebraic steps—now we're just training our eyes like a detective for those sneaky minus signs. You're making real progress!",
+      suggested_teacher_question: `Dear Teacher, we reviewed Aarav's bracket sign distribution in his rough notebook tonight. Could you please glance at his ${day} solution tomorrow to verify if his sign handling is improving?`,
+      has_backlog: true,
+      backlog_count: 1,
+      source: 'fallback',
+      model_used: 'gemini-1.5-flash'
+    };
+  },
+
   // Student Endpoints
   getStudentRecordings: async () => {
     const fallbackRecordings: ClassRecording[] = [
@@ -2381,5 +2832,1011 @@ export const api = {
 
   getStudentBacklogs: async (studentId: number = 1) => {
     return fetchWithFallback<BacklogEvent[]>(`/api/student/backlog-events/${studentId}`, undefined, fallbackBacklogEvents);
+  },
+
+  // --- Operational Task Manager (Decentralized Coordinator Tasks) ---
+  getAdminTasks: async (domain?: string, status?: string, is_escalated?: boolean) => {
+    const params = new URLSearchParams();
+    if (domain && domain !== 'all') params.append('domain', domain);
+    if (status && status !== 'all') params.append('status', status);
+    if (is_escalated !== undefined) params.append('is_escalated', String(is_escalated));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return fetchWithFallback<AdminTask[]>(`/api/admin/tasks${query}`, undefined, fallbackTasks);
+  },
+
+  getTaskExecutiveCockpit: async () => {
+    const fallback: TaskExecutiveCockpitResponse = {
+      total_open: fallbackTasks.filter(t => !['Completed','Done'].includes(t.status || '')).length,
+      critical_escalations: fallbackTasks.filter(t => t.is_escalated || t.priority === 'Critical').length,
+      overdue_count: fallbackTasks.filter(t => t.category === 'urgent' && t.status !== 'Completed').length,
+      auto_generated_count: fallbackTasks.filter(t => t.is_auto_generated).length,
+      department_stats: [
+        { domain: 'academic', label: 'Academic & Curriculum', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+        { domain: 'exam', label: 'Examination Cell', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+        { domain: 'transport', label: 'Yellow Bus Fleet', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+        { domain: 'inventory', label: 'Asset & Lab Store', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+        { domain: 'admissions', label: 'Admissions & CRM', total_tasks: 1, open_tasks: 0, completed_tasks: 1, completion_rate_pct: 100 },
+        { domain: 'finance', label: 'Finance & Bursar', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+        { domain: 'executive', label: 'Executive Mandates', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
+      ],
+      recent_tasks: fallbackTasks.slice(0, 7),
+    };
+    return fetchWithFallback<TaskExecutiveCockpitResponse>('/api/admin/tasks/executive-cockpit', undefined, fallback);
+  },
+
+  createAdminTask: async (task: Partial<AdminTask>) => {
+    const res = await fetchWithFallback<AdminTask>('/api/admin/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    }, { ...task, id: Date.now() } as AdminTask);
+    fallbackTasks = [res, ...fallbackTasks];
+    return res;
+  },
+
+  updateAdminTask: async (taskId: number, updates: Partial<AdminTask>) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }, fallbackTasks.find(t => t.id === taskId) as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
+    return res;
+  },
+
+  escalateAdminTask: async (taskId: number, reason: string) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/escalate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }, { ...(fallbackTasks.find(t => t.id === taskId) || {}), is_escalated: true, priority: 'Critical' } as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? { ...t, is_escalated: true, priority: 'Critical', escalation_reason: reason } : t);
+    return res;
+  },
+
+  autoTriggerTask: async (event_type: string, entity_id?: string, notes?: string) => {
+    const res = await fetchWithFallback<AdminTask>('/api/admin/tasks/auto-trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type, entity_id, notes }),
+    }, { id: Date.now(), title: `Auto-Triggered: ${event_type}`, category: 'urgent', domain: 'executive', due_date: 'Today', assigned_to: 'System', status: 'Pending', priority: 'High', is_auto_generated: true, trigger_event: event_type } as AdminTask);
+    fallbackTasks = [res, ...fallbackTasks];
+    return res;
+  },
+
+  requestTaskRelief: async (taskId: number, data: TaskReliefRequest) => {
+    try {
+      const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/request-relief`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        relief_requested: true,
+        relief_reason: data.relief_reason,
+        relief_justification: data.justification,
+        suggested_peer_teacher: data.suggested_peer_teacher,
+        status: 'Relief Requested'
+      } : t);
+      return res;
+    } catch {
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        relief_requested: true,
+        relief_reason: data.relief_reason,
+        relief_justification: data.justification,
+        suggested_peer_teacher: data.suggested_peer_teacher,
+        status: 'Relief Requested'
+      } : t);
+      return fallbackTasks.find(t => t.id === taskId)!;
+    }
+  },
+
+  approveTaskRelief: async (taskId: number, data: ApproveReliefRequest) => {
+    try {
+      const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/approve-relief`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        assigned_to: data.new_assigned_to,
+        relief_requested: false,
+        status: 'Pending',
+        sla_hours: data.new_sla_hours || 48
+      } : t);
+      return res;
+    } catch {
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        assigned_to: data.new_assigned_to,
+        relief_requested: false,
+        status: 'Pending',
+        sla_hours: data.new_sla_hours || 48
+      } : t);
+      return fallbackTasks.find(t => t.id === taskId)!;
+    }
+  },
+
+  extendTaskSla: async (taskId: number, data: ExtendSlaRequest) => {
+    try {
+      const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/extend-sla`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        sla_hours: (t.sla_hours || 24) + data.additional_hours,
+        relief_requested: false,
+        status: 'Pending'
+      } : t);
+      return res;
+    } catch {
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        sla_hours: (t.sla_hours || 24) + data.additional_hours,
+        relief_requested: false,
+        status: 'Pending'
+      } : t);
+      return fallbackTasks.find(t => t.id === taskId)!;
+    }
+  },
+
+  getPTMGovernance: async () => {
+    const fallback: PTMGovernanceStatus = {
+      active_event_title: "Term-2 Mid-Term Parent-Teacher Meeting",
+      event_date: "Saturday, 24 Oct 2026",
+      time_window: "09:00 AM – 01:00 PM",
+      slot_duration_mins: 10,
+      total_teachers: 30,
+      published_teachers_count: 28,
+      readiness_percentage: 93.3,
+      unready_teachers: ["Dr. Suresh Babu (Science)", "Mrs. Rekha Sharma (Hindi)"],
+      focus_students_requiring_brief: 6
+    };
+    return fetchWithFallback<PTMGovernanceStatus>('/api/admin/ptm/governance', undefined, fallback);
+  },
+
+  getPTMEvents: async () => {
+    const fallback: PTMEventResponse[] = [
+      {
+        id: 1,
+        title: "Post Mid-Term Evaluation PTM (Grades 8, 9, 10)",
+        academic_term: "Term 1",
+        start_date: "2026-10-24",
+        end_date: "2026-10-25",
+        start_time: "09:00 AM",
+        end_time: "01:00 PM",
+        slot_duration_mins: 10,
+        target_classes: ["Class 8-A", "Class 8-B", "Class 9-A", "Class 9-B", "Class 10-A"],
+        status: "Active",
+        created_by_name: "Academic Coordinator",
+        created_at: new Date().toISOString()
+      }
+    ];
+    return fetchWithFallback<PTMEventResponse[]>('/api/admin/ptm/events', undefined, fallback);
+  },
+
+  declarePTMEvent: async (data: PTMEventCreate) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; event: PTMEventResponse; tasks_broadcast: number }>('/api/admin/ptm/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const fallbackEvent: PTMEventResponse = {
+        id: Math.floor(Math.random() * 9000) + 100,
+        title: data.title,
+        academic_term: data.academic_term || 'Term 1',
+        start_date: data.start_date,
+        end_date: data.end_date,
+        start_time: data.start_time || '09:00 AM',
+        end_time: data.end_time || '01:00 PM',
+        slot_duration_mins: data.slot_duration_mins || 10,
+        target_classes: data.target_classes,
+        status: 'Active',
+        created_by_name: 'Academic Coordinator',
+        created_at: new Date().toISOString()
+      };
+      return {
+        success: true,
+        message: `Successfully declared PTM '${data.title}' (Offline fallback)`,
+        event: fallbackEvent,
+        tasks_broadcast: data.target_classes.length * 3
+      };
+    }
+  },
+
+  remindUnreadyPTMTeachers: async () => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string }>('/api/admin/ptm/remind-unready', {
+        method: 'POST'
+      });
+    } catch {
+      return { success: true, message: "Dispatched urgent 6-hour SLA task to 2 defaulting teachers" };
+    }
+  },
+
+  teacherLogCurriculumUnit: async (className: string, subject: string, unitsToAdd: number = 1, lessonTitle?: string) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; item: CurriculumPacingItem }>('/api/teacher/curriculum/log-unit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_name: className, subject, units_to_add: unitsToAdd, lesson_title: lessonTitle })
+      });
+    } catch {
+      fallbackCurriculumPacing = fallbackCurriculumPacing.map(item => {
+        if (item.class_name === className && item.subject === subject) {
+          const completed = Math.min(item.total_units, item.completed_units + unitsToAdd);
+          return {
+            ...item,
+            completed_units: completed,
+            completion_pct: Math.round((completed / item.total_units) * 1000) / 10,
+            last_lesson_title: lessonTitle || item.last_lesson_title
+          };
+        }
+        return item;
+      });
+      return { success: true, item: fallbackCurriculumPacing.find(i => i.class_name === className && i.subject === subject)! };
+    }
+  },
+
+  // =========================================================================
+  // REMEDIAL FOCUS TABLE & DIAGNOSTIC LAG INTELLIGENCE (Cross-Role Sync)
+  // =========================================================================
+  getRemedialRoster: async () => {
+    try {
+      return await fetchWithFallback<{ success: boolean; count: number; roster: FocusRosterItem[] }>('/api/remedial/roster');
+    } catch {
+      return { success: true, count: INITIAL_FOCUS_ROSTER.length, roster: INITIAL_FOCUS_ROSTER };
+    }
+  },
+
+  getRemedialStudent: async (studentId: number) => {
+    try {
+      const res = await fetchWithFallback<any>(`/api/remedial/student/${studentId}`);
+      if (res && res.student) {
+        return { success: true, student: res.student as FocusRosterItem };
+      }
+      return { success: true, student: res as FocusRosterItem };
+    } catch {
+      const student = getFocusStudentById(studentId) || INITIAL_FOCUS_ROSTER[0];
+      return { success: true, student };
+    }
+  },
+
+  generateRemedialSprint: async (studentId: number) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; student: FocusRosterItem; source: string }>('/api/remedial/generate-sprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId })
+      });
+    } catch {
+      const student = getFocusStudentById(studentId) || INITIAL_FOCUS_ROSTER[0];
+      return { success: true, student, source: 'fallback' };
+    }
+  },
+
+  scanStudentPapers: async (data: {
+    student_id: number;
+    exam_paper_name?: string;
+    exam_paper_data?: string;
+    exam_paper_mime?: string;
+    homework_paper_name?: string;
+    homework_paper_data?: string;
+    homework_paper_mime?: string;
+    assignment_notes?: string;
+  }) => {
+    try {
+      return await fetchWithFallback<{
+        success: boolean;
+        student: FocusRosterItem;
+        extracted_papers_ocr?: {
+          exam_paper_transcript?: string;
+          homework_paper_transcript?: string;
+          identified_errors?: string[];
+          calculated_score_pct?: number;
+        };
+        source: string;
+      }>('/api/remedial/scan-student-papers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const student = getFocusStudentById(data.student_id) || INITIAL_FOCUS_ROSTER[0];
+      return { success: true, student, source: 'fallback' };
+    }
+  },
+
+  getRemedialSocraticHint: async (data: { student_id: number; day_num: number; question_text: string; student_notes?: string; attempt_count?: number }) => {
+    try {
+      return await fetchWithFallback<SocraticHintResponse>('/api/remedial/socratic-hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const attempts = data.attempt_count || 1;
+      return {
+        success: true,
+        hint: attempts === 1 
+          ? "Remember the distribution law: a minus sign outside parentheses reverses every sign inside. Try writing -(x - 3) as -1 * (x) + (-1) * (-3)."
+          : "Focus specifically on the second term: (-1) * (-7). When two negative numbers multiply, their product becomes positive!",
+        guiding_question: attempts === 1 
+          ? "When you distribute -1 across both terms, what does -1 * -3 become?"
+          : "What is (-1) * (-7)? Does it stay negative or flip to +7?",
+        source: "fallback",
+        attempt_count: attempts,
+        formula_card: attempts >= 2 ? {
+          title: "Algebraic Parentheses & Negative Sign Rule",
+          rule: "-(a - b) = -a + b",
+          explanation: "A minus sign directly outside brackets acts as multiplying every term inside by -1. Both signs flip!",
+          visual_steps: [
+            "1. -(3x - 7) has a negative sign outside brackets",
+            "2. Distribute: (-1)*(3x) + (-1)*(-7)",
+            "3. Result: -3x + 7 (Note +7 flips to positive!)"
+          ]
+        } : undefined,
+        flagged_for_teacher: attempts >= 3,
+        escalation_message: attempts >= 3 ? "Stuck after 3 Socratic hints. Flagged for Teacher 5-Minute In-Class Huddle! Problem marked unlocked so you can continue." : undefined
+      };
+    }
+  },
+
+  preVerifyRemedialRoughWork: async (data: { student_id: number; day_num: number; rubric_checkpoint?: string; student_notes?: string }) => {
+    try {
+      return await fetchWithFallback<PreVerifyResponse>('/api/remedial/pre-verify-rough-work', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      return {
+        success: true,
+        ai_status: 'passed' as const,
+        confidence: 0.94,
+        ai_rubric_match: 'Rubric Checkpoint Verified: Intermediate bracket expansion +7 sign change detected.',
+        recommendation: '1-Click Approve',
+        verified_at: 'Just now'
+      };
+    }
+  },
+
+  uploadRemedialRoughWork: async (data: { student_id: number; day_num: number; file_name: string; file_size?: string; student_notes?: string }) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; student: FocusRosterItem; message: string }>('/api/remedial/upload-rough-work', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const student = getFocusStudentById(data.student_id);
+      if (student) {
+        student.plan_days = student.plan_days.map(d => {
+          if (d.day_num === data.day_num) {
+            return {
+              ...d,
+              status: 'Pending',
+              submitted_file: {
+                name: data.file_name,
+                size: data.file_size || '1.4 MB',
+                submitted_at: 'Just now',
+                student_notes: data.student_notes
+              }
+            };
+          }
+          return d;
+        });
+        updateFocusStudent(data.student_id, student);
+      }
+      return {
+        success: true,
+        student: getFocusStudentById(data.student_id) || INITIAL_FOCUS_ROSTER[0],
+        message: 'Rough work uploaded successfully (Offline fallback)'
+      };
+    }
+  },
+
+  verifyRemedialDay: async (data: { student_id: number; day_num: number; action: 'approve' | 'rework'; teacher_remarks?: string }) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; student: FocusRosterItem; message: string }>('/api/remedial/verify-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const student = getFocusStudentById(data.student_id);
+      if (student) {
+        student.plan_days = student.plan_days.map(d => {
+          if (d.day_num === data.day_num) {
+            return {
+              ...d,
+              status: data.action === 'approve' ? 'Completed' : 'Pending'
+            };
+          }
+          return d;
+        });
+        updateFocusStudent(data.student_id, student);
+      }
+      return {
+        success: true,
+        student: getFocusStudentById(data.student_id) || INITIAL_FOCUS_ROSTER[0],
+        message: `Day ${data.day_num} marked as ${data.action === 'approve' ? 'Completed' : 'Rework requested'}`
+      };
+    }
+  },
+
+  parentVerifyRemedial: async (data: { student_id: number; day_num: number }) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; student: FocusRosterItem; message: string }>('/api/remedial/parent-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      return {
+        success: true,
+        student: getFocusStudentById(data.student_id) || INITIAL_FOCUS_ROSTER[0],
+        message: `Parent verification recorded for Day ${data.day_num}`
+      };
+    }
+  },
+
+  getRemedialAdminOverview: async () => {
+    try {
+      return await fetchWithFallback<RemedialAdminOverview>('/api/remedial/admin-overview');
+    } catch {
+      return {
+        total_remedial_students: 8,
+        subject_breakdown: { Mathematics: 8 },
+        section_breakdown: { "Class 8-B": 3, "Class 8-A": 2, "Class 9-A": 2, "Class 9-B": 1 },
+        overall_recovery_rate: 87.5,
+        active_sprints_on_track: 5,
+        early_warning_pacing_triage: [
+          {
+            student_id: 3,
+            name: "Kabir Mehta",
+            class_name: "Class 8-A",
+            subject: "Mathematics",
+            exam_score_pct: 44.0,
+            current_day: 2,
+            status: "Pending",
+            weak_concept: "Inverting divisors during rational algebraic fractions",
+            days_inactive: 2,
+            parent_name: "Mr. Suresh Mehta",
+            parent_phone: "+91 98111 00015",
+            action_required: "Unsubmitted rough work on Day 2 for 2+ consecutive days"
+          },
+          {
+            student_id: 5,
+            name: "Siddharth Verma",
+            class_name: "Class 9-A",
+            subject: "Mathematics",
+            exam_score_pct: 46.0,
+            current_day: 2,
+            status: "Pending",
+            weak_concept: "Omits cross-terms (2ab) when expanding (a - b)² binomials",
+            days_inactive: 2,
+            parent_name: "Mrs. Pooja Verma",
+            parent_phone: "+91 98111 00017",
+            action_required: "Unsubmitted rough work on Day 2 for 2+ consecutive days"
+          },
+          {
+            student_id: 8,
+            name: "Aditya Roy",
+            class_name: "Class 9-B",
+            subject: "Mathematics",
+            exam_score_pct: 45.0,
+            current_day: 2,
+            status: "Pending",
+            weak_concept: "Sign reversal errors during inequality division by negatives",
+            days_inactive: 2,
+            parent_name: "Mrs. Neha Roy",
+            parent_phone: "+91 98450 99883",
+            action_required: "Unsubmitted rough work on Day 2 for 2+ consecutive days"
+          }
+        ]
+      };
+    }
+  },
+
+  adminNotifyRemedialTeacher: async (data: { student_id: number; note?: string }) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; notification: any }>('/api/remedial/admin-notify-teacher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      return {
+        success: true,
+        message: 'Direct notification dispatched to Class Teacher Mrs. Ananya Verma and PTM Briefing requested with priority SLA 12h.',
+        notification: { student_id: data.student_id, timestamp: new Date().toISOString() }
+      };
+    }
+  },
+
+  dispatchWhatsAppUpdate: async (data: {
+    student_id: number;
+    parent_phone: string;
+    parent_name?: string;
+    day_num: number;
+    custom_note?: string;
+  }): Promise<WhatsAppDispatchResponse> => {
+    try {
+      return await fetchWithFallback<WhatsAppDispatchResponse>('/api/remedial/dispatch-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const mockReceipt = `WA-LIVE-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      return {
+        success: true,
+        message: `WhatsApp progress brief dispatched to ${data.parent_phone}`,
+        receipt_id: mockReceipt,
+        delivery_status: 'DELIVERED',
+        parent_phone: data.parent_phone,
+        message_body: `📘 EDU360 Remedial Update: Day ${data.day_num} checklist dispatched to parent.`
+      };
+    }
+  },
+
+  listExams: async (params?: { class_name?: string; section?: string; subject?: string }): Promise<{ success: boolean; exams: ExamItem[] }> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.class_name) q.set('class_name', params.class_name);
+      if (params?.section) q.set('section', params.section);
+      if (params?.subject) q.set('subject', params.subject);
+      const url = `/api/exams${q.toString() ? `?${q.toString()}` : ''}`;
+      return await fetchWithFallback<{ success: boolean; exams: ExamItem[] }>(url);
+    } catch {
+      return {
+        success: true,
+        exams: [
+          {
+            id: 1,
+            title: "Term 1 Descriptive Examination - Mathematics",
+            subject: "Mathematics",
+            class_name: "Class 8",
+            section: "B",
+            term: "Term 1",
+            exam_type: "descriptive",
+            total_marks: 100,
+            pass_marks: 40,
+            remedial_threshold_pct: 70,
+            exam_date: "14 Oct 2026",
+            is_published: true,
+            published_at: new Date().toISOString(),
+            total_students: 3,
+            graded_count: 3,
+            remedial_count: 2
+          },
+          {
+            id: 2,
+            title: "Mid-Term Mathematics Descriptive Paper (Class 8-A)",
+            subject: "Mathematics",
+            class_name: "Class 8",
+            section: "A",
+            term: "Mid-Term",
+            exam_type: "descriptive",
+            total_marks: 100,
+            pass_marks: 40,
+            remedial_threshold_pct: 70,
+            exam_date: "16 Oct 2026",
+            is_published: false,
+            published_at: null,
+            total_students: 2,
+            graded_count: 2,
+            remedial_count: 1
+          }
+        ]
+      };
+    }
+  },
+
+  getExamSubmissions: async (examId: number): Promise<{ success: boolean; exam: any; submissions: ExamSubmissionItem[] }> => {
+    try {
+      return await fetchWithFallback<{ success: boolean; exam: any; submissions: ExamSubmissionItem[] }>(`/api/exams/${examId}/submissions`);
+    } catch {
+      return {
+        success: true,
+        exam: { id: examId, title: "Mathematics Descriptive Exam", total_marks: 100, is_published: false },
+        submissions: []
+      };
+    }
+  },
+
+  submitExamPaper: async (examId: number, data: { student_id: number; paper_file_url: string; paper_file_name: string; student_notes?: string }): Promise<{ success: boolean; message: string; submission_id: number }> => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; submission_id: number }>(`/api/exams/${examId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      return {
+        success: true,
+        message: `Successfully submitted ${data.paper_file_name}`,
+        submission_id: Date.now()
+      };
+    }
+  },
+
+  gradeExamSubmission: async (examId: number, data: { student_id: number; marks_obtained: number; teacher_feedback?: string; teacher_id?: number }): Promise<{ success: boolean; message: string; percentage: number; is_remedial_target: boolean }> => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; percentage: number; is_remedial_target: boolean }>(`/api/exams/${examId}/grade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const pct = (data.marks_obtained / 100) * 100;
+      return {
+        success: true,
+        message: `Graded: ${data.marks_obtained}/100 (${pct}%)`,
+        percentage: pct,
+        is_remedial_target: pct <= 70
+      };
+    }
+  },
+
+  publishExamResults: async (examId: number, data?: { teacher_id?: number; notify_parents?: boolean }): Promise<{
+    success: boolean;
+    message: string;
+    exam_title: string;
+    total_published: number;
+    remedial_enrolled_count: number;
+    remedial_students: any[];
+  }> => {
+    try {
+      return await fetchWithFallback<any>(`/api/exams/${examId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {})
+      });
+    } catch {
+      return {
+        success: true,
+        message: "Results published and students scoring <= 70% auto-enrolled in 1-Week Remedial Focus Table.",
+        exam_title: "Mathematics Descriptive Exam",
+        total_published: 2,
+        remedial_enrolled_count: 1,
+        remedial_students: [{ student_id: 4, name: "Siddharth Verma", score_pct: 46.0 }]
+      };
+    }
+  },
+
+  // --- Question Paper Handoff Pipeline ---
+  getQuestionPapers: async (params?: { subject?: string; class_name?: string; status?: string; teacher_id?: number }): Promise<QuestionPaperItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.subject) q.set('subject', params.subject);
+      if (params?.class_name) q.set('class_name', params.class_name);
+      if (params?.status) q.set('status', params.status);
+      if (params?.teacher_id) q.set('teacher_id', params.teacher_id.toString());
+      const res = await fetchWithFallback<{ success: boolean; question_papers: QuestionPaperItem[] }>(`/api/exams/question-papers?${q.toString()}`);
+      return res.question_papers || [];
+    } catch {
+      return [];
+    }
+  },
+
+  orderQuestionPaper: async (data: any): Promise<{ success: boolean; message: string; paper_id: number }> => {
+    return await fetchWithFallback<any>(`/api/exams/question-papers/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  submitQuestionPaperDraft: async (paperId: number, data: { draft_file_url: string; draft_file_name: string; answer_key_url?: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/submit-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  reviewQuestionPaper: async (paperId: number, data: { approved: boolean; revision_notes?: string; reviewer_id?: number }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  handoffQuestionPaper: async (paperId: number): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/handoff`, {
+      method: 'POST'
+    });
+  },
+
+  // --- Dynamic Exam Schedules ---
+  getExamSchedules: async (): Promise<ExamScheduleItem[]> => {
+    try {
+      const res = await fetchWithFallback<{ success: boolean; schedules: ExamScheduleItem[] }>(`/api/exams/schedules`);
+      return res.schedules || [];
+    } catch {
+      return [];
+    }
+  },
+
+  createExamSchedule: async (data: any): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/schedules/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  grantScheduleClearance: async (scheduleId: number, data: { academic_clearance: boolean; academic_clearance_notes?: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/schedules/${scheduleId}/clearance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  // --- AI Marksheet Vision OCR & Batch Commit ---
+  ocrScanMarksheet: async (examId: number, data: { file_name?: string; class_name?: string; section?: string }): Promise<{
+    success: boolean;
+    message: string;
+    exam_title: string;
+    total_marks: number;
+    scanned_file_name: string;
+    parsed_count: number;
+    remedial_candidates_count: number;
+    results: OcrScanResultItem[];
+  }> => {
+    return await fetchWithFallback<any>(`/api/exams/${examId}/ocr-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  batchGradeCommit: async (examId: number, data: { grades: { student_id: number; marks_obtained: number; teacher_feedback?: string }[]; auto_publish?: boolean }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/${examId}/batch-grade-commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  // --- Report Cards ---
+  getReportCards: async (params?: { class_name?: string; section?: string; term?: string; student_id?: number }): Promise<ReportCardItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.class_name) q.set('class_name', params.class_name);
+      if (params?.section) q.set('section', params.section);
+      if (params?.term) q.set('term', params.term);
+      if (params?.student_id) q.set('student_id', params.student_id.toString());
+      const res = await fetchWithFallback<{ success: boolean; report_cards: ReportCardItem[] }>(`/api/exams/report-cards?${q.toString()}`);
+      return res.report_cards || [];
+    } catch {
+      return [];
+    }
+  },
+
+  generateBatchReportCards: async (data: { class_name: string; section: string; term: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/report-cards/generate-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  publishBatchReportCards: async (data: { class_name: string; section: string; term: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/report-cards/publish-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  // --- Class-Wise Batch Schedules ---
+  createBatchClassSchedule: async (data: { class_name: string; series_name?: string; slots: { subject: string; exam_date: string; start_time: string; end_time: string; hall_name: string; capacity?: number; chief_invigilator_name?: string }[] }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/schedules/batch-class`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  // --- Live Marks Submission Tracker & Ledger Lock ---
+  getExamSubmissionsSummary: async (params?: { class_name?: string; term?: string }): Promise<any[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.class_name) q.set('class_name', params.class_name);
+      if (params?.term) q.set('term', params.term);
+      const res = await fetchWithFallback<{ success: boolean; summary: any[] }>(`/api/exams/submissions/summary?${q.toString()}`);
+      return res.summary || [];
+    } catch {
+      return [];
+    }
+  },
+
+  lockExamGradebook: async (examId: number): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/${examId}/lock-gradebook`, {
+      method: 'POST'
+    });
+  },
+
+  // --- Digital Hall Tickets ---
+  releaseHallTickets: async (data?: { series_name?: string; class_name?: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/hall-tickets/release`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {})
+    });
+  },
+
+  getStudentHallTicket: async (studentId: number): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/hall-tickets/student/${studentId}`);
+  },
+
+  // --- Absentee & Medical Retest ---
+  getAbsenteeRecords: async (): Promise<any[]> => {
+    try {
+      const res = await fetchWithFallback<{ success: boolean; absentees: any[] }>(`/api/exams/absentees`);
+      return res.absentees || [];
+    } catch {
+      return [];
+    }
+  },
+
+  scheduleAbsenteeRetest: async (absenteeId: number, retestDate: string): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/absentees/${absenteeId}/schedule-retest?retest_date=${encodeURIComponent(retestDate)}`, {
+      method: 'POST'
+    });
+  },
+
+  // --- Notifications Engine ---
+  getNotifications: async (params?: { user_id?: number; role?: string; unread_only?: boolean; limit?: number }): Promise<{ unread_count: number; notifications: any[] }> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.user_id !== undefined) q.set('user_id', String(params.user_id));
+      if (params?.role) q.set('role', params.role);
+      if (params?.unread_only) q.set('unread_only', 'true');
+      if (params?.limit) q.set('limit', String(params.limit));
+      const res = await fetchWithFallback<{ success: boolean; unread_count: number; notifications: any[] }>(`/api/notifications?${q.toString()}`);
+      return { unread_count: res.unread_count || 0, notifications: res.notifications || [] };
+    } catch {
+      return { unread_count: 0, notifications: [] };
+    }
+  },
+
+  markNotificationRead: async (notificationId: number): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/notifications/${notificationId}/read`, {
+      method: 'PATCH'
+    });
+  },
+
+  markAllNotificationsRead: async (params?: { user_id?: number; role?: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/notifications/mark-all-read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params || {})
+    });
+  },
+
+  sendNotification: async (payload: any): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/notifications/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  // =========================================================================
+  // --- Finance & Accounts Coordinator Domain ---
+  // =========================================================================
+  getFinanceStats: async (): Promise<FinanceDashboardStats> => {
+    return await fetchWithFallback<FinanceDashboardStats>(`/api/finance/stats`);
+  },
+
+  bulkSendFeeReminders: async (payload: BulkReminderPayload): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/finance/defaulters/bulk-remind`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
+    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  applyFeeWaiver: async (id: number, payload: ApplyWaiverPayload): Promise<FeeDefaulterItem> => {
+    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/waiver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getPaymentTransactions: async (params?: { reconciled?: boolean; status?: string; payment_method?: string; search?: string }): Promise<PaymentTransactionItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.reconciled !== undefined) q.set('reconciled', String(params.reconciled));
+      if (params?.status) q.set('status', params.status);
+      if (params?.payment_method) q.set('payment_method', params.payment_method);
+      if (params?.search) q.set('search', params.search);
+      const res = await fetchWithFallback<PaymentTransactionItem[]>(`/api/finance/transactions?${q.toString()}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  reconcileTransaction: async (id: number, reconciledBy: string = 'Mr. Arvind Krishnan'): Promise<PaymentTransactionItem> => {
+    return await fetchWithFallback<PaymentTransactionItem>(`/api/finance/transactions/${id}/reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
+      method: 'POST'
+    });
+  },
+
+  bulkReconcileTransactions: async (transactionIds?: number[], reconciledBy: string = 'Mr. Arvind Krishnan'): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/finance/transactions/bulk-reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transactionIds || null)
+    });
+  },
+
+  getVendorInvoices: async (params?: { status?: string; category?: string; search?: string }): Promise<VendorInvoiceItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.category) q.set('category', params.category);
+      if (params?.search) q.set('search', params.search);
+      const res = await fetchWithFallback<VendorInvoiceItem[]>(`/api/finance/invoices?${q.toString()}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  createVendorInvoice: async (payload: any): Promise<VendorInvoiceItem> => {
+    return await fetchWithFallback<VendorInvoiceItem>(`/api/finance/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  updateVendorInvoiceStatus: async (id: number, payload: any): Promise<VendorInvoiceItem> => {
+    return await fetchWithFallback<VendorInvoiceItem>(`/api/finance/invoices/${id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getFinanceDispatchLogs: async (limit: number = 20): Promise<FinanceDispatchLogItem[]> => {
+    try {
+      const res = await fetchWithFallback<FinanceDispatchLogItem[]>(`/api/finance/dispatch-logs?limit=${limit}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  seedFinanceData: async (): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/finance/seed-data`, {
+      method: 'POST'
+    });
   }
 };
+
+

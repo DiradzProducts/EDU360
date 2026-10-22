@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Download, 
@@ -14,8 +14,13 @@ import {
   X,
   ChevronRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  GraduationCap,
+  RefreshCw
 } from 'lucide-react';
+import { downloadMarksMemoFile } from '@/lib/export-utils';
+import { api } from '@/lib/api';
+import { ReportCardItem } from '@/lib/types';
 
 interface SubjectMark {
   id: string;
@@ -30,11 +35,46 @@ interface SubjectMark {
 }
 
 export function ParentMarksView() {
-  const [selectedTerm, setSelectedTerm] = useState<'ut2' | 'midterm' | 'ut1'>('ut2');
+  const [selectedTerm, setSelectedTerm] = useState<'term1' | 'ut2' | 'midterm' | 'ut1'>('term1');
+  const [liveReportCard, setLiveReportCard] = useState<ReportCardItem | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
   const [downloadToast, setDownloadToast] = useState<string | null>(null);
+
+  // Admit Card (Hall Ticket) Modal State
+  const [showAdmitCardModal, setShowAdmitCardModal] = useState(false);
+  const [admitCardData, setAdmitCardData] = useState<any>(null);
+  const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
+
+  const handleOpenAdmitCard = async () => {
+    setLoadingAdmitCard(true);
+    setShowAdmitCardModal(true);
+    try {
+      const res = await api.getStudentHallTicket(1);
+      if (res && res.success && res.ticket) {
+        setAdmitCardData(res.ticket);
+      }
+    } catch (err) {
+      console.error('Failed to load hall ticket', err);
+    } finally {
+      setLoadingAdmitCard(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchLiveCard = async () => {
+      try {
+        const cards = await api.getReportCards({ student_id: 1 });
+        if (cards && cards.length > 0) {
+          setLiveReportCard(cards[0]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch parent report card:', err);
+      }
+    };
+    fetchLiveCard();
+  }, []);
 
   const guardianEmail = 'rajesh.sharma@example.com';
 
@@ -122,6 +162,22 @@ export function ParentMarksView() {
   const totalMax = subjectMarksData.reduce((acc, curr) => acc + curr.maxMarks, 0);
   const percentage = ((totalObtained / totalMax) * 100).toFixed(1);
 
+  const isTerm1 = selectedTerm === 'term1';
+  const hasRemedial = isTerm1 && liveReportCard && Object.values(liveReportCard.grades_grid || {}).some(g => g.remedial_flag);
+
+  const displayPercentage = isTerm1 && liveReportCard 
+    ? liveReportCard.overall_percentage.toFixed(1) 
+    : percentage;
+  const displayTotalObtained = isTerm1 && liveReportCard 
+    ? liveReportCard.total_marks_obtained 
+    : totalObtained;
+  const displayTotalMax = isTerm1 && liveReportCard 
+    ? liveReportCard.max_total_marks 
+    : totalMax;
+  const displayGrade = isTerm1 && liveReportCard 
+    ? liveReportCard.overall_grade 
+    : 'A1';
+
   const handleSendEmail = () => {
     setEmailSending(true);
     setTimeout(() => {
@@ -135,7 +191,8 @@ export function ParentMarksView() {
   };
 
   const handleDownloadMemo = () => {
-    setDownloadToast('Generating official CBSE-format marks memo PDF (Ref: EDU-2026-UT2-88B14)...');
+    downloadMarksMemoFile('Aarav Sharma', isTerm1 ? 'Term 1 Official CBSE Memo' : 'Term 2 Periodic Assessment');
+    setDownloadToast(isTerm1 ? 'Official Term 1 CBSE marks memo downloaded.' : 'Official CBSE marks memo downloaded (Ref: EDU-2026-UT2-88B14)');
     setTimeout(() => setDownloadToast(null), 4000);
   };
 
@@ -166,15 +223,23 @@ export function ParentMarksView() {
             Aarav Sharma — Examination Marks &amp; Progress Memo
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Class 8B • Roll #14 • Board Affiliation #CBSE-103049 • Verified by Office of the Registrar
+            Class 8B • Roll #14 • Board Affiliation #CBSE-103049 • Verified by Examination Controller Dr. Hemanth Sen
           </p>
         </div>
 
-        {/* Action Buttons: Email to Parent & Download Memo */}
+        {/* Action Buttons: Admit Card, Email to Parent & Download Memo */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button
+            onClick={handleOpenAdmitCard}
+            className="flex items-center gap-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Award className="h-4 w-4" />
+            <span>🎟️ Official Admit Card &amp; Timetable</span>
+          </button>
+
+          <button
             onClick={() => setEmailModalOpen(true)}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95"
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
           >
             <Mail className="h-4 w-4" />
             <span>Email Report Card to My Mail</span>
@@ -182,13 +247,35 @@ export function ParentMarksView() {
 
           <button
             onClick={handleDownloadMemo}
-            className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2.5 text-xs font-bold transition-colors"
+            className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer"
           >
             <Download className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span>Download Official PDF Memo</span>
           </button>
         </div>
       </div>
+
+      {/* Remedial Active Alert if Student has score <= 70% in any subject */}
+      {hasRemedial && (
+        <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-amber-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 mt-0.5">
+              <AlertCircle className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-black text-amber-950 dark:text-amber-200 block text-xs">
+                Active 1-Week Remedial Focus Sprint (Mathematics · Score: 68%)
+              </span>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                Aarav scored $\le 70\%$ in Mathematics and has been enrolled in Mrs. Ananya Verma&apos;s 1-Week targeted quadratic equations remediation with daily rough paper review.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-[11px] font-bold shrink-0 text-center">
+            Day 3 In Progress
+          </span>
+        </div>
+      )}
 
       {/* Term Selector & Analytics Highlights */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -199,13 +286,13 @@ export function ParentMarksView() {
             Overall Term Aggregate
           </span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-black text-slate-900 dark:text-white">{percentage}%</span>
+            <span className="text-3xl font-black text-slate-900 dark:text-white">{displayPercentage}%</span>
             <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
-              Grade A1
+              Grade {displayGrade}
             </span>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
-            {totalObtained} / {totalMax} Marks Total
+            {displayTotalObtained} / {displayTotalMax} Marks Total
           </span>
         </div>
 
@@ -216,26 +303,28 @@ export function ParentMarksView() {
           </span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-3xl font-black text-blue-600 dark:text-blue-400">Rank #4</span>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">of 42 students</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">of 38 students</span>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
             Top 10% Academic Distinction
           </span>
         </div>
 
-        {/* Percentile */}
+        {/* Attendance */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-            Cohort Percentile
+            Exam Attendance
           </span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-black text-purple-600 dark:text-purple-400">92.4th</span>
+            <span className="text-3xl font-black text-purple-600 dark:text-purple-400">
+              {isTerm1 && liveReportCard ? `${liveReportCard.attendance_pct}%` : '91.0%'}
+            </span>
             <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded-full">
-              Elite
+              Regular
             </span>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
-            Across 180 Grade 8 Students
+            Biometric SIS Check-in Synced
           </span>
         </div>
 
@@ -250,28 +339,60 @@ export function ParentMarksView() {
             </span>
           </div>
           <span className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 block font-medium">
-            100% Exam Attendance Record
+            Verified by Examination Authority
           </span>
         </div>
 
       </div>
 
+      {/* Gemini AI Pedagogical Growth & Teacher Observations Banner */}
+      {isTerm1 && liveReportCard?.ai_teacher_narrative && (
+        <div className="rounded-3xl border border-violet-200 dark:border-violet-800/60 bg-gradient-to-br from-violet-50/90 via-white to-fuchsia-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-violet-950/30 p-5 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 text-xs font-black">
+              <Sparkles className="h-4 w-4 text-violet-600" />
+              <span>Gemini AI Pedagogical Growth &amp; Teacher Observations (Term 1)</span>
+            </div>
+            <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-950 px-2 py-0.5 rounded-full">
+              Automated AI Synthesis
+            </span>
+          </div>
+          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
+            &ldquo;{liveReportCard.ai_teacher_narrative}&rdquo;
+          </p>
+          <div className="text-[10px] text-slate-400 pt-1 flex items-center justify-between border-t border-violet-100 dark:border-violet-900/40">
+            <span>Synthesized from Exam Score Matrix, 1-Week Remedial Analytics &amp; SIS Attendance</span>
+            <span className="font-semibold text-slate-600 dark:text-slate-300">Class Teacher: Mrs. Ananya Verma</span>
+          </div>
+        </div>
+      )}
+
       {/* Term Switcher Tabs */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSelectedTerm('term1')}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+              selectedTerm === 'term1'
+                ? 'bg-violet-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Term 1 Final (CBSE Board &amp; AI Memo)
+          </button>
           <button
             onClick={() => setSelectedTerm('ut2')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut2'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Unit Test 2 (Oct 2026) · Published
+            Unit Test 2 (Oct 2026)
           </button>
           <button
             onClick={() => setSelectedTerm('midterm')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'midterm'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -281,7 +402,7 @@ export function ParentMarksView() {
           </button>
           <button
             onClick={() => setSelectedTerm('ut1')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut1'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -292,7 +413,7 @@ export function ParentMarksView() {
         </div>
 
         <span className="hidden sm:inline-block text-xs text-slate-500 dark:text-slate-400">
-          Evaluated on 10 Oct 2026 • Published to Parent Portal
+          Evaluated &amp; Published by Examination Controller
         </span>
       </div>
 
@@ -304,11 +425,11 @@ export function ParentMarksView() {
               Curriculum Subject Performance Ledger
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Individual subject marks, class averages, and official teacher remarks
+              Individual subject marks, maximum scale, grades, and teacher remarks
             </p>
           </div>
           <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-            7 Subjects Evaluated
+            {isTerm1 && liveReportCard ? Object.keys(liveReportCard.grades_grid || {}).length : subjectMarksData.length} Subjects Evaluated
           </span>
         </div>
 
@@ -317,61 +438,86 @@ export function ParentMarksView() {
             <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-100 dark:border-slate-800">
               <tr>
                 <th className="py-3.5 px-5 font-bold">Subject</th>
-                <th className="py-3.5 px-4 font-bold">Marks Scored</th>
-                <th className="py-3.5 px-4 font-bold">Max Marks</th>
-                <th className="py-3.5 px-4 font-bold">Grade</th>
-                <th className="py-3.5 px-4 font-bold">Class Average</th>
-                <th className="py-3.5 px-4 font-bold">Teacher In-Charge</th>
+                <th className="py-3.5 px-4 font-bold text-center">Marks Scored</th>
+                <th className="py-3.5 px-4 font-bold text-center">Max Marks</th>
+                <th className="py-3.5 px-4 font-bold text-center">Grade</th>
                 <th className="py-3.5 px-5 font-bold">Pedagogical Observation &amp; Remarks</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {subjectMarksData.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="py-4 px-5 font-black text-slate-900 dark:text-white">
-                    {s.subject}
-                  </td>
-                  <td className="py-4 px-4 font-black text-slate-900 dark:text-white text-sm">
-                    {s.marksObtained.toFixed(1)}
-                  </td>
-                  <td className="py-4 px-4 text-slate-500 dark:text-slate-400 font-medium">
-                    {s.maxMarks}
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${
-                      s.grade.startsWith('A') 
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                    }`}>
-                      {s.grade}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4 text-slate-600 dark:text-slate-300 font-semibold">
-                    {s.classAverage.toFixed(1)}
-                  </td>
-                  <td className="py-4 px-4 text-slate-700 dark:text-slate-300 font-medium">
-                    {s.teacherName}
-                  </td>
-                  <td className="py-4 px-5 text-slate-600 dark:text-slate-300 italic max-w-xs leading-relaxed">
-                    &quot;{s.teacherRemarks}&quot;
-                  </td>
-                </tr>
-              ))}
+              {isTerm1 && liveReportCard ? (
+                Object.entries(liveReportCard.grades_grid || {}).map(([sub, detail]) => (
+                  <tr key={sub} className={detail.remedial_flag ? 'bg-amber-50/40 dark:bg-amber-950/20' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'}>
+                    <td className="py-4 px-5 font-black text-slate-900 dark:text-white">
+                      {sub}
+                      {detail.remedial_flag && (
+                        <span className="ml-2 text-[9px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-300">
+                          1-Week Remedial Focus Active
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 font-black text-slate-900 dark:text-white text-sm text-center">
+                      {detail.score}
+                    </td>
+                    <td className="py-4 px-4 text-slate-500 dark:text-slate-400 font-medium text-center">
+                      {detail.max}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${
+                        detail.grade.startsWith('A') 
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : detail.grade.startsWith('B')
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      }`}>
+                        {detail.grade}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-slate-600 dark:text-slate-300 italic max-w-xs leading-relaxed">
+                      &quot;{detail.remarks}&quot;
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                subjectMarksData.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-4 px-5 font-black text-slate-900 dark:text-white">
+                      {s.subject}
+                    </td>
+                    <td className="py-4 px-4 font-black text-slate-900 dark:text-white text-sm text-center">
+                      {s.marksObtained.toFixed(1)}
+                    </td>
+                    <td className="py-4 px-4 text-slate-500 dark:text-slate-400 font-medium text-center">
+                      {s.maxMarks}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${
+                        s.grade.startsWith('A') 
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                      }`}>
+                        {s.grade}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-slate-600 dark:text-slate-300 italic max-w-xs leading-relaxed">
+                      &quot;{s.teacherRemarks}&quot;
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
             <tfoot className="bg-slate-50 dark:bg-slate-800/70 border-t-2 border-slate-200 dark:border-slate-700 font-black text-slate-900 dark:text-white">
               <tr>
-                <td className="py-4 px-5 text-sm uppercase">Total Cumulative</td>
-                <td className="py-4 px-4 text-base text-blue-600 dark:text-blue-400">{totalObtained.toFixed(1)}</td>
-                <td className="py-4 px-4 text-sm text-slate-500">{totalMax}</td>
-                <td className="py-4 px-4">
+                <td className="py-4 px-5 text-sm uppercase">Total Aggregate</td>
+                <td className="py-4 px-4 text-base text-blue-600 dark:text-blue-400 text-center">{displayTotalObtained}</td>
+                <td className="py-4 px-4 text-sm text-slate-500 text-center">{displayTotalMax}</td>
+                <td className="py-4 px-4 text-center">
                   <span className="bg-emerald-600 text-white px-2.5 py-1 rounded-full text-xs font-black">
-                    A1 (Distinction)
+                    {displayGrade} (Distinction)
                   </span>
                 </td>
-                <td className="py-4 px-4 text-slate-500">125.0 Avg</td>
-                <td className="py-4 px-4 text-xs font-normal text-slate-500">Class 8B Overall</td>
                 <td className="py-4 px-5 text-xs text-emerald-700 dark:text-emerald-400 font-bold">
-                  Promoted with Distinction • Top 10%
+                  {isTerm1 ? 'Term 1 Official Certified Result · Promoted with Distinction' : 'Top 10% Academic Distinction'}
                 </td>
               </tr>
             </tfoot>
@@ -485,7 +631,201 @@ export function ParentMarksView() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
 
+      {/* ===================================================== */}
+      {/* OFFICIAL ADMIT CARD / HALL TICKET MODAL FOR PARENTS   */}
+      {/* ===================================================== */}
+      {showAdmitCardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            {/* Modal Controls Bar */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                  <Award className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    CBSE Board &amp; Term Examination Admit Card
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Candidate: Aarav Sharma · Document Ref: EDU-ADM-{admitCardData?.roll_number || '14'}-2026
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Print Copy</span>
+                </button>
+                <button
+                  onClick={() => setShowAdmitCardModal(false)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {loadingAdmitCard ? (
+              <div className="py-16 text-center space-y-3">
+                <RefreshCw className="h-8 w-8 text-purple-600 animate-spin mx-auto" />
+                <p className="text-xs font-bold text-slate-500">Retrieving official cryptographically signed hall ticket...</p>
+              </div>
+            ) : (
+              <div className="space-y-5 print:p-0">
+                {/* School Header Stamp Box */}
+                <div className="rounded-2xl border-2 border-purple-500/20 bg-gradient-to-br from-purple-50/50 via-white to-indigo-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-purple-950/20 p-5 text-center space-y-1 relative overflow-hidden">
+                  <div className="absolute right-4 top-4 opacity-10 pointer-events-none">
+                    <GraduationCap className="h-28 w-28 text-purple-600" />
+                  </div>
+
+                  <span className="inline-block text-[10px] font-black tracking-widest text-purple-700 dark:text-purple-300 uppercase px-3 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 border border-purple-200 dark:border-purple-800">
+                    CENTRAL BOARD OF SECONDARY EDUCATION
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    ST. XAVIER&apos;S INTERNATIONAL ACADEMY
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Affiliation #830029 · School Code #40182 · Main Campus Academic Block
+                  </p>
+                  <div className="pt-2">
+                    <span className="text-xs font-black uppercase text-slate-900 dark:text-white px-3 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 inline-block shadow-xs">
+                      {admitCardData?.exam_name || 'TERM 1 DESCRIPTIVE EXAMINATION (2026-27)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Candidate Credentials Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Candidate Name</span>
+                    <strong className="text-slate-900 dark:text-white text-sm">
+                      {admitCardData?.student_name || 'Aarav Sharma'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Roll / Board Reg</span>
+                    <strong className="text-purple-600 dark:text-purple-400 text-sm font-mono">
+                      #{admitCardData?.roll_number || '14'}
+                    </strong>
+                    <span className="text-[10px] text-slate-400 block font-mono">2026-CBSE-8B-014</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Class &amp; Section</span>
+                    <strong className="text-slate-900 dark:text-white text-sm">
+                      {admitCardData?.grade_level || 'Class 8'} - {admitCardData?.section || 'B'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Assigned Hall &amp; Desk</span>
+                    <strong className="text-emerald-600 dark:text-emerald-400 text-sm font-mono">
+                      {admitCardData?.hall_number || 'Hall B'}, Desk {admitCardData?.desk_number || '#A-14'}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Timetable Schedule Table */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Approved Examination Timetable
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Reporting Time: <strong>{admitCardData?.reporting_time || '08:30 AM IST'}</strong>
+                    </span>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 dark:bg-slate-800/70 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">
+                          <th className="py-2.5 px-3">Date &amp; Day</th>
+                          <th className="py-2.5 px-3">Subject</th>
+                          <th className="py-2.5 px-3">Time Window</th>
+                          <th className="py-2.5 px-3">Hall</th>
+                          <th className="py-2.5 px-3">Max Marks</th>
+                          <th className="py-2.5 px-3 text-right">Invigilator Sign</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {(admitCardData?.schedule || [
+                          { date: '2026-10-24', day: 'Saturday', subject: 'Mathematics', time: '09:00 AM - 12:00 PM', hall: 'Hall B', max_marks: 80 },
+                          { date: '2026-10-26', day: 'Monday', subject: 'Science', time: '09:00 AM - 12:00 PM', hall: 'Hall B', max_marks: 80 },
+                          { date: '2026-10-28', day: 'Wednesday', subject: 'Social Science', time: '09:00 AM - 12:00 PM', hall: 'Hall B', max_marks: 80 },
+                          { date: '2026-10-30', day: 'Friday', subject: 'English Language', time: '09:00 AM - 12:00 PM', hall: 'Hall B', max_marks: 80 }
+                        ]).map((s: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3 font-mono">
+                              <strong>{s.date}</strong> <span className="text-[10px] text-slate-400">({s.day})</span>
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                              {s.subject}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                              {s.time}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-purple-600">
+                              {s.hall}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
+                              {s.max_marks} pts
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-slate-300 dark:text-slate-600 font-serif italic text-xs">
+                              [Verified]
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Parent Guidelines */}
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-1.5 text-[11px] text-blue-900 dark:text-blue-200">
+                  <span className="font-bold flex items-center gap-1.5 text-xs text-blue-950 dark:text-blue-300">
+                    <ShieldCheck className="h-4 w-4" />
+                    Notice for Parents &amp; Guardians
+                  </span>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
+                    <li>Please ensure your ward arrives before 08:30 AM with their physical school identity card and stationery pouch.</li>
+                    <li>School bus routes will run on morning examination shifts; check the Live Bus Tracker tab for adjusted stop timings.</li>
+                    <li>If a student is unwell on exam day, immediately submit an official medical leave request via the Leave tab.</li>
+                  </ul>
+                </div>
+
+                {/* Official Signatures Bar */}
+                <div className="flex items-end justify-between border-t border-slate-200 dark:border-slate-800 pt-4 text-center">
+                  <div>
+                    <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300 font-bold">
+                      Dr. Hemanth Sen
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                      Controller of Examinations
+                    </span>
+                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono">
+                      ✓ Digitally Authenticated {admitCardData?.issued_date || '2026-10-18'}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300 font-bold">
+                      Fr. George Varghese
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                      Principal &amp; Center Head
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

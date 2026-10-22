@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { User, GamificationProfile } from '@/lib/types';
 import { playButtonClick, playStarCollect } from '@/lib/sound-effects';
+import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 
 interface JuniorProfileCardProps {
   user: User;
@@ -364,7 +365,7 @@ export function JuniorProfileCard({ user, profile }: JuniorProfileCardProps) {
               <button
                 onClick={() => {
                   playStarCollect();
-                  alert("Certificate PDF downloaded with EDU360 Cryptographic Seal.");
+                  downloadOfficialDocumentFile(selectedCertificate.title, user.name);
                   setSelectedCertificate(null);
                 }}
                 className="flex-1 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 py-3 font-black text-xs shadow-md border-b-4 border-amber-600"

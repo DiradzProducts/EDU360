@@ -24,6 +24,7 @@ import {
   Check
 } from 'lucide-react';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
+import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 
 interface OfficialDocument {
   id: string;
@@ -167,7 +168,8 @@ export function ParentSisView() {
   };
 
   const handleDownload = (docTitle: string) => {
-    setDownloadToast(`Downloading certified copy: ${docTitle}...`);
+    downloadOfficialDocumentFile(docTitle, 'Aarav Sharma', 'OIS-2026-8814');
+    setDownloadToast(`Certified copy downloaded: ${docTitle}`);
     setTimeout(() => setDownloadToast(null), 3500);
   };
 
