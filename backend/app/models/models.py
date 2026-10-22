@@ -331,16 +331,6 @@ class ClassRecording(Base):
     thumbnail = Column(String(255), nullable=True)
     date = Column(String(30), nullable=False)
 
-class InventoryItem(Base):
-    __tablename__ = "inventory_items"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), nullable=False)
-    category = Column(String(50), nullable=False)  # Books, Lab, Sports, IT Hardware, Classroom
-    total_quantity = Column(Integer, nullable=False)
-    issued_quantity = Column(Integer, default=0)
-    damaged_quantity = Column(Integer, default=0)
-    min_threshold = Column(Integer, default=10)
-    status = Column(String(30), default="In Stock")
 
 class StaffMember(Base):
     __tablename__ = "staff_members"
@@ -678,6 +668,160 @@ class FinanceDispatchLog(Base):
     dispatch_note = Column(Text, nullable=True)
     dispatched_by = Column(String(100), nullable=False, default="Mr. Arvind Krishnan")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class PayrollBatch(Base):
+    """Monthly institutional payroll run across all faculty and administrative staff."""
+    __tablename__ = "payroll_batches"
+    id = Column(Integer, primary_key=True, index=True)
+    payroll_month = Column(String(50), nullable=False, unique=True)  # e.g. "October 2026"
+    total_staff_count = Column(Integer, default=0)
+    gross_total = Column(Float, default=0.0)
+    total_deductions = Column(Float, default=0.0)  # PF, PT, TDS, LOP
+    net_payable = Column(Float, default=0.0)
+    status = Column(String(50), default="Draft", index=True)  # Draft | Audit Pending | Approved for Wire | Disbursed
+    authorized_by = Column(String(100), nullable=True)
+    authorized_at = Column(DateTime, nullable=True)
+    disbursed_at = Column(DateTime, nullable=True)
+    bank_batch_ref = Column(String(100), nullable=True)  # HDFC / SBI Corporate CMS batch ID
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class StaffPayslip(Base):
+    """Individual monthly salary slip for faculty/staff with statutory deductions."""
+    __tablename__ = "staff_payslips"
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, nullable=False, index=True)
+    staff_id = Column(Integer, nullable=False, index=True)
+    staff_name = Column(String(100), nullable=False)
+    role_designation = Column(String(80), nullable=False)
+    department = Column(String(80), nullable=False)
+    bank_account_no = Column(String(50), nullable=False, default="918204918201")
+    bank_ifsc = Column(String(20), nullable=False, default="HDFC0001824")
+    
+    # Earnings
+    basic_salary = Column(Float, nullable=False)
+    hra_allowance = Column(Float, default=0.0)
+    special_allowance = Column(Float, default=0.0)
+    gross_earnings = Column(Float, nullable=False)
+    
+    # Deductions
+    provident_fund = Column(Float, default=0.0)  # PF (12% of basic)
+    professional_tax = Column(Float, default=200.0)  # PT
+    income_tax_tds = Column(Float, default=0.0)
+    loss_of_pay_days = Column(Integer, default=0)
+    loss_of_pay_deduction = Column(Float, default=0.0)
+    total_deductions = Column(Float, default=0.0)
+    
+    net_salary = Column(Float, nullable=False)
+    disbursement_status = Column(String(30), default="Pending", index=True)  # Pending | Disbursed | On Hold
+    payment_utr = Column(String(100), nullable=True)
+    disbursed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class PurchaseOrder(Base):
+    """Institutional procurement purchase order linking store requisitions to vendor billing."""
+    __tablename__ = "purchase_orders"
+    id = Column(Integer, primary_key=True, index=True)
+    po_number = Column(String(50), unique=True, nullable=False)  # e.g. "PO-2026-OCT-012"
+    department = Column(String(80), nullable=False)  # Science Lab, Sports, IT, Classroom
+    vendor_name = Column(String(150), nullable=False)
+    items_json = Column(Text, nullable=False)  # [{item_name, quantity, unit_price, total}]
+    total_amount = Column(Float, nullable=False)
+    expected_delivery_date = Column(String(50), nullable=True)
+    status = Column(String(50), default="Issued", index=True)  # Issued | GRN Verified | Invoiced | Settled
+    grn_number = Column(String(50), nullable=True)
+    grn_verified_by = Column(String(100), nullable=True)
+    grn_verified_at = Column(DateTime, nullable=True)
+    linked_invoice_no = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class FleetExpenseRecord(Base):
+    """Yellow bus fleet maintenance, fuel disbursements, and RTO statutory compliance contracts."""
+    __tablename__ = "fleet_expenses"
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_no = Column(String(50), nullable=False)  # KA-01-AB-1201
+    bus_route = Column(String(100), nullable=False)  # Route 1 - Indiranagar Express
+    expense_type = Column(String(80), nullable=False)  # Fuel Refill | RTO Fitness & Tax | Speed Governor AMC | Tyre Replacement
+    vendor_name = Column(String(150), nullable=False)
+    amount = Column(Float, nullable=False)
+    status = Column(String(50), default="Approved for Wire", index=True)  # Pending Clearance | Approved for Wire | Paid
+    invoice_ref = Column(String(50), nullable=True)
+    payment_utr = Column(String(100), nullable=True)
+    logged_by = Column(String(100), nullable=False, default="Mr. Vikram Malhotra (Transport Lead)")
+    due_date = Column(String(50), nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class InventoryItem(Base):
+    """Movable store items, consumables, laboratory chemicals, and smart hardware."""
+    __tablename__ = "inventory_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    asset_tag = Column(String(64), unique=True, index=True, nullable=False)  # e.g. "AST-IT-092", "CON-CHEM-001"
+    name = Column(String(255), nullable=False)
+    category = Column(String(64), index=True, nullable=False)  # 'Lab Consumable', 'IT Hardware', 'Sports Gear', 'Books/Stationery'
+    sub_category = Column(String(64), nullable=True)  # 'Chemistry Reagent', 'Smart Display', 'Coding Tablets'
+    location = Column(String(128), index=True, nullable=False)  # 'Chemistry Lab 2 Cabinet A', 'Computer Lab 1 Cart'
+    total_stock = Column(Integer, default=1, nullable=False)
+    available_stock = Column(Integer, default=1, nullable=False)
+    issued_count = Column(Integer, default=0, nullable=False)
+    damaged_count = Column(Integer, default=0, nullable=False)
+    reorder_level = Column(Integer, default=5, nullable=False)
+    unit_of_measure = Column(String(32), default="Units")  # 'Litres', 'Units', 'Boxes', 'Sets', 'Kg'
+    unit_cost = Column(Float, default=0.0)
+    amc_vendor = Column(String(128), nullable=True)  # e.g. "Promethean India Support"
+    amc_valid_until = Column(String(32), nullable=True)
+    condition = Column(String(32), default="Optimal")  # 'Optimal', 'Low Buffer', 'Under Service', 'Condemned'
+    last_audited = Column(String(32), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    custody_logs = relationship("AssetCustodyLog", back_populates="item", cascade="all, delete-orphan")
+    movements = relationship("InventoryMovement", back_populates="item", cascade="all, delete-orphan")
+
+
+class InventoryMovement(Base):
+    """Audit ledger for every stock change (inward purchase, lab consumption, write-off)."""
+    __tablename__ = "inventory_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    movement_type = Column(String(50), nullable=False)  # 'Inward GRN', 'Lab Consumption', 'Damage Write-off', 'Stock Audit Adjustment'
+    quantity = Column(Integer, nullable=False)  # Positive or negative delta
+    reference_no = Column(String(64), nullable=True)  # PO Number or Audit ID
+    recorded_by = Column(String(128), nullable=False, default="Mrs. Shalini Rao")
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    item = relationship("InventoryItem", back_populates="movements")
+
+
+class AssetCustodyLog(Base):
+    """Daily check-in / check-out register and TC clearance asset quarantine."""
+    __tablename__ = "asset_custody_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    borrower_name = Column(String(128), nullable=False)  # "Mrs. Ananya Verma" or "Kabir Mehta"
+    borrower_role = Column(String(32), nullable=False)  # 'Teacher', 'Student', 'Staff'
+    borrower_ref_id = Column(String(64), nullable=True)  # Roll No: "8B-15" or Teacher ID: "EMP-042"
+    class_room = Column(String(64), nullable=True)  # "Class 8-B"
+    quantity = Column(Integer, default=1, nullable=False)
+    checkout_time = Column(DateTime, default=datetime.datetime.utcnow)
+    expected_return_time = Column(DateTime, nullable=True)
+    actual_return_time = Column(DateTime, nullable=True)
+    condition_on_return = Column(String(32), default="Intact")  # 'Intact', 'Damaged', 'Lost'
+    fine_assessed = Column(Float, default=0.0)
+    status = Column(String(32), index=True, default="Active")  # 'Active', 'Returned', 'Overdue', 'Waived'
+
+    item = relationship("InventoryItem", back_populates="custody_logs")
+
 
 
 

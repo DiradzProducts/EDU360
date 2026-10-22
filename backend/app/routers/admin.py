@@ -549,14 +549,22 @@ async def list_inventory(db: AsyncSession = Depends(get_db)):
     return [
         {
             "id": i.id,
+            "asset_tag": i.asset_tag,
             "name": i.name,
             "category": i.category,
-            "total_stock": i.total_quantity,
-            "issued_count": i.issued_quantity,
-            "damaged_count": i.damaged_quantity,
-            "location": "Main Store Room / Block B",
-            "last_audited": "05 Oct 2026",
-            "status": i.status
+            "sub_category": i.sub_category,
+            "total_stock": i.total_stock,
+            "available_stock": i.available_stock,
+            "issued_count": i.issued_count,
+            "damaged_count": i.damaged_count,
+            "reorder_level": i.reorder_level,
+            "unit_of_measure": i.unit_of_measure,
+            "location": i.location,
+            "last_audited": i.last_audited or "20 Oct 2026",
+            "condition": i.condition,
+            "amc_vendor": i.amc_vendor,
+            "amc_valid_until": i.amc_valid_until,
+            "status": "In Stock" if i.available_stock > i.reorder_level else "Low Stock"
         }
         for i in items
     ]

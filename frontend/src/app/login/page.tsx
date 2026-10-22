@@ -47,10 +47,10 @@ export default function LoginPage() {
         const roleFromPath = (res.portal_redirect.replace('/', '') || 'student') as UserRole;
         loginAs(roleFromPath);
       } else {
-        loginAs('student');
+        throw new Error('Invalid authentication response. Please verify credentials.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please verify your institutional credentials.');
+      setErrorMessage(err.message || 'Incorrect credentials. Please verify your institutional username and password.');
       setLoading(false);
     }
   };

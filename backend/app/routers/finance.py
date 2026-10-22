@@ -9,14 +9,19 @@ from sqlalchemy import select, update, or_, and_, func
 from app.core.database import get_db
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
-    FeeMilestone, Student, Notification
+    FeeMilestone, Student, Notification, StaffMember,
+    PayrollBatch, StaffPayslip, PurchaseOrder, FleetExpenseRecord
 )
 from app.schemas.schemas import (
     FeeDefaulterResponse, FeeDefaulterCreate, FeeDefaulterUpdate,
     VendorInvoiceResponse, VendorInvoiceCreate, VendorInvoiceUpdate,
     PaymentTransactionResponse, PaymentTransactionCreate,
     FinanceDispatchLogResponse, FinanceDashboardStats,
-    ApplyWaiverRequest, RecordFeePaymentRequest, BulkReminderRequest
+    ApplyWaiverRequest, RecordFeePaymentRequest, BulkReminderRequest,
+    StaffPayslipResponse, PayrollBatchResponse, GeneratePayrollRequest,
+    AuthorizePayrollRequest, DisbursePayrollRequest, PurchaseOrderCreate,
+    PurchaseOrderResponse, VerifyGRNRequest, FleetExpenseCreate,
+    FleetExpenseResponse, SettleFleetExpenseRequest
 )
 from app.routers.notifications import create_system_notification
 
@@ -891,3 +896,413 @@ async def seed_finance_data(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"status": "success", "message": "Finance domain seeded with realistic defaulters, transactions, and vendor invoices."}
+
+
+# =========================================================================
+# 7. STAFF PAYROLL & SALARY DISBURSEMENT OUTFLOW
+# =========================================================================
+
+@router.get("/payroll/batches", response_model=List[PayrollBatchResponse])
+async def get_payroll_batches(db: AsyncSession = Depends(get_db)):
+    """List historical and active monthly payroll runs."""
+    result = await db.execute(select(PayrollBatch).order_by(PayrollBatch.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.get("/payroll/batches/{batch_id}/slips", response_model=List[StaffPayslipResponse])
+async def get_payroll_batch_slips(batch_id: int, db: AsyncSession = Depends(get_db)):
+    """List granular staff salary slips for a specific payroll batch."""
+    result = await db.execute(
+        select(StaffPayslip).where(StaffPayslip.batch_id == batch_id).order_by(StaffPayslip.department, StaffPayslip.staff_name)
+    )
+    return result.scalars().all()
+
+
+@router.post("/payroll/generate", response_model=PayrollBatchResponse)
+async def generate_monthly_payroll(
+    req: GeneratePayrollRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Computes 1-click monthly salary register across all school faculty and staff.
+    Calculates Base, HRA, Allowances, PF (12%), Professional Tax (₹200), and TDS withholding.
+    """
+    # Check if batch for this month already exists
+    existing = await db.execute(select(PayrollBatch).where(PayrollBatch.payroll_month == req.payroll_month))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail=f"Payroll batch for {req.payroll_month} already exists")
+
+    # Fetch staff members
+    staff_res = await db.execute(select(StaffMember))
+    staff_list = staff_res.scalars().all()
+
+    if not staff_list:
+        raise HTTPException(status_code=400, detail="No staff members registered in system")
+
+    # Calculate earnings & deductions per employee
+    total_gross = 0.0
+    total_deductions_all = 0.0
+    total_net = 0.0
+
+    new_batch = PayrollBatch(
+        payroll_month=req.payroll_month,
+        total_staff_count=len(staff_list),
+        gross_total=0.0,
+        total_deductions=0.0,
+        net_payable=0.0,
+        status="Audit Pending",
+        notes=req.notes or f"Generated automated {req.payroll_month} payroll run."
+    )
+    db.add(new_batch)
+    await db.flush()
+
+    for idx, s in enumerate(staff_list):
+        # Salary baseline based on role
+        if "Principal" in s.role or "Head" in s.role:
+            base = 65000.0
+            hra = 16000.0
+            spl = 7000.0
+        elif "Senior" in s.role or s.role == "Teacher":
+            base = 45000.0
+            hra = 12000.0
+            spl = 8000.0
+        else: # Support / Driver / Store / Lab
+            base = 25000.0
+            hra = 6000.0
+            spl = 4000.0
+
+        gross = base + hra + spl
+        
+        # Deductions
+        pf = round(base * 0.12, 2)  # 12% PF statutory
+        pt = 200.0  # PT standard
+        tds = round(gross * 0.05, 2) if gross > 50000 else 0.0
+        lop_days = 0
+        lop_ded = 0.0
+
+        tot_ded = pf + pt + tds + lop_ded
+        net = gross - tot_ded
+
+        total_gross += gross
+        total_deductions_all += tot_ded
+        total_net += net
+
+        slip = StaffPayslip(
+            batch_id=new_batch.id,
+            staff_id=s.id,
+            staff_name=s.name,
+            role_designation=s.role,
+            department=s.department,
+            bank_account_no=f"9182{idx + 10}491820",
+            bank_ifsc="HDFC0001824",
+            basic_salary=base,
+            hra_allowance=hra,
+            special_allowance=spl,
+            gross_earnings=gross,
+            provident_fund=pf,
+            professional_tax=pt,
+            income_tax_tds=tds,
+            loss_of_pay_days=lop_days,
+            loss_of_pay_deduction=lop_ded,
+            total_deductions=tot_ded,
+            net_salary=net,
+            disbursement_status="Pending"
+        )
+        db.add(slip)
+
+    new_batch.gross_total = total_gross
+    new_batch.total_deductions = total_deductions_all
+    new_batch.net_payable = total_net
+
+    # Notify Principal / Admin for high-value authorization
+    await create_system_notification(
+        db=db,
+        sender_name="Mr. Arvind Krishnan",
+        sender_role="accounts_coordinator",
+        recipient_role="admin",
+        title=f"Monthly Payroll Ready: {req.payroll_month}",
+        message=f"{req.payroll_month} Payroll Batch for {len(staff_list)} staff members computed. Net wire amount: ₹{total_net:,.2f}. Ready for Principal authorization.",
+        notification_type="PAYROLL_AUDIT",
+        priority="HIGH",
+        action_url="/accounts_coordinator"
+    )
+
+    await db.commit()
+    await db.refresh(new_batch)
+    return new_batch
+
+
+@router.post("/payroll/batches/{batch_id}/authorize", response_model=PayrollBatchResponse)
+async def authorize_payroll_batch(
+    batch_id: int,
+    req: AuthorizePayrollRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Principal executive sign-off for monthly staff salary disbursement wire."""
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    batch.status = "Approved for Wire"
+    batch.authorized_by = req.authorized_by
+    batch.authorized_at = datetime.datetime.utcnow()
+    if req.notes:
+        batch.notes = (batch.notes or "") + f" | Authorized: {req.notes}"
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.post("/payroll/batches/{batch_id}/disburse", response_model=PayrollBatchResponse)
+async def disburse_payroll_batch(
+    batch_id: int,
+    req: DisbursePayrollRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Executes corporate bank NACH/NEFT salary disbursement wire.
+    Updates all payslips to 'Disbursed' and notifies all teachers and staff.
+    """
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    now = datetime.datetime.utcnow()
+    batch.status = "Disbursed"
+    batch.disbursed_at = now
+    batch.bank_batch_ref = req.bank_batch_ref
+
+    # Update all slips
+    slips_res = await db.execute(select(StaffPayslip).where(StaffPayslip.batch_id == batch_id))
+    slips = slips_res.scalars().all()
+    for s in slips:
+        s.disbursement_status = "Disbursed"
+        s.payment_utr = f"CMS/SAL/{req.bank_batch_ref}/{s.id}"
+        s.disbursed_at = now
+
+    # Dispatch notification to all teachers
+    await create_system_notification(
+        db=db,
+        sender_name="Mr. Arvind Krishnan (Accounts Officer)",
+        sender_role="accounts_coordinator",
+        recipient_role="teacher",
+        title=f"Salary Slip Published: {batch.payroll_month}",
+        message=f"Your {batch.payroll_month} salary has been credited to your bank account. Digital payslip is available in your Teacher Console.",
+        notification_type="SALARY_DISBURSED",
+        priority="NORMAL",
+        action_url="/teacher?tab=my_salary"
+    )
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.get("/payroll/my-payslip", response_model=StaffPayslipResponse)
+async def get_my_payslip(
+    staff_name: Optional[str] = Query("Mrs. Ananya Verma"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Enables faculty to view their latest official salary slip in the Teacher Portal."""
+    result = await db.execute(
+        select(StaffPayslip).where(StaffPayslip.staff_name.ilike(f"%{staff_name}%")).order_by(StaffPayslip.created_at.desc())
+    )
+    slip = result.scalars().first()
+    if not slip:
+        # Fallback to first slip
+        fallback = await db.execute(select(StaffPayslip).order_by(StaffPayslip.created_at.desc()))
+        slip = fallback.scalars().first()
+    if not slip:
+        raise HTTPException(status_code=404, detail="No payslip available for this staff member")
+    return slip
+
+
+# =========================================================================
+# 8. PROCUREMENT & PO 3-WAY MATCH (STORE -> ACCOUNTS)
+# =========================================================================
+
+@router.get("/purchase-orders", response_model=List[PurchaseOrderResponse])
+async def get_purchase_orders(
+    status: Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all procurement purchase orders across Science Lab, Sports, IT and Classroom store."""
+    query = select(PurchaseOrder)
+    if status and status != "ALL":
+        query = query.where(PurchaseOrder.status == status)
+    if department and department != "All Departments":
+        query = query.where(PurchaseOrder.department == department)
+    query = query.order_by(PurchaseOrder.created_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/purchase-orders", response_model=PurchaseOrderResponse)
+async def create_purchase_order(
+    req: PurchaseOrderCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Issues a formal purchase order linked to store requisitions."""
+    po = PurchaseOrder(
+        po_number=req.po_number,
+        department=req.department,
+        vendor_name=req.vendor_name,
+        items_json=req.items_json,
+        total_amount=req.total_amount,
+        expected_delivery_date=req.expected_delivery_date,
+        status="Issued",
+        notes=req.notes
+    )
+    db.add(po)
+
+    # Notify Inventory Coordinator Mrs. Shalini Rao
+    await create_system_notification(
+        db=db,
+        sender_name="Mr. Arvind Krishnan",
+        sender_role="accounts_coordinator",
+        recipient_role="inventory_coordinator",
+        title=f"PO Issued: {po.po_number}",
+        message=f"Purchase order for {po.vendor_name} ({po.department}) valued at ₹{po.total_amount:,.2f} has been dispatched. Awaiting delivery handover inspection.",
+        notification_type="PO_ISSUED",
+        priority="NORMAL",
+        action_url="/inventory_coordinator"
+    )
+
+    await db.commit()
+    await db.refresh(po)
+    return po
+
+
+@router.post("/purchase-orders/{po_id}/grn", response_model=PurchaseOrderResponse)
+async def verify_purchase_order_grn(
+    po_id: int,
+    req: VerifyGRNRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Inventory Coordinator digitally stamps Goods Received Note (GRN) upon physical delivery.
+    Auto-generates a VendorInvoice for the Accounts Coordinator to authorize wire transfer.
+    """
+    res = await db.execute(select(PurchaseOrder).where(PurchaseOrder.id == po_id))
+    po = res.scalars().first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    po.status = "GRN Verified"
+    po.grn_number = req.grn_number
+    po.grn_verified_by = req.verified_by
+    po.grn_verified_at = datetime.datetime.utcnow()
+
+    # Create linked VendorInvoice in Accounts Payable queue
+    inv_no = f"INV-{po.po_number.replace('PO-', '')}"
+    po.linked_invoice_no = inv_no
+
+    new_inv = VendorInvoice(
+        invoice_no=inv_no,
+        vendor_name=po.vendor_name,
+        vendor_category=po.department,
+        invoice_for=f"Procurement settlement for {po.po_number} (GRN: {req.grn_number})",
+        amount=po.total_amount,
+        invoice_date=datetime.datetime.utcnow().strftime("%d %b %Y"),
+        due_date="Net 30 Days",
+        status="Pending Approval",
+        notes=f"3-Way match verified against {req.grn_number} by {req.verified_by}"
+    )
+    db.add(new_inv)
+
+    # Alert Accounts Coordinator
+    await create_system_notification(
+        db=db,
+        sender_name="Mrs. Shalini Rao (Store Lead)",
+        sender_role="inventory_coordinator",
+        recipient_role="accounts_coordinator",
+        title=f"GRN Verified: {po.po_number}",
+        message=f"Goods for {po.po_number} inspected and stamped with {req.grn_number}. Invoice {inv_no} (₹{po.total_amount:,.2f}) released for Accounts wire authorization.",
+        notification_type="GRN_STAMPED",
+        priority="NORMAL",
+        action_url="/accounts_coordinator"
+    )
+
+    await db.commit()
+    await db.refresh(po)
+    return po
+
+
+# =========================================================================
+# 9. FLEET & FACILITY EXPENSES (TRANSPORT -> ACCOUNTS)
+# =========================================================================
+
+@router.get("/fleet-expenses", response_model=List[FleetExpenseResponse])
+async def get_fleet_expenses(
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """List bus fleet fuel, RTO fitness certification, and maintenance AMC expenses."""
+    query = select(FleetExpenseRecord)
+    if status and status != "ALL":
+        query = query.where(FleetExpenseRecord.status == status)
+    query = query.order_by(FleetExpenseRecord.created_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/fleet-expenses", response_model=FleetExpenseResponse)
+async def log_fleet_expense(
+    req: FleetExpenseCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Logs a fleet expenditure claim submitted by Transport Coordinator."""
+    rec = FleetExpenseRecord(
+        vehicle_no=req.vehicle_no,
+        bus_route=req.bus_route,
+        expense_type=req.expense_type,
+        vendor_name=req.vendor_name,
+        amount=req.amount,
+        status="Approved for Wire",
+        invoice_ref=req.invoice_ref,
+        logged_by=req.logged_by or "Mr. Vikram Malhotra (Transport Lead)",
+        due_date=req.due_date
+    )
+    db.add(rec)
+
+    # Notify Accounts Coordinator
+    await create_system_notification(
+        db=db,
+        sender_name=req.logged_by or "Transport Coordinator",
+        sender_role="transport_coordinator",
+        recipient_role="accounts_coordinator",
+        title=f"Transport Outflow: {req.expense_type}",
+        message=f"Transport claim of ₹{req.amount:,.2f} for {req.vehicle_no} ({req.bus_route}) submitted by Transport Lead.",
+        notification_type="FLEET_EXPENSE",
+        priority="NORMAL",
+        action_url="/accounts_coordinator"
+    )
+
+    await db.commit()
+    await db.refresh(rec)
+    return rec
+
+
+@router.post("/fleet-expenses/{id}/settle", response_model=FleetExpenseResponse)
+async def settle_fleet_expense(
+    id: int,
+    req: SettleFleetExpenseRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Records payment wire UTR for transport fuel or RTO contract."""
+    res = await db.execute(select(FleetExpenseRecord).where(FleetExpenseRecord.id == id))
+    rec = res.scalars().first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Fleet expense record not found")
+
+    rec.status = "Paid"
+    rec.payment_utr = req.payment_utr
+    rec.paid_at = datetime.datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(rec)
+    return rec

@@ -62,7 +62,8 @@ import {
   Phone,
   MapPin,
   Paperclip,
-  Menu
+  Menu,
+  CreditCard
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { 
@@ -86,7 +87,8 @@ import {
   ExamItem,
   ExamSubmissionItem,
   QuestionPaperItem,
-  OcrScanResultItem
+  OcrScanResultItem,
+  StaffPayslipItem
 } from '@/lib/types';
 
 import { AttendanceSimulator } from '@/components/attendance-simulator';
@@ -117,7 +119,8 @@ type TeacherTab =
   | 'parent_chat'
   | 'leave_approvals' 
   | 'duties' 
-  | 'my_permissions';
+  | 'my_permissions'
+  | 'my_salary';
 
 // Data types for Teacher Exams & Marks (Used in Duties Paper Correction Queue)
 interface TeacherExamScoreItem {
@@ -177,6 +180,7 @@ export default function TeacherPage() {
   const [duties, setDuties] = useState<TeacherDutyItem[]>([]);
   const [students, setStudents] = useState<TeacherStudentRosterItem[]>([]);
   const [myPermissions, setMyPermissions] = useState<TeacherPermissionRequest[]>([]);
+  const [myPayslip, setMyPayslip] = useState<StaffPayslipItem | null>(null);
   const [parentContext, setParentContext] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -871,7 +875,8 @@ export default function TeacherPage() {
           ptmCfgRes,
           ptmSlotsRes,
           acadTasksRes,
-          currPacingRes
+          currPacingRes,
+          payslipRes
         ] = await Promise.all([
           api.getAttendanceRoster(1),
           api.getSubmission(1),
@@ -888,7 +893,8 @@ export default function TeacherPage() {
           api.getPTMEventConfig(),
           api.getPTMSlots(),
           api.getAdminTasks('academic'),
-          api.getCurriculumPacing()
+          api.getCurriculumPacing(),
+          api.getMyPayslip(2)
         ]);
 
         setAttendance(attRes);
@@ -907,6 +913,7 @@ export default function TeacherPage() {
         setPtmSlots(ptmSlotsRes);
         setAcademicTasks(acadTasksRes);
         setCurriculumItems(currPacingRes);
+        setMyPayslip(payslipRes);
       } catch (err) {
         console.error("Error loading teacher portal", err);
       } finally {
@@ -1884,6 +1891,25 @@ export default function TeacherPage() {
                 </div>
                 {!sidebarCollapsed && (
                   <span className="text-[10px] font-bold text-slate-400 shrink-0">Self-Service</span>
+                )}
+              </button>
+
+              {/* 10. Teacher Salary & Payslips */}
+              <button
+                onClick={() => { setActiveTab('my_salary'); setMobileDrawerOpen(false); }}
+                title="My Monthly Salary & Digital Payslips"
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'my_salary'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'my_salary' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">My Payslips</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Bursar</span>
                 )}
               </button>
             </div>
@@ -6747,6 +6773,247 @@ export default function TeacherPage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===================================================== */}
+          {/* TAB 9: FACULTY SALARY & DIGITAL PAYSLIPS             */}
+          {/* ===================================================== */}
+          {activeTab === 'my_salary' && (
+            <div className="space-y-6">
+              {/* Header Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                      Staff Self-Service
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">Oct 2026 Pay Cycle</span>
+                  </div>
+                  <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                    Faculty Salary & Monthly Payslips
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Itemized earnings, statutory EPF/PT/TDS deductions, and bank wire remittance status certified by Accounts Department.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Print Statement
+                  </button>
+                  <button
+                    onClick={() => {
+                      triggerToast("Salary inquiry routed directly to Accounts Coordinator desk.");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Contact Bursar
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Ribbon */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gross Earnings</div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                    Basic + HRA + Special Allowance
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Deductions</div>
+                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+                    -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-semibold mt-1">
+                    EPF (12%) + PT (₹200) + TDS
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-xs">
+                  <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Net Take-Home Pay</div>
+                  <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1">
+                    ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                    Direct Credit to Bank A/c
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Wire Remittance</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      (myPayslip?.disbursement_status || 'Pending') === 'Disbursed'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                    }`}>
+                      <CheckCircle2 className="h-3 w-3" />
+                      {myPayslip?.disbursement_status || 'Disbursed'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-500 mt-1.5 truncate">
+                    UTR: {myPayslip?.payment_utr || 'CMS-HDFC-20261028-0912'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Comprehensive Itemized Digital Payslip */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                {/* School Header */}
+                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="h-5 w-5 text-blue-600" />
+                        <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                          Delhi Public School, Sector 45
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Affiliated to CBSE, New Delhi (Affiliation No: 2130048) · Pay Slip for October 2026
+                      </p>
+                    </div>
+                    <div className="text-right sm:border-l sm:border-slate-200 dark:sm:border-slate-700 sm:pl-4">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">Mrs. Ananya Verma</div>
+                      <div className="text-[11px] text-slate-500">PGT Mathematics · Faculty ID #2</div>
+                      <div className="text-[10px] font-mono text-slate-400">A/c: 918204918201 · HDFC Bank (HDFC0001829)</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Earnings & Deductions Dual Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-800">
+                  {/* Earnings Column */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+                      <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Earnings & Allowances
+                      </span>
+                      <span className="text-xs font-black text-slate-900 dark:text-white">Amount (₹)</span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <span className="text-slate-600 dark:text-slate-400">Basic Pay</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          ₹{myPayslip ? myPayslip.basic_salary.toLocaleString('en-IN') : '38,000'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <span className="text-slate-600 dark:text-slate-400">House Rent Allowance (HRA)</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          ₹{myPayslip ? myPayslip.hra_allowance.toLocaleString('en-IN') : '15,200'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <span className="text-slate-600 dark:text-slate-400">Special Teaching Allowance</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          ₹{myPayslip ? myPayslip.special_allowance.toLocaleString('en-IN') : '8,800'}
+                        </span>
+                      </div>
+                      {myPayslip && myPayslip.loss_of_pay_days > 0 && (
+                        <div className="flex justify-between py-1 text-rose-600 font-semibold border-b border-slate-50 dark:border-slate-800/40">
+                          <span>Loss of Pay ({myPayslip.loss_of_pay_days} day(s))</span>
+                          <span>-₹{myPayslip.loss_of_pay_deduction.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between font-black text-xs text-slate-900 dark:text-white">
+                      <span>Total Gross Earnings</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Deductions Column */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+                      <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Statutory Deductions
+                      </span>
+                      <span className="text-xs font-black text-slate-900 dark:text-white">Amount (₹)</span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <div>
+                          <span className="text-slate-600 dark:text-slate-400">Employees' Provident Fund (EPF 12%)</span>
+                          <span className="block text-[10px] text-slate-400">UAN: 100921829102</span>
+                        </div>
+                        <span className="font-semibold text-rose-600 dark:text-rose-400">
+                          ₹{myPayslip ? myPayslip.provident_fund.toLocaleString('en-IN') : '4,560'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <div>
+                          <span className="text-slate-600 dark:text-slate-400">Professional Tax (PT)</span>
+                          <span className="block text-[10px] text-slate-400">State Statutory Standard</span>
+                        </div>
+                        <span className="font-semibold text-rose-600 dark:text-rose-400">
+                          ₹{myPayslip ? myPayslip.professional_tax.toLocaleString('en-IN') : '200'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+                        <div>
+                          <span className="text-slate-600 dark:text-slate-400">Income Tax (TDS / Form 16)</span>
+                          <span className="block text-[10px] text-slate-400">Old Tax Regime Declaration</span>
+                        </div>
+                        <span className="font-semibold text-rose-600 dark:text-rose-400">
+                          ₹{myPayslip ? myPayslip.income_tax_tds.toLocaleString('en-IN') : '2,980'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between font-black text-xs text-slate-900 dark:text-white">
+                      <span>Total Deductions</span>
+                      <span className="text-rose-600 dark:text-rose-400">
+                        -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Net Pay Highlight Bar */}
+                <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/30 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <span className="text-xs font-black text-emerald-900 dark:text-emerald-200">
+                        Net Disbursable Salary (Take-Home)
+                      </span>
+                      <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">
+                        Fifty-Four Thousand Two Hundred Sixty Rupees Only
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
+                    ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+                  </div>
+                </div>
+
+                {/* Statutory Certification Footer */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span>
+                    ✓ Authenticated by Accounts Coordinator (Bursar) · Generated automatically via EDU360 Payroll Engine.
+                  </span>
+                  <span className="font-mono text-slate-400">
+                    Document ID: PAY-202610-002 · Digitally Signed
+                  </span>
                 </div>
               </div>
             </div>

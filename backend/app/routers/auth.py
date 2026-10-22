@@ -228,22 +228,25 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
             u_res = await db.execute(select(User).where(User.role == target_role))
             fallback_u = u_res.scalars().first()
 
-        if fallback_u and is_valid_pwd:
-            grade_tier, is_junior, student_id = await resolve_student_tier_details(fallback_u, db)
-            user_dto = UserResponse.model_validate(fallback_u)
-            user_dto.grade_tier = grade_tier
-            user_dto.is_junior_k5 = is_junior
-            user_dto.student_id = student_id
+        if fallback_u:
+            if is_valid_pwd:
+                grade_tier, is_junior, student_id = await resolve_student_tier_details(fallback_u, db)
+                user_dto = UserResponse.model_validate(fallback_u)
+                user_dto.grade_tier = grade_tier
+                user_dto.is_junior_k5 = is_junior
+                user_dto.student_id = student_id
 
-            return AuthResponse(
-                success=True,
-                message=f"Logged in as {fallback_u.name} (@{fallback_u.username or fallback_u.role})",
-                user=user_dto,
-                portal_redirect=PORTAL_REDIRECTS.get(fallback_u.role.lower(), "/student"),
-                grade_tier=grade_tier,
-                is_junior_k5=is_junior,
-                student_id=student_id
-            )
+                return AuthResponse(
+                    success=True,
+                    message=f"Logged in as {fallback_u.name} (@{fallback_u.username or fallback_u.role})",
+                    user=user_dto,
+                    portal_redirect=PORTAL_REDIRECTS.get(fallback_u.role.lower(), "/student"),
+                    grade_tier=grade_tier,
+                    is_junior_k5=is_junior,
+                    student_id=student_id
+                )
+            else:
+                raise HTTPException(status_code=401, detail="Incorrect password. For all institutional accounts, use 'Password123'.")
 
     raise HTTPException(status_code=404, detail=f"Account with username or email '{identifier}' not found. Please verify your username (e.g. sr_student, teacher_mat, admin).")
 

@@ -21,7 +21,11 @@ import {
   RemedialEarlyWarning, RemedialAdminOverview, SocraticHintResponse,
   ExamItem, ExamSubmissionItem, WhatsAppDispatchResponse,
   PreVerifyResponse, VisualFormulaCard,
-  QuestionPaperItem, ExamScheduleItem, OcrScanResultItem, ReportCardItem
+  QuestionPaperItem, ExamScheduleItem, OcrScanResultItem, ReportCardItem,
+  PayrollBatchItem, StaffPayslipItem, PurchaseOrderItem, FleetExpenseItem,
+  GeneratePayrollPayload, AuthorizePayrollPayload, DisbursePayrollPayload,
+  CreatePurchaseOrderPayload, VerifyGRNPayload, CreateFleetExpensePayload, SettleFleetExpensePayload,
+  AssetCustodyLogItem, ClearanceCheckResult
 } from './types';
 import { FocusRosterItem, getFocusStudentById, updateFocusStudent, INITIAL_FOCUS_ROSTER } from './focus-data';
 
@@ -628,11 +632,18 @@ let fallbackTeacherPermissions: TeacherPermissionRequest[] = [
 ];
 
 let fallbackInventory: InventoryRecord[] = [
-  { id: 1, name: "NCERT Class 8 & 9 Standard Textbooks", category: "Books", total_stock: 1200, issued_count: 1140, damaged_count: 12, reorder_level: 100, location: "Central Library Rack A", last_audited: "10 Oct 2026" },
-  { id: 2, name: "Optics Kits (Convex/Concave Lenses & Lasers)", category: "Lab Equipment", total_stock: 45, issued_count: 38, damaged_count: 2, reorder_level: 10, location: "Physics Lab 2 Cabinet 4", last_audited: "08 Oct 2026" },
-  { id: 3, name: "Student Coding Tablets (Lenovo M10 HD)", category: "IT Hardware", total_stock: 90, issued_count: 85, damaged_count: 1, reorder_level: 15, location: "Computer Lab 1 Charging Cart", last_audited: "12 Oct 2026" },
-  { id: 4, name: "Tournament Match Footballs (FIFA Quality)", category: "Sports Gear", total_stock: 35, issued_count: 32, damaged_count: 4, reorder_level: 12, location: "Sports Equipment Room B", last_audited: "11 Oct 2026" },
-  { id: 5, name: "Interactive Smart Board Touch Stylus & Pens", category: "Classroom", total_stock: 60, issued_count: 54, damaged_count: 3, reorder_level: 15, location: "Academic Admin Supply Vault", last_audited: "13 Oct 2026" }
+  { id: 1, asset_tag: "CON-CHEM-001", name: "Hydrochloric Acid (HCl 35% Analytical Grade)", category: "Lab Consumable", sub_category: "Chemistry Reagents", total_stock: 5, available_stock: 2, issued_count: 3, damaged_count: 0, reorder_level: 5, unit_of_measure: "Litres", unit_cost: 320, location: "Chemistry Lab 2 Acid Locker", condition: "Low Buffer", last_audited: "20 Oct 2026" },
+  { id: 2, asset_tag: "CON-BIO-004", name: "Pre-Mounted Microscope Glass Slides (Set of 100)", category: "Lab Consumable", sub_category: "Biology Apparatus", total_stock: 250, available_stock: 240, issued_count: 10, damaged_count: 0, reorder_level: 100, unit_of_measure: "Units", unit_cost: 15, location: "Biology Lab Specimen Cabinet", condition: "Optimal", last_audited: "18 Oct 2026" },
+  { id: 3, asset_tag: "AST-IT-092", name: "Lenovo Tab M10 HD (Student Coding Tablets)", category: "IT Hardware", sub_category: "Coding Tablets", total_stock: 90, available_stock: 60, issued_count: 30, damaged_count: 0, reorder_level: 15, unit_of_measure: "Units", unit_cost: 12500, location: "Computer Lab 1 Charging Cart A", condition: "Optimal", amc_vendor: "Lenovo Enterprise Support", amc_valid_until: "31 Dec 2027", last_audited: "19 Oct 2026" },
+  { id: 4, asset_tag: "AST-AV-018", name: "Promethean 75-inch 4K Interactive Touch Panel", category: "IT Hardware", sub_category: "Classroom Displays", total_stock: 16, available_stock: 16, issued_count: 0, damaged_count: 0, reorder_level: 2, unit_of_measure: "Units", unit_cost: 185000, location: "Class 8-B Homeroom Wall", condition: "Optimal", amc_vendor: "Promethean Digital India AMC", amc_valid_until: "15 Nov 2027", last_audited: "15 Oct 2026" },
+  { id: 5, asset_tag: "AST-OPT-042", name: "Crown Glass Equilateral Triangular Prisms", category: "Lab Consumable", sub_category: "Physics Optics", total_stock: 35, available_stock: 32, issued_count: 2, damaged_count: 1, reorder_level: 10, unit_of_measure: "Units", unit_cost: 450, location: "Physics Lab Optics Vault", condition: "Optimal", last_audited: "16 Oct 2026" },
+  { id: 6, asset_tag: "SPT-BALL-015", name: "FIFA Quality Match Footballs (Size 5)", category: "Sports Gear", sub_category: "Field Sports", total_stock: 40, available_stock: 32, issued_count: 6, damaged_count: 2, reorder_level: 12, unit_of_measure: "Units", unit_cost: 1850, location: "Sports Equipment Depot Rack B", condition: "Optimal", last_audited: "21 Oct 2026" },
+  { id: 7, asset_tag: "BK-NCERT-801", name: "NCERT Class 8 Mathematics & Science Textbook Bundles", category: "Books/Stationery", sub_category: "Standard Curricula", total_stock: 400, available_stock: 370, issued_count: 30, damaged_count: 0, reorder_level: 50, unit_of_measure: "Sets", unit_cost: 650, location: "Central Textbook Repository Shelf 4", condition: "Optimal", last_audited: "12 Oct 2026" }
+];
+
+let fallbackCustodyLogs: AssetCustodyLogItem[] = [
+  { id: 1, item_id: 3, item_name: "Lenovo Tab M10 HD (Student Coding Tablets)", asset_tag: "AST-IT-092", borrower_name: "Mrs. Ananya Verma", borrower_role: "Teacher", borrower_ref_id: "EMP-042", class_room: "Class 8-B", quantity: 30, checkout_time: "2026-10-22T09:30:00Z", expected_return_time: "2026-10-22T15:30:00Z", condition_on_return: "Pending Return", fine_assessed: 0, status: "Active" },
+  { id: 2, item_id: 5, item_name: "Crown Glass Equilateral Triangular Prisms", asset_tag: "AST-OPT-042", borrower_name: "Kabir Mehta", borrower_role: "Student", borrower_ref_id: "15", class_room: "Class 8-B", quantity: 1, checkout_time: "2026-10-20T11:00:00Z", expected_return_time: "2026-10-21T11:00:00Z", condition_on_return: "Pending Return", fine_assessed: 0, status: "Active" }
 ];
 
 let fallbackFeeDefaulters: FeeDefaulter[] = [
@@ -1508,152 +1519,35 @@ export const api = {
     });
   },
   login: async (usernameOrEmail: string, password?: string, schoolCode?: string) => {
-    const norm = (usernameOrEmail || '').toLowerCase().trim();
-    let userRole = 'student';
-    let userName = 'Aarav Sharma';
-    let username = 'sr_student';
-    let redirect = '/student';
-    let avatar = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150';
-    let userId = 4;
-    let phone = '+91 98111 00004';
-    let gradeTier = 'secondary';
-    let isJunior = false;
-
-    if (norm === 'admin' || norm.includes('principal') || norm.includes('kapoor')) {
-      userRole = 'admin';
-      userName = 'Dr. Sunita Kapoor';
-      username = 'admin';
-      redirect = '/admin';
-      avatar = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150';
-      userId = 1;
-      phone = '+91 98111 00001';
-    } else if (norm === 'academic_coord' || norm.includes('academic')) {
-      userRole = 'academic_coordinator';
-      userName = 'Prof. Rajeshwari Nair';
-      username = 'academic_coord';
-      redirect = '/academic_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150';
-      userId = 6;
-      phone = '+91 98111 00006';
-    } else if (norm === 'exam_coord' || norm.includes('exam')) {
-      userRole = 'exam_coordinator';
-      userName = 'Dr. Hemanth Sen';
-      username = 'exam_coord';
-      redirect = '/exam_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150';
-      userId = 8;
-      phone = '+91 98111 00008';
-    } else if (norm === 'transport_coord' || norm.includes('transport')) {
-      userRole = 'transport_coordinator';
-      userName = 'Mr. Vikram Malhotra';
-      username = 'transport_coord';
-      redirect = '/transport_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150';
-      userId = 7;
-      phone = '+91 98111 00007';
-    } else if (norm === 'inventory_coord' || norm.includes('inventory')) {
-      userRole = 'inventory_coordinator';
-      userName = 'Mrs. Shalini Rao';
-      username = 'inventory_coord';
-      redirect = '/inventory_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150';
-      userId = 9;
-      phone = '+91 98111 00009';
-    } else if (norm === 'admissions_coord' || norm.includes('admission')) {
-      userRole = 'admissions_coordinator';
-      userName = 'Ms. Sneha Kulkarni';
-      username = 'admissions_coord';
-      redirect = '/admissions_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
-      userId = 10;
-      phone = '+91 98111 00010';
-    } else if (norm === 'accounts_coord' || norm.includes('account')) {
-      userRole = 'accounts_coordinator';
-      userName = 'Mr. Arvind Krishnan';
-      username = 'accounts_coord';
-      redirect = '/accounts_coordinator';
-      avatar = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150';
-      userId = 11;
-      phone = '+91 98111 00011';
-    } else if (norm === 'teacher_sci' || norm.includes('raman')) {
-      userRole = 'teacher';
-      userName = 'Dr. K. Raman';
-      username = 'teacher_sci';
-      redirect = '/teacher';
-      avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
-      userId = 12;
-      phone = '+91 98111 22332';
-    } else if (norm === 'teacher_eng' || norm.includes('sunitha')) {
-      userRole = 'teacher';
-      userName = 'Mrs. Sunitha Rao';
-      username = 'teacher_eng';
-      redirect = '/teacher';
-      avatar = 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150';
-      userId = 14;
-      phone = '+91 98111 22331';
-    } else if (norm === 'teacher_soc' || norm.includes('kalyani')) {
-      userRole = 'teacher';
-      userName = 'Mrs. Kalyani Murthy';
-      username = 'teacher_soc';
-      redirect = '/teacher';
-      avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
-      userId = 15;
-      phone = '+91 98111 22335';
-    } else if (norm.startsWith('teacher') || norm.includes('ananya')) {
-      userRole = 'teacher';
-      userName = 'Mrs. Ananya Verma';
-      username = 'teacher_mat';
-      redirect = '/teacher';
-      avatar = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150';
-      userId = 2;
-      phone = '+91 98111 00002';
-    } else if (norm === 'parent' || norm.includes('rajesh')) {
-      userRole = 'parent';
-      userName = 'Mr. Rajesh Sharma';
-      username = 'parent';
-      redirect = '/parent';
-      avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
-      userId = 3;
-      phone = '+91 98111 00003';
-    } else if (norm === 'jr_student' || norm.includes('junior')) {
-      userRole = 'student';
-      userName = 'Aarav Kumar';
-      username = 'jr_student';
-      redirect = '/student';
-      avatar = 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150';
-      userId = 5;
-      phone = '+91 98111 00005';
-      gradeTier = 'k5';
-      isJunior = true;
-    }
-
-    return fetchWithFallback<any>('/api/auth/login', {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ 
         username: usernameOrEmail, 
         email: usernameOrEmail, 
-        password: password || 'Password123', 
-        school_code: schoolCode 
+        password: password || '', 
+        school_code: schoolCode || 'EDU-GLOBAL-360'
       })
-    }, {
-      success: true,
-      message: `Login successful as ${userName}`,
-      user: {
-        id: userId,
-        name: userName,
-        username,
-        email: usernameOrEmail.includes('@') ? usernameOrEmail : `${username}@edu360.internal`,
-        role: userRole as any,
-        school_code: schoolCode || 'EDU-GLOBAL-360',
-        avatar,
-        phone,
-        grade_tier: gradeTier,
-        is_junior_k5: isJunior
-      },
-      portal_redirect: redirect,
-      grade_tier: gradeTier,
-      is_junior_k5: isJunior
     });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      const detailMsg = errJson?.detail || errJson?.message;
+      if (detailMsg) {
+        throw new Error(typeof detailMsg === 'string' ? detailMsg : JSON.stringify(detailMsg));
+      }
+      if (res.status === 401) {
+        throw new Error("Incorrect password. For all institutional accounts, use 'Password123'.");
+      }
+      if (res.status === 404) {
+        throw new Error(`Account with username '${usernameOrEmail}' not found. Please verify your username.`);
+      }
+      throw new Error(`Authentication failed (HTTP ${res.status}).`);
+    }
+
+    return await res.json();
   },
   register: async (data: { school_code: string; name: string; email: string; password: string; role: string; identifier?: string; phone?: string }) => {
     return fetchWithFallback<any>('/api/auth/register', {
@@ -1820,8 +1714,105 @@ export const api = {
       return { success: true };
     }
   },
-  getInventory: async () => {
-    return fetchWithFallback<InventoryRecord[]>('/api/admin/inventory', undefined, fallbackInventory);
+  getInventory: async (params?: { category?: string; condition?: string; search?: string }): Promise<InventoryRecord[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.category) q.set('category', params.category);
+      if (params?.condition) q.set('condition', params.condition);
+      if (params?.search) q.set('search', params.search);
+      const url = `/api/inventory/items${q.toString() ? '?' + q.toString() : ''}`;
+      const res = await fetchWithFallback<InventoryRecord[]>(url, undefined, fallbackInventory);
+      return Array.isArray(res) ? res : fallbackInventory;
+    } catch {
+      return fallbackInventory;
+    }
+  },
+
+  createInventoryItem: async (payload: Partial<InventoryRecord>): Promise<InventoryRecord> => {
+    return await fetchWithFallback<InventoryRecord>('/api/inventory/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  adjustInventoryStock: async (itemId: number, delta: number, reason: string = 'Class Practical Usage', notes?: string): Promise<InventoryRecord> => {
+    try {
+      return await fetchWithFallback<InventoryRecord>(`/api/inventory/items/${itemId}/stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta, reason, notes })
+      });
+    } catch {
+      fallbackInventory = fallbackInventory.map(i => {
+        if (i.id === itemId) {
+          const newTotal = Math.max(0, i.total_stock + delta);
+          return { ...i, total_stock: newTotal, available_stock: Math.max(0, (i.available_stock || newTotal) + delta) };
+        }
+        return i;
+      });
+      return fallbackInventory.find(i => i.id === itemId)!;
+    }
+  },
+
+  requisitionPurchaseOrder: async (itemId: number, payload: { quantity: number; vendor_name: string; department?: string; unit_price?: number; notes?: string }): Promise<PurchaseOrderItem> => {
+    return await fetchWithFallback<PurchaseOrderItem>(`/api/inventory/items/${itemId}/requisition-po`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getCustodyLogs: async (params?: { status?: string; borrower_role?: string; search?: string }): Promise<AssetCustodyLogItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.borrower_role) q.set('borrower_role', params.borrower_role);
+      if (params?.search) q.set('search', params.search);
+      const url = `/api/inventory/custody${q.toString() ? '?' + q.toString() : ''}`;
+      const res = await fetchWithFallback<AssetCustodyLogItem[]>(url, undefined, fallbackCustodyLogs);
+      return Array.isArray(res) ? res : fallbackCustodyLogs;
+    } catch {
+      return fallbackCustodyLogs;
+    }
+  },
+
+  checkoutAsset: async (payload: { item_id: number; borrower_name: string; borrower_role?: string; borrower_ref_id?: string; class_room?: string; quantity: number }): Promise<AssetCustodyLogItem> => {
+    return await fetchWithFallback<AssetCustodyLogItem>('/api/inventory/custody/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  returnAsset: async (logId: number, payload: { condition_on_return?: string; damaged_qty?: number; fine_assessed?: number; notes?: string }): Promise<AssetCustodyLogItem> => {
+    return await fetchWithFallback<AssetCustodyLogItem>(`/api/inventory/custody/${logId}/return`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  checkStudentClearance: async (studentId: number): Promise<ClearanceCheckResult> => {
+    try {
+      return await fetchWithFallback<ClearanceCheckResult>(`/api/inventory/clearance/student/${studentId}`, undefined, {
+        student_id: studentId,
+        student_name: 'Student',
+        is_cleared: true,
+        active_hold_count: 0,
+        pending_items: [],
+        total_unpaid_fines: 0
+      });
+    } catch {
+      return {
+        student_id: studentId,
+        student_name: 'Student',
+        is_cleared: true,
+        active_hold_count: 0,
+        pending_items: [],
+        total_unpaid_fines: 0
+      };
+    }
   },
   getFeeDefaulters: async (params?: { aging_tier?: string; status?: string; class_name?: string; search?: string }): Promise<FeeDefaulter[]> => {
     try {
@@ -3835,6 +3826,119 @@ export const api = {
   seedFinanceData: async (): Promise<any> => {
     return await fetchWithFallback<any>(`/api/finance/seed-data`, {
       method: 'POST'
+    });
+  },
+
+  // -------------------------------------------------------------
+  // Institutional Outflows: Payroll, Procurement, Fleet
+  // -------------------------------------------------------------
+
+  getPayrollBatches: async (): Promise<PayrollBatchItem[]> => {
+    try {
+      const res = await fetchWithFallback<PayrollBatchItem[]>(`/api/finance/payroll/batches`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  getPayrollSlips: async (batchId: number): Promise<StaffPayslipItem[]> => {
+    try {
+      const res = await fetchWithFallback<StaffPayslipItem[]>(`/api/finance/payroll/batches/${batchId}/slips`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  generatePayroll: async (payload: GeneratePayrollPayload): Promise<PayrollBatchItem> => {
+    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  authorizePayroll: async (batchId: number, payload: AuthorizePayrollPayload): Promise<PayrollBatchItem> => {
+    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/authorize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  disbursePayroll: async (batchId: number, payload: DisbursePayrollPayload): Promise<PayrollBatchItem> => {
+    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/disburse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getMyPayslip: async (staffId: number = 2, month?: string): Promise<StaffPayslipItem | null> => {
+    try {
+      const q = new URLSearchParams();
+      q.set('staff_id', String(staffId));
+      if (month) q.set('month', month);
+      return await fetchWithFallback<StaffPayslipItem>(`/api/finance/payroll/my-payslip?${q.toString()}`);
+    } catch {
+      return null;
+    }
+  },
+
+  getPurchaseOrders: async (params?: { department?: string; status?: string }): Promise<PurchaseOrderItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.department) q.set('department', params.department);
+      if (params?.status) q.set('status', params.status);
+      const res = await fetchWithFallback<PurchaseOrderItem[]>(`/api/finance/purchase-orders?${q.toString()}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  createPurchaseOrder: async (payload: CreatePurchaseOrderPayload): Promise<PurchaseOrderItem> => {
+    return await fetchWithFallback<PurchaseOrderItem>(`/api/finance/purchase-orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  verifyGRN: async (poId: number, payload: VerifyGRNPayload): Promise<PurchaseOrderItem> => {
+    return await fetchWithFallback<PurchaseOrderItem>(`/api/finance/purchase-orders/${poId}/grn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getFleetExpenses: async (params?: { status?: string; vehicle_no?: string }): Promise<FleetExpenseItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.vehicle_no) q.set('vehicle_no', params.vehicle_no);
+      const res = await fetchWithFallback<FleetExpenseItem[]>(`/api/finance/fleet-expenses?${q.toString()}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  logFleetExpense: async (payload: CreateFleetExpensePayload): Promise<FleetExpenseItem> => {
+    return await fetchWithFallback<FleetExpenseItem>(`/api/finance/fleet-expenses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  },
+
+  settleFleetExpense: async (expenseId: number, payload: SettleFleetExpensePayload): Promise<FleetExpenseItem> => {
+    return await fetchWithFallback<FleetExpenseItem>(`/api/finance/fleet-expenses/${expenseId}/settle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
   }
 };

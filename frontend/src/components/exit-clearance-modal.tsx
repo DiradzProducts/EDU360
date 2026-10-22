@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileCheck2, 
   ShieldCheck, 
@@ -10,9 +10,11 @@ import {
   FileText, 
   AlertCircle,
   Lock,
-  Stamp
+  Stamp,
+  Boxes
 } from 'lucide-react';
-import { ExitClearance } from '@/lib/types';
+import { ExitClearance, ClearanceCheckResult } from '@/lib/types';
+import { api } from '@/lib/api';
 
 interface ExitClearanceModalProps {
   clearance: ExitClearance;
@@ -23,6 +25,16 @@ interface ExitClearanceModalProps {
 
 export function ExitClearanceView({ clearance, onVerifyPhysical, onDigitalSign, role }: ExitClearanceModalProps) {
   const [loading, setLoading] = useState(false);
+  const [clearanceCheck, setClearanceCheck] = useState<ClearanceCheckResult | null>(null);
+
+  useEffect(() => {
+    if (clearance.student_id) {
+      api.checkStudentClearance(clearance.student_id)
+        .then(res => setClearanceCheck(res))
+        .catch(() => {});
+    }
+  }, [clearance.student_id]);
+
 
   const handlePhysicalVerify = async () => {
     if (!onVerifyPhysical) return;
@@ -95,11 +107,21 @@ export function ExitClearanceView({ clearance, onVerifyPhysical, onDigitalSign, 
             </span>
           </div>
 
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 text-center">
+          <div className={`rounded-xl border p-3 text-center ${
+            clearanceCheck && !clearanceCheck.is_cleared
+              ? 'border-rose-300 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20'
+              : 'border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20'
+          }`}>
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block">Lab &amp; Sports</span>
-            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mt-1 flex items-center justify-center gap-1">
-              <Check className="h-3.5 w-3.5" /> No Asset Dues
-            </span>
+            {clearanceCheck && !clearanceCheck.is_cleared ? (
+              <span className="text-xs font-bold text-rose-700 dark:text-rose-300 mt-1 flex items-center justify-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" /> Hold: {clearanceCheck.active_hold_count} Item Out
+              </span>
+            ) : (
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mt-1 flex items-center justify-center gap-1">
+                <Check className="h-3.5 w-3.5" /> No Asset Dues
+              </span>
+            )}
           </div>
 
           <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 text-center">
@@ -109,6 +131,20 @@ export function ExitClearanceView({ clearance, onVerifyPhysical, onDigitalSign, 
             </span>
           </div>
         </div>
+
+        {/* Inventory Custody Quarantine Warning */}
+        {clearanceCheck && !clearanceCheck.is_cleared && (
+          <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+            <div>
+              <span className="font-bold">Inventory Custody Quarantine Active:</span>
+              <p className="text-[11px] mt-0.5">
+                Departing student holds unreturned school apparatus: <b>{clearanceCheck.pending_items.join(', ')}</b>. 
+                Please return all borrowed equipment to <b>Mrs. Shalini Rao (Store Lead)</b> or settle replacement dues before final digital TC authorization.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dual Verification Proofs (Digital Approval + Physical Handover Scan) */}

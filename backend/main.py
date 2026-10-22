@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.routers import auth, admin, teacher, parent, student, remedial, exams, notifications, finance
+from app.routers import auth, admin, teacher, parent, student, remedial, exams, notifications, finance, inventory
 from app.seed import seed_data
 
 import asyncio
@@ -60,6 +60,7 @@ app.include_router(remedial.router)
 app.include_router(exams.router)
 app.include_router(notifications.router)
 app.include_router(finance.router)
+app.include_router(inventory.router)
 
 
 @app.get("/api/health")

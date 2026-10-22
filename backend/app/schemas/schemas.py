@@ -1136,3 +1136,224 @@ class FinanceDashboardStats(BaseModel):
     overdue_tier_30: int
     overdue_tier_60: int
     collection_target_progress_pct: float
+
+
+# =========================================================================
+# CASH OUTFLOW DOMAIN SCHEMAS (PAYROLL, PROCUREMENT, FLEET)
+# =========================================================================
+
+class StaffPayslipResponse(BaseModel):
+    id: int
+    batch_id: int
+    staff_id: int
+    staff_name: str
+    role_designation: str
+    department: str
+    bank_account_no: str
+    bank_ifsc: str
+    basic_salary: float
+    hra_allowance: float
+    special_allowance: float
+    gross_earnings: float
+    provident_fund: float
+    professional_tax: float
+    income_tax_tds: float
+    loss_of_pay_days: int
+    loss_of_pay_deduction: float
+    total_deductions: float
+    net_salary: float
+    disbursement_status: str
+    payment_utr: Optional[str] = None
+    disbursed_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class PayrollBatchResponse(BaseModel):
+    id: int
+    payroll_month: str
+    total_staff_count: int
+    gross_total: float
+    total_deductions: float
+    net_payable: float
+    status: str
+    authorized_by: Optional[str] = None
+    authorized_at: Optional[datetime.datetime] = None
+    disbursed_at: Optional[datetime.datetime] = None
+    bank_batch_ref: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class GeneratePayrollRequest(BaseModel):
+    payroll_month: str  # e.g. "October 2026"
+    include_lop_deductions: bool = True
+    notes: Optional[str] = None
+
+class AuthorizePayrollRequest(BaseModel):
+    authorized_by: str = "Dr. Sunita Kapoor (Principal)"
+    notes: Optional[str] = None
+
+class DisbursePayrollRequest(BaseModel):
+    bank_batch_ref: str = "HDFC-CMS-SAL-OCT26-001"
+    disbursed_by: str = "Mr. Arvind Krishnan (Accounts Officer)"
+
+class PurchaseOrderBase(BaseModel):
+    po_number: str
+    department: str
+    vendor_name: str
+    items_json: str
+    total_amount: float
+    expected_delivery_date: Optional[str] = None
+    notes: Optional[str] = None
+
+class PurchaseOrderCreate(PurchaseOrderBase):
+    pass
+
+class PurchaseOrderResponse(PurchaseOrderBase):
+    id: int
+    status: str
+    grn_number: Optional[str] = None
+    grn_verified_by: Optional[str] = None
+    grn_verified_at: Optional[datetime.datetime] = None
+    linked_invoice_no: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class VerifyGRNRequest(BaseModel):
+    grn_number: str = "GRN-2026-OCT-041"
+    verified_by: str = "Mrs. Shalini Rao (Store Lead)"
+    notes: Optional[str] = "Physical delivery checked and verified at campus inventory store"
+
+class FleetExpenseBase(BaseModel):
+    vehicle_no: str
+    bus_route: str
+    expense_type: str
+    vendor_name: str
+    amount: float
+    invoice_ref: Optional[str] = None
+    due_date: Optional[str] = None
+
+class FleetExpenseCreate(FleetExpenseBase):
+    logged_by: Optional[str] = "Mr. Vikram Malhotra (Transport Lead)"
+
+class FleetExpenseResponse(FleetExpenseBase):
+    id: int
+    status: str
+    payment_utr: Optional[str] = None
+    logged_by: str
+    paid_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class SettleFleetExpenseRequest(BaseModel):
+    payment_utr: str = "RTGS/SBIN20261022981048"
+    payment_mode: str = "RTGS"
+
+
+# --- Inventory & Asset Schemas ---
+class InventoryItemBase(BaseModel):
+    asset_tag: str
+    name: str
+    category: str
+    sub_category: Optional[str] = None
+    location: str
+    total_stock: int = 1
+    available_stock: int = 1
+    issued_count: int = 0
+    damaged_count: int = 0
+    reorder_level: int = 5
+    unit_of_measure: str = "Units"
+    unit_cost: float = 0.0
+    amc_vendor: Optional[str] = None
+    amc_valid_until: Optional[str] = None
+    condition: str = "Optimal"
+    last_audited: Optional[str] = None
+
+class InventoryItemCreate(InventoryItemBase):
+    pass
+
+class InventoryItemResponse(InventoryItemBase):
+    id: int
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class StockAdjustmentRequest(BaseModel):
+    delta: int  # can be positive (restock) or negative (consumed/broken)
+    reason: str = "Class Practical Usage"
+    recorded_by: Optional[str] = "Mrs. Shalini Rao (Store Lead)"
+    notes: Optional[str] = None
+
+class RequisitionPORequest(BaseModel):
+    quantity: int = 10
+    vendor_name: str
+    department: str = "Science Labs"
+    unit_price: float = 250.0
+    expected_delivery_date: Optional[str] = "Within 5 Days"
+    notes: Optional[str] = None
+
+class InventoryMovementResponse(BaseModel):
+    id: int
+    item_id: int
+    movement_type: str
+    quantity: int
+    reference_no: Optional[str] = None
+    recorded_by: str
+    notes: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class AssetCustodyCheckoutRequest(BaseModel):
+    item_id: int
+    borrower_name: str
+    borrower_role: str = "Teacher"  # Teacher | Student | Staff
+    borrower_ref_id: Optional[str] = None
+    class_room: Optional[str] = None
+    quantity: int = 1
+    expected_return_time: Optional[datetime.datetime] = None
+
+class AssetCustodyReturnRequest(BaseModel):
+    condition_on_return: str = "Intact"  # Intact | Damaged | Lost
+    damaged_qty: int = 0
+    fine_assessed: float = 0.0
+    notes: Optional[str] = None
+
+class AssetCustodyLogResponse(BaseModel):
+    id: int
+    item_id: int
+    item_name: Optional[str] = None
+    asset_tag: Optional[str] = None
+    borrower_name: str
+    borrower_role: str
+    borrower_ref_id: Optional[str] = None
+    class_room: Optional[str] = None
+    quantity: int
+    checkout_time: datetime.datetime
+    expected_return_time: Optional[datetime.datetime] = None
+    actual_return_time: Optional[datetime.datetime] = None
+    condition_on_return: str
+    fine_assessed: float
+    status: str
+
+    class Config:
+        from_attributes = True
+
+class ClearanceCheckResponse(BaseModel):
+    student_id: int
+    student_name: str
+    is_cleared: bool
+    active_hold_count: int
+    pending_items: List[str] = []
+    total_unpaid_fines: float = 0.0
+

@@ -594,15 +594,52 @@ export interface TeacherPermissionRequest {
 
 export interface InventoryRecord {
   id: number;
+  asset_tag: string;
   name: string;
-  category: 'Books' | 'Lab Equipment' | 'Sports Gear' | 'IT Hardware' | 'Classroom';
+  category: 'Lab Consumable' | 'IT Hardware' | 'Sports Gear' | 'Books/Stationery' | 'Books' | 'Lab Equipment' | 'Classroom' | string;
+  sub_category?: string | null;
   total_stock: number;
+  available_stock?: number;
   issued_count: number;
   damaged_count: number;
   reorder_level: number;
+  unit_of_measure?: string;
+  unit_cost?: number;
   location: string;
+  condition?: string;
+  amc_vendor?: string | null;
+  amc_valid_until?: string | null;
   last_audited: string;
+  created_at?: string;
 }
+
+export interface AssetCustodyLogItem {
+  id: number;
+  item_id: number;
+  item_name?: string;
+  asset_tag?: string;
+  borrower_name: string;
+  borrower_role: 'Teacher' | 'Student' | 'Staff' | string;
+  borrower_ref_id?: string | null;
+  class_room?: string | null;
+  quantity: number;
+  checkout_time: string;
+  expected_return_time?: string | null;
+  actual_return_time?: string | null;
+  condition_on_return: string;
+  fine_assessed: number;
+  status: 'Active' | 'Returned' | 'Overdue' | 'Waived' | string;
+}
+
+export interface ClearanceCheckResult {
+  student_id: number;
+  student_name: string;
+  is_cleared: boolean;
+  active_hold_count: number;
+  pending_items: string[];
+  total_unpaid_fines: number;
+}
+
 
 export interface FeeDefaulter {
   id: number;
@@ -1216,6 +1253,137 @@ export interface BulkReminderPayload {
   aging_tier?: string;
   channel: string;
   custom_message?: string;
+}
+
+// -------------------------------------------------------------
+// Institutional Outflow Intelligence Types (Salaries, Procurement, Fleet)
+// -------------------------------------------------------------
+
+export interface PayrollBatchItem {
+  id: number;
+  payroll_month: string;
+  total_staff_count: number;
+  gross_total: number;
+  total_deductions: number;
+  net_payable: number;
+  status: 'Draft' | 'Audit Pending' | 'Approved for Wire' | 'Disbursed' | string;
+  authorized_by?: string | null;
+  authorized_at?: string | null;
+  disbursed_at?: string | null;
+  bank_batch_ref?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
+export interface StaffPayslipItem {
+  id: number;
+  batch_id: number;
+  staff_id: number;
+  staff_name: string;
+  role_designation: string;
+  department: string;
+  bank_account_no: string;
+  bank_ifsc: string;
+  basic_salary: number;
+  hra_allowance: number;
+  special_allowance: number;
+  gross_earnings: number;
+  provident_fund: number;
+  professional_tax: number;
+  income_tax_tds: number;
+  loss_of_pay_days: number;
+  loss_of_pay_deduction: number;
+  total_deductions: number;
+  net_salary: number;
+  disbursement_status: 'Pending' | 'Disbursed' | 'On Hold' | string;
+  payment_utr?: string | null;
+  disbursed_at?: string | null;
+  created_at?: string;
+}
+
+export interface PurchaseOrderItem {
+  id: number;
+  po_number: string;
+  department: string;
+  vendor_name: string;
+  items_json: string;
+  total_amount: number;
+  expected_delivery_date?: string | null;
+  status: 'Issued' | 'GRN Verified' | 'Invoiced' | 'Settled' | string;
+  grn_number?: string | null;
+  grn_verified_by?: string | null;
+  grn_verified_at?: string | null;
+  linked_invoice_no?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
+export interface FleetExpenseItem {
+  id: number;
+  vehicle_no: string;
+  bus_route: string;
+  expense_type: string;
+  vendor_name: string;
+  amount: number;
+  status: 'Pending Clearance' | 'Approved for Wire' | 'Paid' | string;
+  invoice_ref?: string | null;
+  payment_utr?: string | null;
+  logged_by: string;
+  due_date?: string | null;
+  paid_at?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
+export interface GeneratePayrollPayload {
+  payroll_month: string;
+  notes?: string;
+}
+
+export interface AuthorizePayrollPayload {
+  authorized_by: string;
+  notes?: string;
+}
+
+export interface DisbursePayrollPayload {
+  bank_batch_ref: string;
+  payment_mode?: string;
+}
+
+export interface CreatePurchaseOrderPayload {
+  department: string;
+  vendor_name: string;
+  items: Array<{
+    item_name: string;
+    quantity: number;
+    unit_price: number;
+    total: number;
+  }>;
+  expected_delivery_date?: string;
+  notes?: string;
+}
+
+export interface VerifyGRNPayload {
+  grn_number: string;
+  verified_by: string;
+  notes?: string;
+}
+
+export interface CreateFleetExpensePayload {
+  vehicle_no: string;
+  bus_route: string;
+  expense_type: string;
+  vendor_name: string;
+  amount: number;
+  invoice_ref?: string;
+  due_date?: string;
+  notes?: string;
+  logged_by?: string;
+}
+
+export interface SettleFleetExpensePayload {
+  payment_utr: string;
+  notes?: string;
 }
 
 

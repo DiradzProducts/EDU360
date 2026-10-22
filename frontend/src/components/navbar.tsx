@@ -4,40 +4,15 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
-  Building2, 
-  GraduationCap, 
-  Users, 
-  BookOpen, 
   Sparkles, 
-  ShieldCheck, 
-  LogOut, 
-  LogIn, 
-  UserPlus, 
-  School, 
   ChevronDown,
-  Layers,
-  FileEdit,
-  Clock,
-  Target,
-  MessageSquare,
-  Bus,
-  CreditCard,
-  Video,
-  Trophy,
-  Lock,
-  Bell,
   Sun,
   Moon,
-  Calendar,
-  Award,
-  CheckCircle2,
-  X,
-  ExternalLink,
+  LogOut,
   User
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
-import { UserRole } from '@/lib/types';
 
 import { NotificationCenter } from '@/components/notification-center';
 import { MarketingNavbar } from '@/components/marketing-navbar';
@@ -57,66 +32,6 @@ export function Navbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const isAuthPage = pathname === '/login' || pathname === '/register';
-
-  // Role-specific navigation links for other portals
-  const roleNavItems: Record<UserRole, { label: string; href: string; icon: any }[]> = {
-    teacher: [
-      { label: 'Inline Grading', href: '/teacher', icon: FileEdit },
-      { label: 'Auto-Attendance', href: '/teacher', icon: Clock },
-      { label: 'Focus Table', href: '/teacher', icon: Target },
-      { label: 'Parent Hub', href: '/teacher', icon: MessageSquare }
-    ],
-    admin: [
-      { label: 'Priority Triage', href: '/admin', icon: Layers },
-      { label: 'Admissions CRM', href: '/admin', icon: Users },
-      { label: 'SIS Vault', href: '/admin', icon: Lock },
-      { label: 'Exit Clearance', href: '/admin', icon: ShieldCheck }
-    ],
-    academic_coordinator: [
-      { label: 'Academic Desk', href: '/academic_coordinator', icon: BookOpen },
-      { label: 'Substitutions', href: '/academic_coordinator?tab=substitutions', icon: Users },
-      { label: 'Syllabus Pacing', href: '/academic_coordinator?tab=curriculum', icon: Layers },
-    ],
-    exam_coordinator: [
-      { label: 'Examination Cell', href: '/exam_coordinator', icon: Layers },
-      { label: 'Marks Moderation', href: '/exam_coordinator?tab=moderation', icon: Award },
-      { label: 'Schedules', href: '/exam_coordinator?tab=schedules', icon: Calendar },
-    ],
-    transport_coordinator: [
-      { label: 'Fleet Operations', href: '/transport_coordinator', icon: Bus },
-      { label: 'Live Bus Radar', href: '/transport_coordinator?tab=radar', icon: Target },
-      { label: 'RTO Compliance', href: '/transport_coordinator?tab=rto', icon: ShieldCheck },
-    ],
-    inventory_coordinator: [
-      { label: 'Inventory & Store', href: '/inventory_coordinator', icon: Layers },
-      { label: 'Lab Consumables', href: '/inventory_coordinator?tab=lab', icon: Sparkles },
-      { label: 'Smart Hardware', href: '/inventory_coordinator?tab=hardware', icon: Lock },
-    ],
-    admissions_coordinator: [
-      { label: 'Admissions Desk', href: '/admissions_coordinator', icon: Users },
-      { label: 'CRM Pipeline', href: '/admissions_coordinator?tab=crm', icon: Target },
-      { label: 'Campus Tours', href: '/admissions_coordinator?tab=tours', icon: Calendar },
-    ],
-    accounts_coordinator: [
-      { label: 'Bursar & Accounts', href: '/accounts_coordinator', icon: CreditCard },
-      { label: 'Aging Defaulters', href: '/accounts_coordinator?tab=aging', icon: Clock },
-      { label: 'Fee Milestones', href: '/accounts_coordinator?tab=milestones', icon: Layers },
-    ],
-    parent: [
-      { label: 'Child Overview', href: '/parent', icon: Sparkles },
-      { label: 'Focus Table', href: '/parent', icon: Target },
-      { label: 'Live Bus GPS', href: '/parent', icon: Bus },
-      { label: 'Fees & Receipts', href: '/parent', icon: CreditCard }
-    ],
-    student: [
-      { label: 'Live Classes & LMS', href: '/student', icon: Video },
-      { label: 'Portfolio', href: '/student', icon: Trophy },
-      { label: 'Homework', href: '/student', icon: BookOpen },
-      { label: 'Official Vault', href: '/student', icon: Lock }
-    ]
-  };
-
-  const navItems = roleNavItems[role] || roleNavItems.teacher;
 
   return (
     <header className="sticky top-0 z-50 w-full h-16 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-md transition-colors duration-150">
@@ -139,30 +54,6 @@ export function Navbar() {
             </div>
           </Link>
         </div>
-
-        {/* Center: Clean Role Shortcut Pills (from reference design) */}
-        {!isAuthPage && user && (
-          <nav className="hidden lg:flex items-center gap-1 bg-slate-50 dark:bg-slate-900/60 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
-            {navItems.map((item, idx) => {
-              const Icon = item.icon;
-              const isActive = idx === 0 && !pathname.includes('?');
-              return (
-                <Link
-                  key={idx}
-                  href={item.href}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        )}
 
         {/* Right Section: Theme Toggle, Notifications, Authenticated User Profile */}
         <div className="flex items-center gap-2 sm:gap-3">

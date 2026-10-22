@@ -11,7 +11,9 @@ from app.models.models import (
     StudentGamification, DailyQuest, MagicBoosterChest, BacklogEvent,
     Exam, ExamSubmission, RemedialSprint,
     QuestionPaper, ExamSchedule, ReportCard, Notification,
-    FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog
+    FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
+    PayrollBatch, StaffPayslip, PurchaseOrder, FleetExpenseRecord,
+    InventoryMovement, AssetCustodyLog
 )
 
 async def seed_data():
@@ -971,15 +973,6 @@ async def seed_data():
             StaffMember(id=4, name="Ramesh Kumar", role="Senior Transport Driver", department="Logistics", email="transport.ramesh@edu360.internal", phone="+91 98450 12345", attendance_status="On Duty", salary_slip_ready=True),
         ]
         db.add_all(staff)
-
-        # 19. Inventory
-        inventory = [
-            InventoryItem(id=1, name="CBSE Class 8 Mathematics NCERT Exemplar", category="Books", total_quantity=120, issued_quantity=95, damaged_quantity=2, min_threshold=15, status="Good Stock"),
-            InventoryItem(id=2, name="Compound Optical Microscopes (1000x)", category="Lab Equipment", total_quantity=25, issued_quantity=22, damaged_quantity=1, min_threshold=5, status="Optimal"),
-            InventoryItem(id=3, name="Yonex Carbonex Badminton Rackets", category="Sports Gear", total_quantity=40, issued_quantity=32, damaged_quantity=4, min_threshold=10, status="Low Stock Alert"),
-            InventoryItem(id=4, name="Dell OptiPlex Core i7 Desktop Terminals", category="IT Hardware", total_quantity=60, issued_quantity=58, damaged_quantity=0, min_threshold=5, status="Optimal"),
-        ]
-        db.add_all(inventory)
 
         # 20. Junior Gamification (K-5 Junior Explorer Engine)
         gamifications = [
@@ -1945,6 +1938,459 @@ async def seed_data():
             )
         ]
         db.add_all(initial_dispatch_logs)
+
+        # 16. Outflow: Monthly Staff Payroll Engine
+        oct_batch = PayrollBatch(
+            id=1,
+            payroll_month="October 2026",
+            total_staff_count=7,
+            gross_total=391000.0,
+            total_deductions=45920.0,
+            net_payable=345080.0,
+            status="Audit Pending",
+            notes="Statutory deductions (PF 12%, PT ₹200, TDS) computed based on biometric attendance."
+        )
+        db.add(oct_batch)
+        await db.flush()
+
+        initial_payslips = [
+            StaffPayslip(
+                id=1,
+                batch_id=oct_batch.id,
+                staff_id=2,  # Mrs. Ananya Verma
+                staff_name="Mrs. Ananya Verma",
+                role_designation="Senior Mathematics Teacher & Homeroom Head",
+                department="Mathematics & Secondary Academics",
+                bank_account_no="918204918201",
+                bank_ifsc="HDFC0001824",
+                basic_salary=42000.0,
+                hra_allowance=12600.0,
+                special_allowance=7400.0,
+                gross_earnings=62000.0,
+                provident_fund=5040.0,
+                professional_tax=200.0,
+                income_tax_tds=2500.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=7740.0,
+                net_salary=54260.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=2,
+                batch_id=oct_batch.id,
+                staff_id=1,  # Dr. Sunita Kapoor
+                staff_name="Dr. Sunita Kapoor",
+                role_designation="Principal & Institutional Director",
+                department="Executive Leadership",
+                bank_account_no="918204918202",
+                bank_ifsc="HDFC0001824",
+                basic_salary=65000.0,
+                hra_allowance=22750.0,
+                special_allowance=17250.0,
+                gross_earnings=105000.0,
+                provident_fund=7800.0,
+                professional_tax=200.0,
+                income_tax_tds=11000.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=19000.0,
+                net_salary=86000.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=3,
+                batch_id=oct_batch.id,
+                staff_id=12,  # Dr. K. Raman
+                staff_name="Dr. K. Raman",
+                role_designation="Head of Department - Physics",
+                department="Science & Laboratories",
+                bank_account_no="918204918203",
+                bank_ifsc="HDFC0001824",
+                basic_salary=40000.0,
+                hra_allowance=12000.0,
+                special_allowance=6000.0,
+                gross_earnings=58000.0,
+                provident_fund=4800.0,
+                professional_tax=200.0,
+                income_tax_tds=2100.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=7100.0,
+                net_salary=50900.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=4,
+                batch_id=oct_batch.id,
+                staff_id=7,  # Mr. Vikram Malhotra
+                staff_name="Mr. Vikram Malhotra",
+                role_designation="Fleet & Logistics Coordinator",
+                department="Transport & Campus Safety",
+                bank_account_no="918204918204",
+                bank_ifsc="HDFC0001824",
+                basic_salary=32000.0,
+                hra_allowance=9600.0,
+                special_allowance=4400.0,
+                gross_earnings=46000.0,
+                provident_fund=3840.0,
+                professional_tax=200.0,
+                income_tax_tds=1200.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=5240.0,
+                net_salary=40760.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=5,
+                batch_id=oct_batch.id,
+                staff_id=9,  # Mrs. Shalini Rao
+                staff_name="Mrs. Shalini Rao",
+                role_designation="Store & Asset Inventory Custodian",
+                department="Inventory & Facilities",
+                bank_account_no="918204918205",
+                bank_ifsc="HDFC0001824",
+                basic_salary=30000.0,
+                hra_allowance=9000.0,
+                special_allowance=4000.0,
+                gross_earnings=43000.0,
+                provident_fund=3600.0,
+                professional_tax=200.0,
+                income_tax_tds=900.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=4700.0,
+                net_salary=38300.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=6,
+                batch_id=oct_batch.id,
+                staff_id=11,  # Mr. Arvind Krishnan
+                staff_name="Mr. Arvind Krishnan",
+                role_designation="Accounts Coordinator & Senior Bursar",
+                department="Finance & Accounts",
+                bank_account_no="918204918206",
+                bank_ifsc="HDFC0001824",
+                basic_salary=36000.0,
+                hra_allowance=10800.0,
+                special_allowance=5200.0,
+                gross_earnings=52000.0,
+                provident_fund=4320.0,
+                professional_tax=200.0,
+                income_tax_tds=1800.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=6320.0,
+                net_salary=45680.0,
+                disbursement_status="Pending"
+            ),
+            StaffPayslip(
+                id=7,
+                batch_id=oct_batch.id,
+                staff_id=99,  # Driver Ramesh Kumar
+                staff_name="Ramesh Kumar",
+                role_designation="Senior School Bus Pilot (Route 4)",
+                department="Transport Fleet",
+                bank_account_no="918204918207",
+                bank_ifsc="HDFC0001824",
+                basic_salary=18000.0,
+                hra_allowance=4500.0,
+                special_allowance=2500.0,
+                gross_earnings=25000.0,
+                provident_fund=2160.0,
+                professional_tax=200.0,
+                income_tax_tds=0.0,
+                loss_of_pay_days=0,
+                loss_of_pay_deduction=0.0,
+                total_deductions=2360.0,
+                net_salary=22640.0,
+                disbursement_status="Pending"
+            )
+        ]
+        db.add_all(initial_payslips)
+
+        # 17. Outflow: Store Procurement & 3-Way Match Purchase Orders
+        initial_pos = [
+            PurchaseOrder(
+                id=1,
+                po_number="PO-2026-OCT-008",
+                department="Science Laboratories",
+                vendor_name="Borosil Scientific Supplies Ltd",
+                items_json=json.dumps([
+                    {"item_name": "Borosilicate Beakers 250ml (Pack of 20)", "quantity": 5, "unit_price": 1400.0, "total": 7000.0},
+                    {"item_name": "Concave & Convex Lens Kit with Optical Bench", "quantity": 10, "unit_price": 850.0, "total": 8500.0}
+                ]),
+                total_amount=15500.0,
+                expected_delivery_date="20 Oct 2026",
+                status="GRN Verified",
+                grn_number="GRN-2026-OCT-041",
+                grn_verified_by="Mrs. Shalini Rao (Store Lead)",
+                grn_verified_at=datetime.datetime.utcnow() - datetime.timedelta(days=2),
+                linked_invoice_no="INV-2026-BS-88",
+                notes="Delivered to Physics lab storage rack 3. 3-Way Match complete."
+            ),
+            PurchaseOrder(
+                id=2,
+                po_number="PO-2026-OCT-014",
+                department="Sports & Athletics",
+                vendor_name="Decathlon Institutional Direct",
+                items_json=json.dumps([
+                    {"item_name": "Match Size Footballs (FIFA Basic)", "quantity": 15, "unit_price": 1200.0, "total": 18000.0},
+                    {"item_name": "Badminton Rackets & Tournament Feather Shuttles", "quantity": 20, "unit_price": 950.0, "total": 19000.0}
+                ]),
+                total_amount=37000.0,
+                expected_delivery_date="26 Oct 2026",
+                status="Issued",
+                notes="Pending delivery from Decathlon logistics hub. Gate pass prepared."
+            ),
+            PurchaseOrder(
+                id=3,
+                po_number="PO-2026-OCT-019",
+                department="Examination & Stationary Stores",
+                vendor_name="Navneet Stationery Mart",
+                items_json=json.dumps([
+                    {"item_name": "CBSE Standard 32-Page Ruled Answer Booklets", "quantity": 2000, "unit_price": 18.0, "total": 36000.0},
+                    {"item_name": "Whiteboard Markers & Dustless Chalk Cartons", "quantity": 50, "unit_price": 120.0, "total": 6000.0}
+                ]),
+                total_amount=42000.0,
+                expected_delivery_date="19 Oct 2026",
+                status="GRN Verified",
+                grn_number="GRN-2026-OCT-055",
+                grn_verified_by="Mrs. Shalini Rao (Store Lead)",
+                grn_verified_at=datetime.datetime.utcnow() - datetime.timedelta(days=3),
+                linked_invoice_no="INV-2026-NV-109",
+                notes="Checked against packing slip. Clean match ready for payment batch."
+            )
+        ]
+        db.add_all(initial_pos)
+
+        # 18. Outflow: Yellow Bus Fleet Maintenance & Fuel AMC
+        initial_fleet_expenses = [
+            FleetExpenseRecord(
+                id=1,
+                vehicle_no="KA-01-EA-4412",
+                bus_route="Route 1 - Indiranagar Express",
+                expense_type="Fuel Refill (Diesel 180L)",
+                vendor_name="Indian Oil Corporation Ltd",
+                amount=16200.0,
+                status="Approved for Wire",
+                invoice_ref="IOC-OCT-9921",
+                logged_by="Mr. Vikram Malhotra (Transport Lead)",
+                due_date="28 Oct 2026",
+                notes="Standard monthly diesel supply under bulk commercial agreement."
+            ),
+            FleetExpenseRecord(
+                id=2,
+                vehicle_no="KA-01-EA-4418",
+                bus_route="Route 4 - Whitefield Corridor",
+                expense_type="RTO Fitness & Speed Governor AMC",
+                vendor_name="Karnataka State RTO Auto Services",
+                amount=8400.0,
+                status="Approved for Wire",
+                invoice_ref="RTO-FIT-2026-04",
+                logged_by="Mr. Vikram Malhotra (Transport Lead)",
+                due_date="25 Oct 2026",
+                notes="Mandatory annual fitness certificate renewal before inter-school excursion."
+            ),
+            FleetExpenseRecord(
+                id=3,
+                vehicle_no="KA-01-EA-4422",
+                bus_route="Route 7 - Koramangala Ring Road",
+                expense_type="Brake Pad Replacement & Air Filter Service",
+                vendor_name="Ashok Leyland Authorized Depot",
+                amount=22500.0,
+                status="Pending Clearance",
+                invoice_ref="AL-DEPOT-883",
+                logged_by="Mr. Vikram Malhotra (Transport Lead)",
+                due_date="30 Oct 2026",
+                notes="Diagnostic report attached: Rear brake liners worn down to 2mm."
+            ),
+            FleetExpenseRecord(
+                id=4,
+                vehicle_no="KA-01-EA-4415",
+                bus_route="Route 2 - Jayanagar Circle",
+                expense_type="Commercial Bus Fleet Insurance Policy",
+                vendor_name="New India Assurance Co.",
+                amount=48000.0,
+                status="Paid",
+                invoice_ref="NIA-POL-55410",
+                payment_utr="RTGS/SBIN2026101890214",
+                paid_at=datetime.datetime.utcnow() - datetime.timedelta(days=4),
+                logged_by="Mr. Vikram Malhotra (Transport Lead)",
+                due_date="15 Oct 2026",
+                notes="Comprehensive zero-depreciation policy renewed for 2026-27."
+            )
+        ]
+        db.add_all(initial_fleet_expenses)
+
+        # 26. Inventory & Asset Ledger (Lab Consumables, IT Hardware, Sports, Books)
+        initial_inventory = [
+            InventoryItem(
+                id=1,
+                asset_tag="CON-CHEM-001",
+                name="Hydrochloric Acid (HCl 35% Analytical Grade)",
+                category="Lab Consumable",
+                sub_category="Chemistry Reagents",
+                location="Chemistry Lab 2 Acid Locker",
+                total_stock=5,
+                available_stock=2,
+                issued_count=3,
+                damaged_count=0,
+                reorder_level=5,
+                unit_of_measure="Litres",
+                unit_cost=320.0,
+                amc_vendor="Apex Scientific Co.",
+                condition="Low Buffer",
+                last_audited="20 Oct 2026"
+            ),
+            InventoryItem(
+                id=2,
+                asset_tag="CON-BIO-004",
+                name="Pre-Mounted Microscope Glass Slides (Set of 100)",
+                category="Lab Consumable",
+                sub_category="Biology Apparatus",
+                location="Biology Lab Specimen Cabinet",
+                total_stock=250,
+                available_stock=240,
+                issued_count=10,
+                damaged_count=0,
+                reorder_level=100,
+                unit_of_measure="Units",
+                unit_cost=15.0,
+                amc_vendor="BioLab Solutions Ltd.",
+                condition="Optimal",
+                last_audited="18 Oct 2026"
+            ),
+            InventoryItem(
+                id=3,
+                asset_tag="AST-IT-092",
+                name="Lenovo Tab M10 HD (Student Coding Tablets)",
+                category="IT Hardware",
+                sub_category="Coding Tablets",
+                location="Computer Lab 1 Charging Cart A",
+                total_stock=90,
+                available_stock=60,
+                issued_count=30,
+                damaged_count=0,
+                reorder_level=15,
+                unit_of_measure="Units",
+                unit_cost=12500.0,
+                amc_vendor="Lenovo Enterprise Support",
+                amc_valid_until="31 Dec 2027",
+                condition="Optimal",
+                last_audited="19 Oct 2026"
+            ),
+            InventoryItem(
+                id=4,
+                asset_tag="AST-AV-018",
+                name="Promethean 75-inch 4K Interactive Touch Panel",
+                category="IT Hardware",
+                sub_category="Classroom Displays",
+                location="Class 8-B Homeroom Wall",
+                total_stock=16,
+                available_stock=16,
+                issued_count=0,
+                damaged_count=0,
+                reorder_level=2,
+                unit_of_measure="Units",
+                unit_cost=185000.0,
+                amc_vendor="Promethean Digital India AMC",
+                amc_valid_until="15 Nov 2027",
+                condition="Optimal",
+                last_audited="15 Oct 2026"
+            ),
+            InventoryItem(
+                id=5,
+                asset_tag="AST-OPT-042",
+                name="Crown Glass Equilateral Triangular Prisms",
+                category="Lab Consumable",
+                sub_category="Physics Optics",
+                location="Physics Lab Optics Vault",
+                total_stock=35,
+                available_stock=32,
+                issued_count=2,
+                damaged_count=1,
+                reorder_level=10,
+                unit_of_measure="Units",
+                unit_cost=450.0,
+                amc_vendor="OptoTech Instruments",
+                condition="Optimal",
+                last_audited="16 Oct 2026"
+            ),
+            InventoryItem(
+                id=6,
+                asset_tag="SPT-BALL-015",
+                name="FIFA Quality Match Footballs (Size 5)",
+                category="Sports Gear",
+                sub_category="Field Sports",
+                location="Sports Equipment Depot Rack B",
+                total_stock=40,
+                available_stock=32,
+                issued_count=6,
+                damaged_count=2,
+                reorder_level=12,
+                unit_of_measure="Units",
+                unit_cost=1850.0,
+                amc_vendor="Cosco India Sports",
+                condition="Optimal",
+                last_audited="21 Oct 2026"
+            ),
+            InventoryItem(
+                id=7,
+                asset_tag="BK-NCERT-801",
+                name="NCERT Class 8 Mathematics & Science Textbook Bundles",
+                category="Books/Stationery",
+                sub_category="Standard Curricula",
+                location="Central Textbook Repository Shelf 4",
+                total_stock=400,
+                available_stock=370,
+                issued_count=30,
+                damaged_count=0,
+                reorder_level=50,
+                unit_of_measure="Sets",
+                unit_cost=650.0,
+                amc_vendor="NCERT Publication Division",
+                condition="Optimal",
+                last_audited="12 Oct 2026"
+            )
+        ]
+        db.add_all(initial_inventory)
+        await db.flush()
+
+        # 27. Active Daily Custody Logs (Tablet Carts & Student Loan)
+        initial_custody = [
+            AssetCustodyLog(
+                id=1,
+                item_id=3,
+                borrower_name="Mrs. Ananya Verma",
+                borrower_role="Teacher",
+                borrower_ref_id="EMP-042",
+                class_room="Class 8-B",
+                quantity=30,
+                checkout_time=datetime.datetime.utcnow() - datetime.timedelta(hours=2),
+                expected_return_time=datetime.datetime.utcnow() + datetime.timedelta(hours=3),
+                condition_on_return="Pending Return",
+                fine_assessed=0.0,
+                status="Active"
+            ),
+            AssetCustodyLog(
+                id=2,
+                item_id=5,
+                borrower_name="Kabir Mehta",
+                borrower_role="Student",
+                borrower_ref_id="15",
+                class_room="Class 8-B",
+                quantity=1,
+                checkout_time=datetime.datetime.utcnow() - datetime.timedelta(days=2),
+                expected_return_time=datetime.datetime.utcnow() - datetime.timedelta(days=1),
+                condition_on_return="Pending Return",
+                fine_assessed=0.0,
+                status="Active"
+            )
+        ]
+        db.add_all(initial_custody)
 
         await db.commit()
         print("EDU360 seed data populated successfully!")

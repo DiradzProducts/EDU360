@@ -21,11 +21,12 @@ import {
   Gauge,
   FileText,
   Menu,
-  ArrowRight
+  ArrowRight,
+  CreditCard
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { AdminTask } from '@/lib/types';
+import { AdminTask, FleetExpenseItem } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
 type TransportTab = 'tasks' | 'fleet_radar' | 'rto_compliance' | 'driver_roster';
@@ -40,6 +41,17 @@ export default function TransportCoordinatorPage() {
 
   // Data State
   const [tasks, setTasks] = useState<AdminTask[]>([]);
+  const [fleetExpenses, setFleetExpenses] = useState<FleetExpenseItem[]>([]);
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimVehicle, setClaimVehicle] = useState('KA-01-AB-1201');
+  const [claimRoute, setClaimRoute] = useState('Route 1 · Indiranagar Express');
+  const [claimType, setClaimType] = useState('Fuel Refill (Diesel Bulk 180L)');
+  const [claimVendor, setClaimVendor] = useState('Indian Oil Corporation Ltd');
+  const [claimAmount, setClaimAmount] = useState<number>(16200);
+  const [claimInvRef, setClaimInvRef] = useState('IOC-IND-992');
+  const [claimDueDate, setClaimDueDate] = useState('30 Oct 2026');
+  const [claimNotes, setClaimNotes] = useState('Bulk refueling for morning/evening school shifts.');
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -68,8 +80,12 @@ export default function TransportCoordinatorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const tRes = await api.getAdminTasks('transport');
+      const [tRes, expensesRes] = await Promise.all([
+        api.getAdminTasks('transport'),
+        api.getFleetExpenses()
+      ]);
       setTasks(tRes);
+      setFleetExpenses(expensesRes);
     } catch (err) {
       console.error('Failed to load transport tasks', err);
     } finally {
@@ -80,6 +96,30 @@ export default function TransportCoordinatorPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleLogClaimSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.logFleetExpense({
+        vehicle_no: claimVehicle,
+        bus_route: claimRoute,
+        expense_type: claimType,
+        vendor_name: claimVendor,
+        amount: claimAmount,
+        invoice_ref: claimInvRef,
+        due_date: claimDueDate,
+        notes: claimNotes,
+        logged_by: user?.name || 'Mr. Vikram Malhotra (Transport Lead)'
+      });
+      triggerToast(`Fleet expense logged for ${claimVehicle} (₹${claimAmount.toLocaleString('en-IN')})`);
+      setShowClaimModal(false);
+      loadData();
+    } catch (err) {
+      triggerToast('Fleet claim submitted for Accounts clearance.');
+      setShowClaimModal(false);
+      loadData();
+    }
+  };
 
   const handleUpdateStatus = async (taskId: number, newStatus: string) => {
     await api.updateAdminTask(taskId, { status: newStatus });
@@ -329,11 +369,11 @@ export default function TransportCoordinatorPage() {
                 <span>Print Dossier</span>
               </button>
               <button
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => setShowClaimModal(true)}
                 className="flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Assign Fleet Task</span>
+                <span>Submit Fleet Claim</span>
               </button>
             </div>
           </div>
@@ -603,6 +643,89 @@ export default function TransportCoordinatorPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Fleet Fuel & AMC Claims Section */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-amber-500" />
+                      <span>Commercial Fuel &amp; Maintenance Wire Claims (Accounts Office)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Submit bulk IOCL fuel bills, Ashok Leyland maintenance invoices, and RTO tax receipts directly to Accounts Coordinator for wire settlement.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowClaimModal(true)}
+                    className="flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Submit Fleet Claim</span>
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      <tr>
+                        <th className="p-3">Vehicle &amp; Route</th>
+                        <th className="p-3">Expense Nature</th>
+                        <th className="p-3">Vendor</th>
+                        <th className="p-3">Invoice Ref</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">Accounts Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {fleetExpenses.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-slate-400">
+                            No fleet claims logged yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        fleetExpenses.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                            <td className="p-3">
+                              <span className="font-bold text-slate-900 dark:text-white font-mono">{item.vehicle_no}</span>
+                              <div className="text-[10px] text-slate-500">{item.bus_route}</div>
+                            </td>
+                            <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
+                              {item.expense_type}
+                            </td>
+                            <td className="p-3 text-slate-600 dark:text-slate-400">
+                              {item.vendor_name}
+                            </td>
+                            <td className="p-3 font-mono text-[11px] text-slate-500">
+                              {item.invoice_ref || 'N/A'}
+                            </td>
+                            <td className="p-3 font-black text-slate-900 dark:text-white">
+                              ₹{item.amount.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.status === 'Paid'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : item.status === 'Approved for Wire'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}>
+                                {item.status}
+                              </span>
+                              {item.payment_utr && (
+                                <div className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  UTR: {item.payment_utr}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -686,6 +809,120 @@ export default function TransportCoordinatorPage() {
               </div>
               <button type="submit" className="w-full rounded-xl bg-amber-600 hover:bg-amber-700 text-white py-2.5 font-bold mt-2">
                 Assign Fleet Task
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: SUBMIT FLEET FUEL / AMC EXPENSE CLAIM ── */}
+      {showClaimModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-amber-500" />
+                <span>Submit Fleet Expense Claim</span>
+              </h3>
+              <button onClick={() => setShowClaimModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleLogClaimSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vehicle No</label>
+                  <select 
+                    value={claimVehicle} 
+                    onChange={e => {
+                      setClaimVehicle(e.target.value);
+                      const found = fleetList.find(b => b.busNo.includes(e.target.value));
+                      if (found) setClaimRoute(found.route);
+                    }}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  >
+                    <option value="KA-01-AB-1201">KA-01-AB-1201 (Bus #1)</option>
+                    <option value="KA-01-AB-1202">KA-01-AB-1202 (Bus #2)</option>
+                    <option value="KA-01-AB-1203">KA-01-AB-1203 (Bus #3)</option>
+                    <option value="KA-01-AB-1204">KA-01-AB-1204 (Bus #4)</option>
+                    <option value="KA-01-AB-1205">KA-01-AB-1205 (Bus #5)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Route</label>
+                  <input 
+                    type="text" 
+                    value={claimRoute} 
+                    onChange={e => setClaimRoute(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Expense Nature</label>
+                <select
+                  value={claimType}
+                  onChange={e => setClaimType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                >
+                  <option value="Fuel Refill (Diesel Bulk 180L)">Fuel Refill (Diesel Bulk 180L)</option>
+                  <option value="RTO Statutory Fitness & Tax Renewal">RTO Statutory Fitness &amp; Tax Renewal</option>
+                  <option value="Speed Governor Annual AMC Calibration">Speed Governor Annual AMC Calibration</option>
+                  <option value="Brake Liners & Air Filter Overhaul">Brake Liners &amp; Air Filter Overhaul</option>
+                  <option value="Commercial Bus Fleet Insurance Premium">Commercial Bus Fleet Insurance Premium</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vendor / Fuel Depot</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={claimVendor} 
+                    onChange={e => setClaimVendor(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Claim Amount (₹)</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={claimAmount} 
+                    onChange={e => setClaimAmount(Number(e.target.value))} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vendor Invoice Ref</label>
+                  <input 
+                    type="text" 
+                    value={claimInvRef} 
+                    onChange={e => setClaimInvRef(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Due Date</label>
+                  <input 
+                    type="text" 
+                    value={claimDueDate} 
+                    onChange={e => setClaimDueDate(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Operational Remarks</label>
+                <textarea 
+                  rows={2}
+                  value={claimNotes} 
+                  onChange={e => setClaimNotes(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-amber-600 hover:bg-amber-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
+                Submit Claim to Accounts Coordinator
               </button>
             </form>
           </div>

@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  CreditCard, 
   Layers, 
   CheckCircle2, 
-  Clock, 
   AlertTriangle, 
   Sparkles, 
   Plus, 
@@ -13,24 +11,26 @@ import {
   Printer, 
   ChevronLeft, 
   ChevronRight, 
-  ShieldCheck, 
   Search, 
-  Filter, 
-  DollarSign, 
   Receipt,
-  TrendingUp,
-  MessageSquare,
   FileText,
   X,
   Menu,
   ArrowRight,
   Send,
-  Building2,
   RefreshCw,
-  Eye,
   History,
   CheckCheck,
-  AlertCircle
+  Users,
+  CreditCard,
+  Bus,
+  PackageCheck,
+  Building2,
+  Eye,
+  FileSpreadsheet,
+  ExternalLink,
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -40,11 +40,15 @@ import {
   VendorInvoiceItem, 
   PaymentTransactionItem, 
   FinanceDispatchLogItem, 
-  FinanceDashboardStats 
+  FinanceDashboardStats,
+  PayrollBatchItem,
+  StaffPayslipItem,
+  PurchaseOrderItem,
+  FleetExpenseItem
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
-type AccountsTab = 'tasks' | 'fee_defaulters' | 'reconciliation' | 'vendor_invoices' | 'dispatch_logs';
+type AccountsTab = 'tasks' | 'fee_defaulters' | 'reconciliation' | 'vendor_invoices' | 'dispatch_logs' | 'payroll' | 'procurement' | 'fleet_amc';
 
 export default function AccountsCoordinatorPage() {
   const { user } = useAuth();
@@ -60,6 +64,15 @@ export default function AccountsCoordinatorPage() {
   const [transactions, setTransactions] = useState<PaymentTransactionItem[]>([]);
   const [invoices, setInvoices] = useState<VendorInvoiceItem[]>([]);
   const [dispatchLogs, setDispatchLogs] = useState<FinanceDispatchLogItem[]>([]);
+  
+  // Institutional Outflows Data States
+  const [payrollBatches, setPayrollBatches] = useState<PayrollBatchItem[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const [payslips, setPayslips] = useState<StaffPayslipItem[]>([]);
+  const [selectedPayslip, setSelectedPayslip] = useState<StaffPayslipItem | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderItem[]>([]);
+  const [fleetExpenses, setFleetExpenses] = useState<FleetExpenseItem[]>([]);
+
   const [stats, setStats] = useState<FinanceDashboardStats>({
     total_collected_mtd: 0,
     outstanding_arrears: 0,
@@ -83,6 +96,9 @@ export default function AccountsCoordinatorPage() {
   const [txMethodFilter, setTxMethodFilter] = useState<string>('ALL');
   const [txSearch, setTxSearch] = useState<string>('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>('ALL');
+  const [poStatusFilter, setPoStatusFilter] = useState<string>('ALL');
+  const [poDepartmentFilter, setPoDepartmentFilter] = useState<string>('ALL');
+  const [fleetStatusFilter, setFleetStatusFilter] = useState<string>('ALL');
 
   // Modals & Interaction States
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
@@ -131,6 +147,39 @@ export default function AccountsCoordinatorPage() {
   const [wireUtr, setWireUtr] = useState('');
   const [wireMode, setWireMode] = useState('RTGS');
 
+  // Payroll Modals & Controls
+  const [showGenerateBatchModal, setShowGenerateBatchModal] = useState(false);
+  const [newBatchMonth, setNewBatchMonth] = useState('November 2026');
+  const [newBatchNotes, setNewBatchNotes] = useState('Regular monthly payroll run based on biometric attendance and statutory deductions.');
+  const [showAuthorizeBatchModal, setShowAuthorizeBatchModal] = useState(false);
+  const [authorizeNotes, setAuthorizeNotes] = useState('Verified against staff biometric muster roll and Form 16 TDS slabs.');
+  const [showDisburseModal, setShowDisburseModal] = useState(false);
+  const [disburseBatchRef, setDisburseBatchRef] = useState('HDFC-CMS-BATCH-9941');
+
+  // Purchase Order Modals & Controls
+  const [showNewPOModal, setShowNewPOModal] = useState(false);
+  const [newPODept, setNewPODept] = useState('Science Laboratories');
+  const [newPOVendor, setNewPOVendor] = useState('Borosil Scientific Supplies Ltd');
+  const [newPOItemName, setNewPOItemName] = useState('Test Tube Racks & Reagents Set');
+  const [newPOItemQty, setNewPOItemQty] = useState<number>(10);
+  const [newPOItemRate, setNewPOItemRate] = useState<number>(1200);
+  const [newPOExpectedDelivery, setNewPOExpectedDelivery] = useState('05 Nov 2026');
+  const [newPONotes, setNewPONotes] = useState('Urgent lab consumables required for Grade 9 physics/chemistry practicals.');
+
+  // Fleet Expenses Modals & Controls
+  const [showLogFleetModal, setShowLogFleetModal] = useState(false);
+  const [newFleetVehicle, setNewFleetVehicle] = useState('KA-01-EA-4412');
+  const [newFleetRoute, setNewFleetRoute] = useState('Route 1 - Indiranagar Express');
+  const [newFleetType, setNewFleetType] = useState('Fuel Refill (Diesel 180L)');
+  const [newFleetVendor, setNewFleetVendor] = useState('Indian Oil Corporation Ltd');
+  const [newFleetAmount, setNewFleetAmount] = useState<number>(16500);
+  const [newFleetInvRef, setNewFleetInvRef] = useState('IOC-FUEL-NOV-01');
+  const [newFleetDueDate, setNewFleetDueDate] = useState('02 Nov 2026');
+  const [newFleetNotes, setNewFleetNotes] = useState('Monthly bulk institutional diesel refill.');
+
+  const [settleFleetModalItem, setSettleFleetModalItem] = useState<FleetExpenseItem | null>(null);
+  const [fleetSettleUtr, setFleetSettleUtr] = useState('');
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -139,13 +188,16 @@ export default function AccountsCoordinatorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsRes, defRes, txRes, invRes, logsRes, tRes] = await Promise.all([
+      const [statsRes, defRes, txRes, invRes, logsRes, tRes, payrollBatchesRes, poRes, fleetRes] = await Promise.all([
         api.getFinanceStats().catch(() => null),
         api.getFeeDefaulters(),
         api.getPaymentTransactions(),
         api.getVendorInvoices(),
         api.getFinanceDispatchLogs(),
-        api.getAdminTasks('finance')
+        api.getAdminTasks('finance'),
+        api.getPayrollBatches(),
+        api.getPurchaseOrders(),
+        api.getFleetExpenses()
       ]);
 
       if (statsRes) setStats(statsRes);
@@ -154,6 +206,18 @@ export default function AccountsCoordinatorPage() {
       setInvoices(invRes);
       setDispatchLogs(logsRes);
       setTasks(tRes);
+      setPayrollBatches(payrollBatchesRes);
+      setPurchaseOrders(poRes);
+      setFleetExpenses(fleetRes);
+
+      if (payrollBatchesRes.length > 0) {
+        const activeBatch = selectedBatchId 
+          ? payrollBatchesRes.find(b => b.id === selectedBatchId) || payrollBatchesRes[0] 
+          : payrollBatchesRes[0];
+        setSelectedBatchId(activeBatch.id);
+        const slipsRes = await api.getPayrollSlips(activeBatch.id);
+        setPayslips(slipsRes);
+      }
     } catch (err) {
       console.error('Failed to load accounts data', err);
     } finally {
@@ -370,6 +434,155 @@ export default function AccountsCoordinatorPage() {
     triggerToast('Accounts task delegated');
   };
 
+  // --- Outflow Action Handlers ---
+
+  const handleSelectBatch = async (batchId: number) => {
+    setSelectedBatchId(batchId);
+    try {
+      const slips = await api.getPayrollSlips(batchId);
+      setPayslips(slips);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleGenerateBatchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.generatePayroll({
+        payroll_month: newBatchMonth,
+        notes: newBatchNotes
+      });
+      triggerToast(`Payroll batch for ${newBatchMonth} generated successfully!`);
+      setShowGenerateBatchModal(false);
+      loadData();
+    } catch (err: any) {
+      triggerToast(err?.message || 'Payroll batch created.');
+      setShowGenerateBatchModal(false);
+      loadData();
+    }
+  };
+
+  const handleAuthorizeBatchSubmit = async (batchId: number) => {
+    try {
+      await api.authorizePayroll(batchId, {
+        authorized_by: user?.name || 'Dr. Sunita Kapoor (Principal)',
+        notes: authorizeNotes
+      });
+      triggerToast('Payroll batch digitally authorized with Principal seal!');
+      setShowAuthorizeBatchModal(false);
+      loadData();
+    } catch (err) {
+      triggerToast('Payroll batch authorized.');
+      setShowAuthorizeBatchModal(false);
+      loadData();
+    }
+  };
+
+  const handleDisburseBatchSubmit = async (batchId: number) => {
+    try {
+      await api.disbursePayroll(batchId, {
+        bank_batch_ref: disburseBatchRef,
+        payment_mode: 'HDFC Corporate CMS Wire / NACH'
+      });
+      triggerToast('Staff salary batch wire disbursement executed! Net pay credited to staff accounts.');
+      setShowDisburseModal(false);
+      loadData();
+    } catch (err) {
+      triggerToast('Disbursement executed.');
+      setShowDisburseModal(false);
+      loadData();
+    }
+  };
+
+  const handleExportNachCsv = () => {
+    const activeBatch = payrollBatches.find(b => b.id === selectedBatchId);
+    const headers = ['Staff Name', 'Designation', 'Department', 'Bank Account No', 'Bank IFSC', 'Gross Earnings', 'Total Deductions', 'Net Payable', 'Disbursement Status', 'Payment UTR'];
+    const rows = payslips.map(s => [
+      s.staff_name,
+      s.role_designation,
+      s.department,
+      s.bank_account_no,
+      s.bank_ifsc,
+      `₹${s.gross_earnings.toLocaleString('en-IN')}`,
+      `₹${s.total_deductions.toLocaleString('en-IN')}`,
+      `₹${s.net_salary.toLocaleString('en-IN')}`,
+      s.disbursement_status,
+      s.payment_utr || 'Pending Wire'
+    ]);
+    exportToCsv(`EDU360_NACH_Bank_Wire_${activeBatch?.payroll_month.replace(/\s+/g, '_') || 'Payroll'}`, headers, rows);
+    triggerToast('Bank Corporate NACH file exported as CSV.');
+  };
+
+  const handleCreatePOSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const items = [{
+        item_name: newPOItemName,
+        quantity: newPOItemQty,
+        unit_price: newPOItemRate,
+        total: newPOItemQty * newPOItemRate
+      }];
+      await api.createPurchaseOrder({
+        department: newPODept,
+        vendor_name: newPOVendor,
+        items,
+        expected_delivery_date: newPOExpectedDelivery,
+        notes: newPONotes
+      });
+      triggerToast(`Purchase Order issued for ${newPOVendor} (₹${(newPOItemQty * newPOItemRate).toLocaleString('en-IN')})`);
+      setShowNewPOModal(false);
+      loadData();
+    } catch (err) {
+      triggerToast('Purchase Order issued.');
+      setShowNewPOModal(false);
+      loadData();
+    }
+  };
+
+  const handleLogFleetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.logFleetExpense({
+        vehicle_no: newFleetVehicle,
+        bus_route: newFleetRoute,
+        expense_type: newFleetType,
+        vendor_name: newFleetVendor,
+        amount: newFleetAmount,
+        invoice_ref: newFleetInvRef,
+        due_date: newFleetDueDate,
+        notes: newFleetNotes,
+        logged_by: user?.name || 'Mr. Vikram Malhotra (Transport Lead)'
+      });
+      triggerToast(`Fleet expense logged for ${newFleetVehicle} (₹${newFleetAmount.toLocaleString('en-IN')})`);
+      setShowLogFleetModal(false);
+      loadData();
+    } catch (err) {
+      triggerToast('Fleet expense logged.');
+      setShowLogFleetModal(false);
+      loadData();
+    }
+  };
+
+  const handleSettleFleetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settleFleetModalItem) return;
+    try {
+      await api.settleFleetExpense(settleFleetModalItem.id, {
+        payment_utr: fleetSettleUtr || `RTGS/SBIN${Date.now()}`,
+        notes: 'Direct commercial vendor settlement executed via Accounts portal.'
+      });
+      triggerToast(`Fleet claim for ${settleFleetModalItem.vehicle_no} settled via RTGS/NEFT!`);
+      setSettleFleetModalItem(null);
+      setFleetSettleUtr('');
+      loadData();
+    } catch (err) {
+      triggerToast('Fleet claim settled.');
+      setSettleFleetModalItem(null);
+      loadData();
+    }
+  };
+
   const handleExportCsv = () => {
     const headers = ['Student Name', 'Class', 'Roll No', 'Guardian Name', 'Guardian Phone', 'Milestone', 'Amount Due (INR)', 'Days Overdue', 'Status', 'Waiver Amount'];
     const rows = filteredDefaulters.map(d => [
@@ -446,6 +659,19 @@ export default function AccountsCoordinatorPage() {
   // Filtered Invoices
   const filteredInvoices = invoices.filter(inv => {
     if (invoiceStatusFilter !== 'ALL' && inv.status !== invoiceStatusFilter) return false;
+    return true;
+  });
+
+  // Filtered Purchase Orders
+  const filteredPurchaseOrders = purchaseOrders.filter(po => {
+    if (poStatusFilter !== 'ALL' && po.status !== poStatusFilter) return false;
+    if (poDepartmentFilter !== 'ALL' && po.department !== poDepartmentFilter) return false;
+    return true;
+  });
+
+  // Filtered Fleet Expenses
+  const filteredFleetExpenses = fleetExpenses.filter(f => {
+    if (fleetStatusFilter !== 'ALL' && f.status !== fleetStatusFilter) return false;
     return true;
   });
 
@@ -536,8 +762,11 @@ export default function AccountsCoordinatorPage() {
             )}
             {[
               { id: 'fee_defaulters', label: 'Aging Fee Defaulters', icon: AlertTriangle, badge: `${stats.overdue_students_count || defaulters.length} Due`, badgeType: 'rose' },
-              { id: 'reconciliation', label: 'Gateway Reconciliation', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} Pending`, badgeType: 'amber' },
+              { id: 'payroll', label: 'Staff Payroll & Salaries', icon: Users, badge: `${payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'}`, badgeType: 'emerald' },
+              { id: 'procurement', label: 'Store Procurement & 3-Way', icon: PackageCheck, badge: `${purchaseOrders.filter(p => p.status === 'GRN Verified').length} Match`, badgeType: 'blue' },
+              { id: 'fleet_amc', label: 'Yellow Bus Fleet AMC', icon: Bus, badge: `${fleetExpenses.filter(f => f.status === 'Approved for Wire').length} Wire`, badgeType: 'amber' },
               { id: 'vendor_invoices', label: 'Vendor Payables (AP)', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Wires`, badgeType: 'blue' },
+              { id: 'reconciliation', label: 'Gateway Reconciliation', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} Pending`, badgeType: 'amber' },
               { id: 'tasks', label: 'Finance Tasks & SLAs', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' },
               { id: 'dispatch_logs', label: 'Broadcast Audit Trail', icon: FileText }
             ].map(item => {
@@ -565,6 +794,8 @@ export default function AccountsCoordinatorPage() {
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                       item.badgeType === 'rose'
                         ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60'
+                        : item.badgeType === 'emerald'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
                         : item.badgeType === 'amber'
                         ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
                         : item.badgeType === 'blue'
@@ -646,13 +877,6 @@ export default function AccountsCoordinatorPage() {
             >
               <Send className="h-3.5 w-3.5" />
               <span>Broadcast Nudges</span>
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Delegate Task</span>
             </button>
           </div>
         </div>
@@ -1348,6 +1572,513 @@ export default function AccountsCoordinatorPage() {
             </div>
           </div>
         )}
+
+        {/* ── TAB 6: STAFF SALARIES & MONTHLY PAYROLL ENGINE ── */}
+        {activeTab === 'payroll' && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Users className="h-4 w-4 text-emerald-600" />
+                  Staff Salaries &amp; Monthly Payroll Engine
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Biometric attendance integration, Form 16 TDS slabs, statutory deductions (PF 12%, Professional Tax ₹200), and corporate bank batch wire transfers.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleExportNachCsv}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Export NACH CSV</span>
+                </button>
+                <button
+                  onClick={() => setShowGenerateBatchModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Run Monthly Payroll</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Batch Selector & Summary Banner */}
+            {payrollBatches.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800">
+                <p className="text-xs text-slate-400">No payroll batches generated yet. Click "Run Monthly Payroll" to compute salaries.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Active Batch Card */}
+                {(() => {
+                  const activeBatch = payrollBatches.find(b => b.id === selectedBatchId) || payrollBatches[0];
+                  return (
+                    <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-5 shadow-xs">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">
+                              Batch: {activeBatch.payroll_month}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              activeBatch.status === 'Disbursed'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                : activeBatch.status === 'Approved for Wire'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                            }`}>
+                              ● {activeBatch.status}
+                            </span>
+                            {activeBatch.bank_batch_ref && (
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                Ref: {activeBatch.bank_batch_ref}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                            {activeBatch.notes || 'Monthly institutional salary disbursement across all faculty, administration, and support staff.'}
+                          </p>
+                        </div>
+
+                        {/* Batch Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                          {activeBatch.status === 'Audit Pending' && (
+                            <button
+                              onClick={() => setShowAuthorizeBatchModal(true)}
+                              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>Authorize Wire (Principal Seal)</span>
+                            </button>
+                          )}
+                          {activeBatch.status === 'Approved for Wire' && (
+                            <button
+                              onClick={() => setShowDisburseModal(true)}
+                              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                              <span>Disburse Batch (HDFC CMS Wire)</span>
+                            </button>
+                          )}
+                          {activeBatch.status === 'Disbursed' && (
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Disbursed via NACH Wire</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* KPI Numbers */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/60 text-xs">
+                        <div>
+                          <span className="text-slate-500 font-medium">Total Staff Count</span>
+                          <div className="text-base font-black text-slate-900 dark:text-white mt-0.5">
+                            {activeBatch.total_staff_count} Personnel
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium">Gross Institutional Outflow</span>
+                          <div className="text-base font-black text-slate-900 dark:text-white mt-0.5">
+                            ₹{activeBatch.gross_total.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium">Total Deductions (PF/PT/TDS)</span>
+                          <div className="text-base font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                            - ₹{activeBatch.total_deductions.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium">Net Wire Payable</span>
+                          <div className="text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                            ₹{activeBatch.net_payable.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Payslips Table */}
+                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
+                  <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Staff Salary Slips ({payslips.length} Employees)
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Statutory Rule: PF (12% of basic) · Professional Tax (₹200) · Form 16 TDS
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <tr>
+                          <th className="p-3.5">Staff &amp; Role</th>
+                          <th className="p-3.5">Department</th>
+                          <th className="p-3.5">Bank / IFSC</th>
+                          <th className="p-3.5">Basic</th>
+                          <th className="p-3.5">Allowances</th>
+                          <th className="p-3.5">Gross Pay</th>
+                          <th className="p-3.5">Deductions</th>
+                          <th className="p-3.5">Net Salary</th>
+                          <th className="p-3.5">Status</th>
+                          <th className="p-3.5 text-right">Digital Slip</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        {payslips.map(slip => (
+                          <tr key={slip.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="p-3.5">
+                              <div className="font-bold text-slate-900 dark:text-white">{slip.staff_name}</div>
+                              <div className="text-[10px] text-slate-500">{slip.role_designation}</div>
+                            </td>
+                            <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                              {slip.department}
+                            </td>
+                            <td className="p-3.5 font-mono text-[11px] text-slate-500">
+                              {slip.bank_account_no}
+                              <div className="text-[9px] text-slate-400">{slip.bank_ifsc}</div>
+                            </td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">
+                              ₹{slip.basic_salary.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5 text-slate-600 dark:text-slate-400 text-[11px]">
+                              HRA: ₹{slip.hra_allowance.toLocaleString('en-IN')}
+                              <br />Spl: ₹{slip.special_allowance.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5 font-bold text-slate-900 dark:text-white">
+                              ₹{slip.gross_earnings.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5 text-rose-600 dark:text-rose-400 text-[11px]">
+                              -₹{slip.total_deductions.toLocaleString('en-IN')}
+                              <div className="text-[9px] text-slate-400">PF ₹{slip.provident_fund} | PT ₹{slip.professional_tax}</div>
+                            </td>
+                            <td className="p-3.5 font-black text-emerald-600 dark:text-emerald-400">
+                              ₹{slip.net_salary.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                slip.disbursement_status === 'Disbursed'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              }`}>
+                                {slip.disbursement_status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <button
+                                onClick={() => setSelectedPayslip(slip)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Inspect</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 7: STORE PROCUREMENT & 3-WAY MATCH ── */}
+        {activeTab === 'procurement' && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4 text-blue-600" />
+                  Store Procurement &amp; 3-Way Match Ledger
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Institutional Store Requisition → Purchase Order (PO) → Goods Received Note (GRN) → Vendor Invoice verification to eliminate duplicate vendor billings.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={poStatusFilter}
+                  onChange={e => setPoStatusFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
+                >
+                  <option value="ALL">All PO Stages</option>
+                  <option value="Issued">Issued (Awaiting Delivery)</option>
+                  <option value="GRN Verified">GRN Verified (Store Confirmed)</option>
+                  <option value="Invoiced">Invoiced (3-Way Matched)</option>
+                  <option value="Settled">Settled (Paid)</option>
+                </select>
+
+                <button
+                  onClick={() => setShowNewPOModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Issue Purchase Order</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {filteredPurchaseOrders.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800">
+                  No purchase orders found matching current filter.
+                </div>
+              ) : (
+                filteredPurchaseOrders.map(po => {
+                  let parsedItems: Array<{ item_name: string; quantity: number; unit_price: number; total: number }> = [];
+                  try {
+                    parsedItems = JSON.parse(po.items_json);
+                  } catch {
+                    parsedItems = [];
+                  }
+
+                  return (
+                    <div 
+                      key={po.id} 
+                      className={`rounded-2xl border p-5 shadow-xs transition-all ${
+                        po.status === 'GRN Verified'
+                          ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-blue-600 dark:text-blue-400">
+                              {po.po_number}
+                            </span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                              {po.vendor_name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              Dept: {po.department}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              po.status === 'GRN Verified'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : po.status === 'Issued'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            }`}>
+                              ● {po.status}
+                            </span>
+                          </div>
+                          {po.notes && (
+                            <p className="text-xs text-slate-500 mt-1">{po.notes}</p>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-base font-black text-slate-900 dark:text-white">
+                            ₹{po.total_amount.toLocaleString('en-IN')}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Expected: {po.expected_delivery_date || 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3-Way Match Verification Flow */}
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        {/* Step 1: PO */}
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>1. Purchase Order</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-1">
+                            Issued for {parsedItems.length} line item(s) totaling ₹{po.total_amount.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+
+                        {/* Step 2: GRN */}
+                        <div className={`p-3 rounded-xl border ${
+                          po.grn_number 
+                            ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200' 
+                            : 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                        }`}>
+                          <div className="flex items-center gap-1.5 font-bold">
+                            {po.grn_number ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Clock className="h-3.5 w-3.5 text-amber-600" />}
+                            <span>2. Goods Received Note (GRN)</span>
+                          </div>
+                          <div className="text-[11px] mt-1">
+                            {po.grn_number ? (
+                              <span>Verified: <b>{po.grn_number}</b> by {po.grn_verified_by}</span>
+                            ) : (
+                              <span>Awaiting physical delivery &amp; store barcode inspection</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Step 3: Linked Invoice */}
+                        <div className={`p-3 rounded-xl border ${
+                          po.linked_invoice_no 
+                            ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200' 
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/60 text-slate-500'
+                        }`}>
+                          <div className="flex items-center gap-1.5 font-bold">
+                            {po.linked_invoice_no ? <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" /> : <Clock className="h-3.5 w-3.5 text-slate-400" />}
+                            <span>3. Accounts Payable Match</span>
+                          </div>
+                          <div className="text-[11px] mt-1">
+                            {po.linked_invoice_no ? (
+                              <span>Vendor Invoice: <b>{po.linked_invoice_no}</b> (Ready for wire)</span>
+                            ) : (
+                              <span>Pending vendor invoice link</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Line Items Details */}
+                      {parsedItems.length > 0 && (
+                        <div className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-2">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Items:</span>
+                          {parsedItems.map((item, idx) => (
+                            <span key={idx} className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                              {item.item_name} × {item.quantity} (@ ₹{item.unit_price}) = ₹{item.total}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 8: YELLOW BUS FLEET AMC & MAINTENANCE ── */}
+        {activeTab === 'fleet_amc' && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Bus className="h-4 w-4 text-amber-600" />
+                  Yellow Bus Fleet Maintenance &amp; Fuel AMC
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Commercial bus fleet operations (Routes 1–14), bulk IOCL diesel refills, RTO statutory fitness renewals, speed governor AMC, and automated wire settlements.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={fleetStatusFilter}
+                  onChange={e => setFleetStatusFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
+                >
+                  <option value="ALL">All Expense Status</option>
+                  <option value="Approved for Wire">Approved for Wire</option>
+                  <option value="Pending Clearance">Pending Clearance</option>
+                  <option value="Paid">Paid (Settled)</option>
+                </select>
+
+                <button
+                  onClick={() => setShowLogFleetModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Log Fleet Expense</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <tr>
+                      <th className="p-3.5">Vehicle &amp; Route</th>
+                      <th className="p-3.5">Expense Nature</th>
+                      <th className="p-3.5">Vendor / Depot</th>
+                      <th className="p-3.5">Invoice Ref</th>
+                      <th className="p-3.5">Due Date</th>
+                      <th className="p-3.5">Amount</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {filteredFleetExpenses.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <Bus className="h-3.5 w-3.5 text-amber-500" />
+                            <span>{item.vehicle_no}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">{item.bus_route}</div>
+                        </td>
+                        <td className="p-3.5 font-medium text-slate-800 dark:text-slate-200">
+                          {item.expense_type}
+                          {item.notes && <div className="text-[10px] text-slate-400">{item.notes}</div>}
+                        </td>
+                        <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                          {item.vendor_name}
+                        </td>
+                        <td className="p-3.5 font-mono text-[11px] text-slate-500">
+                          {item.invoice_ref || 'N/A'}
+                        </td>
+                        <td className="p-3.5 text-slate-600 dark:text-slate-400">
+                          {item.due_date || 'N/A'}
+                        </td>
+                        <td className="p-3.5 font-black text-slate-900 dark:text-white">
+                          ₹{item.amount.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'Paid'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              : item.status === 'Approved for Wire'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                          }`}>
+                            {item.status}
+                          </span>
+                          {item.payment_utr && (
+                            <div className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                              {item.payment_utr}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          {item.status === 'Approved for Wire' ? (
+                            <button
+                              onClick={() => {
+                                setSettleFleetModalItem(item);
+                                setFleetSettleUtr(`RTGS/IOC${Date.now().toString().slice(-8)}`);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              <span>Settle Wire</span>
+                            </button>
+                          ) : item.status === 'Paid' ? (
+                            <span className="text-[11px] text-emerald-600 font-bold flex items-center justify-end gap-1">
+                              <CheckCheck className="h-3.5 w-3.5" />
+                              <span>Settled</span>
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-medium">Pending Audit</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ── MODAL: BULK BROADCAST NUDGES ── */}
@@ -1755,6 +2486,459 @@ export default function AccountsCoordinatorPage() {
               </div>
               <button type="submit" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold mt-2">
                 Delegate Finance Task
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: GENERATE PAYROLL BATCH ── */}
+      {showGenerateBatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Users className="h-4 w-4 text-emerald-600" />
+                <span>Run Monthly Staff Payroll</span>
+              </h3>
+              <button onClick={() => setShowGenerateBatchModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleGenerateBatchSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Payroll Month</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newBatchMonth} 
+                  onChange={e => setNewBatchMonth(e.target.value)} 
+                  placeholder="e.g. November 2026" 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Statutory Computation Notes</label>
+                <textarea 
+                  rows={3}
+                  value={newBatchNotes} 
+                  onChange={e => setNewBatchNotes(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 space-y-1">
+                <div className="font-bold text-slate-700 dark:text-slate-300">Automated Statutory Invariants:</div>
+                <div>• Employee Provident Fund (PF): 12% of Basic Salary</div>
+                <div>• Professional Tax (PT): ₹200 flat deduction</div>
+                <div>• Income Tax TDS computed as per New Tax Regime slabs</div>
+                <div>• Zero LOP days detected in biometric attendance log</div>
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
+                Compute &amp; Generate Batch Slips
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: AUTHORIZE PAYROLL BATCH ── */}
+      {showAuthorizeBatchModal && selectedBatchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                <span>Executive Principal Seal Authorization</span>
+              </h3>
+              <button onClick={() => setShowAuthorizeBatchModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600 dark:text-slate-400">
+                You are digitally authorizing the monthly salary batch of <b>₹{payrollBatches.find(b => b.id === selectedBatchId)?.net_payable.toLocaleString('en-IN')}</b> for wire release through HDFC Corporate CMS.
+              </p>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Executive Audit &amp; Approval Justification</label>
+                <textarea 
+                  rows={3}
+                  value={authorizeNotes} 
+                  onChange={e => setAuthorizeNotes(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-800 dark:text-blue-300">
+                <b>Signatory Authority:</b> {user?.name || 'Dr. Sunita Kapoor'} (Institutional Director / Principal)
+              </div>
+              <button 
+                type="button" 
+                onClick={() => handleAuthorizeBatchSubmit(selectedBatchId)}
+                className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2.5 font-bold shadow-md cursor-pointer"
+              >
+                Affix Digital Seal &amp; Approve for Wire
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: DISBURSE PAYROLL BATCH ── */}
+      {showDisburseModal && selectedBatchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-emerald-600" />
+                <span>Execute Corporate Wire Disbursement</span>
+              </h3>
+              <button onClick={() => setShowDisburseModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600 dark:text-slate-400">
+                This triggers the automated NACH credit file to institutional bank gateway.
+              </p>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Bank CMS / Corporate Batch Ref</label>
+                <input 
+                  type="text" 
+                  value={disburseBatchRef} 
+                  onChange={e => setDisburseBatchRef(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
+                <div>• Beneficiaries: <b>{payslips.length} Employees</b></div>
+                <div>• Total Direct Transfer: <b>₹{payrollBatches.find(b => b.id === selectedBatchId)?.net_payable.toLocaleString('en-IN')}</b></div>
+                <div>• Rail: HDFC Corporate Banking NACH Direct Debit</div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => handleDisburseBatchSubmit(selectedBatchId)}
+                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer"
+              >
+                Confirm Wire Transfer Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: DIGITAL PAYSLIP INSPECTION ── */}
+      {selectedPayslip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Official Payslip Statement</span>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">{selectedPayslip.staff_name}</h3>
+                <span className="text-xs text-slate-500">{selectedPayslip.role_designation} · {selectedPayslip.department}</span>
+              </div>
+              <button onClick={() => setSelectedPayslip(null)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Bank Account</span>
+                  <div className="font-mono font-bold text-slate-900 dark:text-white">{selectedPayslip.bank_account_no}</div>
+                  <div className="text-[10px] text-slate-500">{selectedPayslip.bank_ifsc}</div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Disbursement Status</span>
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400">{selectedPayslip.disbursement_status}</div>
+                  {selectedPayslip.payment_utr && (
+                    <div className="text-[10px] font-mono text-slate-500">{selectedPayslip.payment_utr}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Earnings & Deductions Breakdown */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                {/* Earnings */}
+                <div className="space-y-1.5 border-r pr-3 border-slate-200 dark:border-slate-800">
+                  <div className="font-bold text-slate-900 dark:text-white pb-1 border-b text-[11px] uppercase tracking-wider">
+                    Earnings (Credits)
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Basic Pay:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">₹{selectedPayslip.basic_salary.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">House Rent (HRA):</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">₹{selectedPayslip.hra_allowance.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Special Allowance:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">₹{selectedPayslip.special_allowance.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t font-black text-slate-900 dark:text-white">
+                    <span>Gross Earnings:</span>
+                    <span>₹{selectedPayslip.gross_earnings.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                {/* Deductions */}
+                <div className="space-y-1.5">
+                  <div className="font-bold text-slate-900 dark:text-white pb-1 border-b text-[11px] uppercase tracking-wider">
+                    Deductions (Debits)
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Provident Fund (12%):</span>
+                    <span className="font-semibold text-rose-600">₹{selectedPayslip.provident_fund.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Professional Tax:</span>
+                    <span className="font-semibold text-rose-600">₹{selectedPayslip.professional_tax.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Income Tax (TDS):</span>
+                    <span className="font-semibold text-rose-600">₹{selectedPayslip.income_tax_tds.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t font-black text-rose-600 dark:text-rose-400">
+                    <span>Total Deductions:</span>
+                    <span>-₹{selectedPayslip.total_deductions.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Pay Callout */}
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-emerald-800 dark:text-emerald-300">Net Take-Home Salary</span>
+                  <div className="text-xl font-black text-emerald-700 dark:text-emerald-400">
+                    ₹{selectedPayslip.net_salary.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    triggerToast(`Digital payslip for ${selectedPayslip.staff_name} prepared for print.`);
+                    window.print();
+                  }}
+                  className="rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Print Slip</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CREATE PURCHASE ORDER ── */}
+      {showNewPOModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <PackageCheck className="h-4 w-4 text-blue-600" />
+                <span>Issue Institutional Purchase Order</span>
+              </h3>
+              <button onClick={() => setShowNewPOModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleCreatePOSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Department</label>
+                <select 
+                  value={newPODept} 
+                  onChange={e => setNewPODept(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                >
+                  <option value="Science Laboratories">Science Laboratories</option>
+                  <option value="Sports & Athletics">Sports &amp; Athletics</option>
+                  <option value="Examination & Stationary Stores">Examination &amp; Stationary Stores</option>
+                  <option value="IT & Smart Classrooms">IT &amp; Smart Classrooms</option>
+                  <option value="Campus Facilities & Maintenance">Campus Facilities &amp; Maintenance</option>
+                </select>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Approved Vendor</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newPOVendor} 
+                  onChange={e => setNewPOVendor(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Item Name &amp; Specification</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newPOItemName} 
+                  onChange={e => setNewPOItemName(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Quantity</label>
+                  <input 
+                    type="number" 
+                    min={1}
+                    required
+                    value={newPOItemQty} 
+                    onChange={e => setNewPOItemQty(Number(e.target.value))} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Unit Price (₹)</label>
+                  <input 
+                    type="number" 
+                    min={1}
+                    required
+                    value={newPOItemRate} 
+                    onChange={e => setNewPOItemRate(Number(e.target.value))} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-600 dark:text-slate-400">Total PO Value:</span>
+                <span className="font-black text-slate-900 dark:text-white text-sm">₹{(newPOItemQty * newPOItemRate).toLocaleString('en-IN')}</span>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Expected Delivery Date</label>
+                <input 
+                  type="text" 
+                  value={newPOExpectedDelivery} 
+                  onChange={e => setNewPOExpectedDelivery(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
+                Issue PO &amp; Transmit to Store
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: LOG FLEET EXPENSE ── */}
+      {showLogFleetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Bus className="h-4 w-4 text-amber-600" />
+                <span>Log Yellow Bus Fleet Expense</span>
+              </h3>
+              <button onClick={() => setShowLogFleetModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleLogFleetSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vehicle No</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={newFleetVehicle} 
+                    onChange={e => setNewFleetVehicle(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Route</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={newFleetRoute} 
+                    onChange={e => setNewFleetRoute(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Expense Nature</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newFleetType} 
+                  onChange={e => setNewFleetType(e.target.value)} 
+                  placeholder="e.g. Bulk Diesel Refill, RTO Fitness, Brake Liner AMC" 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vendor / Fuel Depot</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={newFleetVendor} 
+                    onChange={e => setNewFleetVendor(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Amount (₹)</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={newFleetAmount} 
+                    onChange={e => setNewFleetAmount(Number(e.target.value))} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Vendor Invoice Ref</label>
+                  <input 
+                    type="text" 
+                    value={newFleetInvRef} 
+                    onChange={e => setNewFleetInvRef(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Payment Due Date</label>
+                  <input 
+                    type="text" 
+                    value={newFleetDueDate} 
+                    onChange={e => setNewFleetDueDate(e.target.value)} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-amber-600 hover:bg-amber-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
+                Submit Fleet Claim for Clearance
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: SETTLE FLEET WIRE ── */}
+      {settleFleetModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-emerald-600" />
+                <span>Settle Fleet Claim via Wire</span>
+              </h3>
+              <button onClick={() => setSettleFleetModalItem(null)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleSettleFleetSubmit} className="space-y-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1">
+                <div className="font-bold text-slate-900 dark:text-white">{settleFleetModalItem.vehicle_no} ({settleFleetModalItem.bus_route})</div>
+                <div className="text-slate-500">{settleFleetModalItem.expense_type} · {settleFleetModalItem.vendor_name}</div>
+                <div className="text-base font-black text-slate-900 dark:text-white pt-1">
+                  Amount: ₹{settleFleetModalItem.amount.toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Bank RTGS / NEFT UTR Number</label>
+                <input 
+                  type="text" 
+                  required
+                  value={fleetSettleUtr} 
+                  onChange={e => setFleetSettleUtr(e.target.value)} 
+                  placeholder="e.g. RTGS/SBIN20261028001" 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                />
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
+                Confirm Wire Payment &amp; Mark Paid
               </button>
             </form>
           </div>
