@@ -804,7 +804,8 @@ export default function AdminPage() {
                 )}
               </button>
 
-              {/* Inventory & Assets */}
+              {/* Inventory hidden for Online School */}
+              {false && (
               <button
                 onClick={() => { setActiveTab('inventory'); setMobileDrawerOpen(false); }}
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
@@ -819,6 +820,7 @@ export default function AdminPage() {
                   {!sidebarCollapsed && <span className="truncate">Inventory &amp; Assets</span>}
                 </div>
               </button>
+              )}
 
               {/* Event Command Center */}
               <button
@@ -2637,7 +2639,7 @@ export default function AdminPage() {
                       <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
                         Decentralized Operations Center
                       </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">6 Coordinator Domains · SLA-Tracked</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">4 Online Coordinator Domains · SLA-Tracked</span>
                     </div>
                     <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
                       Institutional Task Operations Board

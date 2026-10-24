@@ -48,7 +48,7 @@ import {
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
-type AccountsTab = 'tasks' | 'fee_defaulters' | 'reconciliation' | 'vendor_invoices' | 'dispatch_logs' | 'payroll' | 'procurement' | 'fleet_amc';
+type AccountsTab = 'tasks' | 'fee_defaulters' | 'reconciliation' | 'vendor_invoices' | 'dispatch_logs' | 'payroll';
 
 export default function AccountsCoordinatorPage() {
   const { user } = useAuth();
@@ -90,6 +90,7 @@ export default function AccountsCoordinatorPage() {
   // Filter States
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [defaulterTierFilter, setDefaulterTierFilter] = useState<string>('ALL');
+  const [defaulterCategoryFilter, setDefaulterCategoryFilter] = useState<'ALL' | 'NEW_ADMISSION' | 'EXISTING'>('ALL');
   const [defaulterClassFilter, setDefaulterClassFilter] = useState<string>('All Classes');
   const [defaulterSearch, setDefaulterSearch] = useState<string>('');
   const [txReconcileFilter, setTxReconcileFilter] = useState<string>('all');
@@ -256,6 +257,21 @@ export default function AccountsCoordinatorPage() {
     } catch (err) {
       triggerToast(`Broadcast dispatched successfully`);
       setShowBulkModal(false);
+    }
+  };
+
+  const handleToggleExamClearance = async (d: FeeDefaulter) => {
+    try {
+      const res = await api.toggleExamClearance(d.id);
+      if (res.exam_clearance) {
+        triggerToast(`Exam No-Dues clearance granted for ${d.student_name}! Hall Ticket & Report Card unlocked in Exam Portal.`);
+      } else {
+        triggerToast(`Financial hold applied for ${d.student_name}. Hall Ticket placed on hold.`);
+      }
+      loadData();
+    } catch {
+      triggerToast(`Exam clearance status updated for ${d.student_name}`);
+      loadData();
     }
   };
 
@@ -623,6 +639,8 @@ export default function AccountsCoordinatorPage() {
 
   // Filtered Defaulters
   const filteredDefaulters = defaulters.filter(d => {
+    if (defaulterCategoryFilter === 'NEW_ADMISSION' && !d.is_admission_fee) return false;
+    if (defaulterCategoryFilter === 'EXISTING' && d.is_admission_fee) return false;
     if (defaulterTierFilter === '0-15' && d.days_overdue > 15) return false;
     if (defaulterTierFilter === '16-30' && (d.days_overdue <= 15 || d.days_overdue > 30)) return false;
     if (defaulterTierFilter === '30+' && d.days_overdue <= 30) return false;
@@ -763,8 +781,6 @@ export default function AccountsCoordinatorPage() {
             {[
               { id: 'fee_defaulters', label: 'Aging Fee Defaulters', icon: AlertTriangle, badge: `${stats.overdue_students_count || defaulters.length} Due`, badgeType: 'rose' },
               { id: 'payroll', label: 'Staff Payroll & Salaries', icon: Users, badge: `${payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'}`, badgeType: 'emerald' },
-              { id: 'procurement', label: 'Store Procurement & 3-Way', icon: PackageCheck, badge: `${purchaseOrders.filter(p => p.status === 'GRN Verified').length} Match`, badgeType: 'blue' },
-              { id: 'fleet_amc', label: 'Yellow Bus Fleet AMC', icon: Bus, badge: `${fleetExpenses.filter(f => f.status === 'Approved for Wire').length} Wire`, badgeType: 'amber' },
               { id: 'vendor_invoices', label: 'Vendor Payables (AP)', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Wires`, badgeType: 'blue' },
               { id: 'reconciliation', label: 'Gateway Reconciliation', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} Pending`, badgeType: 'amber' },
               { id: 'tasks', label: 'Finance Tasks & SLAs', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' },
@@ -898,7 +914,7 @@ export default function AccountsCoordinatorPage() {
                 ₹{stats.total_collected_mtd.toLocaleString('en-IN')}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                Verified collections across Tuition &amp; Transport
+                Verified collections across Online Tuition &amp; Term Milestones
               </p>
             </div>
             <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -970,7 +986,7 @@ export default function AccountsCoordinatorPage() {
                 ₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                Fleet fuel, lab reagents, campus utilities
+                Curriculum, EdTech tools, and operational expenses
               </p>
             </div>
             <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -994,6 +1010,37 @@ export default function AccountsCoordinatorPage() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Category Filter: All vs New SIS Admissions */}
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setDefaulterCategoryFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      defaulterCategoryFilter === 'ALL'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    All Accounts ({defaulters.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaulterCategoryFilter('NEW_ADMISSION')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      defaulterCategoryFilter === 'NEW_ADMISSION'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                    }`}
+                  >
+                    <span>★ New SIS Admissions</span>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                      defaulterCategoryFilter === 'NEW_ADMISSION' ? 'bg-purple-700 text-white' : 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
+                    }`}>
+                      {defaulters.filter(d => d.is_admission_fee).length}
+                    </span>
+                  </button>
+                </div>
+
                 {/* Aging Tier Filter */}
                 <select 
                   value={defaulterTierFilter} 
@@ -1046,13 +1093,14 @@ export default function AccountsCoordinatorPage() {
                       <th className="p-3.5">Outstanding Balance</th>
                       <th className="p-3.5">Days Aging</th>
                       <th className="p-3.5">Recovery Status</th>
+                      <th className="p-3.5">Exam No-Dues Clearance</th>
                       <th className="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {filteredDefaulters.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <td colSpan={8} className="p-8 text-center text-slate-400">
                           No fee defaulters matching current filter criteria.
                         </td>
                       </tr>
@@ -1060,8 +1108,15 @@ export default function AccountsCoordinatorPage() {
                       filteredDefaulters.map(d => (
                         <tr key={d.id} className="hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">
                           <td className="p-3.5">
-                            <span className="font-bold text-slate-900 dark:text-white block">{d.student_name}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900 dark:text-white">{d.student_name}</span>
+                              {d.is_admission_fee && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  ★ New Admission
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
                               {d.class_name} {d.roll_no ? `• Roll #${d.roll_no}` : ''}
                             </span>
                           </td>
@@ -1106,6 +1161,39 @@ export default function AccountsCoordinatorPage() {
                               </div>
                             ) : (
                               <span className="text-[10px] text-slate-400 italic">No Reminders Yet</span>
+                            )}
+                          </td>
+                          <td className="p-3.5">
+                            {d.exam_clearance ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  No-Dues Cleared
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExamClearance(d)}
+                                  className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                                  title="Revoke exam clearance / Place on financial hold"
+                                >
+                                  Hold
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Exam Hold
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExamClearance(d)}
+                                  className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800"
+                                  title="Issue No-Dues Certificate for Hall Ticket / Report Card"
+                                >
+                                  Clear
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td className="p-3.5 text-right">
@@ -1789,296 +1877,6 @@ export default function AccountsCoordinatorPage() {
           </div>
         )}
 
-        {/* ── TAB 7: STORE PROCUREMENT & 3-WAY MATCH ── */}
-        {activeTab === 'procurement' && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <PackageCheck className="h-4 w-4 text-blue-600" />
-                  Store Procurement &amp; 3-Way Match Ledger
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Institutional Store Requisition → Purchase Order (PO) → Goods Received Note (GRN) → Vendor Invoice verification to eliminate duplicate vendor billings.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={poStatusFilter}
-                  onChange={e => setPoStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="ALL">All PO Stages</option>
-                  <option value="Issued">Issued (Awaiting Delivery)</option>
-                  <option value="GRN Verified">GRN Verified (Store Confirmed)</option>
-                  <option value="Invoiced">Invoiced (3-Way Matched)</option>
-                  <option value="Settled">Settled (Paid)</option>
-                </select>
-
-                <button
-                  onClick={() => setShowNewPOModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Issue Purchase Order</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {filteredPurchaseOrders.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800">
-                  No purchase orders found matching current filter.
-                </div>
-              ) : (
-                filteredPurchaseOrders.map(po => {
-                  let parsedItems: Array<{ item_name: string; quantity: number; unit_price: number; total: number }> = [];
-                  try {
-                    parsedItems = JSON.parse(po.items_json);
-                  } catch {
-                    parsedItems = [];
-                  }
-
-                  return (
-                    <div 
-                      key={po.id} 
-                      className={`rounded-2xl border p-5 shadow-xs transition-all ${
-                        po.status === 'GRN Verified'
-                          ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10'
-                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-black text-blue-600 dark:text-blue-400">
-                              {po.po_number}
-                            </span>
-                            <span className="text-xs font-bold text-slate-900 dark:text-white">
-                              {po.vendor_name}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                              Dept: {po.department}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              po.status === 'GRN Verified'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                : po.status === 'Issued'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                            }`}>
-                              ● {po.status}
-                            </span>
-                          </div>
-                          {po.notes && (
-                            <p className="text-xs text-slate-500 mt-1">{po.notes}</p>
-                          )}
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <div className="text-base font-black text-slate-900 dark:text-white">
-                            ₹{po.total_amount.toLocaleString('en-IN')}
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            Expected: {po.expected_delivery_date || 'N/A'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 3-Way Match Verification Flow */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                        {/* Step 1: PO */}
-                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>1. Purchase Order</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-1">
-                            Issued for {parsedItems.length} line item(s) totaling ₹{po.total_amount.toLocaleString('en-IN')}
-                          </div>
-                        </div>
-
-                        {/* Step 2: GRN */}
-                        <div className={`p-3 rounded-xl border ${
-                          po.grn_number 
-                            ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200' 
-                            : 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                        }`}>
-                          <div className="flex items-center gap-1.5 font-bold">
-                            {po.grn_number ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Clock className="h-3.5 w-3.5 text-amber-600" />}
-                            <span>2. Goods Received Note (GRN)</span>
-                          </div>
-                          <div className="text-[11px] mt-1">
-                            {po.grn_number ? (
-                              <span>Verified: <b>{po.grn_number}</b> by {po.grn_verified_by}</span>
-                            ) : (
-                              <span>Awaiting physical delivery &amp; store barcode inspection</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Step 3: Linked Invoice */}
-                        <div className={`p-3 rounded-xl border ${
-                          po.linked_invoice_no 
-                            ? 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200' 
-                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/60 text-slate-500'
-                        }`}>
-                          <div className="flex items-center gap-1.5 font-bold">
-                            {po.linked_invoice_no ? <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" /> : <Clock className="h-3.5 w-3.5 text-slate-400" />}
-                            <span>3. Accounts Payable Match</span>
-                          </div>
-                          <div className="text-[11px] mt-1">
-                            {po.linked_invoice_no ? (
-                              <span>Vendor Invoice: <b>{po.linked_invoice_no}</b> (Ready for wire)</span>
-                            ) : (
-                              <span>Pending vendor invoice link</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Line Items Details */}
-                      {parsedItems.length > 0 && (
-                        <div className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-2">
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">Items:</span>
-                          {parsedItems.map((item, idx) => (
-                            <span key={idx} className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
-                              {item.item_name} × {item.quantity} (@ ₹{item.unit_price}) = ₹{item.total}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 8: YELLOW BUS FLEET AMC & MAINTENANCE ── */}
-        {activeTab === 'fleet_amc' && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Bus className="h-4 w-4 text-amber-600" />
-                  Yellow Bus Fleet Maintenance &amp; Fuel AMC
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Commercial bus fleet operations (Routes 1–14), bulk IOCL diesel refills, RTO statutory fitness renewals, speed governor AMC, and automated wire settlements.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={fleetStatusFilter}
-                  onChange={e => setFleetStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="ALL">All Expense Status</option>
-                  <option value="Approved for Wire">Approved for Wire</option>
-                  <option value="Pending Clearance">Pending Clearance</option>
-                  <option value="Paid">Paid (Settled)</option>
-                </select>
-
-                <button
-                  onClick={() => setShowLogFleetModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Log Fleet Expense</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    <tr>
-                      <th className="p-3.5">Vehicle &amp; Route</th>
-                      <th className="p-3.5">Expense Nature</th>
-                      <th className="p-3.5">Vendor / Depot</th>
-                      <th className="p-3.5">Invoice Ref</th>
-                      <th className="p-3.5">Due Date</th>
-                      <th className="p-3.5">Amount</th>
-                      <th className="p-3.5">Status</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {filteredFleetExpenses.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="p-3.5">
-                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <Bus className="h-3.5 w-3.5 text-amber-500" />
-                            <span>{item.vehicle_no}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500">{item.bus_route}</div>
-                        </td>
-                        <td className="p-3.5 font-medium text-slate-800 dark:text-slate-200">
-                          {item.expense_type}
-                          {item.notes && <div className="text-[10px] text-slate-400">{item.notes}</div>}
-                        </td>
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">
-                          {item.vendor_name}
-                        </td>
-                        <td className="p-3.5 font-mono text-[11px] text-slate-500">
-                          {item.invoice_ref || 'N/A'}
-                        </td>
-                        <td className="p-3.5 text-slate-600 dark:text-slate-400">
-                          {item.due_date || 'N/A'}
-                        </td>
-                        <td className="p-3.5 font-black text-slate-900 dark:text-white">
-                          ₹{item.amount.toLocaleString('en-IN')}
-                        </td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'Paid'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                              : item.status === 'Approved for Wire'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          }`}>
-                            {item.status}
-                          </span>
-                          {item.payment_utr && (
-                            <div className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                              {item.payment_utr}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3.5 text-right">
-                          {item.status === 'Approved for Wire' ? (
-                            <button
-                              onClick={() => {
-                                setSettleFleetModalItem(item);
-                                setFleetSettleUtr(`RTGS/IOC${Date.now().toString().slice(-8)}`);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                            >
-                              <CreditCard className="h-3 w-3" />
-                              <span>Settle Wire</span>
-                            </button>
-                          ) : item.status === 'Paid' ? (
-                            <span className="text-[11px] text-emerald-600 font-bold flex items-center justify-end gap-1">
-                              <CheckCheck className="h-3.5 w-3.5" />
-                              <span>Settled</span>
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 font-medium">Pending Audit</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* ── MODAL: BULK BROADCAST NUDGES ── */}
@@ -2322,11 +2120,10 @@ export default function AccountsCoordinatorPage() {
                     onChange={e => setNewInvCategory(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                   >
-                    <option value="Transport & Fuel">Transport &amp; Fuel</option>
-                    <option value="Laboratory Supplies">Laboratory Supplies</option>
-                    <option value="Software & IT">Software &amp; IT</option>
-                    <option value="Cafeteria & Dining">Cafeteria &amp; Dining</option>
-                    <option value="Security & Maintenance">Security &amp; Maintenance</option>
+                    <option value="Curriculum & Digital Content">Curriculum &amp; Digital Content</option>
+                    <option value="Software & IT">Software &amp; EdTech Subscriptions</option>
+                    <option value="Faculty Operations">Faculty Operations</option>
+                    <option value="Administrative & Legal">Administrative &amp; Legal</option>
                   </select>
                 </div>
               </div>

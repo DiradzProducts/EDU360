@@ -54,6 +54,9 @@ import {
   Download,
   CheckSquare,
   Save,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
   FileCheck,
   Upload,
   Bus,
@@ -486,6 +489,38 @@ export default function TeacherPage() {
   const [editingExamSubmission, setEditingExamSubmission] = useState<ExamSubmissionItem | null>(null);
   const [editExamMarks, setEditExamMarks] = useState<number>(50);
   const [editExamFeedback, setEditExamFeedback] = useState<string>('');
+  const [editExamWeakConcept, setEditExamWeakConcept] = useState<string>('');
+  const [editExamTheoryMarks, setEditExamTheoryMarks] = useState<number>(36);
+  const [editExamInternalMarks, setEditExamInternalMarks] = useState<number>(9);
+  const [initialAiScore, setInitialAiScore] = useState<number>(45);
+  const [q1Marks, setQ1Marks] = useState<number>(10);
+  const [q2Marks, setQ2Marks] = useState<number>(4);
+  const [q3Marks, setQ3Marks] = useState<number>(2);
+  const [otherTheoryMarks, setOtherTheoryMarks] = useState<number>(20);
+  const [paperZoomLevel, setPaperZoomLevel] = useState<number>(100);
+  const [paperActivePage, setPaperActivePage] = useState<number>(1);
+
+  const handleUpdateQuestionScore = (question: 'q1' | 'q2' | 'q3', newScore: number) => {
+    const boundedScore = Math.min(10, Math.max(0, newScore));
+    let nQ1 = q1Marks;
+    let nQ2 = q2Marks;
+    let nQ3 = q3Marks;
+    if (question === 'q1') { nQ1 = boundedScore; setQ1Marks(boundedScore); }
+    if (question === 'q2') { nQ2 = boundedScore; setQ2Marks(boundedScore); }
+    if (question === 'q3') { nQ3 = boundedScore; setQ3Marks(boundedScore); }
+    
+    const newTheory = nQ1 + nQ2 + nQ3 + otherTheoryMarks;
+    setEditExamTheoryMarks(newTheory);
+    const newTotal = newTheory + editExamInternalMarks;
+    setEditExamMarks(newTotal);
+  };
+
+  const getExamShortLabel = (ex: ExamItem) => {
+    if (ex.id === 1) return `Term 1 Exam (9-A)`;
+    if (ex.id === 2) return `Mid-Term (8-A)`;
+    if (ex.id === 3) return `Unit Test 2 (9-B)`;
+    return `${ex.term || 'Exam'} (${ex.class_name}-${ex.section})`;
+  };
 
   // OCR & Question Paper Drafting State
   const [examSubTab, setExamSubTab] = useState<'marks_ledger' | 'qp_desk'>('marks_ledger');
@@ -635,17 +670,76 @@ export default function TeacherPage() {
     }
   };
 
-  const handleSaveExamMarks = async () => {
+  const handleOpenEvaluationStudio = (sub: ExamSubmissionItem) => {
+    setEditingExamSubmission(sub);
+    const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : 45;
+    setInitialAiScore(total);
+    
+    if (sub.roll_no === '12' || total === 45) {
+      setQ1Marks(10);
+      setQ2Marks(4);
+      setQ3Marks(2);
+      setOtherTheoryMarks(20);
+      setEditExamTheoryMarks(36);
+      setEditExamInternalMarks(9);
+      setEditExamMarks(45);
+    } else if (total >= 70) {
+      setQ1Marks(10);
+      setQ2Marks(9);
+      setQ3Marks(8);
+      setOtherTheoryMarks(33);
+      setEditExamTheoryMarks(60);
+      setEditExamInternalMarks(14.5);
+      setEditExamMarks(74.5);
+    } else {
+      const theory = Math.min(80, Math.max(0, Math.round(total * 0.8)));
+      const internal = Math.max(0, total - theory);
+      setQ1Marks(10);
+      setQ2Marks(Math.max(2, Math.min(10, Math.round(theory * 0.2))));
+      setQ3Marks(Math.max(2, Math.min(10, Math.round(theory * 0.15))));
+      setOtherTheoryMarks(Math.max(0, theory - 10 - Math.round(theory * 0.35)));
+      setEditExamTheoryMarks(theory);
+      setEditExamInternalMarks(internal);
+      setEditExamMarks(total);
+    }
+
+    setEditExamFeedback(sub.teacher_feedback || '');
+    setEditExamWeakConcept(sub.weak_concept || (total <= 70 ? 'Quadratic Factorization: Sign Error' : 'Mastery: No Remediable Lag'));
+    setPaperZoomLevel(100);
+    setPaperActivePage(1);
+  };
+
+  const handleNavigateSubmission = (direction: 'next' | 'prev') => {
+    if (!editingExamSubmission) return;
+    const currentIndex = examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id);
+    if (currentIndex === -1) return;
+    const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    if (newIndex >= 0 && newIndex < examSubmissionsList.length) {
+      handleOpenEvaluationStudio(examSubmissionsList[newIndex]);
+    }
+  };
+
+  const handleSaveExamMarks = async (andNext: boolean = false) => {
     if (!editingExamSubmission) return;
     try {
       const res = await api.gradeExamSubmission(activePublishExamId, {
         student_id: editingExamSubmission.student_id,
-        marks_obtained: editExamMarks,
+        marks_obtained: Math.min(100, Math.max(0, editExamTheoryMarks + editExamInternalMarks)),
+        weak_concept: editExamWeakConcept,
         teacher_feedback: editExamFeedback,
         teacher_id: 2
       });
       if (res && res.success) {
-        triggerToast(`Updated score: ${editExamMarks}/100 (${res.percentage}%)`);
+        triggerToast(`✓ Evaluated ${editingExamSubmission.student_name}: ${res.percentage}%`);
+        if (andNext) {
+          const currentIndex = examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id);
+          if (currentIndex !== -1 && currentIndex + 1 < examSubmissionsList.length) {
+            handleOpenEvaluationStudio(examSubmissionsList[currentIndex + 1]);
+            const subRes = await api.getExamSubmissions(activePublishExamId);
+            if (subRes.success) setExamSubmissionsList(subRes.submissions);
+            return;
+          }
+        }
         setEditingExamSubmission(null);
         // Refresh submissions
         const subRes = await api.getExamSubmissions(activePublishExamId);
@@ -1731,30 +1825,69 @@ export default function TeacherPage() {
                 )}
               </button>
 
-              {/* 5b. Terminal Exams & Gradebook Publishing Engine */}
-              <button
-                onClick={() => {
-                  setActiveTab('exams_gradebook');
-                  setMobileDrawerOpen(false);
-                  if (examsList.length === 0) loadExams();
-                }}
-                title="Terminal Descriptive Exams & Gradebook Publishing Engine"
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
-                  activeTab === 'exams_gradebook'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Award className={`h-4 w-4 shrink-0 ${activeTab === 'exams_gradebook' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Exams &amp; Gradebook</span>}
-                </div>
-                {!sidebarCollapsed && (
-                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
-                    Publish Hub
-                  </span>
+              {/* 5b. Terminal Exams & Gradebook with Sub-Modules */}
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => {
+                    setActiveTab('exams_gradebook');
+                    setMobileDrawerOpen(false);
+                    if (examsList.length === 0) loadExams();
+                  }}
+                  title="Terminal Descriptive Exams & Gradebook Publishing Engine"
+                  className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                    activeTab === 'exams_gradebook'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Award className={`h-4 w-4 shrink-0 ${activeTab === 'exams_gradebook' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                    {!sidebarCollapsed && <span className="truncate">Exams &amp; Gradebook</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+                      Publish Hub
+                    </span>
+                  )}
+                </button>
+
+                {/* Sub-modules in Sidebar */}
+                {activeTab === 'exams_gradebook' && !sidebarCollapsed && (
+                  <div className="ml-6 pl-2.5 border-l-2 border-blue-200 dark:border-blue-800/60 my-1 space-y-1 animate-in fade-in">
+                    <button
+                      type="button"
+                      onClick={() => setExamSubTab('marks_ledger')}
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
+                        examSubTab === 'marks_ledger'
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <FileSpreadsheet className="h-3 w-3 shrink-0" />
+                      <span className="truncate">Evaluation Ledger</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamSubTab('qp_desk')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
+                        examSubTab === 'qp_desk'
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <FileText className="h-3 w-3 shrink-0" />
+                        <span className="truncate">QP Blueprints</span>
+                      </div>
+                      {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shrink-0">
+                          {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
 
               {/* 6. Student Roster & 360 */}
               <button
@@ -2010,11 +2143,11 @@ export default function TeacherPage() {
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setShowPTMModal(true)}
+                      onClick={() => setActiveTab('parent_chat')}
                       className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                     >
-                      <Users className="h-3.5 w-3.5 text-blue-500" />
-                      <span>Schedule PTM</span>
+                      <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
+                      <span>Parent Chat &amp; Notes</span>
                     </button>
 
                     <button
@@ -2381,22 +2514,90 @@ export default function TeacherPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        Academic Mandates &amp; Coordinator SLA Delegations
+                        Academic &amp; Faculty Duty Information Center
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                          {academicTasks.filter(t => (t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher') && t.status !== 'Completed').length} Active
+                          {academicTasks.filter(t => (t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher') && t.status !== 'Completed').length + 1} Active
                         </span>
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Remedial intervention plans, rubric audits, and syllabus catchup tasks delegated by the Academic Coordinator
+                        Official exam invigilation allocations, syllabus pacing plans, and academic duties (Information Portal)
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Official Exam Invigilation Duty Order Card (Gap 2/3 Information Slip) */}
+                  <div className="p-4 rounded-2xl border-2 border-amber-300 dark:border-amber-800 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 dark:from-amber-950/30 dark:via-slate-900 dark:to-slate-900 transition-all space-y-3 shadow-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white flex items-center gap-1">
+                            🎥 Virtual Exam Invigilation
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500">
+                            • 14 Oct 2026 (09:00 AM – 12:00 PM)
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white">
+                          Mid-Term Examination Invigilation · Virtual Room Alpha
+                        </h4>
+                        <span className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold block">
+                          Class 8-B · Mathematics Descriptive Assessment (45 Candidates on Live Camera)
+                        </span>
+                      </div>
+
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1 shrink-0">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>Duty Allocated ✓</span>
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-amber-200/80 dark:border-amber-900/60 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Allocated Session:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">Virtual Exam Room Alpha (WebRTC Proctor Bridge)</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Proctor Login Time:</span>
+                        <span className="font-bold text-amber-700 dark:text-amber-400">08:45 AM (Verify Student Webcams &amp; ID)</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Issuing Authority:</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">Examination Cell (Dr. Hemanth Sen)</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px]">
+                      <span className="text-slate-400 italic">
+                        Official online duty notice &bull; Instructions available on Proctor Console
+                      </span>
+                      <button
+                        onClick={() => setActiveTab('duties')}
+                        className="text-amber-700 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Open Duty Center</span>
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+
                   {academicTasks
                     .filter(t => t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher')
-                    .map(task => (
+                    .map(task => {
+                      const label = task.task_label || (
+                        task.title.toLowerCase().includes('substitut') ? '🔄 Faculty Substitution' :
+                        task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('paper') ? '📐 QP Blueprint Draft' :
+                        task.title.toLowerCase().includes('syllabus') || task.title.toLowerCase().includes('pacing') ? '📚 Syllabus Pacing Catch-up' :
+                        '📚 Academic Duty'
+                      );
+                      const color = 
+                        label.includes('Substitution') ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 dark:border-rose-800' :
+                        label.includes('Blueprint') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800' :
+                        label.includes('Syllabus') ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800' :
+                        'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 dark:border-blue-800';
+
+                      return (
                       <div 
                         key={task.id} 
                         className={`p-4 rounded-2xl border bg-white dark:bg-slate-900 transition-all space-y-3 ${
@@ -2407,7 +2608,10 @@ export default function TeacherPage() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${color}`}>
+                                {label}
+                              </span>
                               <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
                                 task.priority === 'Critical' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' :
                                 task.priority === 'High' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
@@ -2485,7 +2689,8 @@ export default function TeacherPage() {
                           </div>
                         )}
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3975,108 +4180,35 @@ export default function TeacherPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-bold border border-indigo-200 dark:border-indigo-800">
-                      Upstream Trigger Engine
+                      Official Academic Gradebook
                     </span>
                     <span className="text-xs text-slate-500">Subject: Mathematics (Mrs. Ananya Verma)</span>
                   </div>
                   <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1">
-                    Terminal Exams &amp; Gradebook Publishing Engine
+                    Terminal Examination &amp; Evaluation Desk
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Evaluates candidate scores. Publishing marks automatically invokes the <strong>MarksPublishedEvent</strong> hook to enroll students scoring &le; 70% into the 1-Week Remedial Sprint.
+                    Review student descriptive answer sheets, verify pre-graded marks, and publish official marks to enroll students scoring &le; 70% into the 1-Week Focus Plan.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setShowOcrModal(true);
-                      setOcrStep('upload');
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-3.5 py-2 text-xs font-bold shadow-md transition-all cursor-pointer"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>📸 AI Scan Physical Marksheet</span>
-                  </button>
-                  <button
                     onClick={loadExams}
                     disabled={isLoadingExams}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer shadow-xs"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${isLoadingExams ? 'animate-spin' : ''}`} />
-                    <span>Refresh Gradebook</span>
+                    <span>Refresh Ledger</span>
                   </button>
                 </div>
               </div>
 
-              {/* SUB-TAB TOGGLE: MARKS LEDGER VS QUESTION PAPER DRAFTING DESK */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExamSubTab('marks_ledger')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                      examSubTab === 'marks_ledger'
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-                    }`}
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    <span>📊 Marks Entry &amp; Gradebook Publishing</span>
-                  </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setExamSubTab('qp_desk')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer relative ${
-                      examSubTab === 'qp_desk'
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span>📝 Question Paper Drafting Desk</span>
-                    {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse">
-                        {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length} Action
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                <div className="text-xs text-slate-500">
-                  Academic Gate: <strong className="text-slate-800 dark:text-slate-200">Dean Rajeshwari Nair</strong>
-                </div>
-              </div>
 
               {/* TAB CONTENT 1: MARKS LEDGER */}
               {examSubTab === 'marks_ledger' && (
                 <div className="space-y-6">
-                  {/* Alert banner if any question papers need action */}
-                  {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length > 0 && (
-                    <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/90 to-purple-50/60 dark:from-indigo-950/40 dark:to-purple-950/30 p-3.5 flex items-center justify-between gap-3 shadow-xs">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                          <FileText className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-black text-slate-900 dark:text-white">
-                            {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length} Question Paper Blueprint(s) Commissioned &amp; Awaiting Design
-                          </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                            Academic Coordinator assigned syllabus specifications &amp; Bloom&apos;s quotas. Please upload drafts prior to scheduled due date.
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setExamSubTab('qp_desk')}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer shrink-0 flex items-center gap-1.5"
-                      >
-                        <span>Open Drafting Desk</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
 
                   {/* Exam Selector Pills */}
                   <div className="flex flex-wrap items-center gap-2.5">
@@ -4094,7 +4226,7 @@ export default function TeacherPage() {
                       }`}
                     >
                       <Award className="h-3.5 w-3.5" />
-                      <span>{ex.title}</span>
+                      <span>{getExamShortLabel(ex)}</span>
                       <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                         ex.is_published 
                           ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/30' 
@@ -4117,30 +4249,66 @@ export default function TeacherPage() {
 
                 return (
                   <div className="space-y-6">
-                    {/* KPI Stat Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Evaluation Target</span>
-                        <div className="text-sm font-black text-slate-900 dark:text-white truncate">{activeExam.title}</div>
-                        <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">{activeExam.class_name}-{activeExam.section} • Total: {activeExam.total_marks} Marks</span>
+                    {/* Sleek 1-Line Exam Status & Control Bar */}
+                    <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Left: Active Exam Summary */}
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                          <Award className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                              {activeExam.title}
+                            </h3>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              activeExam.is_published 
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' 
+                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {activeExam.is_published ? 'Published ✓' : 'Draft ⏳'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
+                            <span>{activeExam.class_name}-{activeExam.section}</span>
+                            <span>•</span>
+                            <span>Total: <strong>{activeExam.total_marks} Marks</strong></span>
+                            <span>•</span>
+                            <span>Remedial Threshold: <strong>&le; {activeExam.remedial_threshold_pct}%</strong></span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Papers Graded</span>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white">{totalSubs} Students</div>
-                        <span className="text-xs text-slate-500">100% evaluated with teacher rubric</span>
+                      {/* Middle: Inline Metrics */}
+                      <div className="flex items-center gap-2 sm:gap-4 border-y lg:border-y-0 lg:border-x border-slate-100 dark:border-slate-800 py-2 lg:py-0 lg:px-4 shrink-0">
+                        <div className="text-center px-2">
+                          <div className="text-base font-black text-slate-900 dark:text-white">{totalSubs}</div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400">Total Uploads</div>
+                        </div>
+                        <div className="text-center px-2 border-l border-slate-100 dark:border-slate-800">
+                          <div className="text-base font-black text-rose-600 dark:text-rose-400">{remedialCount}</div>
+                          <div className="text-[10px] uppercase font-bold text-rose-500/80">Remedial (&le;70%)</div>
+                        </div>
+                        <div className="text-center px-2 border-l border-slate-100 dark:border-slate-800">
+                          <div className="text-base font-black text-emerald-600 dark:text-emerald-400">{exemptCount}</div>
+                          <div className="text-[10px] uppercase font-bold text-emerald-500/80">Exempt (&gt;70%)</div>
+                        </div>
                       </div>
 
-                      <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 shadow-2xs space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 tracking-wider">Remedial Trigger Candidates</span>
-                        <div className="text-2xl font-black text-rose-700 dark:text-rose-300">{remedialCount} Slow-Learners</div>
-                        <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">Scoring &le; {activeExam.remedial_threshold_pct}% benchmark</span>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 shadow-2xs space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">Mastery Exemption</span>
-                        <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300">{exemptCount} Students</div>
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Above 70% Mastery Threshold</span>
+                      {/* Right: Actions */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowOcrModal(true);
+                            setOcrStep('upload');
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          title="Generate draft step marks & concept tags for teacher review"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span>⚡ AI Pre-Grade Batch</span>
+                        </button>
                       </div>
                     </div>
 
@@ -4183,9 +4351,35 @@ export default function TeacherPage() {
                             Official exam grades and attached student descriptive answer sheets.
                           </p>
                         </div>
-                        <span className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                          Class: {activeExam.class_name}-{activeExam.section}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                            Class: {activeExam.class_name}-{activeExam.section}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const header = "RollNumber,StudentName,Section,MarksObtained,TotalMarks,Percentage,RemedialStatus,WeakConcept,TeacherRemarks\n";
+                              const rows = examSubmissionsList.map(s => {
+                                const isRemedial = (s.percentage || 0) <= activeExam.remedial_threshold_pct;
+                                return `"${s.roll_no}","${s.student_name}","${s.class_name}-${s.section}",${s.marks_obtained !== null ? s.marks_obtained : 0},${activeExam.total_marks},"${s.percentage || 0}%","${isRemedial ? 'Remedial (<=70%)' : 'Mastery Exempt'}","${s.weak_concept || ''}","${s.teacher_feedback || ''}"`;
+                              }).join("\n");
+                              const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement("a");
+                              link.setAttribute("href", url);
+                              link.setAttribute("download", `${activeExam.title.replace(/\s+/g, '_')}_Official_Marksheet.csv`);
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              triggerToast("Downloaded official marksheet CSV ledger!");
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                            title="Export full marksheet as CSV / Excel"
+                          >
+                            <Download className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Export Marksheet (CSV)</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="overflow-x-auto">
@@ -4219,15 +4413,15 @@ export default function TeacherPage() {
                                     </span>
                                   </td>
                                   <td className="py-3.5 px-4">
-                                    <a
-                                      href={sub.paper_file_url || '/samples/math_exam_sample.svg'}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-mono text-[11px]"
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationStudio(sub)}
+                                      className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-mono text-[11px] text-left cursor-pointer"
+                                      title="Open Answer Paper in Correction Studio"
                                     >
-                                      <FileText className="h-3.5 w-3.5" />
+                                      <FileText className="h-3.5 w-3.5 shrink-0" />
                                       <span>{sub.paper_file_name || 'Descriptive_Paper.pdf'}</span>
-                                    </a>
+                                    </button>
                                   </td>
                                   <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">
                                     {sub.marks_obtained !== null ? `${sub.marks_obtained} / ${activeExam.total_marks}` : '--'}
@@ -4241,10 +4435,17 @@ export default function TeacherPage() {
                                   </td>
                                   <td className="py-3.5 px-4">
                                     {isRemedial ? (
-                                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
-                                        <AlertTriangle className="h-3 w-3 shrink-0" />
-                                        <span>Enrolled in Focus Sprint (&le;70%)</span>
-                                      </span>
+                                      <div>
+                                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
+                                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                                          <span>Enrolled in Focus Sprint (&le;70%)</span>
+                                        </span>
+                                        {sub.weak_concept && (
+                                          <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold block pt-0.5 truncate max-w-[220px]" title={sub.weak_concept}>
+                                            Lag: {sub.weak_concept}
+                                          </span>
+                                        )}
+                                      </div>
                                     ) : (
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
@@ -4257,14 +4458,11 @@ export default function TeacherPage() {
                                   </td>
                                   <td className="py-3.5 px-4 text-right">
                                     <button
-                                      onClick={() => {
-                                        setEditingExamSubmission(sub);
-                                        setEditExamMarks(sub.marks_obtained || 50);
-                                        setEditExamFeedback(sub.teacher_feedback || '');
-                                      }}
-                                      className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 text-[11px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                      onClick={() => handleOpenEvaluationStudio(sub)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
                                     >
-                                      Edit Marks
+                                      <FileEdit className="h-3.5 w-3.5" />
+                                      <span>Review &amp; Edit Paper</span>
                                     </button>
                                   </td>
                                 </tr>
@@ -4311,66 +4509,447 @@ export default function TeacherPage() {
                 );
               })()}
 
-              {/* Inline Modal: Edit Submission Marks */}
+              {/* Side-by-Side Exam Paper Correction Studio Modal */}
               {editingExamSubmission && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in">
-                  <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                          Edit Marks: {editingExamSubmission.student_name}
-                        </h3>
-                        <span className="text-xs text-slate-500">Roll #{editingExamSubmission.roll_no} • {editingExamSubmission.class_name}-{editingExamSubmission.section}</span>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in">
+                  <div className="w-full max-w-7xl h-[92vh] rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+                    {/* Studio Header */}
+                    <div className="p-4 sm:px-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-950/60 shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                          {editingExamSubmission.roll_no}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base font-black text-slate-900 dark:text-white">
+                              Exam Evaluation Studio: {editingExamSubmission.student_name}
+                            </h2>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              {editingExamSubmission.class_name}-{editingExamSubmission.section}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {(examsList.find(e => e.id === activePublishExamId) || examsList[0])?.title || 'Descriptive Examination'} • Document: <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{editingExamSubmission.paper_file_name || 'Descriptive_Paper.pdf'}</span>
+                          </p>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => setEditingExamSubmission(null)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+
+                      <div className="flex items-center gap-2">
+                        {/* Previous / Next student shortcuts */}
+                        <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleNavigateSubmission('prev')}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+                            title="Previous Student"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <span className="text-[11px] font-bold px-2 text-slate-500">
+                            {examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id) + 1} / {examSubmissionsList.length}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleNavigateSubmission('next')}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+                            title="Next Student"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => setEditingExamSubmission(null)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="space-y-3 text-xs">
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 dark:text-slate-300 block">Marks Obtained (out of 100):</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={editExamMarks}
-                          onChange={(e) => setEditExamMarks(Number(e.target.value))}
-                          className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                        />
-                        <span className="text-[11px] text-slate-500">
-                          Threshold status: {editExamMarks <= 70 ? '⚠️ Enrolls in 1-Week Remedial Sprint (<= 70%)' : '✓ Exempt (> 70%)'}
-                        </span>
+                    {/* Studio Body: Side by Side (Left: Paper Viewer 65%, Right: Rubric & Marks 35%) */}
+                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+                      {/* LEFT PANEL: Student Descriptive Paper Viewer (cols 7) */}
+                      <div className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 flex flex-col bg-slate-100/70 dark:bg-slate-950/40 overflow-hidden">
+                        {/* Viewer Toolbar */}
+                        <div className="p-2.5 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-700 dark:text-slate-300">Answer Sheet Document:</span>
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                              Page {paperActivePage} of 3
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setPaperZoomLevel(prev => Math.max(70, prev - 15))}
+                              className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+                              title="Zoom Out"
+                            >
+                              <ZoomOut className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="text-[11px] font-mono font-bold w-12 text-center text-slate-600 dark:text-slate-400">
+                              {paperZoomLevel}%
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPaperZoomLevel(prev => Math.min(150, prev + 15))}
+                              className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+                              title="Zoom In"
+                            >
+                              <ZoomIn className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPaperZoomLevel(100)}
+                              className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+                              title="Reset Zoom"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Interactive Answer Paper Canvas */}
+                        <div className="flex-1 overflow-auto p-4 flex justify-center items-start">
+                          <div 
+                            style={{ transform: `scale(${paperZoomLevel / 100})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}
+                            className="w-full max-w-2xl bg-white text-slate-900 rounded-2xl shadow-lg border border-slate-300 p-6 sm:p-8 space-y-6 font-serif select-none"
+                          >
+                            {/* Paper Top Header */}
+                            <div className="border-b-2 border-slate-800 pb-3 flex items-start justify-between">
+                              <div>
+                                <h4 className="text-base font-bold uppercase tracking-wider text-slate-900 font-sans">
+                                  Delhi Public School Bangalore South • Examination Branch
+                                </h4>
+                                <div className="text-xs text-slate-600 font-sans mt-0.5">
+                                  <strong>Subject:</strong> Mathematics (Class 8-B) • <strong>Student:</strong> {editingExamSubmission.student_name} (Roll #{editingExamSubmission.roll_no})
+                                </div>
+                              </div>
+                              <div className="border-2 border-red-600 rounded-xl px-3 py-1 text-center bg-red-50 text-red-700 font-sans shrink-0">
+                                <div className="text-[9px] uppercase font-bold tracking-wider">Teacher Grade</div>
+                                <div className="text-lg font-black">{editExamTheoryMarks + editExamInternalMarks} / 100</div>
+                              </div>
+                            </div>
+
+                            {/* Interactive Guidance Banner */}
+                            <div className="rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2.5 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-center justify-between font-sans">
+                              <span>💡 <strong>Interactive Problem Marks:</strong> You can edit marks in the corner of each problem below. Right-side Total Score &amp; Threshold will update automatically!</span>
+                            </div>
+
+                            {/* Question 1: Solved Correctly */}
+                            <div className="space-y-1.5 border-b border-dashed border-slate-200 pb-4 relative">
+                              <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+                                <span>Q1. Solve by splitting middle term: 2x² + 7x + 3 = 0</span>
+                                {/* Editable Corner Badge for Q1 */}
+                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase">Q1:</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    value={q1Marks}
+                                    onChange={(e) => handleUpdateQuestionScore('q1', Number(e.target.value))}
+                                    className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                    title="Edit marks directly for Q1"
+                                  />
+                                  <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                    q1Marks >= 8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {q1Marks === 10 ? 'Full ✓' : `+${q1Marks}`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="bg-amber-50/40 p-3 rounded-xl border border-amber-200/50 text-xs font-mono text-slate-800 space-y-1">
+                                <div>Step 1: Product = 2 * 3 = 6, Sum = 7 &rarr; factors are 6 and 1</div>
+                                <div>Step 2: 2x² + 6x + x + 3 = 0</div>
+                                <div>Step 3: 2x(x + 3) + 1(x + 3) = 0</div>
+                                <div>Step 4: (2x + 1)(x + 3) = 0 &rarr; x = -1/2 or x = -3</div>
+                              </div>
+                              <div className="text-[11px] text-emerald-700 font-sans font-bold flex items-center gap-1 mt-1">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span>Teacher Check: Clear factoring logic and valid roots. Full credit.</span>
+                              </div>
+                            </div>
+
+                            {/* Question 2: Error in Sign Distribution */}
+                            <div className="space-y-1.5 border-b border-dashed border-slate-200 pb-4 relative">
+                              <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+                                <span>Q2. Solve the quadratic equation: x² - 5x - 6 = 0</span>
+                                {/* Editable Corner Badge for Q2 */}
+                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase">Q2:</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    value={q2Marks}
+                                    onChange={(e) => handleUpdateQuestionScore('q2', Number(e.target.value))}
+                                    className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                    title="Edit marks directly for Q2"
+                                  />
+                                  <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                    q2Marks >= 7 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {q2Marks === 10 ? 'Full ✓' : `+${q2Marks}`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="bg-amber-50/40 p-3 rounded-xl border border-rose-300 text-xs font-mono text-slate-800 space-y-1 relative">
+                                <div>Step 1: x² - 5x - 6 = 0</div>
+                                <div className="line-through decoration-rose-600 decoration-2 text-rose-800">
+                                  Step 2: (x - 2)(x - 3) = 0  &larr; [SIGN ERROR]
+                                </div>
+                                <div className="text-slate-500">Step 3: x = 2, 3</div>
+                                <div className="absolute right-3 top-3 text-[10px] font-sans font-black text-rose-600 bg-white px-2 py-0.5 rounded border border-rose-300 shadow-2xs">
+                                  Teacher Red Ink: (-2)*(-3) = +6 ≠ -6! Factors are (-6, +1)
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between pt-1">
+                                <div className="text-[11px] text-rose-700 font-sans font-semibold flex items-center gap-1">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Misconception: Confused sum/product signs with constant.</span>
+                                </div>
+                                {/* 1-Click Partial Credit Quick Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateQuestionScore('q2', Math.min(10, q2Marks + 2))}
+                                  className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 cursor-pointer transition-all active:scale-95"
+                                  title="Award +2 step marks for valid initial setup"
+                                >
+                                  +2 Step Credit ({q2Marks} &rarr; {Math.min(10, q2Marks + 2)})
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Question 3: Algebraic Identity */}
+                            <div className="space-y-1.5 relative">
+                              <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+                                <span>Q3. Expand using identity: (2a - 3b)²</span>
+                                {/* Editable Corner Badge for Q3 */}
+                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase">Q3:</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    value={q3Marks}
+                                    onChange={(e) => handleUpdateQuestionScore('q3', Number(e.target.value))}
+                                    className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                    title="Edit marks directly for Q3"
+                                  />
+                                  <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                    q3Marks >= 7 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {q3Marks === 10 ? 'Full ✓' : `+${q3Marks}`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="bg-amber-50/40 p-3 rounded-xl border border-rose-300 text-xs font-mono text-slate-800 space-y-1 relative">
+                                <div>Step 1: (2a)² - (3b)²</div>
+                                <div className="line-through decoration-rose-600 decoration-2 text-rose-800">
+                                  Step 2: 4a² - 9b² &larr; [OMITTED MIDDLE TERM &amp; WRONG SIGN]
+                                </div>
+                                <div className="absolute right-3 top-3 text-[10px] font-sans font-black text-rose-600 bg-white px-2 py-0.5 rounded border border-rose-300 shadow-2xs">
+                                  Identity is (a-b)² = a² - 2ab + b²
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 dark:text-slate-300 block">Teacher Pedagogical Feedback:</label>
-                        <textarea
-                          rows={3}
-                          value={editExamFeedback}
-                          onChange={(e) => setEditExamFeedback(e.target.value)}
-                          placeholder="Note down specific algebraic deficiency (e.g. bracket sign distribution)..."
-                          className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
+                      {/* RIGHT PANEL: Scoring, Remedial Pipeline & Feedback (cols 5) */}
+                      <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 overflow-y-auto p-5 sm:p-6 space-y-5">
+                        {/* AI Co-Pilot Assistant Banner */}
+                        <div className="p-3 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-between text-xs shadow-2xs">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span className="font-bold text-indigo-950 dark:text-indigo-200">AI Pre-Graded Script</span>
+                          </div>
+                          <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                            Faculty Sign-off Active
+                          </span>
+                        </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        onClick={() => setEditingExamSubmission(null)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveExamMarks}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-xs cursor-pointer"
-                      >
-                        Save Marks
-                      </button>
+                        {/* Real-time score meter with Teacher Override Indicator */}
+                        <div className={`p-4 rounded-2xl border ${
+                          (editExamTheoryMarks + editExamInternalMarks) <= 70
+                            ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60'
+                            : 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60'
+                        } space-y-2.5`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs uppercase font-bold text-slate-500 block">Verified Total Score</span>
+                              {(editExamTheoryMarks + editExamInternalMarks) !== initialAiScore && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 mt-0.5">
+                                  <span>✏️ Overridden from AI ({initialAiScore} &rarr; {editExamTheoryMarks + editExamInternalMarks})</span>
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-2xl font-black ${
+                              (editExamTheoryMarks + editExamInternalMarks) <= 70 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'
+                            }`}>
+                              {editExamTheoryMarks + editExamInternalMarks} / 100 ({Math.round(((editExamTheoryMarks + editExamInternalMarks) / 100) * 100)}%)
+                            </span>
+                          </div>
+
+                          {/* Quick Score Adjustment Increment Chips */}
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                            <span className="text-[10px] font-bold text-slate-500 mr-1">Quick Adjust:</span>
+                            {[
+                              { label: '+1', delta: 1 },
+                              { label: '+2 (e.g. 69➔71)', delta: 2 },
+                              { label: '+5', delta: 5 },
+                              { label: '-1', delta: -1 },
+                              { label: '-2', delta: -2 }
+                            ].map(adj => (
+                              <button
+                                key={adj.label}
+                                type="button"
+                                onClick={() => {
+                                  setEditExamTheoryMarks(prev => Math.min(80, Math.max(0, prev + adj.delta)));
+                                }}
+                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer shadow-2xs active:scale-95 transition-all"
+                              >
+                                {adj.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="pt-1">
+                            {(editExamTheoryMarks + editExamInternalMarks) <= 70 ? (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 dark:text-rose-300">
+                                <AlertTriangle className="h-4 w-4 shrink-0" />
+                                <span>Enrolls in 1-Week Remedial Focus Sprint (&le;70%)</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                <span>Exempt: Mastery Demonstrated (&gt;70%)</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Marks Breakdown Inputs */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Marking Rubric Breakdown</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Theory Paper (out of 80):</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="80"
+                                value={editExamTheoryMarks}
+                                onChange={(e) => setEditExamTheoryMarks(Number(e.target.value))}
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Internal / Viva (out of 20):</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={editExamInternalMarks}
+                                onChange={(e) => setEditExamInternalMarks(Number(e.target.value))}
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Diagnosed Concept Lag (Weak Area) */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                            Diagnosed Pedagogical Lag (Auto-Transfers to Focus Plan):
+                          </label>
+                          <select
+                            value={editExamWeakConcept}
+                            onChange={(e) => setEditExamWeakConcept(e.target.value)}
+                            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                          >
+                            <option value="Quadratic Factorization: Sign Error">Quadratic Factorization: Sign Error</option>
+                            <option value="Linear Equations: Variable Isolation">Linear Equations: Variable Isolation</option>
+                            <option value="Algebraic Identities: Expansion Error">Algebraic Identities: Expansion Error</option>
+                            <option value="Coordinate Geometry: Quadrant Sign Flip">Coordinate Geometry: Quadrant Sign Flip</option>
+                            <option value="Exponents & Powers: Negative Base Multiplication">Exponents & Powers: Negative Base Multiplication</option>
+                            <option value="Mastery: No Remediable Lag">Mastery: No Remediable Lag</option>
+                          </select>
+                        </div>
+
+                        {/* Teacher Feedback */}
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Teacher Pedagogical Remarks:</label>
+                            <span className="text-[10px] text-slate-400">Transferred to Student Portal</span>
+                          </div>
+                          
+                          {/* Quick Comment Chips */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              "Sign error in Q2 factoring",
+                              "Review (a-b)² formula",
+                              "Excellent intermediate steps",
+                              "Focus Table sprint assigned"
+                            ].map(chip => (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => setEditExamFeedback(prev => prev ? `${prev}. ${chip}` : chip)}
+                                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                              >
+                                + {chip}
+                              </button>
+                            ))}
+                          </div>
+
+                          <textarea
+                            rows={3}
+                            value={editExamFeedback}
+                            onChange={(e) => setEditExamFeedback(e.target.value)}
+                            placeholder="Enter specific guidance for remedial focus..."
+                            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Studio Footer Action Buttons */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setEditingExamSubmission(null)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveExamMarks(false)}
+                              className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95"
+                            >
+                              Save Evaluation
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSaveExamMarks(true)}
+                              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                            >
+                              <span>✓ Approve &amp; Next Student</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4378,7 +4957,7 @@ export default function TeacherPage() {
                 </div>
               )}
 
-              {/* ── TAB CONTENT 2: QUESTION PAPER DRAFTING DESK ── */}
+                            {/* ── TAB CONTENT 2: QUESTION PAPER DRAFTING DESK ── */}
               {examSubTab === 'qp_desk' && (
                 <div className="space-y-6 animate-in fade-in duration-150">
                   {/* Workflow Architecture Stepper */}
@@ -4754,7 +5333,7 @@ export default function TeacherPage() {
                         </div>
                         <div>
                           <h3 className="text-base font-black text-slate-900 dark:text-white">
-                            Gemini Vision AI Marksheet &amp; Paper Register OCR Scanner
+                            Gemini Vision AI Marksheet &amp; Student Paper OCR Evaluator
                           </h3>
                           <p className="text-xs text-slate-500">
                             Eliminate manual marks entry: upload photos of physical score registers to auto-populate grades &amp; trigger remedial focus.
@@ -7364,7 +7943,7 @@ export default function TeacherPage() {
               <div className="flex items-center gap-2">
                 <Video className="h-5 w-5 text-blue-600" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Schedule Online Parent-Teacher Meeting
+                  Parent-Initiated Conference Guidelines
                 </h3>
               </div>
               <button onClick={() => setShowPTMModal(false)} className="text-slate-400 hover:text-slate-600">

@@ -38,15 +38,16 @@ import { DemoBookingModal } from '@/components/demo-booking-modal';
 export default function MarketingLandingPage() {
   const [demoModalOpen, setDemoModalOpen] = useState(false);
   const [demoDefaultRole, setDemoDefaultRole] = useState('admin');
-  const [demoInitialTab, setDemoInitialTab] = useState<'demo' | 'tour'>('demo');
+  const [demoInitialTab, setDemoInitialTab] = useState<'demo' | 'tour' | 'admission'>('admission');
   const [selectedRoleTab, setSelectedRoleTab] = useState<'admin' | 'teacher' | 'parent' | 'student'>('admin');
 
   // Listen to global open demo events (from MarketingNavbar or other CTA links)
   useEffect(() => {
     const handleOpenDemo = (e: any) => {
       const role = e.detail?.role || 'admin';
+      const tab = e.detail?.tab || (role === 'student' ? 'admission' : 'demo');
       setDemoDefaultRole(role);
-      setDemoInitialTab('demo');
+      setDemoInitialTab(tab);
       setDemoModalOpen(true);
     };
 
@@ -54,7 +55,7 @@ export default function MarketingLandingPage() {
     return () => window.removeEventListener('edu360-open-demo', handleOpenDemo);
   }, []);
 
-  const openDemoModal = (role: string = 'admin', tab: 'demo' | 'tour' = 'demo') => {
+  const openDemoModal = (role: string = 'admin', tab: 'demo' | 'tour' | 'admission' = 'demo') => {
     setDemoDefaultRole(role);
     setDemoInitialTab(tab);
     setDemoModalOpen(true);
@@ -159,12 +160,12 @@ export default function MarketingLandingPage() {
         }
       ],
       mockupData: {
-        headerBadge: '🚌 LIVE COMMUTE RADAR • ROUTE 14 · MORNING PICKUP',
-        stat1: { label: 'Bus #14 ETA', val: '4 Mins', trend: 'On schedule · Speed: 32km/h' },
-        stat2: { label: 'Next Stop', val: 'Green Glen', trend: 'Student pickup #6' },
+        headerBadge: '💻 LIVE VIRTUAL CLASSROOM • GRADE 8B',
+        stat1: { label: 'Next Lecture ETA', val: '4 Mins', trend: 'On schedule · Speed: 32km/h' },
+        stat2: { label: 'Next Stop', val: 'Green Glen', trend: 'Mathematics Room' },
         stat3: { label: 'Today’s Tasks', val: '2 / 2 Done', trend: 'Focus practice checked' },
         items: [
-          { tag: 'Transport', name: 'Driver: Mr. Ramesh K.', issue: 'Bus approaching Maple Street Crossing', action: 'Driver Contact: +91 98111-BUS14' },
+          { tag: 'Transport', name: 'Driver: Mr. Ramesh K.', issue: 'Mrs. Ananya Verma started Algebra revision', action: 'Driver Contact: +91 98111-BUS14' },
           { tag: 'Academic', name: 'Math Quiz Published', issue: 'Aarav scored 46/50 in Chapter 4 Evaluation', action: 'View Annotated Worksheet' },
           { tag: 'Fee Milestone', name: 'Term 2 Tuition Due Nov 1', issue: 'Amount: ₹18,500 • Early discount applied', action: '1-Click UPI Pay' }
         ]
@@ -251,22 +252,32 @@ export default function MarketingLandingPage() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <button
               type="button"
-              onClick={() => openDemoModal('admin', 'demo')}
-              className="group inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 px-7 py-4 text-base font-bold text-white shadow-xl shadow-indigo-600/25 hover:shadow-indigo-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 cursor-pointer"
+              onClick={() => openDemoModal('student', 'admission')}
+              className="group inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 px-7 py-4 text-base font-bold text-white shadow-xl shadow-blue-600/25 hover:shadow-blue-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 cursor-pointer"
             >
-              <span>Book a School Demo</span>
+              <GraduationCap className="h-5 w-5" />
+              <span>Apply for Admission</span>
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </button>
 
             <button
               type="button"
-              onClick={() => openDemoModal('admin', 'tour')}
-              className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-7 py-4 text-base font-bold text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-all duration-150 cursor-pointer"
+              onClick={() => openDemoModal('admin', 'demo')}
+              className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-6 py-4 text-base font-bold text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-all duration-150 cursor-pointer"
             >
-              <div className="h-6 w-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Building2 className="h-5 w-5 text-indigo-600" />
+              <span>Book School Demo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openDemoModal('admin', 'tour')}
+              className="inline-flex items-center gap-2.5 rounded-2xl bg-slate-100/90 px-6 py-4 text-sm font-bold text-slate-700 hover:bg-slate-200/90 hover:text-slate-900 transition-all duration-150 cursor-pointer"
+            >
+              <div className="h-6 w-6 rounded-full bg-white text-indigo-600 flex items-center justify-center shadow-xs">
                 <Play className="h-3 w-3 fill-current ml-0.5" />
               </div>
-              <span>Explore Product Tour</span>
+              <span>2-Min Product Tour</span>
             </button>
           </div>
 
@@ -380,14 +391,14 @@ export default function MarketingLandingPage() {
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
                     <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                      <span>Fleet &amp; Bus Transit</span>
+                      <span>Live Online Classes</span>
                       <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
                     </div>
                     <div className="mt-2 flex items-baseline gap-2">
                       <span className="text-2xl font-black text-slate-900">12 / 12</span>
                       <span className="text-[11px] font-bold text-emerald-600">On Time</span>
                     </div>
-                    <span className="text-[11px] text-slate-400 block mt-1">0 route delays reported</span>
+                    <span className="text-[11px] text-slate-400 block mt-1">100% active stream uptime</span>
                   </div>
                 </div>
 

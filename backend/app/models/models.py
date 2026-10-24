@@ -120,9 +120,16 @@ class AdmissionEnquiry(Base):
     email = Column(String(120), nullable=False)
     phone = Column(String(20), nullable=False)
     target_grade = Column(String(20), nullable=False)
-    stage = Column(String(30), default="new")  # new, followup, visit, converted
+    stage = Column(String(30), default="new")  # new, followup, visit, converted, dropped
+    lead_temperature = Column(String(20), default="warm")  # hot, warm, cold
+    source = Column(String(50), default="Website")  # Website, Social Media Ad, Parent Referral, Direct Call
+    doc_report_card = Column(Boolean, default=False)
+    doc_birth_cert = Column(Boolean, default=False)
+    doc_transfer_cert = Column(Boolean, default=False)
     chat_transcript = Column(Text, nullable=True)  # JSON or text transcript
     notes = Column(Text, nullable=True)
+    next_followup_date = Column(String(50), nullable=True)
+    drop_reason = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Event(Base):

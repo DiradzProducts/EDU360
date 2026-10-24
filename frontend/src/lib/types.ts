@@ -49,6 +49,8 @@ export interface OperationalTask {
   relief_justification?: string;
   suggested_peer_teacher?: string;
   task_type?: string;
+  task_label?: string;
+  labels?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -324,9 +326,16 @@ export interface AdmissionEnquiry {
   email: string;
   phone: string;
   target_grade: string;
-  stage: 'new' | 'followup' | 'visit' | 'converted';
+  stage: 'new' | 'followup' | 'visit' | 'converted' | 'dropped';
+  lead_temperature?: 'hot' | 'warm' | 'cold';
+  source?: string;
+  doc_report_card?: boolean;
+  doc_birth_cert?: boolean;
+  doc_transfer_cert?: boolean;
   chat_transcript?: string;
   notes?: string;
+  next_followup_date?: string;
+  drop_reason?: string;
   created_at: string;
 }
 
@@ -662,6 +671,8 @@ export interface FeeDefaulter {
   payment_history_json?: string | null;
   notes?: string | null;
   status?: 'Overdue' | 'Partially Paid' | 'Paid' | 'Waived';
+  is_admission_fee?: boolean;
+  exam_clearance?: boolean;
   created_at?: string;
   updated_at?: string | null;
 }
@@ -1026,6 +1037,7 @@ export interface ExamSubmissionItem {
   is_remedial_target?: boolean;
   teacher_feedback?: string | null;
   graded_at?: string | null;
+  weak_concept?: string | null;
 }
 
 export interface WhatsAppDispatchResponse {
@@ -1065,9 +1077,12 @@ export interface QuestionPaperItem {
   revision_notes?: string;
   review_notes?: string;
   due_date?: string;
-  created_by_teacher_id: number;
+  submission_date?: string;
+  commissioned_by?: string;
+  created_by_teacher_id?: number;
   created_by_teacher_name?: string;
   teacher_name?: string;
+  teacher_id?: number;
   reviewed_by_academic_id?: number;
   handed_over_at?: string | null;
   created_at?: string;
@@ -1084,9 +1099,15 @@ export interface ExamScheduleItem {
   exam_date: string;
   start_time: string;
   end_time: string;
-  hall_name: string;
+  hall_name?: string;
+  room_no?: string;
   room_hall?: string;
   capacity?: number;
+  total_marks?: number;
+  status?: 'draft' | 'scheduled' | 'published';
+  is_published?: boolean;
+  published_at?: string;
+  hall_ticket_published?: boolean;
   chief_invigilator_name?: string;
   invigilator_name?: string;
   academic_clearance: boolean;
@@ -1109,11 +1130,16 @@ export interface OcrScanResultItem {
 }
 
 export interface ReportCardGradeDetail {
-  score: number;
-  max: number;
+  score?: number;
+  max?: number;
   grade: string;
   remedial_flag: boolean;
   remarks: string;
+  theory?: number;
+  practical?: number;
+  total?: number;
+  max_marks?: number;
+  percentage?: number;
 }
 
 export interface ReportCardItem {

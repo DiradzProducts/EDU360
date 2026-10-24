@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
@@ -9,7 +10,8 @@ import {
   Sun,
   Moon,
   LogOut,
-  User
+  User,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
@@ -30,6 +32,12 @@ export function Navbar() {
   const { theme, toggleTheme } = useTheme();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isAuthPage = pathname === '/login' || pathname === '/register';
 
@@ -99,14 +107,10 @@ export function Navbar() {
                 Sign In
               </Link>
               <Link
-                href="/register"
-                className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                  pathname === '/register'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
+                href="/"
+                className="rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 shadow-xs"
               >
-                Register
+                Apply / Book Demo
               </Link>
             </div>
           ) : (
@@ -181,8 +185,8 @@ export function Navbar() {
 
                     <button
                       type="button"
-                      onClick={() => { logout(); setShowUserMenu(false); }}
-                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-left"
+                      onClick={() => { setShowLogoutConfirm(true); setShowUserMenu(false); }}
+                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-left cursor-pointer"
                     >
                       <LogOut className="h-4 w-4 text-red-500" />
                       <span>Sign Out / Lock Session</span>
@@ -195,6 +199,68 @@ export function Navbar() {
         </div>
 
       </div>
+
+      {/* Institutional Sign Out Confirmation Modal (Rendered via React Portal onto document.body to avoid header containing-block clipping) */}
+      {showLogoutConfirm && mounted && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-4 animate-in fade-in duration-200"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div 
+            className="relative w-full max-w-md rounded-3xl bg-white dark:bg-[#0F172A] p-6 sm:p-7 shadow-2xl border border-slate-200/90 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Header / Icon */}
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60 flex items-center justify-center shrink-0 shadow-sm">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                  Sign Out of EDU360
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Active Account: <span className="font-bold text-slate-800 dark:text-slate-200">{user?.name || 'Institutional Account'}</span>
+                  <span className="text-[11px] text-slate-400 block font-mono mt-0.5">@{user?.username || role}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Description / Notice Box */}
+            <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800/80 text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
+              <p className="font-bold text-slate-800 dark:text-slate-200">
+                Are you sure you want to end your current session?
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Any unsaved draft entries, active forms, or unfinished grading records will be closed.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-700/80 px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all shadow-xs cursor-pointer text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  logout();
+                }}
+                className="flex-1 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white px-4 py-3 text-xs font-bold transition-all shadow-lg shadow-rose-600/25 hover:shadow-rose-600/40 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </header>
   );
 }

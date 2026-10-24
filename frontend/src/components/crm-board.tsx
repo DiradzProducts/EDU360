@@ -25,10 +25,10 @@ interface CRMBoardProps {
 }
 
 const stages = [
-  { id: 'new', label: 'New Enquiry', color: 'border-blue-200 bg-blue-50/50' },
-  { id: 'followup', label: 'Follow-up Scheduled', color: 'border-amber-200 bg-amber-50/50' },
-  { id: 'visit', label: 'Campus Visit Booked', color: 'border-purple-200 bg-purple-50/50' },
-  { id: 'converted', label: 'Converted to SIS', color: 'border-emerald-200 bg-emerald-50/50' },
+  { id: 'new', label: '1. Inbound Inquiries', color: 'border-blue-200 bg-blue-50/50' },
+  { id: 'followup', label: '2. Follow-up & Counseling', color: 'border-amber-200 bg-amber-50/50' },
+  { id: 'visit', label: '3. Virtual Demo & Diagnostic', color: 'border-purple-200 bg-purple-50/50' },
+  { id: 'converted', label: '4. Enrolled in SIS ✓', color: 'border-emerald-200 bg-emerald-50/50' },
 ];
 
 export function CRMBoard({ enquiries, onStageChange, onConvertToStudent }: CRMBoardProps) {

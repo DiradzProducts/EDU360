@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -19,7 +19,7 @@ import { UserRole } from '@/lib/types';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithCredentials, loginAs } = useAuth();
+  const { loginWithCredentials, loginAs, user, isAuthenticated, mounted } = useAuth();
   
   // Real authentication inputs
   const [username, setUsername] = useState('');
@@ -28,6 +28,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Auto-forward active sessions away from /login back to their rightful portal
+  useEffect(() => {
+    if (mounted && isAuthenticated && user?.role) {
+      router.replace(`/${user.role}`);
+    }
+  }, [mounted, isAuthenticated, user, router]);
 
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,13 +203,16 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Registration link */}
-          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center">
+          {/* Admissions / Institutional enrollment guidance */}
+          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              New to the platform?{' '}
-              <Link href="/register" className="font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                Register with School Code &rarr;
+              Prospective family looking to enroll?{' '}
+              <Link href="/" className="font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                Apply for Admission &rarr;
               </Link>
+            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+              Enrolled students &amp; staff: Login credentials are provided directly by your school administrator or admissions desk.
             </p>
           </div>
         </div>

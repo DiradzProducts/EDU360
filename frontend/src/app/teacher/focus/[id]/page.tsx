@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -55,7 +55,7 @@ import { api } from '@/lib/api';
 import { HomeworkCanvas } from '@/components/homework-canvas';
 import { Footer } from '@/components/footer';
 
-export default function TeacherFocusDetailPage() {
+function TeacherFocusDetailContent() {
   const params = useParams();
   const router = useRouter();
   const { theme } = useTheme();
@@ -1786,7 +1786,7 @@ export default function TeacherFocusDetailPage() {
                   </div>
 
                   <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-900/60 text-xs space-y-2">
-                    <span className="font-bold text-blue-300 block">Guardian Mobile Quick-Link:</span>
+                    <span className="font-bold text-blue-300 block">Guardian Progress Dispatch & Notification:</span>
                     <div className="flex items-center justify-between gap-2 bg-slate-900/80 p-2 rounded-xl border border-blue-900 font-mono text-[11px] text-slate-300">
                       <span className="truncate">edu360.internal/ptm/meet-{currentStudent.student_id}</span>
                       <button
@@ -1801,11 +1801,11 @@ export default function TeacherFocusDetailPage() {
                     </div>
                     <button
                       onClick={() => {
-                        triggerToast(`Dispatched Video Room link via SMS to ${currentStudent.parent_phone}!`);
+                        triggerToast(`Dispatched 7-Day Remedial Progress Brief via WhatsApp/SMS to ${currentStudent.parent_phone}!`);
                       }}
                       className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer"
                     >
-                      Send Direct Link to Parent Phone (SMS &amp; WA)
+                      Send Remedial Progress Update (WhatsApp / SMS)
                     </button>
                   </div>
                 </div>
@@ -1818,5 +1818,13 @@ export default function TeacherFocusDetailPage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function TeacherFocusDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading Student Focus Sprint...</div>}>
+      <TeacherFocusDetailContent />
+    </Suspense>
   );
 }

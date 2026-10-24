@@ -257,8 +257,8 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
   const [examStudentNotes, setExamStudentNotes] = useState<string>('');
   const [isSubmittingExamPaper, setIsSubmittingExamPaper] = useState<boolean>(false);
   const [studentReportCard, setStudentReportCard] = useState<ReportCardItem | null>(null);
-  const [studentSubmittedExams, setStudentSubmittedExams] = useState<Record<number, { fileName: string; submittedAt: string; marks?: number; pct?: number }>>({
-    1: { fileName: "Aarav_Sharma_Math_Term1_Paper.pdf", submittedAt: "14 Oct 2026, 02:30 PM", marks: 52, pct: 52 }
+  const [studentSubmittedExams, setStudentSubmittedExams] = useState<Record<number, { fileName: string; submittedAt: string; marks?: number; pct?: number; feedback?: string; weak_concept?: string; is_remedial?: boolean }>>({
+    1: { fileName: "Aarav_Sharma_Math_Term1_Paper.pdf", submittedAt: "14 Oct 2026, 02:30 PM", marks: 52, pct: 52, feedback: "Sign error in quadratic factorization step 3.", weak_concept: "Quadratic Factorization: Sign Error", is_remedial: true }
   });
 
   // Admit Card (Hall Ticket) Modal State
@@ -287,6 +287,28 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
       const res = await api.listExams({ subject: 'Mathematics' });
       if (res && res.success && res.exams) {
         setDescriptiveExams(res.exams);
+      }
+      for (const exId of [1, 2]) {
+        try {
+          const subRes = await api.getExamSubmissions(exId);
+          if (subRes && subRes.success && subRes.submissions) {
+            const mySub = subRes.submissions.find((s: any) => s.student_id === 1);
+            if (mySub) {
+              setStudentSubmittedExams(prev => ({
+                ...prev,
+                [exId]: {
+                  fileName: mySub.paper_file_name || 'Aarav_Sharma_Exam_Paper.pdf',
+                  submittedAt: mySub.submitted_at || '14 Oct 2026',
+                  marks: mySub.marks_obtained !== null && mySub.marks_obtained !== undefined ? mySub.marks_obtained : undefined,
+                  pct: mySub.percentage !== null && mySub.percentage !== undefined ? mySub.percentage : undefined,
+                  feedback: mySub.teacher_feedback || '',
+                  weak_concept: mySub.weak_concept || '',
+                  is_remedial: mySub.is_remedial_target
+                }
+              }));
+            }
+          }
+        } catch {}
       }
     } catch (e) {
       console.error(e);
@@ -439,6 +461,7 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
         if (rcRes && rcRes.length > 0) {
           setStudentReportCard(rcRes[0]);
         }
+        await loadDescriptiveExams();
       } catch (err) {
         console.error('Error fetching student data', err);
       }
@@ -2644,12 +2667,16 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
                         </h4>
                         <span className="text-xs text-slate-400">Total: 100 Marks • Date: 14 Oct 2026</span>
                       </div>
-                      <span className="rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
-                        Graded (52%)
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${
+                        (studentSubmittedExams[1]?.pct ?? 52) <= 70
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        Graded ({studentSubmittedExams[1]?.pct ?? 52}%)
                       </span>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-2">
                       <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
                         <span>Submitted Paper:</span>
                         <a
@@ -2659,13 +2686,36 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
                           className="font-mono text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-bold"
                         >
                           <FileText className="h-3.5 w-3.5" />
-                          <span>Aarav_Sharma_Math_Term1_Paper.pdf</span>
+                          <span>{studentSubmittedExams[1]?.fileName || 'Aarav_Sharma_Math_Term1_Paper.pdf'}</span>
                         </a>
                       </div>
-                      <div className="flex items-center justify-between text-slate-500 text-[11px] pt-1">
-                        <span>Score: <strong>52 / 100</strong> (Remedial Active)</span>
-                        <span className="text-rose-600 dark:text-rose-400 font-bold">In 1-Week Focus Sprint</span>
+                      <div className="flex items-center justify-between text-slate-500 text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <span>Score: <strong>{studentSubmittedExams[1]?.marks ?? 52} / 100</strong></span>
+                        {(studentSubmittedExams[1]?.pct ?? 52) <= 70 ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveNav('focus_table')}
+                            className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-bold hover:underline cursor-pointer"
+                          >
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            <span>In 1-Week Focus Sprint &rarr;</span>
+                          </button>
+                        ) : (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            ✓ Mastery Exemption (&gt;70%)
+                          </span>
+                        )}
                       </div>
+                      {studentSubmittedExams[1]?.weak_concept && (
+                        <div className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold bg-rose-50/60 dark:bg-rose-950/40 p-1.5 rounded-lg border border-rose-100 dark:border-rose-900/40">
+                          Diagnosed Lag: <strong>{studentSubmittedExams[1].weak_concept}</strong>
+                        </div>
+                      )}
+                      {studentSubmittedExams[1]?.feedback && (
+                        <div className="text-[10px] text-slate-500 italic">
+                          Teacher remarks: &ldquo;{studentSubmittedExams[1].feedback}&rdquo;
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2735,84 +2785,241 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
                 </div>
               </div>
 
-              {/* Upload Answer Sheet Modal */}
+              {/* Virtual Examination Hall & Answer Upload Modal (Gap 3: Live Proctor + Watermark + 15m Buffer) */}
               {activeUploadExam && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in">
-                  <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                          Upload Descriptive Answer Sheet
-                        </h3>
-                        <p className="text-xs text-slate-500">{activeUploadExam.title}</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
+                  <div className="w-full max-w-5xl max-h-[92vh] rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+                    
+                    {/* Header Strip with Proctor Telemetry, Watermark & Timer */}
+                    <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-purple-600/30 border border-purple-500/50 flex items-center justify-center text-purple-300 shrink-0">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">
+                              CBSE Virtual Examination Hall
+                            </span>
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                              ● Camera Supervision Active
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-bold text-white leading-tight">
+                            {activeUploadExam.title}
+                          </h3>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => setActiveUploadExam(null)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="px-3 py-1 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-2 text-xs font-mono">
+                          <Clock className="h-3.5 w-3.5 text-amber-400" />
+                          <span className="text-amber-300 font-bold">01:29:45</span>
+                          <span className="text-[10px] text-slate-400">(+15m Buffer)</span>
+                        </div>
+                        <button
+                          onClick={() => setActiveUploadExam(null)}
+                          className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="space-y-3 text-xs">
-                      <div className="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 space-y-1">
-                        <span className="font-bold text-indigo-900 dark:text-indigo-200 block">Question Paper Instructions:</span>
-                        <p className="text-[11px] text-indigo-800 dark:text-indigo-300 leading-relaxed">
-                          Scan all 5 handwritten pages clearly. Ensure intermediate quadratic factorization steps and sign distributions are legible for teacher red-pen markup.
-                        </p>
+                    {/* Candidate Watermark Bar */}
+                    <div className="bg-purple-950/40 border-b border-purple-900/30 px-5 py-1.5 text-[11px] font-mono text-purple-300 flex items-center justify-between">
+                      <div className="flex items-center gap-2 truncate">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                        <span>CANDIDATE: <b>{user?.name || 'Aarav Sharma'}</b> · ROLL #01 · CLASS 8-B · DESK #A-14</span>
                       </div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider hidden sm:inline">
+                        Strictly Confidential &bull; Watermarked Paper
+                      </span>
+                    </div>
 
-                      <div className="space-y-1.5">
-                        <label className="font-bold text-slate-700 dark:text-slate-300 block">Select Handwritten Answer Paper File:</label>
-                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4 text-center space-y-2 bg-slate-50/50 dark:bg-slate-800/50">
-                          <FileText className="h-8 w-8 text-indigo-500 mx-auto" />
-                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
-                            {examAnswerFileName}
+                    {/* Body: Left Question Paper (Watermarked) & Right Camera Proctor + Upload */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+                      
+                      {/* Left: Official Watermarked Question Paper (7 cols) */}
+                      <div className="lg:col-span-7 flex flex-col space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="h-4 w-4 text-purple-600" />
+                            Official Question Paper
+                          </span>
+                          <span className="text-xs font-mono text-purple-600 dark:text-purple-400 font-bold">
+                            Max Marks: 100 &bull; Duration: 90 Mins
+                          </span>
+                        </div>
+
+                        {/* Paper Sheet Preview with Repeating Diagonal Watermark */}
+                        <div className="relative rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xs overflow-hidden flex-1 font-serif text-slate-800 dark:text-slate-200 text-xs sm:text-sm leading-relaxed space-y-4">
+                          
+                          {/* Faint repeating watermark background */}
+                          <div className="absolute inset-0 pointer-events-none select-none opacity-5 dark:opacity-10 flex flex-col justify-around rotate-[-25deg] scale-125 font-black text-xs text-slate-900 dark:text-white">
+                            <div>AARAV SHARMA #01 &bull; CBSE TERM 1 ASSESSMENT &bull; ROOM 204 &bull; AARAV SHARMA #01</div>
+                            <div>AARAV SHARMA #01 &bull; CBSE TERM 1 ASSESSMENT &bull; ROOM 204 &bull; AARAV SHARMA #01</div>
+                            <div>AARAV SHARMA #01 &bull; CBSE TERM 1 ASSESSMENT &bull; ROOM 204 &bull; AARAV SHARMA #01</div>
+                            <div>AARAV SHARMA #01 &bull; CBSE TERM 1 ASSESSMENT &bull; ROOM 204 &bull; AARAV SHARMA #01</div>
                           </div>
-                          <div className="flex items-center justify-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setExamAnswerFileName('Handwritten_Math_Paper_Scan.pdf');
-                                setExamAnswerFileUrl('/samples/math_exam_sample.svg');
-                                triggerToast('Attached sample handwritten exam answer sheet.');
-                              }}
-                              className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-white dark:hover:bg-slate-800 cursor-pointer"
-                            >
-                              Use Sample Scan (math_exam_sample.svg)
-                            </button>
+
+                          <div className="border-b border-slate-200 dark:border-slate-800 pb-3 text-center space-y-1">
+                            <h4 className="font-sans font-black text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                              Central Board of Secondary Education (CBSE)
+                            </h4>
+                            <p className="font-sans text-xs text-slate-500 font-bold">
+                              Class 8 Mathematics Terminal Descriptive Assessment (Set A)
+                            </p>
+                            <div className="font-sans text-[11px] text-slate-400">
+                              General Instructions: Show all intermediate algebraic steps. Rough work must be indicated clearly on the margin.
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 relative z-10">
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
+                              <div className="flex justify-between font-sans font-bold text-xs text-purple-700 dark:text-purple-300">
+                                <span>Question 1: Rational Numbers &amp; Properties</span>
+                                <span>(10 Marks)</span>
+                              </div>
+                              <p className="text-xs">
+                                Find the multiplicative inverse and additive inverse of -7/11. Verify the distributive property over addition for a = 1/2, b = -2/3, c = 5/6.
+                              </p>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
+                              <div className="flex justify-between font-sans font-bold text-xs text-purple-700 dark:text-purple-300">
+                                <span>Question 2: Linear Equations in One Variable</span>
+                                <span>(15 Marks)</span>
+                              </div>
+                              <p className="text-xs">
+                                Solve for x: 4(2x - 3) - 3(x - 5) = 2(x + 4) - 7. Show complete intermediate sign distribution steps and check your solution.
+                              </p>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
+                              <div className="flex justify-between font-sans font-bold text-xs text-purple-700 dark:text-purple-300">
+                                <span>Question 3: Quadratic Expressions &amp; Factorization</span>
+                                <span>(15 Marks)</span>
+                              </div>
+                              <p className="text-xs">
+                                Factorize completely using the middle term splitting method: x^2 - 7x + 12 = 0 and 2x^2 + 7x + 3 = 0. Specify root solutions.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 dark:text-slate-300 block">Student Notes / Page Summary:</label>
-                        <textarea
-                          rows={2}
-                          value={examStudentNotes}
-                          onChange={(e) => setExamStudentNotes(e.target.value)}
-                          placeholder="e.g. Attached 5 pages. Included intermediate splitting steps for Q2 & Q4."
-                          className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
-                        />
+                      {/* Right: Camera Proctor Supervision & Upload Zone (5 cols) */}
+                      <div className="lg:col-span-5 flex flex-col space-y-4">
+                        
+                        {/* Live Proctor Camera Feed HUD */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                              <Camera className="h-4 w-4 text-purple-600" />
+                              Proctor Camera Telemetry
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Face Centered ✓
+                            </span>
+                          </div>
+
+                          <div className="relative rounded-2xl overflow-hidden bg-slate-950 border-2 border-purple-500/40 aspect-video flex items-center justify-center shadow-inner">
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none z-10" />
+                            
+                            {/* Simulated Proctor Video Feed */}
+                            <div className="flex flex-col items-center justify-center p-4 text-center text-white relative z-0">
+                              <div className="relative mb-2">
+                                <div className="h-16 w-16 rounded-full border-2 border-dashed border-emerald-400 flex items-center justify-center">
+                                  <Camera className="h-8 w-8 text-emerald-400 animate-pulse" />
+                                </div>
+                                <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-slate-950"></span>
+                              </div>
+                              <span className="text-xs font-bold font-sans">Aarav Sharma (Candidate #01)</span>
+                              <span className="text-[10px] text-slate-400 font-mono">Stream Encrypted &bull; 1080p 30fps</span>
+                            </div>
+
+                            {/* Corner HUD Indicators */}
+                            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-bold text-white font-mono">
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span>
+                              <span>REC &bull; LIVE PROCTOR</span>
+                            </div>
+                            <div className="absolute bottom-2.5 right-2.5 z-20 text-[9px] font-mono text-emerald-400 bg-black/70 px-2 py-0.5 rounded-full">
+                              Noise: 22dB (Quiet)
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Scanned Answer Sheet Attachment Box */}
+                        <div className="space-y-2 flex-1 flex flex-col justify-between">
+                          <div>
+                            <label className="text-xs font-bold text-slate-900 dark:text-white block mb-1">
+                              Attach Scanned Handwritten Answer Sheet:
+                            </label>
+                            
+                            <div className="border-2 border-dashed border-purple-300 dark:border-purple-800/80 rounded-2xl p-4 text-center space-y-2.5 bg-purple-50/30 dark:bg-purple-950/20">
+                              <FileCheck className="h-8 w-8 text-purple-600 dark:text-purple-400 mx-auto" />
+                              <div>
+                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                                  {examAnswerFileName}
+                                </div>
+                                <span className="text-[10px] text-slate-400 block mt-0.5">
+                                  3 Pages Scanned &bull; PDF / High-Res Image format
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExamAnswerFileName('Aarav_Sharma_Math_Term1_Paper.pdf');
+                                  setExamAnswerFileUrl('/samples/math_exam_sample.svg');
+                                  triggerToast('Attached Aarav Sharma official math exam scan with rough work.');
+                                }}
+                                className="px-3 py-1.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 text-xs font-bold hover:bg-purple-50 dark:hover:bg-slate-800 cursor-pointer shadow-2xs transition-all"
+                              >
+                                📎 Load Solved Answer Sheets (3 Pages)
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                              Student Notes / Page Legend:
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={examStudentNotes}
+                              onChange={(e) => setExamStudentNotes(e.target.value)}
+                              placeholder="e.g. Page 1: Q1 & Q2. Page 2: Q3 factoring steps. Page 3: Rough paper calculations."
+                              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                            />
+                          </div>
+
+                          {/* Submit Action */}
+                          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              onClick={() => setActiveUploadExam(null)}
+                              className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              disabled={isSubmittingExamPaper}
+                              onClick={handleUploadExamPaper}
+                              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                              <Upload className="h-4 w-4" />
+                              <span>{isSubmittingExamPaper ? 'Transmitting to Secrecy Strongroom...' : 'Submit to Teacher Evaluation Ledger'}</span>
+                            </button>
+                          </div>
+
+                        </div>
+
                       </div>
+
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        onClick={() => setActiveUploadExam(null)}
-                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        disabled={isSubmittingExamPaper}
-                        onClick={handleUploadExamPaper}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        <span>{isSubmittingExamPaper ? 'Submitting...' : 'Submit to Examination Cell'}</span>
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}

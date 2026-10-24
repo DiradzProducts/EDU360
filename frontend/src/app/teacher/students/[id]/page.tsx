@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -434,7 +434,7 @@ function getStudentData(idNum: number): StudentDossier {
   };
 }
 
-export default function StudentDetailPage() {
+function StudentDetailContent() {
   const params = useParams();
   const router = useRouter();
   const { theme } = useTheme();
@@ -1474,5 +1474,13 @@ export default function StudentDetailPage() {
       {/* Brand Footer */}
       <Footer />
     </div>
+  );
+}
+
+export default function StudentDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading Student Profile Dossier...</div>}>
+      <StudentDetailContent />
+    </Suspense>
   );
 }

@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 interface MarketingNavbarProps {
-  onOpenDemo?: (role?: string) => void;
+  onOpenDemo?: (role?: string, tab?: 'demo' | 'tour' | 'admission') => void;
 }
 
 export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
@@ -53,11 +53,11 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleBookDemo = (rolePref?: string) => {
+  const handleBookDemo = (rolePref?: string, tabPref?: 'demo' | 'tour' | 'admission') => {
     if (onOpenDemo) {
-      onOpenDemo(rolePref);
+      onOpenDemo(rolePref, tabPref);
     } else {
-      window.dispatchEvent(new CustomEvent('edu360-open-demo', { detail: { role: rolePref || 'admin' } }));
+      window.dispatchEvent(new CustomEvent('edu360-open-demo', { detail: { role: rolePref || 'admin', tab: tabPref || (rolePref === 'student' ? 'admission' : 'demo') } }));
     }
     setActiveDropdown(null);
     setMobileMenuOpen(false);
@@ -165,8 +165,8 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
                     <Bus className="h-4.5 w-4.5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">Live Transport &amp; Parent Hub</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">Sub-minute school bus GPS with live ETA &amp; spam-free announcements.</p>
+                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">Live Classroom &amp; Parent Hub</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">1-Click virtual class link, attendance logging &amp; parent progress desk.</p>
                   </div>
                 </div>
 
@@ -355,22 +355,30 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
 
         </nav>
 
-        {/* Right Action Buttons: Sign In (Ghost) + Book a Demo (Primary) */}
-        <div className="hidden sm:flex items-center gap-3">
+        {/* Right Action Buttons: Sign In + Apply for Admission + Book Demo */}
+        <div className="hidden sm:flex items-center gap-2 sm:gap-2.5">
           <Link
             href="/login"
-            className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            className="rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
           >
             Sign In
           </Link>
 
           <button
             type="button"
-            onClick={() => handleBookDemo()}
-            className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/25 hover:shadow-lg hover:shadow-indigo-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 cursor-pointer"
+            onClick={() => handleBookDemo('student', 'admission')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs sm:text-sm font-bold text-blue-700 hover:bg-blue-100 transition-all cursor-pointer shadow-2xs"
           >
-            <span>Book a Demo</span>
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <span>Apply for Admission</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleBookDemo('admin', 'demo')}
+            className="group relative inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-md shadow-indigo-600/25 hover:shadow-lg hover:shadow-indigo-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 cursor-pointer"
+          >
+            <span>Book Demo</span>
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
 
@@ -442,17 +450,24 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
 
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             <button
-              onClick={() => handleBookDemo()}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-indigo-600/25"
+              onClick={() => handleBookDemo('student', 'admission')}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-600/25"
             >
-              <span>Book a School Demo</span>
+              <span>🎓 Apply for Admission</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleBookDemo('admin', 'demo')}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/25"
+            >
+              <span>📅 Book School Demo</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <Link
               href="/login"
-              className="w-full text-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              className="w-full text-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
-              Sign In to School Portal
+              Sign In to Enrolled Portal
             </Link>
           </div>
         </div>

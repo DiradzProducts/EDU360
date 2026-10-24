@@ -213,11 +213,32 @@ class AdmissionEnquiryCreate(BaseModel):
     email: str
     phone: str
     target_grade: str
+    lead_temperature: Optional[str] = "warm"
+    source: Optional[str] = "Website"
+    doc_report_card: Optional[bool] = False
+    doc_birth_cert: Optional[bool] = False
+    doc_transfer_cert: Optional[bool] = False
     notes: Optional[str] = None
+    next_followup_date: Optional[str] = None
 
 class AdmissionEnquiryUpdate(BaseModel):
     stage: Optional[str] = None
+    lead_temperature: Optional[str] = None
+    source: Optional[str] = None
+    doc_report_card: Optional[bool] = None
+    doc_birth_cert: Optional[bool] = None
+    doc_transfer_cert: Optional[bool] = None
     notes: Optional[str] = None
+    next_followup_date: Optional[str] = None
+    drop_reason: Optional[str] = None
+
+class CallLogPayload(BaseModel):
+    outcome: str
+    note: Optional[str] = None
+    next_followup_date: Optional[str] = None
+    stage: Optional[str] = None
+    lead_temperature: Optional[str] = None
+    drop_reason: Optional[str] = None
 
 class AdmissionEnquiryResponse(BaseModel):
     id: int
@@ -227,8 +248,15 @@ class AdmissionEnquiryResponse(BaseModel):
     phone: str
     target_grade: str
     stage: str
+    lead_temperature: Optional[str] = "warm"
+    source: Optional[str] = "Website"
+    doc_report_card: Optional[bool] = False
+    doc_birth_cert: Optional[bool] = False
+    doc_transfer_cert: Optional[bool] = False
     chat_transcript: Optional[str] = None
     notes: Optional[str] = None
+    next_followup_date: Optional[str] = None
+    drop_reason: Optional[str] = None
     created_at: datetime.datetime
     class Config:
         from_attributes = True

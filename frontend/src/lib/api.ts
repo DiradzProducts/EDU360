@@ -228,6 +228,8 @@ let fallbackTasks: AdminTask[] = [
   }
 ];
 
+const getTodayStr = () => new Date().toISOString().split('T')[0];
+
 let fallbackEnquiries: AdmissionEnquiry[] = [
   {
     id: 1,
@@ -236,16 +238,14 @@ let fallbackEnquiries: AdmissionEnquiry[] = [
     email: "meera.rao@example.com",
     phone: "+91 98450 99881",
     target_grade: "Class 8",
-    stage: "visit",
-    chat_transcript: JSON.stringify([
-      { sender: "parent", text: "Hi, does EDU360 follow the CBSE curriculum for Class 8?", time: "10:14 AM" },
-      { sender: "bot", text: "Hello! Yes, our institution is fully affiliated with CBSE (New Delhi). We integrate experiential STEM labs and outcome-based Focus Tables.", time: "10:14 AM" },
-      { sender: "parent", text: "What is the fee range for Grade 8, and is bus transport available to Whitefield?", time: "10:15 AM" },
-      { sender: "bot", text: "Annual tuition is structured in 3 milestones totaling approx ₹65,000. Route 4 specifically covers Whitefield with live GPS tracking! Would you like me to book a campus tour?", time: "10:15 AM" },
-      { sender: "parent", text: "Yes please! Tomorrow around 11:30 AM would be great for my son Siddharth.", time: "10:16 AM" },
-      { sender: "bot", text: "Booked! I have notified our Admissions Counselor. See you tomorrow at 11:30 AM!", time: "10:16 AM" }
-    ]),
-    notes: "Campus tour scheduled tomorrow 11:30 AM. Highly interested in STEM lab.",
+    stage: "followup",
+    lead_temperature: "hot",
+    source: "Website Form",
+    doc_report_card: true,
+    doc_birth_cert: true,
+    doc_transfer_cert: false,
+    next_followup_date: getTodayStr(),
+    notes: "• [Oct 22] Initial Enquiry: Parent asked about online CBSE curriculum and demo class.",
     created_at: new Date().toISOString()
   },
   {
@@ -256,7 +256,13 @@ let fallbackEnquiries: AdmissionEnquiry[] = [
     phone: "+91 98450 99882",
     target_grade: "Class 6",
     stage: "followup",
-    notes: "Needs fee milestone installment breakdown via email.",
+    lead_temperature: "warm",
+    source: "Parent Referral",
+    doc_report_card: true,
+    doc_birth_cert: false,
+    doc_transfer_cert: false,
+    next_followup_date: getTodayStr(),
+    notes: "• [Oct 21] Callback Requested: Discuss fee installment schedule.",
     created_at: new Date().toISOString()
   },
   {
@@ -267,7 +273,12 @@ let fallbackEnquiries: AdmissionEnquiry[] = [
     phone: "+91 98450 99883",
     target_grade: "Class 9",
     stage: "new",
-    notes: "Inquired about sports facilities and robotics club.",
+    lead_temperature: "cold",
+    source: "Social Media Ad",
+    doc_report_card: false,
+    doc_birth_cert: false,
+    doc_transfer_cert: false,
+    notes: "Direct web inquiry: Inquired about Cambridge curriculum options.",
     created_at: new Date().toISOString()
   }
 ];
@@ -646,11 +657,263 @@ let fallbackCustodyLogs: AssetCustodyLogItem[] = [
   { id: 2, item_id: 5, item_name: "Crown Glass Equilateral Triangular Prisms", asset_tag: "AST-OPT-042", borrower_name: "Kabir Mehta", borrower_role: "Student", borrower_ref_id: "15", class_room: "Class 8-B", quantity: 1, checkout_time: "2026-10-20T11:00:00Z", expected_return_time: "2026-10-21T11:00:00Z", condition_on_return: "Pending Return", fine_assessed: 0, status: "Active" }
 ];
 
+let fallbackQuestionPapers: QuestionPaperItem[] = [
+  {
+    id: 1,
+    title: "Class 8 Mathematics Term 1 Final Paper Blueprint",
+    subject: "Mathematics",
+    class_name: "Class 8",
+    section: "B",
+    term: "Term 1",
+    blueprint: {
+      total_marks: 100,
+      units: ["Rational Numbers", "Linear Equations in One Variable", "Understanding Quadrilaterals", "Algebraic Expressions"],
+      bloom_taxonomy: { knowledge_pct: 30, application_pct: 50, hots_pct: 20 }
+    },
+    commissioned_by: "Dean Rajeshwari Nair",
+    teacher_name: "Mrs. Ananya Verma",
+    teacher_id: 2,
+    status: "sent_to_exam_cell",
+    draft_file_url: "/samples/Class8_Math_Term1_Final_QP.pdf",
+    draft_file_name: "Class8_Math_Term1_Final_QP.pdf",
+    answer_key_url: "/samples/Class8_Math_Term1_AnswerKey.pdf",
+    due_date: "10 Oct 2026",
+    submission_date: "09 Oct 2026",
+    review_notes: "Approved by Academic Coordinator for Secrecy Strongroom Custody."
+  },
+  {
+    id: 2,
+    title: "Class 8 Mathematics Mid-Term Descriptive Blueprint",
+    subject: "Mathematics",
+    class_name: "Class 8",
+    section: "A",
+    term: "Mid-Term",
+    blueprint: {
+      total_marks: 100,
+      units: ["Linear Equations in One Variable", "Quadratic Factorization"],
+      bloom_taxonomy: { knowledge_pct: 35, application_pct: 45, hots_pct: 20 }
+    },
+    commissioned_by: "Dean Rajeshwari Nair",
+    teacher_name: "Mrs. Ananya Verma",
+    teacher_id: 2,
+    status: "sent_to_exam_cell",
+    draft_file_url: "/samples/Class8_Math_MidTerm_QP.pdf",
+    draft_file_name: "Class8_Math_MidTerm_QP.pdf",
+    due_date: "14 Oct 2026",
+    submission_date: "13 Oct 2026"
+  },
+  {
+    id: 3,
+    title: "Class 9 Mathematics Unit Test 2 Blueprint",
+    subject: "Mathematics",
+    class_name: "Class 9",
+    section: "A",
+    term: "Unit Test 2",
+    blueprint: {
+      total_marks: 50,
+      units: ["Polynomials", "Coordinate Geometry"],
+      bloom_taxonomy: { knowledge_pct: 40, application_pct: 40, hots_pct: 20 }
+    },
+    commissioned_by: "Dean Rajeshwari Nair",
+    teacher_name: "Mrs. Ananya Verma",
+    teacher_id: 2,
+    status: "draft",
+    due_date: "26 Oct 2026"
+  }
+];
+
+let fallbackExamSchedules: ExamScheduleItem[] = [
+  {
+    id: 1,
+    exam_id: 1,
+    title: "Term 1 Mathematics Descriptive Final",
+    class_name: "Class 8",
+    section: "B",
+    subject: "Mathematics",
+    exam_date: "14 Oct 2026",
+    start_time: "10:00 AM",
+    end_time: "12:00 PM",
+    total_marks: 100,
+    room_no: "Room 204",
+    invigilator_name: "Dr. Suresh Babu",
+    academic_clearance: true,
+    academic_clearance_notes: "Syllabus verified 100% complete",
+    hall_ticket_published: true
+  },
+  {
+    id: 2,
+    exam_id: 2,
+    title: "Mid-Term Mathematics Descriptive Examination",
+    class_name: "Class 8",
+    section: "A",
+    subject: "Mathematics",
+    exam_date: "16 Oct 2026",
+    start_time: "10:00 AM",
+    end_time: "11:30 AM",
+    total_marks: 100,
+    room_no: "Room 108",
+    invigilator_name: "Mrs. Neha Roy",
+    academic_clearance: true,
+    academic_clearance_notes: "Syllabus verified 100% complete",
+    hall_ticket_published: true
+  }
+];
+
+let fallbackReportCards: ReportCardItem[] = [
+  {
+    id: 1,
+    student_id: 1,
+    student_name: "Aarav Sharma",
+    roll_no: "01",
+    class_name: "Class 8",
+    section: "B",
+    term: "Term 1",
+    academic_year: "2026-27",
+    grades_grid: {
+      "Mathematics": { score: 52, max: 100, theory: 38, practical: 14, total: 52, max_marks: 100, percentage: 52, grade: "C1", remedial_flag: true, remarks: "Remedial Sprint Active" },
+      "General Science": { score: 60, max: 100, theory: 42, practical: 18, total: 60, max_marks: 100, percentage: 60, grade: "B2", remedial_flag: true, remarks: "Needs lab revision" },
+      "English Language": { score: 88, max: 100, theory: 70, practical: 18, total: 88, max_marks: 100, percentage: 88, grade: "A2", remedial_flag: false, remarks: "Excellent essay structure" },
+      "Social Sciences": { score: 86, max: 100, theory: 68, practical: 18, total: 86, max_marks: 100, percentage: 86, grade: "A2", remedial_flag: false, remarks: "Good historical analysis" }
+    },
+    total_marks_obtained: 286,
+    max_total_marks: 400,
+    overall_percentage: 71.5,
+    overall_grade: "B1",
+    attendance_pct: 94.2,
+    ai_teacher_narrative: "Demonstrates high aptitude in languages and humanities. Needs targeted algebra reinforcement in Mathematics.",
+    is_moderated: true,
+    is_published: true,
+    published_at: "2026-10-18T10:00:00Z"
+  },
+  {
+    id: 2,
+    student_id: 8,
+    student_name: "Tanvi Deshmukh",
+    roll_no: "08",
+    class_name: "Class 8",
+    section: "B",
+    term: "Term 1",
+    academic_year: "2026-27",
+    grades_grid: {
+      "Mathematics": { score: 88, max: 100, theory: 68, practical: 20, total: 88, max_marks: 100, percentage: 88, grade: "A1", remedial_flag: false, remarks: "Mastery demonstrated" },
+      "General Science": { score: 91, max: 100, theory: 72, practical: 19, total: 91, max_marks: 100, percentage: 91, grade: "A1", remedial_flag: false, remarks: "Top standing" },
+      "English Language": { score: 92, max: 100, theory: 74, practical: 18, total: 92, max_marks: 100, percentage: 92, grade: "A1", remedial_flag: false, remarks: "Outstanding" },
+      "Social Sciences": { score: 89, max: 100, theory: 70, practical: 19, total: 89, max_marks: 100, percentage: 89, grade: "A1", remedial_flag: false, remarks: "Comprehensive" }
+    },
+    total_marks_obtained: 360,
+    max_total_marks: 400,
+    overall_percentage: 90.0,
+    overall_grade: "A1",
+    attendance_pct: 98.5,
+    ai_teacher_narrative: "Consistently ranks in top 5% of grade with exceptional problem-solving rigor.",
+    is_moderated: true,
+    is_published: true,
+    published_at: "2026-10-18T10:00:00Z"
+  }
+];
+
+let fallbackExamSubmissions: Record<number, ExamSubmissionItem[]> = {
+  1: [
+    {
+      id: 101,
+      student_id: 1,
+      student_name: "Aarav Sharma",
+      roll_no: "01",
+      class_name: "Class 8",
+      section: "B",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Aarav_Sharma_Math_Term1_Paper.pdf",
+      submitted_at: "14 Oct 2026, 10:15 AM",
+      marks_obtained: 52,
+      percentage: 52,
+      is_remedial_target: true,
+      weak_concept: "Quadratic Equations: Factorization by Splitting the Middle Term",
+      teacher_feedback: "Sign error in quadratic expansion step 3. Auto-enrolled in 1-Week Remedial Focus Table.",
+      graded_at: "14 Oct 2026, 04:30 PM"
+    },
+    {
+      id: 102,
+      student_id: 8,
+      student_name: "Tanvi Deshmukh",
+      roll_no: "08",
+      class_name: "Class 8",
+      section: "B",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Tanvi_Deshmukh_Math_Term1_Paper.pdf",
+      submitted_at: "14 Oct 2026, 10:20 AM",
+      marks_obtained: 88,
+      percentage: 88,
+      is_remedial_target: false,
+      weak_concept: null,
+      teacher_feedback: "Exemplary method precision and neat algebraic graphing.",
+      graded_at: "14 Oct 2026, 04:45 PM"
+    },
+    {
+      id: 103,
+      student_id: 15,
+      student_name: "Kabir Mehta",
+      roll_no: "15",
+      class_name: "Class 8",
+      section: "B",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Kabir_Mehta_Math_Term1_Paper.pdf",
+      submitted_at: "14 Oct 2026, 10:30 AM",
+      marks_obtained: 46,
+      percentage: 46,
+      is_remedial_target: true,
+      weak_concept: "Fractional Denominators and Sign Rules",
+      teacher_feedback: "Struggles with denominator LCM and standard form conversion.",
+      graded_at: "14 Oct 2026, 05:00 PM"
+    }
+  ],
+  2: [
+    {
+      id: 201,
+      student_id: 1,
+      student_name: "Aarav Sharma",
+      roll_no: "01",
+      class_name: "Class 8",
+      section: "A",
+      status: "Submitted",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Aarav_Sharma_MidTerm_Paper.pdf",
+      submitted_at: "16 Oct 2026, 09:30 AM",
+      marks_obtained: null,
+      percentage: null,
+      is_remedial_target: false,
+      weak_concept: "Quadratic Equations: Factorization by Splitting the Middle Term",
+      teacher_feedback: "Awaiting teacher evaluation."
+    },
+    {
+      id: 202,
+      student_id: 22,
+      student_name: "Vivaan Sen",
+      roll_no: "22",
+      class_name: "Class 8",
+      section: "A",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Vivaan_Sen_MidTerm_Paper.pdf",
+      submitted_at: "16 Oct 2026, 09:40 AM",
+      marks_obtained: 48,
+      percentage: 48,
+      is_remedial_target: true,
+      weak_concept: "Discriminant and Middle Term Splitting",
+      teacher_feedback: "Missed 2 steps in middle term splitting.",
+      graded_at: "16 Oct 2026, 11:30 AM"
+    }
+  ]
+};
+
 let fallbackFeeDefaulters: FeeDefaulter[] = [
-  { id: 1, student_name: "Kabir Mehta", class_name: "Class 8A", roll_no: "15", parent_name: "Mr. Suresh Mehta", parent_phone: "+91 98111 00015", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 5, reminder_sent: false },
-  { id: 2, student_name: "Vivaan Sen", class_name: "Class 8A", roll_no: "22", parent_name: "Mrs. Ritu Sen", parent_phone: "+91 98111 00022", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 5, reminder_sent: false },
-  { id: 3, student_name: "Tanvi Deshmukh", class_name: "Class 6B", roll_no: "08", parent_name: "Dr. Amit Deshmukh", parent_phone: "+91 98450 99882", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 16000, days_overdue: 5, reminder_sent: true },
-  { id: 4, student_name: "Rohan Iyer", class_name: "Class 8A", roll_no: "18", parent_name: "Mr. S. Iyer", parent_phone: "+91 98111 00018", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 5, reminder_sent: false }
+  { id: 101, student_name: "Aarav Sharma", class_name: "Class 8-B", roll_no: "ADM-2026-0819", parent_name: "Mr. Rajesh Sharma", parent_phone: "+91 98450 12345", milestone_title: "Admission & Term 1 Tuition (INV-2026-ADM-0819)", amount_due: 25000, days_overdue: 2, reminder_sent: false, is_admission_fee: true, exam_clearance: false, status: 'Overdue' },
+  { id: 1, student_name: "Kabir Mehta", class_name: "Class 8A", roll_no: "15", parent_name: "Mr. Suresh Mehta", parent_phone: "+91 98111 00015", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 18, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' },
+  { id: 2, student_name: "Vivaan Sen", class_name: "Class 8-B", roll_no: "22", parent_name: "Mrs. Ritu Sen", parent_phone: "+91 98111 00022", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 34, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' },
+  { id: 3, student_name: "Tanvi Deshmukh", class_name: "Class 8-A", roll_no: "08", parent_name: "Dr. Amit Deshmukh", parent_phone: "+91 98450 99882", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 16000, days_overdue: 5, reminder_sent: true, is_admission_fee: false, exam_clearance: true, status: 'Overdue' },
+  { id: 4, student_name: "Rohan Iyer", class_name: "Class 9-A", roll_no: "18", parent_name: "Mr. S. Iyer", parent_phone: "+91 98111 00018", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 8, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' }
 ];
 
 let fallbackSubstitutions: SubstitutionSlot[] = [
@@ -1601,6 +1864,140 @@ export const api = {
   getEnquiries: async () => {
     return fetchWithFallback<AdmissionEnquiry[]>('/api/admin/crm/enquiries', undefined, fallbackEnquiries);
   },
+  createEnquiry: async (payload: {
+    student_name: string;
+    parent_name: string;
+    email: string;
+    phone: string;
+    target_grade: string;
+    lead_temperature?: 'hot' | 'warm' | 'cold';
+    source?: string;
+    doc_report_card?: boolean;
+    doc_birth_cert?: boolean;
+    doc_transfer_cert?: boolean;
+    notes?: string;
+    next_followup_date?: string;
+  }) => {
+    const newEnq: AdmissionEnquiry = {
+      id: fallbackEnquiries.length + 10,
+      student_name: payload.student_name,
+      parent_name: payload.parent_name,
+      email: payload.email,
+      phone: payload.phone,
+      target_grade: payload.target_grade,
+      stage: 'new',
+      lead_temperature: payload.lead_temperature || 'warm',
+      source: payload.source || 'Website Form',
+      doc_report_card: payload.doc_report_card || false,
+      doc_birth_cert: payload.doc_birth_cert || false,
+      doc_transfer_cert: payload.doc_transfer_cert || false,
+      notes: payload.notes || 'Direct enquiry registered.',
+      next_followup_date: payload.next_followup_date,
+      created_at: new Date().toISOString()
+    };
+    fallbackEnquiries.unshift(newEnq);
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      return newEnq;
+    }
+  },
+  scheduleFollowup: async (id: number, date: string, note?: string) => {
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries/' + id + '/followup', {
+        method: 'PATCH',
+        body: JSON.stringify({ next_followup_date: date, notes: note, stage: 'followup' })
+      });
+    } catch {
+      fallbackEnquiries = fallbackEnquiries.map(e => {
+        if (e.id === id) {
+          return {
+            ...e,
+            stage: 'followup',
+            next_followup_date: date,
+            notes: note ? ((e.notes ? e.notes + ' | ' : '') + note) : e.notes
+          };
+        }
+        return e;
+      });
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
+  dropEnquiry: async (id: number, reason: string, note?: string) => {
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries/' + id + '/drop', {
+        method: 'PATCH',
+        body: JSON.stringify({ drop_reason: reason, notes: note, stage: 'dropped' })
+      });
+    } catch {
+      fallbackEnquiries = fallbackEnquiries.map(e => {
+        if (e.id === id) {
+          return {
+            ...e,
+            stage: 'dropped',
+            drop_reason: reason,
+            notes: note ? ((e.notes ? e.notes + ' | ' : '') + 'Drop: ' + reason + ' (' + note + ')') : ((e.notes ? e.notes + ' | ' : '') + 'Drop: ' + reason)
+          };
+        }
+        return e;
+      });
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
+  logCallOutcome: async (id: number, payload: {
+    outcome: string;
+    note: string;
+    next_followup_date?: string;
+    stage?: 'new' | 'followup' | 'visit' | 'converted' | 'dropped';
+    drop_reason?: string;
+  }) => {
+    const timestamp = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const callEntry = '• [' + timestamp + '] ' + payload.outcome + ': ' + (payload.note || 'Call concluded');
+    
+    fallbackEnquiries = fallbackEnquiries.map(e => {
+      if (e.id === id) {
+        let newStage = payload.stage || e.stage;
+        let newDropReason = e.drop_reason;
+        let nextDate = payload.next_followup_date;
+        
+        if (payload.outcome === 'Not Interested / Drop') {
+          newStage = 'dropped';
+          newDropReason = payload.drop_reason || 'Not Interested';
+          nextDate = undefined;
+        } else if (payload.outcome === 'Connected - Ready to Enroll') {
+          newStage = 'followup';
+        } else if (payload.outcome === 'Ringing / No Answer') {
+          newStage = 'followup';
+          const tmrw = new Date();
+          tmrw.setDate(tmrw.getDate() + 1);
+          nextDate = tmrw.toISOString().split('T')[0];
+        } else if (payload.outcome === 'Callback Requested') {
+          newStage = 'followup';
+        }
+
+        return {
+          ...e,
+          stage: newStage,
+          drop_reason: newDropReason,
+          next_followup_date: nextDate,
+          notes: e.notes ? e.notes + '\n' + callEntry : callEntry
+        };
+      }
+      return e;
+    });
+
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries/' + id + '/log-call', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
   updateEnquiryStage: async (id: number, stage: string) => {
     try {
       return await fetchWithFallback<AdmissionEnquiry>(`/api/admin/crm/enquiries/${id}/stage`, {
@@ -1612,14 +2009,86 @@ export const api = {
       return fallbackEnquiries.find(e => e.id === id);
     }
   },
+  updateEnquiryTemperature: async (id: number, temperature: 'hot' | 'warm' | 'cold') => {
+    fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { ...e, lead_temperature: temperature } : e);
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries/' + id + '/stage', {
+        method: 'PATCH',
+        body: JSON.stringify({ lead_temperature: temperature })
+      });
+    } catch {
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
+  updateEnquiryDocs: async (id: number, docs: { doc_report_card?: boolean; doc_birth_cert?: boolean; doc_transfer_cert?: boolean }) => {
+    fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { ...e, ...docs } : e);
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>('/api/admin/crm/enquiries/' + id + '/stage', {
+        method: 'PATCH',
+        body: JSON.stringify(docs)
+      });
+    } catch {
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
   convertEnquiryToStudent: async (id: number) => {
+    const enq = fallbackEnquiries.find(e => e.id === id);
+    const studentName = enq ? enq.student_name : 'New Student';
+    const rollNo = `ADM-2026-08${String(id).padStart(2, '0')}`;
+    const targetGrade = enq?.target_grade || 'Class 8';
+    const section = `${targetGrade}-B`;
+    const invoiceNo = `INV-2026-ADM-${id}84`;
+    const feeAmt = 25000;
+
+    fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { 
+      ...e, 
+      stage: 'converted', 
+      notes: `${e.notes || ''} | Enrolled as ${rollNo} in ${section}. Admission Invoice #${invoiceNo} dispatched to Accounts.` 
+    } : e);
+
+    // Auto-create Admission Fee Receivable into Accounts Desk!
+    const newAdmissionFee: FeeMilestone = {
+      id: fallbackFees.length + 1,
+      student_id: id + 100,
+      title: `Admission & Term 1 Tuition (${studentName} · ${rollNo})`,
+      amount: feeAmt,
+      due_date: new Date(Date.now() + 5 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      status: 'Overdue',
+    };
+    fallbackFees.unshift(newAdmissionFee);
+
+    const newAdmissionDefaulter: FeeDefaulter = {
+      id: fallbackFeeDefaulters.length + 100,
+      student_id: id + 100,
+      student_name: studentName,
+      class_name: section,
+      roll_no: rollNo,
+      parent_name: enq?.parent_name || `Parent of ${studentName}`,
+      parent_phone: enq?.phone || '+91 98450 12345',
+      milestone_title: `Admission & Term 1 Tuition (${invoiceNo})`,
+      amount_due: feeAmt,
+      days_overdue: 1,
+      reminder_sent: false,
+      is_admission_fee: true,
+      exam_clearance: false,
+      status: 'Overdue'
+    };
+    fallbackFeeDefaulters.unshift(newAdmissionDefaulter);
+
     try {
       return await fetchWithFallback(`/api/admin/crm/enquiries/${id}/convert`, { method: 'POST' });
     } catch {
-      fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { ...e, stage: 'converted', notes: `${e.notes || ''} | Converted to SIS` } : e);
       return {
         success: true,
-        message: 'Student record enrolled into SIS successfully'
+        student_name: studentName,
+        roll_no: rollNo,
+        allocated_section: section,
+        admission_fee_invoice: invoiceNo,
+        fee_amount: feeAmt,
+        parent_user: enq?.email || 'parent.portal@edu360.internal',
+        temp_password: `Edu360@${new Date().getFullYear()}`,
+        parent_phone: enq?.phone || '+91 98450 12345',
+        message: `Student enrolled successfully as ${rollNo}! Admission Fee Invoice generated & dispatched to Accounts Desk.`
       };
     }
   },
@@ -3438,8 +3907,13 @@ export const api = {
     } catch {
       return {
         success: true,
-        exam: { id: examId, title: "Mathematics Descriptive Exam", total_marks: 100, is_published: false },
-        submissions: []
+        exam: { 
+          id: examId, 
+          title: examId === 1 ? "Term 1 Descriptive Examination - Mathematics" : "Mid-Term Mathematics Descriptive Paper (Class 8-A)", 
+          total_marks: 100, 
+          is_published: examId === 1 
+        },
+        submissions: fallbackExamSubmissions[examId] || []
       };
     }
   },
@@ -3452,6 +3926,36 @@ export const api = {
         body: JSON.stringify(data)
       });
     } catch {
+      const list = fallbackExamSubmissions[examId] || [];
+      const existingIdx = list.findIndex(s => s.student_id === data.student_id);
+      if (existingIdx >= 0) {
+        list[existingIdx] = {
+          ...list[existingIdx],
+          paper_file_url: data.paper_file_url,
+          paper_file_name: data.paper_file_name,
+          submitted_at: 'Just now',
+          status: 'Submitted'
+        };
+      } else {
+        list.push({
+          id: Date.now(),
+          student_id: data.student_id,
+          student_name: 'Aarav Sharma',
+          roll_no: '01',
+          class_name: 'Class 8',
+          section: 'A',
+          status: 'Submitted',
+          paper_file_url: data.paper_file_url,
+          paper_file_name: data.paper_file_name,
+          submitted_at: 'Just now',
+          marks_obtained: null,
+          percentage: null,
+          is_remedial_target: false,
+          weak_concept: 'Quadratic Equations: Factorization by Splitting the Middle Term',
+          teacher_feedback: 'Submitted via student portal. Ready for faculty evaluation.'
+        });
+      }
+      fallbackExamSubmissions[examId] = list;
       return {
         success: true,
         message: `Successfully submitted ${data.paper_file_name}`,
@@ -3460,7 +3964,7 @@ export const api = {
     }
   },
 
-  gradeExamSubmission: async (examId: number, data: { student_id: number; marks_obtained: number; teacher_feedback?: string; teacher_id?: number }): Promise<{ success: boolean; message: string; percentage: number; is_remedial_target: boolean }> => {
+  gradeExamSubmission: async (examId: number, data: { student_id: number; marks_obtained: number; teacher_feedback?: string; teacher_id?: number; weak_concept?: string }): Promise<{ success: boolean; message: string; percentage: number; is_remedial_target: boolean }> => {
     try {
       return await fetchWithFallback<{ success: boolean; message: string; percentage: number; is_remedial_target: boolean }>(`/api/exams/${examId}/grade`, {
         method: 'POST',
@@ -3468,12 +3972,30 @@ export const api = {
         body: JSON.stringify(data)
       });
     } catch {
-      const pct = (data.marks_obtained / 100) * 100;
+      const pct = Math.round((data.marks_obtained / 100) * 100);
+      const isRemedial = pct <= 70;
+      const list = fallbackExamSubmissions[examId] || [];
+      fallbackExamSubmissions[examId] = list.map(s => {
+        if (s.student_id === data.student_id) {
+          return {
+            ...s,
+            marks_obtained: data.marks_obtained,
+            percentage: pct,
+            is_remedial_target: isRemedial,
+            status: 'Graded',
+            weak_concept: data.weak_concept !== undefined ? data.weak_concept : s.weak_concept,
+            teacher_feedback: data.teacher_feedback || (isRemedial ? 'Sign error in quadratic factorization. Enrolled in 1-Week Remedial Sprint.' : 'Mastery demonstrated. Exempt from remedial.'),
+            graded_at: 'Just now'
+          };
+        }
+        return s;
+      });
+
       return {
         success: true,
         message: `Graded: ${data.marks_obtained}/100 (${pct}%)`,
         percentage: pct,
-        is_remedial_target: pct <= 70
+        is_remedial_target: isRemedial
       };
     }
   },
@@ -3493,13 +4015,15 @@ export const api = {
         body: JSON.stringify(data || {})
       });
     } catch {
+      const list = fallbackExamSubmissions[examId] || [];
+      const underperforming = list.filter(s => (s.percentage || 0) <= 70);
       return {
         success: true,
-        message: "Results published and students scoring <= 70% auto-enrolled in 1-Week Remedial Focus Table.",
-        exam_title: "Mathematics Descriptive Exam",
-        total_published: 2,
-        remedial_enrolled_count: 1,
-        remedial_students: [{ student_id: 4, name: "Siddharth Verma", score_pct: 46.0 }]
+        message: `Results published and ${underperforming.length} slow-learner student(s) scoring <= 70% auto-enrolled in 1-Week Remedial Focus Table.`,
+        exam_title: examId === 1 ? 'Term 1 Descriptive Examination - Mathematics' : 'Mid-Term Mathematics Descriptive Paper (Class 8-A)',
+        total_published: list.length,
+        remedial_enrolled_count: underperforming.length,
+        remedial_students: underperforming.map(u => ({ student_id: u.student_id, name: u.student_name, score_pct: u.percentage }))
       };
     }
   },
@@ -3513,49 +4037,122 @@ export const api = {
       if (params?.status) q.set('status', params.status);
       if (params?.teacher_id) q.set('teacher_id', params.teacher_id.toString());
       const res = await fetchWithFallback<{ success: boolean; question_papers: QuestionPaperItem[] }>(`/api/exams/question-papers?${q.toString()}`);
-      return res.question_papers || [];
+      return res.question_papers || fallbackQuestionPapers;
     } catch {
-      return [];
+      let filtered = [...fallbackQuestionPapers];
+      if (params?.subject) filtered = filtered.filter(p => p.subject.toLowerCase() === params.subject?.toLowerCase());
+      if (params?.status && params.status !== 'all') filtered = filtered.filter(p => p.status === params.status);
+      if (params?.teacher_id) filtered = filtered.filter(p => p.teacher_id === params.teacher_id || !p.teacher_id);
+      return filtered;
     }
   },
 
   orderQuestionPaper: async (data: any): Promise<{ success: boolean; message: string; paper_id: number }> => {
-    return await fetchWithFallback<any>(`/api/exams/question-papers/order`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    try {
+      return await fetchWithFallback<any>(`/api/exams/question-papers/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      const newId = fallbackQuestionPapers.length + 1;
+      const newQp: QuestionPaperItem = {
+        id: newId,
+        title: data.title || `${data.class_name} ${data.subject} ${data.term} Blueprint`,
+        subject: data.subject || 'Mathematics',
+        class_name: data.class_name || 'Class 8',
+        section: data.section || 'B',
+        term: data.term || 'Term 1',
+        blueprint: {
+          total_marks: data.total_marks || 100,
+          units: data.units || ['Linear Equations', 'Quadratic Factorization'],
+          bloom_taxonomy: {
+            knowledge_pct: data.knowledge_pct || 30,
+            application_pct: data.application_pct || 50,
+            hots_pct: data.hots_pct || 20
+          }
+        },
+        commissioned_by: 'Dean Rajeshwari Nair',
+        teacher_name: 'Mrs. Ananya Verma',
+        teacher_id: 2,
+        status: 'draft',
+        due_date: data.due_date || '28 Oct 2026'
+      };
+      fallbackQuestionPapers = [newQp, ...fallbackQuestionPapers];
+      return { success: true, message: 'Question paper commissioned successfully to faculty!', paper_id: newId };
+    }
   },
 
   submitQuestionPaperDraft: async (paperId: number, data: { draft_file_url: string; draft_file_name: string; answer_key_url?: string }): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/submit-draft`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    try {
+      return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/submit-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      fallbackQuestionPapers = fallbackQuestionPapers.map(p => {
+        if (p.id === paperId) {
+          return {
+            ...p,
+            status: 'under_review',
+            draft_file_url: data.draft_file_url,
+            draft_file_name: data.draft_file_name,
+            answer_key_url: data.answer_key_url,
+            submission_date: 'Today, 12:45 PM'
+          };
+        }
+        return p;
+      });
+      return { success: true, message: 'Draft submitted to Academic Coordinator for review!' };
+    }
   },
 
   reviewQuestionPaper: async (paperId: number, data: { approved: boolean; revision_notes?: string; reviewer_id?: number }): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/review`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    try {
+      return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      fallbackQuestionPapers = fallbackQuestionPapers.map(p => {
+        if (p.id === paperId) {
+          return {
+            ...p,
+            status: data.approved ? 'approved' : 'revision_requested',
+            review_notes: data.revision_notes
+          };
+        }
+        return p;
+      });
+      return { success: true, message: data.approved ? 'Question paper approved by Academic Coordinator!' : 'Revision requested from teacher' };
+    }
   },
 
   handoffQuestionPaper: async (paperId: number): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/handoff`, {
-      method: 'POST'
-    });
+    try {
+      return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/handoff`, {
+        method: 'POST'
+      });
+    } catch {
+      fallbackQuestionPapers = fallbackQuestionPapers.map(p => {
+        if (p.id === paperId) {
+          return { ...p, status: 'sent_to_exam_cell' };
+        }
+        return p;
+      });
+      return { success: true, message: 'Sealed & transferred to Exam Secrecy Strongroom' };
+    }
   },
 
   // --- Dynamic Exam Schedules ---
   getExamSchedules: async (): Promise<ExamScheduleItem[]> => {
     try {
       const res = await fetchWithFallback<{ success: boolean; schedules: ExamScheduleItem[] }>(`/api/exams/schedules`);
-      return res.schedules || [];
+      return res.schedules || fallbackExamSchedules;
     } catch {
-      return [];
+      return fallbackExamSchedules;
     }
   },
 
@@ -3610,9 +4207,30 @@ export const api = {
       if (params?.term) q.set('term', params.term);
       if (params?.student_id) q.set('student_id', params.student_id.toString());
       const res = await fetchWithFallback<{ success: boolean; report_cards: ReportCardItem[] }>(`/api/exams/report-cards?${q.toString()}`);
-      return res.report_cards || [];
+      return res.report_cards || fallbackReportCards;
     } catch {
-      return [];
+      // Sync Aarav Sharma's Mathematics grade dynamically with teacher's latest grading
+      const mathSub = (fallbackExamSubmissions[1] || []).find(s => s.student_id === 1);
+      if (mathSub && fallbackReportCards[0]) {
+        const totalScore = mathSub.marks_obtained !== null && mathSub.marks_obtained !== undefined ? mathSub.marks_obtained : 52;
+        const theory = Math.min(80, Math.round(totalScore * 0.75));
+        const internal = totalScore - theory;
+        fallbackReportCards[0].grades_grid["Mathematics"] = {
+          score: totalScore,
+          max: 100,
+          theory: theory,
+          practical: internal,
+          total: totalScore,
+          max_marks: 100,
+          percentage: totalScore,
+          grade: totalScore >= 90 ? "A1" : totalScore >= 80 ? "A2" : totalScore >= 70 ? "B1" : totalScore >= 60 ? "B2" : "C1",
+          remedial_flag: totalScore <= 70,
+          remarks: totalScore <= 70 ? "Enrolled in 1-Week Remedial Focus Sprint" : "Mastery Demonstrated (>70%)"
+        };
+      }
+      let filtered = [...fallbackReportCards];
+      if (params?.student_id) filtered = filtered.filter(r => r.student_id === params.student_id);
+      return filtered;
     }
   },
 
@@ -3741,12 +4359,47 @@ export const api = {
     });
   },
 
-  recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
-    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+  toggleExamClearance: async (id: number): Promise<{ success: boolean; exam_clearance: boolean }> => {
+    try {
+      return await fetchWithFallback<{ success: boolean; exam_clearance: boolean }>(`/api/finance/defaulters/${id}/exam-clearance`, {
+        method: 'POST'
+      });
+    } catch {
+      let updatedVal = false;
+      fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => {
+        if (d.id === id) {
+          updatedVal = !d.exam_clearance;
+          return { ...d, exam_clearance: updatedVal };
+        }
+        return d;
+      });
+      return { success: true, exam_clearance: updatedVal };
+    }
+  },
+
+recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
+    try {
+      return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => {
+        if (d.id === id) {
+          const remaining = Math.max(0, d.amount_due - payload.amount_paid);
+          return {
+            ...d,
+            amount_due: remaining,
+            status: (remaining === 0 ? 'Paid' : 'Partially Paid') as any,
+            exam_clearance: remaining === 0 ? true : d.exam_clearance,
+            notes: payload.notes || d.notes
+          };
+        }
+        return d;
+      });
+      return fallbackFeeDefaulters.find(d => d.id === id)!;
+    }
   },
 
   applyFeeWaiver: async (id: number, payload: ApplyWaiverPayload): Promise<FeeDefaulterItem> => {

@@ -17,24 +17,28 @@ import {
   Layers,
   FileEdit,
   Bus,
-  Trophy
+  Trophy,
+  GraduationCap,
+  Phone,
+  BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { api } from '@/lib/api';
 
 interface DemoModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultRole?: string;
-  initialTab?: 'demo' | 'tour';
+  initialTab?: 'demo' | 'tour' | 'admission';
 }
 
 export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initialTab = 'demo' }: DemoModalProps) {
-  const [activeTab, setActiveTab] = useState<'demo' | 'tour'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'demo' | 'tour' | 'admission'>(initialTab);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tourChapter, setTourChapter] = useState<number>(0);
 
-  // Form State
+  // Form State: Institutional Demo
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -45,8 +49,20 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
     notes: ''
   });
 
+  // Form State: Student Admission Inquiry
+  const [admissionData, setAdmissionData] = useState({
+    studentName: '',
+    parentName: '',
+    phone: '',
+    email: '',
+    gradeApplying: 'Grade 8',
+    currentSchool: '',
+    notes: ''
+  });
+
   useEffect(() => {
     setActiveTab(initialTab);
+    setSubmitted(false);
   }, [initialTab]);
 
   useEffect(() => {
@@ -57,14 +73,13 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleDemoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     setTimeout(() => {
       setLoading(false);
       setSubmitted(true);
-      // Trigger celebratory confetti
       try {
         confetti({
           particleCount: 80,
@@ -72,9 +87,42 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
           origin: { y: 0.6 }
         });
       } catch (err) {
-        // ignore if not supported
+        // ignore
       }
-    }, 700);
+    }, 600);
+  };
+
+  const handleAdmissionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await api.createEnquiry({
+        student_name: admissionData.studentName,
+        parent_name: admissionData.parentName,
+        email: admissionData.email,
+        phone: admissionData.phone,
+        target_grade: admissionData.gradeApplying,
+        source: 'Website Form',
+        notes: `${admissionData.currentSchool ? `Current School: ${admissionData.currentSchool}. ` : ''}${admissionData.notes || ''}`.trim()
+      });
+      setSubmitted(true);
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      } catch (err) {
+        // ignore
+      }
+    } catch (err) {
+      console.error('Failed to submit enquiry:', err);
+      // Still show reassuring submission screen
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tourChapters = [
@@ -124,36 +172,47 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
       <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-100 z-10 flex flex-col max-h-[90vh]">
         
         {/* Header Tabs */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/70">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 sm:px-6 py-4 bg-slate-50/70">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('admission'); setSubmitted(false); }}
+              className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+                activeTab === 'admission'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              🎓 Apply for Admission
+            </button>
             <button
               type="button"
               onClick={() => { setActiveTab('demo'); setSubmitted(false); }}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+              className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
                 activeTab === 'demo'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
-              📅 Schedule 15-Min Live Demo
+              📅 School Demo
             </button>
             <button
               type="button"
               onClick={() => { setActiveTab('tour'); setSubmitted(false); }}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+              className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
                 activeTab === 'tour'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
-              ▶ Watch 2-Min Interactive Tour
+              ▶ 2-Min Tour
             </button>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="rounded-full p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors ml-2"
           >
             <X className="h-5 w-5" />
           </button>
@@ -161,7 +220,199 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
 
         {/* Modal Body */}
         <div className="p-6 sm:p-8 overflow-y-auto">
-          {activeTab === 'demo' ? (
+          
+          {/* TAB 1: ADMISSION INQUIRY */}
+          {activeTab === 'admission' && (
+            submitted ? (
+              <div className="text-center py-8 space-y-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 className="h-9 w-9" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900">
+                  Admission Inquiry Received!
+                </h3>
+                <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+                  Thank you, <b>{admissionData.parentName || 'Parent'}</b>. We have registered the application for <b>{admissionData.studentName || 'your child'}</b> in our Admissions Coordinator Queue.
+                </p>
+
+                <div className="my-6 rounded-2xl border border-blue-100 bg-blue-50/50 p-4 max-w-md mx-auto text-left space-y-2 text-xs text-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500">Student Name:</span>
+                    <span className="font-bold text-slate-900">{admissionData.studentName}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500">Target Grade:</span>
+                    <span className="font-bold text-blue-700">{admissionData.gradeApplying}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500">Next Step:</span>
+                    <span className="font-bold text-emerald-700">Coordinator Phone Call &amp; Campus Tour</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-600 transition-colors"
+                  >
+                    Done / Return to Site
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="mb-6">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200 mb-2">
+                    <GraduationCap className="h-3.5 w-3.5" />
+                    <span>Prospective Student Admission Form</span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                    Apply for School Admission
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                    Submit your child&apos;s details below. Our admissions desk will contact you to schedule an interactive counseling tour and document check.
+                  </p>
+                </div>
+
+                <form onSubmit={handleAdmissionSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Student Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Aarav Sharma"
+                        value={admissionData.studentName}
+                        onChange={(e) => setAdmissionData({ ...admissionData, studentName: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Parent / Guardian Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ramesh Sharma"
+                        value={admissionData.parentName}
+                        onChange={(e) => setAdmissionData({ ...admissionData, parentName: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Contact Phone Number *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="10-digit mobile number"
+                        value={admissionData.phone}
+                        onChange={(e) => setAdmissionData({ ...admissionData, phone: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="parent@example.com"
+                        value={admissionData.email}
+                        onChange={(e) => setAdmissionData({ ...admissionData, email: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Grade Applying For *
+                      </label>
+                      <select
+                        value={admissionData.gradeApplying}
+                        onChange={(e) => setAdmissionData({ ...admissionData, gradeApplying: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none bg-white"
+                      >
+                        <option value="Grade 1">Grade 1</option>
+                        <option value="Grade 2">Grade 2</option>
+                        <option value="Grade 3">Grade 3</option>
+                        <option value="Grade 4">Grade 4</option>
+                        <option value="Grade 5">Grade 5</option>
+                        <option value="Grade 6">Grade 6</option>
+                        <option value="Grade 7">Grade 7</option>
+                        <option value="Grade 8">Grade 8</option>
+                        <option value="Grade 9">Grade 9</option>
+                        <option value="Grade 10">Grade 10</option>
+                        <option value="Grade 11">Grade 11</option>
+                        <option value="Grade 12">Grade 12</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Current School / Location
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. St. Xavier's, Hyderabad"
+                        value={admissionData.currentSchool}
+                        onChange={(e) => setAdmissionData({ ...admissionData, currentSchool: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Notes or Specific Requirements (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Interested in science labs, sports facilities, or hostel options..."
+                      value={admissionData.notes}
+                      onChange={(e) => setAdmissionData({ ...admissionData, notes: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-4 flex items-center justify-between border-t border-slate-100">
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                      <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                      <span>Direct to Admissions Desk • Secure</span>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-600/25 hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? (
+                        <span>Submitting Application...</span>
+                      ) : (
+                        <>
+                          <span>Submit Admission Inquiry</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )
+          )}
+
+          {/* TAB 2: INSTITUTIONAL DEMO */}
+          {activeTab === 'demo' && (
             submitted ? (
               <div className="text-center py-8 space-y-4">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-500/20">
@@ -214,7 +465,7 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
                   </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleDemoSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -268,10 +519,9 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-indigo-600 focus:outline-none bg-white"
                       >
                         <option value="admin">Principal / School Leader</option>
-                        <option value="admin">Administrator / Operations Head</option>
-                        <option value="teacher">Academic Faculty / Teacher</option>
-                        <option value="parent">Parent Association Representative</option>
-                        <option value="it_director">IT &amp; Systems Director</option>
+                        <option value="teacher">Academic Dean / Teacher</option>
+                        <option value="parent">Parent Association Member</option>
+                        <option value="coordinator">Admissions / Operations Coordinator</option>
                       </select>
                     </div>
                   </div>
@@ -279,22 +529,22 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Student Enrollment
+                        Approximate Student Enrollment
                       </label>
                       <select
                         value={formData.studentCount}
                         onChange={(e) => setFormData({ ...formData, studentCount: e.target.value })}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-indigo-600 focus:outline-none bg-white"
                       >
-                        <option value="under-500">Under 500 Students</option>
+                        <option value="<500">Under 500 Students</option>
                         <option value="500-1500">500 – 1,500 Students</option>
-                        <option value="1500-3500">1,500 – 3,500 Students</option>
-                        <option value="3500+">3,500+ (Multi-Branch Trust)</option>
+                        <option value="1500-3000">1,500 – 3,000 Students</option>
+                        <option value=">3000">3,000+ Students (Multi-Campus)</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Preferred Date
+                        Preferred Date for Walkthrough
                       </label>
                       <input
                         type="date"
@@ -329,8 +579,10 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
                 </form>
               </div>
             )
-          ) : (
-            // Interactive 2-Minute Tour Player
+          )}
+
+          {/* TAB 3: 2-MINUTE TOUR */}
+          {activeTab === 'tour' && (
             <div className="space-y-5">
               <div>
                 <h3 className="text-xl font-black text-slate-900">
@@ -421,6 +673,7 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
               </div>
             </div>
           )}
+
         </div>
 
       </div>

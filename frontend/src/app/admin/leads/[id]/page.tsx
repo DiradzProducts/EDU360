@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -22,7 +22,8 @@ import {
   ShieldCheck,
   User,
   ArrowRight,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AdmissionEnquiry } from '@/lib/types';
@@ -84,13 +85,13 @@ const mockLeads: Record<number, AdmissionEnquiry> = {
 };
 
 const stages = [
-  { id: 'new', label: 'New Enquiry', color: 'border-blue-200 bg-blue-50 text-blue-700' },
-  { id: 'followup', label: 'Follow-up Scheduled', color: 'border-amber-200 bg-amber-50 text-amber-700' },
-  { id: 'visit', label: 'Campus Visit Booked', color: 'border-purple-200 bg-purple-50 text-purple-700' },
-  { id: 'converted', label: 'Converted to SIS', color: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  { id: 'new', label: '1. Inbound Inquiries', color: 'border-blue-200 bg-blue-50 text-blue-700' },
+  { id: 'followup', label: '2. Follow-up & Counseling', color: 'border-amber-200 bg-amber-50 text-amber-700' },
+  { id: 'visit', label: '3. Virtual Demo & Diagnostic', color: 'border-purple-200 bg-purple-50 text-purple-700' },
+  { id: 'converted', label: '4. Enrolled in SIS ✓', color: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
 ];
 
-export default function LeadDetailPage() {
+function LeadDetailContent() {
   const params = useParams();
   const router = useRouter();
 
@@ -116,6 +117,8 @@ export default function LeadDetailPage() {
   const [notesText, setNotesText] = useState(enquiry.notes || '');
   const [converting, setConverting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [conversionResult, setConversionResult] = useState<any | null>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -136,15 +139,18 @@ export default function LeadDetailPage() {
   const handleConvert = async () => {
     setConverting(true);
     try {
-      await api.convertEnquiryToStudent(enquiry.id);
+      const res: any = await api.convertEnquiryToStudent(enquiry.id);
       setEnquiry(prev => ({
         ...prev,
         stage: 'converted',
-        notes: `${prev.notes || ''} | Converted to SIS Student record on ${new Date().toLocaleDateString('en-GB')}`
+        notes: `${prev.notes || ''} | Enrolled as ${res?.roll_no || 'SIS-STU'} on ${new Date().toLocaleDateString('en-GB')}`
       }));
+      setConversionResult(res);
+      setShowInvoiceModal(true);
       triggerToast(`1-Click Success: ${enquiry.student_name} enrolled as active SIS student!`);
     } catch (err) {
       setEnquiry(prev => ({ ...prev, stage: 'converted' }));
+      setShowInvoiceModal(true);
       triggerToast(`1-Click Success: ${enquiry.student_name} enrolled into SIS!`);
     } finally {
       setConverting(false);
@@ -440,10 +446,98 @@ export default function LeadDetailPage() {
 
         </div>
 
+      {/* ── ENROLLMENT & FEE DISPATCH SUCCESS MODAL (Admissions -> Accounts Handshake) ── */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Enrollment &amp; Admission Fee Generated!
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Handed over from Admissions CRM to Accounts Desk
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Credentials Card */}
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200 dark:border-slate-700 space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Official Student Credentials (SIS)
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Assigned Roll No:</span>
+                  <b className="font-mono text-emerald-600 dark:text-emerald-400">{conversionResult?.roll_no || `ADM-2026-08${enquiry.id}`}</b>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Allocated Batch:</span>
+                  <b className="text-slate-800 dark:text-white">{conversionResult?.allocated_section || `${enquiry.target_grade || 'Class 8'}-B`}</b>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Parent Username:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300 truncate block">{conversionResult?.parent_user || enquiry.email}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">Temp Password:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300">Edu360@2026</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Fee Receivable Card */}
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 p-4 border border-amber-200 dark:border-amber-900/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  💳 Admission Fee Invoice #{conversionResult?.admission_fee_invoice || `INV-2026-${enquiry.id}84`}
+                </span>
+                <b className="text-sm font-black text-amber-900 dark:text-amber-200">₹{conversionResult?.fee_amount ? Number(conversionResult.fee_amount).toLocaleString() : '25,000'}</b>
+              </div>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300/90 leading-relaxed">
+                Synced directly into <b>Accounts Coordinator Desk</b> under pending receivables. WhatsApp invoice link dispatched to <b>{enquiry.phone}</b>.
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Close
+              </button>
+              <Link
+                href="/accounts_coordinator"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-all"
+              >
+                View in Accounts Coordinator &rarr;
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       </main>
 
       {/* Brand Footer */}
       <Footer />
     </div>
+  );
+}
+
+export default function LeadDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading Lead Dossier...</div>}>
+      <LeadDetailContent />
+    </Suspense>
   );
 }

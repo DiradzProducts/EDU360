@@ -15,7 +15,7 @@ from app.schemas.schemas import (
     TriageAlertResponse, TriageActionRequest,
     AdminTaskResponse, AdminTaskCreate, AdminTaskUpdate,
     EscalateTaskRequest, AutoTriggerTaskRequest, TaskExecutiveCockpitResponse,
-    AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate,
+    AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate, CallLogPayload,
     StudentResponse, OfficialDocumentResponse, OfficialDocumentCreate,
     ExitClearanceResponse, ExitClearancePhysicalUpload,
     EventResponse, EventAssignmentResponse,
@@ -369,6 +369,28 @@ async def list_enquiries(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdmissionEnquiry).order_by(AdmissionEnquiry.created_at.desc()))
     return result.scalars().all()
 
+@router.post("/crm/enquiries", response_model=AdmissionEnquiryResponse)
+async def create_enquiry(req: AdmissionEnquiryCreate, db: AsyncSession = Depends(get_db)):
+    enquiry = AdmissionEnquiry(
+        student_name=req.student_name,
+        parent_name=req.parent_name,
+        email=req.email,
+        phone=req.phone,
+        target_grade=req.target_grade,
+        lead_temperature=req.lead_temperature or "warm",
+        source=req.source or "Website",
+        doc_report_card=req.doc_report_card or False,
+        doc_birth_cert=req.doc_birth_cert or False,
+        doc_transfer_cert=req.doc_transfer_cert or False,
+        notes=req.notes,
+        next_followup_date=req.next_followup_date,
+        stage="new"
+    )
+    db.add(enquiry)
+    await db.commit()
+    await db.refresh(enquiry)
+    return enquiry
+
 @router.patch("/crm/enquiries/{enquiry_id}/stage", response_model=AdmissionEnquiryResponse)
 async def update_enquiry_stage(enquiry_id: int, req: AdmissionEnquiryUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
@@ -379,6 +401,79 @@ async def update_enquiry_stage(enquiry_id: int, req: AdmissionEnquiryUpdate, db:
         enquiry.stage = req.stage
     if req.notes:
         enquiry.notes = req.notes
+    if req.lead_temperature:
+        enquiry.lead_temperature = req.lead_temperature
+    if req.source:
+        enquiry.source = req.source
+    if req.doc_report_card is not None:
+        enquiry.doc_report_card = req.doc_report_card
+    if req.doc_birth_cert is not None:
+        enquiry.doc_birth_cert = req.doc_birth_cert
+    if req.doc_transfer_cert is not None:
+        enquiry.doc_transfer_cert = req.doc_transfer_cert
+    if req.next_followup_date:
+        enquiry.next_followup_date = req.next_followup_date
+    if req.drop_reason:
+        enquiry.drop_reason = req.drop_reason
+    await db.commit()
+    await db.refresh(enquiry)
+    return enquiry
+
+@router.patch("/crm/enquiries/{enquiry_id}/followup", response_model=AdmissionEnquiryResponse)
+async def schedule_followup(enquiry_id: int, req: AdmissionEnquiryUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    enquiry.stage = "followup"
+    if req.next_followup_date:
+        enquiry.next_followup_date = req.next_followup_date
+    if req.notes:
+        enquiry.notes = f"{enquiry.notes or ''} | {req.notes}".strip(" | ")
+    await db.commit()
+    await db.refresh(enquiry)
+    return enquiry
+
+@router.patch("/crm/enquiries/{enquiry_id}/drop", response_model=AdmissionEnquiryResponse)
+async def drop_enquiry(enquiry_id: int, req: AdmissionEnquiryUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    enquiry.stage = "dropped"
+    if req.drop_reason:
+        enquiry.drop_reason = req.drop_reason
+    if req.notes:
+        enquiry.notes = f"{enquiry.notes or ''} | Drop: {req.drop_reason} ({req.notes})".strip(" | ")
+    await db.commit()
+    await db.refresh(enquiry)
+    return enquiry
+
+@router.post("/crm/enquiries/{enquiry_id}/log-call", response_model=AdmissionEnquiryResponse)
+async def log_call_outcome(enquiry_id: int, req: CallLogPayload, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    
+    timestamp = datetime.datetime.utcnow().strftime("%d %b, %I:%M %p")
+    call_entry = f"[{timestamp}] {req.outcome}: {req.note or 'Call concluded'}"
+    enquiry.notes = f"{enquiry.notes}\n• {call_entry}" if enquiry.notes else f"• {call_entry}"
+    
+    if req.stage:
+        enquiry.stage = req.stage
+    elif req.outcome == "Not Interested":
+        enquiry.stage = "dropped"
+        enquiry.drop_reason = req.drop_reason or "Not Interested"
+    elif req.outcome in ["Connected - Positive", "Callback Requested", "Ringing / No Answer"]:
+        enquiry.stage = "followup"
+    
+    if req.next_followup_date:
+        enquiry.next_followup_date = req.next_followup_date
+    elif req.outcome == "Ringing / No Answer":
+        tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        enquiry.next_followup_date = tomorrow
+        
     await db.commit()
     await db.refresh(enquiry)
     return enquiry

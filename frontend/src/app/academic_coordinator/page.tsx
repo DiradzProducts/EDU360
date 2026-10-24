@@ -64,6 +64,7 @@ export default function AcademicCoordinatorPage() {
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskLabel, setNewTaskLabel] = useState<string>('🔄 Faculty Substitution');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('Mrs. Ananya Verma');
   const [newTaskPriority, setNewTaskPriority] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
@@ -363,6 +364,8 @@ export default function AcademicCoordinatorPage() {
         description: newTaskDesc.trim() || undefined,
         category: totalHours <= 24 ? 'urgent' : 'upcoming',
         domain: 'academic',
+        task_label: newTaskLabel,
+        labels: [newTaskLabel],
         due_date: dueDateStr,
         assigned_to: newTaskAssignee,
         assigned_to_role: 'teacher',
@@ -950,8 +953,26 @@ export default function AcademicCoordinatorPage() {
                             {task.status}
                           </span>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="text-xs font-bold text-slate-900 dark:text-white">{task.title}</h3>
+                              {(() => {
+                                const label = task.task_label || (
+                                  task.title.toLowerCase().includes('substitut') ? '🔄 Faculty Substitution' :
+                                  task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('paper') ? '📐 QP Blueprint Draft' :
+                                  task.title.toLowerCase().includes('syllabus') || task.title.toLowerCase().includes('pacing') ? '📚 Syllabus Pacing Catch-up' :
+                                  '📚 Academic Duty'
+                                );
+                                const color = 
+                                  label.includes('Substitution') ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800' :
+                                  label.includes('Blueprint') ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800' :
+                                  label.includes('Syllabus') ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' :
+                                  'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800';
+                                return (
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${color}`}>
+                                    {label}
+                                  </span>
+                                );
+                              })()}
                               {task.relief_requested && (
                                 <span className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-md font-black text-[9px] uppercase tracking-wider">
                                   Relief Requested
@@ -1623,6 +1644,40 @@ export default function AcademicCoordinatorPage() {
               <button onClick={() => setShowCreateModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreateTask} className="space-y-3 text-xs">
+              {/* Linear-Style Assignable Task Type Chip Selector */}
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Select Task Type Label:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: '🔄 Faculty Substitution', color: 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800' },
+                    { label: '📐 QP Blueprint Draft', color: 'bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800' },
+                    { label: '📚 Syllabus Pacing Catch-up', color: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' }
+                  ].map(chip => (
+                    <button
+                      type="button"
+                      key={chip.label}
+                      onClick={() => {
+                        setNewTaskLabel(chip.label);
+                        if (!newTaskTitle || newTaskTitle.startsWith('Grade') || newTaskTitle.startsWith('Cover') || newTaskTitle.startsWith('Submit') || newTaskTitle.startsWith('Syllabus')) {
+                          if (chip.label.includes('Substitution')) setNewTaskTitle('Cover Period 3 (Class 9-A) - Faculty Leave');
+                          if (chip.label.includes('Blueprint')) setNewTaskTitle('Submit Class 8-B Term 1 Math Paper Blueprint');
+                          if (chip.label.includes('Pacing')) setNewTaskTitle('Syllabus Catch-up: Linear Equations Unit Review');
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        newTaskLabel === chip.label
+                          ? `${chip.color} shadow-xs ring-2 ring-indigo-500 font-extrabold scale-[1.02]`
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300">Task Title</label>
                 <input 

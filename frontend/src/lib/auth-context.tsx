@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { User, UserRole } from './types';
 
 interface AuthContextType {
@@ -122,7 +122,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -170,6 +169,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, mounted]);
 
+  // BFCache (Back-Forward Cache) Protection:
+  // If user navigates via browser Back/Forward after logout, prevent viewing stale cached portal snapshot
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('edu360_active_user') : null;
+        const hasCookie = typeof document !== 'undefined' && document.cookie.includes('edu360_session=');
+        if (!stored || !hasCookie) {
+          window.location.replace('/login');
+        }
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   const getRoleRoute = (targetRole: UserRole): string => {
     return `/${targetRole}`;
   };
@@ -179,21 +194,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(role);
-    router.push(getRoleRoute(role));
+    router.replace(getRoleRoute(role));
   };
 
   const loginWithCredentials = (newUser: User) => {
     setUser(newUser);
     localStorage.setItem('edu360_active_user', JSON.stringify(newUser));
     syncSessionCookie(newUser.role);
-    router.push(getRoleRoute(newUser.role));
+    router.replace(getRoleRoute(newUser.role));
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('edu360_active_user');
     syncSessionCookie(null);
-    router.push('/login');
+    router.replace('/login');
   };
 
   const switchRole = (newRole: UserRole) => {
@@ -201,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(newRole);
-    router.push(getRoleRoute(newRole));
+    router.replace(getRoleRoute(newRole));
   };
 
   const role: UserRole = user ? user.role : 'teacher';

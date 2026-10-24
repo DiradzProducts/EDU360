@@ -267,9 +267,9 @@ async def seed_data():
         ])
 
         enquiries = [
-            AdmissionEnquiry(id=1, student_name="Siddharth Rao", parent_name="Mrs. Meera Rao", email="meera.rao@example.com", phone="+91 98450 99881", target_grade="Class 8", stage="visit", chat_transcript=chat_sample_1, notes="Campus tour scheduled tomorrow 11:30 AM. Highly interested in STEM lab."),
-            AdmissionEnquiry(id=2, student_name="Tanvi Deshmukh", parent_name="Dr. Amit Deshmukh", email="amit.d@example.com", phone="+91 98450 99882", target_grade="Class 6", stage="followup", chat_transcript=None, notes="Needs fee milestone installment breakdown via email."),
-            AdmissionEnquiry(id=3, student_name="Aditya Roy", parent_name="Mrs. Neha Roy", email="neha.roy@example.com", phone="+91 98450 99883", target_grade="Class 9", stage="new", chat_transcript=None, notes="Inquired about sports facilities and robotics club."),
+            AdmissionEnquiry(id=1, student_name="Siddharth Rao", parent_name="Mrs. Meera Rao", email="meera.rao@example.com", phone="+91 98450 99881", target_grade="Class 8", stage="followup", lead_temperature="hot", source="Website Form", doc_report_card=True, doc_birth_cert=True, doc_transfer_cert=False, next_followup_date=datetime.date.today().isoformat(), chat_transcript=chat_sample_1, notes="• [Oct 22] Initial Enquiry: Parent asked about online CBSE curriculum and demo class."),
+            AdmissionEnquiry(id=2, student_name="Tanvi Deshmukh", parent_name="Dr. Amit Deshmukh", email="amit.d@example.com", phone="+91 98450 99882", target_grade="Class 6", stage="followup", lead_temperature="warm", source="Parent Referral", doc_report_card=True, doc_birth_cert=False, doc_transfer_cert=False, next_followup_date=datetime.date.today().isoformat(), chat_transcript=None, notes="• [Oct 21] Callback Requested: Discuss fee installment schedule."),
+            AdmissionEnquiry(id=3, student_name="Aditya Roy", parent_name="Mrs. Neha Roy", email="neha.roy@example.com", phone="+91 98450 99883", target_grade="Class 9", stage="new", lead_temperature="cold", source="Social Media Ad", doc_report_card=False, doc_birth_cert=False, doc_transfer_cert=False, chat_transcript=None, notes="Direct web inquiry: Inquired about Cambridge curriculum options."),
         ]
         db.add_all(enquiries)
 
