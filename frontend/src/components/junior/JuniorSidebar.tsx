@@ -24,21 +24,32 @@ import {
   ChevronRight,
   ArrowRightLeft,
   LogOut,
-  Camera
+  Camera,
+  Palette,
+  BookOpen,
+  Home,
+  Video,
+  Calendar
 } from 'lucide-react';
 import { User } from '@/lib/types';
 import { isSoundEffectsEnabled, toggleSoundEffects, soundEngine, playButtonClick } from '@/lib/sound-effects';
 
 export type JuniorTab =
+  | 'dashboard'
+  | 'adventures'
+  | 'timetable'
+  | 'recordings'
+  | 'homework'
+  | 'exams'
+  | 'badges'
+  | 'holidays'
+  | 'profile'
   | 'launchpad'
   | 'quests'
   | 'booster'
+  | 'creative'
   | 'bus'
-  | 'homework'
-  | 'exams'
   | 'portfolio'
-  | 'timetable'
-  | 'profile'
   | 'vault';
 
 export interface JuniorSidebarProps {
@@ -86,87 +97,80 @@ export function JuniorSidebar({
 
   const navGroups = [
     {
-      title: 'ADVENTURE & QUESTS',
+      title: 'ACADEMICS & CLASSROOM',
       items: [
         {
-          id: 'launchpad' as JuniorTab,
-          label: 'Adventure Hub',
-          icon: Rocket,
+          id: 'dashboard' as JuniorTab,
+          label: 'Explorer Dashboard',
+          icon: Home,
           badge: 'Today',
           color: 'text-sky-500 bg-sky-50 dark:bg-sky-950/60 border-sky-400 text-sky-600 dark:text-sky-400'
         },
         {
-          id: 'quests' as JuniorTab,
-          label: 'Daily Quests',
+          id: 'adventures' as JuniorTab,
+          label: "Today's Adventures",
           icon: Sparkles,
-          badge: '2 Due',
+          badge: '3 Quests',
           color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-600 dark:text-amber-400'
-        },
-        {
-          id: 'booster' as JuniorTab,
-          label: 'Magic Booster',
-          icon: Compass,
-          badge: `Lvl ${level}`,
-          color: 'text-pink-500 bg-pink-50 dark:bg-pink-950/60 border-pink-400 text-pink-600 dark:text-pink-400'
-        },
-        {
-          id: 'bus' as JuniorTab,
-          label: 'Yellow Bus Radar',
-          icon: Bus,
-          badge: 'Live ETA',
-          color: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-950/60 border-yellow-400 text-yellow-700 dark:text-yellow-300'
-        }
-      ]
-    },
-    {
-      title: 'ACADEMICS & CLASSROOM (PRD)',
-      items: [
-        {
-          id: 'homework' as JuniorTab,
-          label: 'Homework & Tasks',
-          icon: FileText,
-          badge: '2 Pending',
-          color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-600 dark:text-amber-400'
-        },
-        {
-          id: 'exams' as JuniorTab,
-          label: 'Exams & Results',
-          icon: BarChart,
-          badge: '88.5%',
-          color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60 border-blue-400 text-blue-600 dark:text-blue-400'
-        },
-        {
-          id: 'portfolio' as JuniorTab,
-          label: 'Dual Portfolio',
-          icon: Trophy,
-          badge: 'Verified',
-          color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 text-indigo-600 dark:text-indigo-400'
         },
         {
           id: 'timetable' as JuniorTab,
           label: 'Class Timetable',
           icon: CalendarDays,
-          badge: '6 Periods',
-          color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60 border-blue-400 text-blue-600 dark:text-blue-400'
+          badge: 'Mon-Fri',
+          color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 text-indigo-600 dark:text-indigo-400'
+        },
+        {
+          id: 'recordings' as JuniorTab,
+          label: 'Class Recordings',
+          icon: Video,
+          badge: 'Replays',
+          color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60 border-rose-400 text-rose-600 dark:text-rose-400'
         }
       ]
     },
     {
-      title: 'RECORDS & VAULT (PRD)',
+      title: 'TASKS & STAR EXAMS',
       items: [
         {
-          id: 'profile' as JuniorTab,
-          label: 'Explorer SIS ID',
-          icon: Award,
-          badge: '94.2%',
+          id: 'homework' as JuniorTab,
+          label: 'Homework & Magic Book',
+          icon: BookOpen,
+          badge: '1 Due',
           color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 text-emerald-600 dark:text-emerald-400'
         },
         {
-          id: 'vault' as JuniorTab,
-          label: 'Official Documents',
-          icon: FolderLock,
-          badge: 'View Only',
-          color: 'text-slate-600 bg-slate-100 dark:bg-slate-800 border-slate-400 text-slate-800 dark:text-slate-200'
+          id: 'exams' as JuniorTab,
+          label: 'Star Challenges (Exams)',
+          icon: Award,
+          badge: 'Quizzes',
+          color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/60 border-purple-400 text-purple-600 dark:text-purple-400'
+        }
+      ]
+    },
+    {
+      title: 'REWARDS & SCHOOL LIFE',
+      items: [
+        {
+          id: 'badges' as JuniorTab,
+          label: 'Badges & Trophy Room',
+          icon: Trophy,
+          badge: `Lvl ${level}`,
+          color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-600 dark:text-amber-400'
+        },
+        {
+          id: 'holidays' as JuniorTab,
+          label: 'Holidays Calendar',
+          icon: Calendar,
+          badge: 'Vacations',
+          color: 'text-pink-500 bg-pink-50 dark:bg-pink-950/60 border-pink-400 text-pink-600 dark:text-pink-400'
+        },
+        {
+          id: 'profile' as JuniorTab,
+          label: 'Explorer SIS Profile',
+          icon: Shield,
+          badge: 'Class 3-A',
+          color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60 border-blue-400 text-blue-600 dark:text-blue-400'
         }
       ]
     }

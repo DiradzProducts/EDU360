@@ -21,6 +21,7 @@ import {
 import { downloadMarksMemoFile } from '@/lib/export-utils';
 import { api } from '@/lib/api';
 import { ReportCardItem } from '@/lib/types';
+import { EvaluationKeyModal } from '@/components/evaluation-key-modal';
 
 interface SubjectMark {
   id: string;
@@ -41,6 +42,10 @@ export function ParentMarksView() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
   const [downloadToast, setDownloadToast] = useState<string | null>(null);
+
+  // AI Evaluation Key Modal State
+  const [evalModalOpen, setEvalModalOpen] = useState(false);
+  const [selectedEvalSubject, setSelectedEvalSubject] = useState('Mathematics');
 
   // Admit Card (Hall Ticket) Modal State
   const [showAdmitCardModal, setShowAdmitCardModal] = useState(false);
@@ -227,8 +232,19 @@ export function ParentMarksView() {
           </p>
         </div>
 
-        {/* Action Buttons: Admit Card, Email to Parent & Download Memo */}
+        {/* Action Buttons: Admit Card, Email to Parent, AI Evaluation Key & Download Memo */}
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setSelectedEvalSubject('Mathematics');
+              setEvalModalOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Sparkles className="h-4 w-4 text-amber-300" />
+            <span>🔍 View Evaluation Key &amp; AI Script</span>
+          </button>
+
           <button
             onClick={handleOpenAdmitCard}
             className="flex items-center gap-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
@@ -829,6 +845,18 @@ export function ParentMarksView() {
           </div>
         </div>
       )}
+
+      {/* AI Evaluation Key & Graded Script Modal */}
+      <EvaluationKeyModal
+        isOpen={evalModalOpen}
+        onClose={() => setEvalModalOpen(false)}
+        subject={selectedEvalSubject}
+        examTitle={isTerm1 ? 'Term 1 Periodic Assessment (Mid-Term)' : 'Unit Test 2 Assessment'}
+        studentName="Aarav Sharma"
+        totalScore={22.5}
+        maxTotal={25}
+        grade="A1"
+      />
 
     </div>
   );

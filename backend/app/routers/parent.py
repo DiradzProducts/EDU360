@@ -1,4 +1,6 @@
 import datetime
+from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -320,6 +322,35 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
     await db.commit()
     await db.refresh(milestone)
     return milestone
+
+class WhatsAppFeeDispatchRequest(BaseModel):
+    phone: Optional[str] = "+91 98480 22338"
+    milestone_id: Optional[int] = None
+    action_type: str = "receipt"  # "receipt" | "summary"
+
+@router.post("/fees/whatsapp-dispatch")
+async def dispatch_parent_fee_whatsapp(req: WhatsAppFeeDispatchRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Simulated dummy WhatsApp dispatch endpoint for fee receipts and fee summary dispatches.
+    Logs dispatch and returns realistic payload.
+    """
+    phone = req.phone or "+91 98480 22338"
+    timestamp_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+    
+    if req.action_type == "summary":
+        message_preview = f"EDU360 Accounts: Aarav Sharma (Class 8-B). Total Paid: ₹35,000 | Pending Dues: ₹18,500 (Due: 25 Oct 2026). Settle instantly via https://edu360.school/pay/aarav8b"
+    else:
+        receipt_code = f"REC-2026-FEE-{req.milestone_id or 5821}"
+        message_preview = f"EDU360 Accounts: Official payment receipt #{receipt_code} for Aarav Sharma has been generated. Download authenticated PDF: https://edu360.school/receipts/{receipt_code}.pdf"
+    
+    return {
+        "success": True,
+        "message": f"WhatsApp message successfully dispatched to {phone}",
+        "dispatched_to": phone,
+        "action_type": req.action_type,
+        "timestamp": timestamp_str,
+        "message_preview": message_preview
+    }
 
 # --- 5. Leave Request Application ---
 @router.post("/leave-requests", response_model=LeaveRequestResponse)

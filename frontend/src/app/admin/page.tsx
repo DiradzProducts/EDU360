@@ -85,8 +85,10 @@ import { RoleGuard } from '@/components/role-guard';
 import { Footer } from '@/components/footer';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
 import { useTheme } from '@/lib/theme-context';
+import { AdminCockpit } from '@/components/admin-cockpit';
 
 type AdminTab = 
+  | 'cockpit'
   | 'triage' 
   | 'tasks'
   | 'crm' 
@@ -101,7 +103,7 @@ type AdminTab =
   | 'rollover';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('triage');
+  const [activeTab, setActiveTab] = useState<AdminTab>('cockpit');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const { theme } = useTheme();
@@ -608,6 +610,27 @@ export default function AdminPage() {
                   Daily Operations
                 </span>
               )}
+
+              {/* Executive Cockpit */}
+              <button
+                onClick={() => { setActiveTab('cockpit'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'cockpit'
+                    ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold'
+                }`}
+                title="Executive Cockpit"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Sparkles className="h-4 w-4 shrink-0 text-amber-400" />
+                  {!sidebarCollapsed && <span className="truncate">Executive Cockpit</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/20 text-white">
+                    Live
+                  </span>
+                )}
+              </button>
 
               {/* Priority Triage */}
               <button
@@ -1206,6 +1229,21 @@ export default function AdminPage() {
           {/* ===================================================== */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-slate-200 dark:border-slate-800">
             <button
+              onClick={() => setActiveTab('cockpit')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                activeTab === 'cockpit'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              <span>Executive Cockpit</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'cockpit' ? 'bg-white/20 text-white' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'}`}>
+                Live
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('triage')}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
                 activeTab === 'triage'
@@ -1362,6 +1400,10 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {/* TAB 1: PRIORITY TRIAGE & ACTION ENGINE               */}
           {/* ===================================================== */}
+          {activeTab === 'cockpit' && (
+            <AdminCockpit onNavigateTab={(tab: string) => setActiveTab(tab as AdminTab)} />
+          )}
+
           {activeTab === 'triage' && (
             <div className="space-y-6">
               

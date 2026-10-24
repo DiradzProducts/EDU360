@@ -122,18 +122,31 @@ Built to give middle and high school students clear ownership over their academi
 
 ## 🎈 5. Junior Student Portal (`/junior`)
 
-Designed specifically for elementary K–5 students with vibrant, playful aesthetics, high engagement, and zero cognitive strain.
+Designed specifically for elementary K–5 students in an online schooling environment with vibrant, playful aesthetics, gamified engagement, and zero adult clutter (no confusing fees or administrative bureaucracy).
 
-* **Daily Learning Quests**: Bite-sized, gamified daily challenges with completion stars.
-* **Visual Reward Center**: Animated badges, animal mascots, and unlockable avatar stickers.
-* **Simplified Classroom**: Large, colorful subject cards (Math, English, Science, Art) with audio-visual story lessons.
+* **🏠 Explorer Dashboard**: Warm welcome card, today's schedule at a glance, and 1-click launch to the live classroom.
+* **🧭 Today's Adventures**: 3 daily micro-milestones (Maths, Phonics, Art) with celebration fanfare, sound chimes, and +50 Star rewards.
+* **📅 Class Timetable**: Clean visual weekly Mon–Fri schedule showing class periods, teacher avatars, and virtual meeting links.
+* **🎬 Class Recordings Archive**: Video replay library categorized by subject (Maths, English, Science, Art) with a video modal player, 10s skip controls, and +10 curiosity star claims.
+* **📖 Homework & Magic Book (Subject-Wise & Date-Wise)**:
+  * **Dual Filter Bar**: Filter by subject (🧮 Mathematics, 📖 Phonics & English, 🌱 Science & Nature, 🎨 Art & Craft) and by date timeline (`Due Today • Oct 24`, `Due Tomorrow • Oct 25`, `Next Week • Oct 27–28`, `Graded & Checked`).
+  * **Worksheet Submission Dropzone**: 1-click snapshot photo or PDF upload, `Download Template Worksheet PDF`, and +30 to +40 Star rewards.
+  * **Teacher Feedback & Stickers**: Displays teacher handwritten-style praise, star scores (e.g. `20/20 ⭐`), and verified annotated correction sheets.
+* **🏆 Exams & Assessment Hub (5-Day Timetable & Star Quizzes)**:
+  * **📅 Term 1 Examination Timetable**: Day-by-day examination schedule (Oct 28 to Nov 2) for Mathematics, English Storytelling, EVS, Hindi Phonics, and Art Practical with syllabus coverage, Zoom room link, and revision paper PDF downloads.
+  * **🚀 Practice Star Quizzes (Mock Tests)**: Voice-narrated interactive quizzes (`speechSynthesis`) with audio hints, instant bounce feedback, and +50 Star rewards.
+  * **📊 Term 1 Report Card & Grades**: Verified marks memo with overall distinction (88.5% Grade A1) and subject-wise faculty remarks.
+* **🎖️ Badges & Trophy Room**: Level 3 progression bar (Explorer Aarav advancing to Astronaut), 3D badges grid, Magic Power Booster mystery chests, and dual portfolio (school participations + uploaded certificates).
+* **🎉 Holidays Calendar**: Colorful festive school holiday calendar with live countdowns to vacations (Diwali, Winter Break, Holi) and zero stress.
+* **🛡️ Explorer SIS Profile**: Student digital school identity card with photo, roll number, blood group, and emergency contact details.
 
 ---
 
 ## 👨‍👩‍👧 6. Parent Co-Tracking Portal (`/parent`)
 
-Designed for busy parents with an anti-spam, high-transparency communication philosophy.
+Designed for busy parents with an anti-spam, high-transparency communication philosophy and multi-child support.
 
+* **🧒 Multi-Child Context Switcher**: 1-tap header pill switcher to toggle seamlessly between siblings (e.g., Aarav in Class 8-B vs. Ananya in Class 3-A). Guarantees 100% isolated academic contexts, fee schedules, and absence leaves without mix-ups.
 * **Anti-Spam Moving Slider Carousel**: Replaces notification bombardment with a calm, categorized carousel for daily circulars and school events.
 * **Live School Bus GPS Tracking (Route 4)**: Real-time map simulation showing current bus location, estimated arrival time (ETA), and direct call button to bus driver/attendant.
 * **Student Focus Table Co-Tracking**: Parents see their child's 1-week focus plan and can sign off on daily rough notebook checks.

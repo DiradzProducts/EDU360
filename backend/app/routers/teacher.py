@@ -323,10 +323,10 @@ async def get_my_permissions():
     return _my_permissions
 
 @router.post("/apply-permission")
-async def apply_teacher_permission(req: dict):
+async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)):
     new_perm = {
         "id": len(_my_permissions) + 10,
-        "teacher_name": "Mrs. Ananya Verma",
+        "teacher_name": req.get("teacher_name", "Mrs. Ananya Verma"),
         "type": req.get("type", "Short Permission (1 hr)"),
         "reason": req.get("reason", "Personal errand"),
         "status": "Pending",
@@ -334,6 +334,40 @@ async def apply_teacher_permission(req: dict):
         "applied_at": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
     }
     _my_permissions.insert(0, new_perm)
+
+    # Cross-Role Interlock: push directly into Admin permissions queue
+    try:
+        from app.routers.admin import _teacher_permissions
+        _teacher_permissions.insert(0, {
+            "id": new_perm["id"],
+            "teacher_name": new_perm["teacher_name"],
+            "type": new_perm["type"],
+            "reason": new_perm["reason"],
+            "status": "Pending",
+            "date": new_perm["date"]
+        })
+    except Exception as ex:
+        print("Admin permissions queue sync warning:", ex)
+
+    # Persist in SQLite staff_permissions table
+    try:
+        from app.models.models import StaffPermission
+        perm_record = StaffPermission(
+            staff_id=1,
+            staff_name=new_perm["teacher_name"],
+            role="Teacher",
+            permission_type=new_perm["type"],
+            from_date=new_perm["date"],
+            to_date=new_perm["date"],
+            affected_periods="Period 3 (Class 8-B)",
+            reason=new_perm["reason"],
+            status="Pending"
+        )
+        db.add(perm_record)
+        await db.commit()
+    except Exception as ex:
+        print("StaffPermission DB persist warning:", ex)
+
     return {"success": True, "permission": new_perm}
 
 # --- 9. Teacher-Centric Chronological Personal Schedule ---

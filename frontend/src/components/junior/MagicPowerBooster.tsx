@@ -30,6 +30,7 @@ export function MagicPowerBooster({ studentId = 6, chests, onChestClaimed }: Mag
   const [chestList, setChestList] = useState<MagicBoosterChest[]>(chests);
   const [celebrationData, setCelebrationData] = useState<ChestUnlockResponse | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [lockedHint, setLockedHint] = useState<string | null>(null);
 
   const handleChestClick = async (chest: MagicBoosterChest) => {
     playButtonClick();
@@ -40,7 +41,8 @@ export function MagicPowerBooster({ studentId = 6, chests, onChestClaimed }: Mag
     }
 
     if (chest.status === 'locked') {
-      alert(`Day ${chest.day_number} is locked! Complete preceding focus adventures with Mom, Dad & Teacher to open this chest! 🗝️`);
+      setLockedHint(`Day ${chest.day_number} Chest is still locked! Complete today's adventures first to unlock this secret chest 🗝️`);
+      setTimeout(() => setLockedHint(null), 3500);
       return;
     }
 
@@ -90,6 +92,19 @@ export function MagicPowerBooster({ studentId = 6, chests, onChestClaimed }: Mag
       
       {/* Background Rainbow Shimmer Arc */}
       <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-gradient-to-tr from-pink-300/20 to-yellow-300/20 blur-3xl pointer-events-none" />
+
+      {/* Locked Hint Floating Banner */}
+      {lockedHint && (
+        <div className="p-3.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span>🗝️</span>
+            <span>{lockedHint}</span>
+          </div>
+          <button onClick={() => setLockedHint(null)} className="p-1 hover:opacity-75 cursor-pointer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* ========================================================
           HEADER & CONCEPTS

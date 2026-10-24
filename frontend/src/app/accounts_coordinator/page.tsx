@@ -1081,6 +1081,40 @@ export default function AccountsCoordinatorPage() {
               </div>
             </div>
 
+            {/* New Admissions Pop-In Alert Banner */}
+            {defaulters.filter(d => d.is_admission_fee).length > 0 && (
+              <div className="rounded-2xl border-2 border-purple-300 dark:border-purple-800 bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 p-4 shadow-sm animate-in fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                      🎓
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-purple-950 dark:text-purple-200">
+                          Active Enrolment Intake Queue: {defaulters.filter(d => d.is_admission_fee).length} New Admission(s) Converted by Admissions Desk
+                        </span>
+                        <span className="text-[10px] font-bold bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full animate-pulse">
+                          Auto-Synced from CRM
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-800 dark:text-purple-300 mt-0.5">
+                        Students converted to SIS directory with pending admission fee schedules. Click to inspect, collect offline, or trigger WhatsApp payment links.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setDefaulterCategoryFilter('NEW_ADMISSION')}
+                    className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 self-start sm:self-auto"
+                  >
+                    <span>Inspect Intake Queue ({defaulters.filter(d => d.is_admission_fee).length})</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Defaulters Table */}
             <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
               <div className="overflow-x-auto">

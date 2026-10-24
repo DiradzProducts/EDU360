@@ -25,7 +25,8 @@ import {
   PayrollBatchItem, StaffPayslipItem, PurchaseOrderItem, FleetExpenseItem,
   GeneratePayrollPayload, AuthorizePayrollPayload, DisbursePayrollPayload,
   CreatePurchaseOrderPayload, VerifyGRNPayload, CreateFleetExpensePayload, SettleFleetExpensePayload,
-  AssetCustodyLogItem, ClearanceCheckResult
+  AssetCustodyLogItem, ClearanceCheckResult,
+  ExecutivePulseResponse
 } from './types';
 import { FocusRosterItem, getFocusStudentById, updateFocusStudent, INITIAL_FOCUS_ROSTER } from './focus-data';
 
@@ -916,6 +917,28 @@ let fallbackFeeDefaulters: FeeDefaulter[] = [
   { id: 4, student_name: "Rohan Iyer", class_name: "Class 9-A", roll_no: "18", parent_name: "Mr. S. Iyer", parent_phone: "+91 98111 00018", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 8, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' }
 ];
 
+let fallbackPaymentTransactions: PaymentTransactionItem[] = [
+  {
+    id: 1,
+    utr_number: "UPI/2026101901/HDFC",
+    student_name: "Aarav Sharma",
+    class_name: "Class 8-B",
+    parent_name: "Mr. Rajesh Sharma",
+    amount: 35000,
+    payment_method: "UPI (Google Pay)",
+    bank_name: "HDFC School Collections Gateway",
+    milestone_title: "Term 1 Comprehensive Fee (Tuition, Lab & Sports)",
+    status: "Success",
+    transaction_date: "10 Oct 2026",
+    reconciled: true,
+    reconciled_at: "11 Oct 2026, 10:15 AM",
+    reconciled_by: "Mr. Arvind Krishnan",
+    gateway_ref: "pay_online_1_1728555300",
+    notes: "Settled via Parent Online Portal",
+    created_at: "2026-10-10T10:15:00Z"
+  }
+];
+
 let fallbackSubstitutions: SubstitutionSlot[] = [
   {
     id: 1,
@@ -1763,7 +1786,77 @@ async function fetchWithFallback<T>(url: string, options?: RequestInit, fallback
   }
 }
 
+
+let fallbackExecutivePulse: ExecutivePulseResponse = {
+  quick_action_counts: {
+    pending_tcs: 2,
+    pending_staff_permissions: 1,
+    pending_fee_waivers: 1,
+    sla_escalations: 0
+  },
+  admissions: {
+    new_inflows_mtd: 45,
+    active_followups: 18,
+    total_enrolled: 142,
+    total_capacity: 180,
+    capacity_percentage: 78.9,
+    exits_count_ytd: 2,
+    grade_capacities: [
+      { grade: 'Class 8', enrolled: 92, capacity: 100 },
+      { grade: 'Class 9', enrolled: 78, capacity: 100 },
+      { grade: 'Class 10', enrolled: 84, capacity: 100 }
+    ]
+  },
+  accounts: {
+    today_collections: 145000,
+    today_transactions_count: 12,
+    aging: {
+      under_30_days: 210000,
+      days_30_to_60: 140000,
+      over_60_days_critical: 65000
+    },
+    payroll: {
+      batch_month: 'October 2026',
+      total_staff: 44,
+      total_amount: 1820000,
+      status: 'Ready_For_Authorization'
+    },
+    gateway_settlement_pipeline: 85000
+  },
+  exams: {
+    active_exams: [
+      { class_name: 'Class 10', subject: 'Pre-Board Mathematics', time: '09:30 AM – 12:30 PM', status: 'In Progress' },
+      { class_name: 'Class 8', subject: 'General Science Periodic', time: '10:00 AM – 11:30 AM', status: 'In Progress' }
+    ],
+    upcoming_exams: [
+      { class_name: 'Class 9', subject: 'English Literature', date: 'Monday, 27 Oct' },
+      { class_name: 'Class 8', subject: 'Social Studies', date: 'Wednesday, 29 Oct' }
+    ],
+    grading_queue_pending_papers: 120,
+    trajectory: [
+      { class_name: 'Class 8', prev_avg: 68.0, current_avg: 74.0, change_pct: 6.0, status: 'Improved' },
+      { class_name: 'Class 9', prev_avg: 73.0, current_avg: 66.0, change_pct: -7.0, status: 'Alert' },
+      { class_name: 'Class 10', prev_avg: 81.0, current_avg: 83.0, change_pct: 2.0, status: 'Stable' }
+    ],
+    remedial_student_count: 8
+  },
+  staff_and_pacing: {
+    staff_present: 42,
+    staff_total: 44,
+    attendance_pct: 95.5,
+    pacing_lag_alerts_count: 1,
+    lagging_classes: [
+      { class_name: 'Class 9-A', subject: 'Physics', teacher_name: 'Mr. Vikram Sharma', lag_units: 2 }
+    ]
+  }
+};
+
 export const api = {
+
+  getExecutivePulse: async () => {
+    return fetchWithFallback<ExecutivePulseResponse>('/api/admin/executive-pulse', undefined, fallbackExecutivePulse);
+  },
+
   // Auth Endpoints
   verifySchoolCode: async (code: string) => {
     return fetchWithFallback<any>('/api/auth/verify-school-code', {
@@ -2031,64 +2124,86 @@ export const api = {
       return fallbackEnquiries.find(e => e.id === id);
     }
   },
-  convertEnquiryToStudent: async (id: number) => {
+  convertEnquiryToStudent: async (id: number, options?: { section?: string; feeAmount?: number; feeStatus?: 'Paid' | 'Pending'; paymentMethod?: string }) => {
     const enq = fallbackEnquiries.find(e => e.id === id);
     const studentName = enq ? enq.student_name : 'New Student';
     const rollNo = `ADM-2026-08${String(id).padStart(2, '0')}`;
     const targetGrade = enq?.target_grade || 'Class 8';
-    const section = `${targetGrade}-B`;
+    const sectionName = options?.section ? `${targetGrade}-${options.section}` : `${targetGrade}-B`;
     const invoiceNo = `INV-2026-ADM-${id}84`;
-    const feeAmt = 25000;
+    const feeAmt = options?.feeAmount ?? 25000;
+    const feeStatus = options?.feeStatus ?? 'Pending';
+    const payMethod = options?.paymentMethod ?? 'UPI';
 
     fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { 
       ...e, 
       stage: 'converted', 
-      notes: `${e.notes || ''} | Enrolled as ${rollNo} in ${section}. Admission Invoice #${invoiceNo} dispatched to Accounts.` 
+      notes: `${e.notes || ''} | Enrolled as ${rollNo} in ${sectionName}. Admission Fee ₹${feeAmt} (${feeStatus}).` 
     } : e);
 
-    // Auto-create Admission Fee Receivable into Accounts Desk!
-    const newAdmissionFee: FeeMilestone = {
-      id: fallbackFees.length + 1,
-      student_id: id + 100,
-      title: `Admission & Term 1 Tuition (${studentName} · ${rollNo})`,
-      amount: feeAmt,
-      due_date: new Date(Date.now() + 5 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      status: 'Overdue',
-    };
-    fallbackFees.unshift(newAdmissionFee);
-
-    const newAdmissionDefaulter: FeeDefaulter = {
-      id: fallbackFeeDefaulters.length + 100,
-      student_id: id + 100,
-      student_name: studentName,
-      class_name: section,
-      roll_no: rollNo,
-      parent_name: enq?.parent_name || `Parent of ${studentName}`,
-      parent_phone: enq?.phone || '+91 98450 12345',
-      milestone_title: `Admission & Term 1 Tuition (${invoiceNo})`,
-      amount_due: feeAmt,
-      days_overdue: 1,
-      reminder_sent: false,
-      is_admission_fee: true,
-      exam_clearance: false,
-      status: 'Overdue'
-    };
-    fallbackFeeDefaulters.unshift(newAdmissionDefaulter);
+    if (feeStatus === 'Paid') {
+      const receiptNo = `REC-ADM-2026-${id + 100}`;
+      const newPaidTx: PaymentTransactionItem = {
+        id: fallbackPaymentTransactions.length + 1,
+        utr_number: `UPI/${Date.now()}${id}/ADMISSION`,
+        student_name: studentName,
+        class_name: sectionName,
+        parent_name: enq?.parent_name || `Parent of ${studentName}`,
+        amount: feeAmt,
+        payment_method: payMethod,
+        bank_name: 'HDFC School Collections Gateway',
+        milestone_title: `One-Time Admission & Registration Fee (${receiptNo})`,
+        status: 'Success',
+        reconciled: false,
+        gateway_ref: `pay_adm_${id}_${Date.now()}`,
+        transaction_date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        notes: `New Enrolment Intake Admission Fee • Receipt #${receiptNo}`,
+        created_at: new Date().toISOString()
+      };
+      fallbackPaymentTransactions.unshift(newPaidTx);
+    } else {
+      const newAdmissionDefaulter: FeeDefaulter = {
+        id: fallbackFeeDefaulters.length + 100,
+        student_id: id + 100,
+        student_name: studentName,
+        class_name: sectionName,
+        roll_no: rollNo,
+        parent_name: enq?.parent_name || `Parent of ${studentName}`,
+        parent_phone: enq?.phone || '+91 98450 12345',
+        milestone_title: `One-Time Admission Fee (${invoiceNo})`,
+        amount_due: feeAmt,
+        days_overdue: 0,
+        reminder_sent: false,
+        is_admission_fee: true,
+        exam_clearance: true,
+        status: 'Overdue'
+      };
+      fallbackFeeDefaulters.unshift(newAdmissionDefaulter);
+    }
 
     try {
-      return await fetchWithFallback(`/api/admin/crm/enquiries/${id}/convert`, { method: 'POST' });
+      return await fetchWithFallback(`/api/admin/crm/enquiries/${id}/convert`, {
+        method: 'POST',
+        body: JSON.stringify({
+          section: options?.section || 'B',
+          admission_fee: feeAmt,
+          fee_status: feeStatus,
+          payment_method: payMethod
+        })
+      });
     } catch {
       return {
         success: true,
         student_name: studentName,
         roll_no: rollNo,
-        allocated_section: section,
+        allocated_section: sectionName,
         admission_fee_invoice: invoiceNo,
         fee_amount: feeAmt,
+        fee_status: feeStatus,
         parent_user: enq?.email || 'parent.portal@edu360.internal',
         temp_password: `Edu360@${new Date().getFullYear()}`,
         parent_phone: enq?.phone || '+91 98450 12345',
-        message: `Student enrolled successfully as ${rollNo}! Admission Fee Invoice generated & dispatched to Accounts Desk.`
+        message: `Student enrolled successfully as ${rollNo}! Admission Fee ₹${feeAmt} (${feeStatus}) dispatched to Accounts Desk.`
       };
     }
   },
@@ -2887,6 +3002,22 @@ export const api = {
       return fallbackFees.find(f => f.id === milestoneId)!;
     }
   },
+  dispatchFeeWhatsApp: async (milestoneId?: number, actionType: 'receipt' | 'summary' = 'receipt', phone: string = '+91 98480 22338') => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; message_preview: string }>(`/api/parent/fees/whatsapp-dispatch`, {
+        method: 'POST',
+        body: JSON.stringify({ milestone_id: milestoneId, action_type: actionType, phone })
+      });
+    } catch {
+      return {
+        success: true,
+        message: `WhatsApp message successfully dispatched to ${phone}`,
+        message_preview: actionType === 'summary' 
+          ? `EDU360 Accounts: Aarav Sharma (Class 8-B). Total Paid: ₹35,000 | Pending Dues: ₹18,500. Settle online at https://edu360.school/pay/aarav8b`
+          : `EDU360 Accounts: Official payment receipt #REC-2026-FEE-${milestoneId || 5821} generated. Download authenticated PDF: https://edu360.school/receipts/REC.pdf`
+      };
+    }
+  },
   parentDigitalSignTC: async (studentId: number = 1) => {
     try {
       return await fetchWithFallback(`/api/parent/exit-clearance/${studentId}/digital-sign`, {
@@ -2942,9 +3073,57 @@ export const api = {
   // Student Endpoints
   getStudentRecordings: async () => {
     const fallbackRecordings: ClassRecording[] = [
-      { id: 1, title: "Quadratic Equations: Factorization by Splitting", subject: "Mathematics", chapter: "Chapter 4: Quadratic Equations", teacher_name: "Mrs. Ananya Verma", duration: "42 mins", video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", thumbnail: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400", date: "11 Oct 2026" },
-      { id: 2, title: "Force and Laws of Motion: Newton's 3rd Law", subject: "Physics", chapter: "Chapter 9: Laws of Motion", teacher_name: "Dr. K. Raman", duration: "48 mins", video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", thumbnail: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=400", date: "09 Oct 2026" },
-      { id: 3, title: "The Merchant of Venice: Act II Scene IV", subject: "English", chapter: "Drama Literature", teacher_name: "Ms. Rachel Adams", duration: "38 mins", video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", thumbnail: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=400", date: "07 Oct 2026" }
+      { 
+        id: 1, 
+        title: "Quadratic Equations: Factorization by Splitting", 
+        subject: "Mathematics", 
+        chapter: "Chapter 4: Quadratic Equations", 
+        teacher_name: "Mrs. Ananya Verma", 
+        duration: "42 mins", 
+        video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
+        thumbnail: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400", 
+        date: "11 Oct 2026",
+        topic_tags: ["#QuadraticEquations", "#Factorization", "#CBSE_Ch4"],
+        chapters: [
+          { time: "02:15", label: "Standard Quadratic Form ax² + bx + c = 0", key_takeaway: "Ensure a ≠ 0 and all terms are gathered onto the LHS." },
+          { time: "09:40", label: "Splitting Middle Term: Finding p & q", key_takeaway: "Identify pairs where p·q = a·c and p+q = b." },
+          { time: "18:25", label: "Sign Conventions & Negative Coefficients", key_takeaway: "Watch negative signs when grouping: 2x² - 5x - 3." },
+          { time: "31:10", label: "CBSE Board Model Problem Practice", key_takeaway: "Always conclude with distinct root values x = α, β." }
+        ]
+      },
+      { 
+        id: 2, 
+        title: "Force and Laws of Motion: Newton's 3rd Law", 
+        subject: "Physics", 
+        chapter: "Chapter 9: Laws of Motion", 
+        teacher_name: "Dr. K. Raman", 
+        duration: "48 mins", 
+        video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", 
+        thumbnail: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=400", 
+        date: "09 Oct 2026",
+        topic_tags: ["#NewtonsLaws", "#ActionReaction", "#Momentum"],
+        chapters: [
+          { time: "01:30", label: "Action & Reaction Pair Definition", key_takeaway: "Forces always occur in matched opposite pairs on different bodies." },
+          { time: "14:15", label: "Conservation of Linear Momentum", key_takeaway: "Total initial momentum equals total final momentum in isolated systems." },
+          { time: "28:50", label: "Recoil Velocity of Guns & Rockets", key_takeaway: "V_recoil = -(m_bullet · v_bullet) / M_gun." }
+        ]
+      },
+      { 
+        id: 3, 
+        title: "The Merchant of Venice: Act II Scene IV", 
+        subject: "English", 
+        chapter: "Drama Literature", 
+        teacher_name: "Ms. Rachel Adams", 
+        duration: "38 mins", 
+        video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", 
+        thumbnail: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=400", 
+        date: "07 Oct 2026",
+        topic_tags: ["#Shakespeare", "#Act2Scene4", "#LiteraryAnalysis"],
+        chapters: [
+          { time: "03:10", label: "Lorenzo and Gratiano Dialogue Context", key_takeaway: "Plotting the masque and Lorenzo's elopement with Jessica." },
+          { time: "16:40", label: "Theme of Disguise & Elizabethan Theater", key_takeaway: "Torchbearer symbolism in Venetian festival nights." }
+        ]
+      }
     ];
     return fetchWithFallback<ClassRecording[]>('/api/student/recordings', undefined, fallbackRecordings);
   },

@@ -563,6 +563,12 @@ export interface StudentPortfolio {
   description?: string;
 }
 
+export interface ChapterTimestamp {
+  time: string;
+  label: string;
+  key_takeaway?: string;
+}
+
 export interface ClassRecording {
   id: number;
   title: string;
@@ -575,6 +581,8 @@ export interface ClassRecording {
   thumbnail_url?: string;
   date: string;
   date_recorded?: string;
+  topic_tags?: string[];
+  chapters?: ChapterTimestamp[];
 }
 
 export interface StaffMemberItem {
@@ -1411,5 +1419,104 @@ export interface SettleFleetExpensePayload {
   payment_utr: string;
   notes?: string;
 }
+
+// --- Base Executive Command Center Pulse Types ---
+
+export interface QuickActionCounts {
+  pending_tcs: number;
+  pending_staff_permissions: number;
+  pending_fee_waivers: number;
+  sla_escalations: number;
+}
+
+export interface GradeCapacityItem {
+  grade: string;
+  enrolled: number;
+  capacity: number;
+}
+
+export interface AdmissionsPulse {
+  new_inflows_mtd: number;
+  active_followups: number;
+  total_enrolled: number;
+  total_capacity: number;
+  capacity_percentage: number;
+  exits_count_ytd: number;
+  grade_capacities: GradeCapacityItem[];
+}
+
+export interface ExecutiveAgingSummary {
+  under_30_days: number;
+  days_30_to_60: number;
+  over_60_days_critical: number;
+}
+
+export interface PayrollBatchStatus {
+  batch_month: string;
+  total_staff: number;
+  total_amount: number;
+  status: string;
+}
+
+export interface AccountsPulse {
+  today_collections: number;
+  today_transactions_count: number;
+  aging: ExecutiveAgingSummary;
+  payroll: PayrollBatchStatus;
+  gateway_settlement_pipeline: number;
+}
+
+export interface ActiveExamItem {
+  class_name: string;
+  subject: string;
+  time: string;
+  status: string;
+}
+
+export interface UpcomingExamItem {
+  class_name: string;
+  subject: string;
+  date: string;
+}
+
+export interface AcademicTrajectoryItem {
+  class_name: string;
+  prev_avg: number;
+  current_avg: number;
+  change_pct: number;
+  status: string;
+}
+
+export interface ExamsPulse {
+  active_exams: ActiveExamItem[];
+  upcoming_exams: UpcomingExamItem[];
+  grading_queue_pending_papers: number;
+  trajectory: AcademicTrajectoryItem[];
+  remedial_student_count: number;
+}
+
+export interface LaggingClassItem {
+  class_name: string;
+  subject: string;
+  teacher_name: string;
+  lag_units: number;
+}
+
+export interface StaffAndPacingPulse {
+  staff_present: number;
+  staff_total: number;
+  attendance_pct: number;
+  pacing_lag_alerts_count: number;
+  lagging_classes: LaggingClassItem[];
+}
+
+export interface ExecutivePulseResponse {
+  quick_action_counts: QuickActionCounts;
+  admissions: AdmissionsPulse;
+  accounts: AccountsPulse;
+  exams: ExamsPulse;
+  staff_and_pacing: StaffAndPacingPulse;
+}
+
 
 

@@ -1385,3 +1385,112 @@ class ClearanceCheckResponse(BaseModel):
     pending_items: List[str] = []
     total_unpaid_fines: float = 0.0
 
+
+# --- Base Admin Command Center Executive Pulse Schemas ---
+
+class QuickActionCounts(BaseModel):
+    pending_tcs: int = 0
+    pending_staff_permissions: int = 0
+    pending_fee_waivers: int = 0
+    sla_escalations: int = 0
+
+class GradeCapacityItem(BaseModel):
+    grade: str
+    enrolled: int
+    capacity: int
+
+class AdmissionsPulse(BaseModel):
+    new_inflows_mtd: int
+    active_followups: int
+    total_enrolled: int
+    total_capacity: int
+    capacity_percentage: float
+    exits_count_ytd: int
+    grade_capacities: List[GradeCapacityItem] = []
+
+class ExecutiveAgingSummary(BaseModel):
+    under_30_days: float
+    days_30_to_60: float
+    over_60_days_critical: float
+
+class PayrollBatchStatus(BaseModel):
+    batch_month: str
+    total_staff: int
+    total_amount: float
+    status: str
+
+class AccountsPulse(BaseModel):
+    today_collections: float
+    today_transactions_count: int
+    aging: ExecutiveAgingSummary
+    payroll: PayrollBatchStatus
+    gateway_settlement_pipeline: float
+
+class ActiveExamItem(BaseModel):
+    class_name: str
+    subject: str
+    time: str
+    status: str
+
+class UpcomingExamItem(BaseModel):
+    class_name: str
+    subject: str
+    date: str
+
+class AcademicTrajectoryItem(BaseModel):
+    class_name: str
+    prev_avg: float
+    current_avg: float
+    change_pct: float
+    status: str
+
+class ExamsPulse(BaseModel):
+    active_exams: List[ActiveExamItem] = []
+    upcoming_exams: List[UpcomingExamItem] = []
+    grading_queue_pending_papers: int
+    trajectory: List[AcademicTrajectoryItem] = []
+    remedial_student_count: int
+
+class LaggingClassItem(BaseModel):
+    class_name: str
+    subject: str
+    teacher_name: str
+    lag_units: int
+
+class StaffAndPacingPulse(BaseModel):
+    staff_present: int
+    staff_total: int
+    attendance_pct: float
+    pacing_lag_alerts_count: int
+    lagging_classes: List[LaggingClassItem] = []
+
+class ExecutivePulseResponse(BaseModel):
+    quick_action_counts: QuickActionCounts
+    admissions: AdmissionsPulse
+    accounts: AccountsPulse
+    exams: ExamsPulse
+    staff_and_pacing: StaffAndPacingPulse
+
+class StaffPermissionResponse(BaseModel):
+    id: int
+    staff_id: int
+    staff_name: str
+    role: str
+    permission_type: str
+    from_date: str
+    to_date: str
+    affected_periods: Optional[str] = None
+    reason: str
+    status: str
+    approved_by: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class StaffPermissionReviewRequest(BaseModel):
+    status: str = "Approved"  # "Approved" | "Rejected"
+    notes: Optional[str] = None
+    assign_substitute: bool = True
+
+

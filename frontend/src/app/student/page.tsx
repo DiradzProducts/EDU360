@@ -78,6 +78,7 @@ import { StudentRemedialView } from '@/components/student-remedial-view';
 import { Footer } from '@/components/footer';
 import { JuniorStudentDashboard } from '@/components/junior/JuniorStudentDashboard';
 import { OnlineExamModal } from '@/components/online-exam-modal';
+import { EvaluationKeyModal } from '@/components/evaluation-key-modal';
 import { downloadStudyNotesFile, downloadMarksMemoFile } from '@/lib/export-utils';
 
 type NavSection = 
@@ -223,6 +224,7 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
   const [recordings, setRecordings] = useState<ClassRecording[]>([]);
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('All');
   const [activeVideoModal, setActiveVideoModal] = useState<ClassRecording | null>(null);
+  const [activeRecordingChapterIndex, setActiveRecordingChapterIndex] = useState<number>(0);
 
   // Portfolio State
   const [portfolio, setPortfolio] = useState<StudentPortfolio[]>([]);
@@ -263,6 +265,7 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
 
   // Admit Card (Hall Ticket) Modal State
   const [showAdmitCardModal, setShowAdmitCardModal] = useState(false);
+  const [isEvalKeyOpen, setIsEvalKeyOpen] = useState(false);
   const [admitCardData, setAdmitCardData] = useState<any>(null);
   const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
 
@@ -3087,11 +3090,20 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
 
               {/* SUBJECT-WISE SCORE TABLE */}
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    Term 1 — Subject Performance Matrix &amp; Grades
-                  </h3>
-                  <span className="text-xs text-slate-500 font-semibold">Standardized CBSE Assessment</span>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      Term 1 — Subject Performance Matrix &amp; Grades
+                    </h3>
+                    <span className="text-xs text-slate-500 font-semibold">Standardized CBSE Assessment</span>
+                  </div>
+                  <button
+                    onClick={() => setIsEvalKeyOpen(true)}
+                    className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                    <span>🔍 View Evaluation Key &amp; AI Evaluated Script</span>
+                  </button>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -3526,9 +3538,28 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
                         Instructor: {rec.teacher_name}
                       </p>
 
+                      {rec.topic_tags && rec.topic_tags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 pt-1">
+                          {rec.topic_tags.map((tag, tIdx) => (
+                            <span key={tIdx} className="text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {rec.chapters && rec.chapters.length > 0 && (
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                          <span>📑 {rec.chapters.length} Synced Chapter Markers</span>
+                        </div>
+                      )}
+
                       <div className="pt-2 flex items-center gap-2 border-t border-slate-100">
                         <button
-                          onClick={() => setActiveVideoModal(rec)}
+                          onClick={() => {
+                            setActiveRecordingChapterIndex(0);
+                            setActiveVideoModal(rec);
+                          }}
                           className="flex-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 py-1.5 text-xs font-bold text-center"
                         >
                           Play Lesson
@@ -5242,51 +5273,129 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
         );
       })()}
 
-      {/* MODAL 5: VIDEO RECORDING PLAYER */}
-      {activeVideoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="relative max-w-3xl w-full bg-[#0F172A] rounded-3xl overflow-hidden shadow-2xl border border-slate-700 text-white">
-            <div className="flex items-center justify-between p-4 border-b border-slate-800">
-              <div>
-                <span className="text-[10px] font-bold text-blue-400 bg-blue-900/40 px-2 py-0.5 rounded">
-                  {activeVideoModal.subject}
-                </span>
-                <h3 className="text-xs sm:text-sm font-bold text-white mt-1">
-                  {activeVideoModal.title}
-                </h3>
+      {/* MODAL 5: VIDEO RECORDING PLAYER WITH CHAPTER TIMESTAMPS */}
+      {activeVideoModal && (() => {
+        const currentChapters = activeVideoModal.chapters || [
+          { time: "02:15", label: "Chapter Introduction & Core Concept", key_takeaway: "Master fundamental equations and domain conventions before attempting calculations." },
+          { time: "12:30", label: "Step-by-Step Derivation & Worked Examples", key_takeaway: "Step marking applies strictly; write explicit grouping steps." },
+          { time: "25:40", label: "Common Traps, Sign Rules & Verification", key_takeaway: "Double-check negative coefficient expansions." }
+        ];
+        const selectedChapter = currentChapters[activeRecordingChapterIndex] || currentChapters[0];
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200 overflow-y-auto">
+            <div className="relative max-w-3xl w-full bg-[#0F172A] rounded-3xl overflow-hidden shadow-2xl border border-slate-700 text-white flex flex-col my-auto max-h-[92vh]">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-blue-400 bg-blue-900/40 px-2 py-0.5 rounded">
+                      {activeVideoModal.subject}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {activeVideoModal.chapter}
+                    </span>
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-bold text-white mt-1">
+                    {activeVideoModal.title}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setActiveVideoModal(null)}
+                  className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setActiveVideoModal(null)}
-                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <div className="relative aspect-video bg-black flex items-center justify-center">
-              <video
-                src={activeVideoModal.video_url}
-                controls
-                autoPlay
-                className="w-full h-full object-cover"
-              />
-            </div>
+              {/* Video Player */}
+              <div className="relative aspect-video bg-black flex items-center justify-center shrink-0">
+                <video
+                  src={activeVideoModal.video_url}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-cover"
+                />
+              </div>
 
-            <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs">
-              <span className="text-slate-400">
-                Duration: {activeVideoModal.duration} • Instructor: {activeVideoModal.teacher_name}
-              </span>
-              <button
-                onClick={() => handleDownloadNotes(activeVideoModal.subject, activeVideoModal.chapter)}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 px-3.5 py-1.5 text-xs font-bold text-white"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>Download Chapter Notes (PDF)</span>
-              </button>
+              {/* Synced Chapter Timestamps Section */}
+              <div className="p-4 bg-slate-900/90 border-t border-slate-800 overflow-y-auto space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                    📑 Synced Chapter Markers &amp; Concept Timestamps
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Click timestamp to review teacher concept takeaway
+                  </span>
+                </div>
+
+                {/* Chapter Pill List */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {currentChapters.map((ch, idx) => {
+                    const isSelected = activeRecordingChapterIndex === idx;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveRecordingChapterIndex(idx)}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600/20 border-blue-500 text-white ring-1 ring-blue-500/50'
+                            : 'bg-slate-800/60 border-slate-700/80 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/30 text-blue-300">
+                            ⏱ {ch.time}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[9px] font-bold text-emerald-400">Active</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold block mt-1 line-clamp-1">
+                          {ch.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Chapter Formula / Takeaway Box */}
+                {selectedChapter && (
+                  <div className="p-3 rounded-2xl bg-slate-800 border border-slate-700 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-blue-400">
+                        Teacher Concept Takeaway (Timestamp: {selectedChapter.time})
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {activeVideoModal.teacher_name}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-200 leading-relaxed">
+                      💡 {selectedChapter.key_takeaway || selectedChapter.label}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
+                <span className="text-slate-400 text-center sm:text-left">
+                  Duration: {activeVideoModal.duration} • Instructor: {activeVideoModal.teacher_name} • {activeVideoModal.date}
+                </span>
+                <button
+                  onClick={() => handleDownloadNotes(activeVideoModal.subject, activeVideoModal.chapter)}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-bold text-white transition-all shadow-md cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download Synced Notes (PDF)</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Live Proctoring & Online CBT Examination Modal */}
       <OnlineExamModal
@@ -5300,6 +5409,18 @@ function StandardStudentDashboard({ onSwitchToJunior }: { onSwitchToJunior?: () 
           setIsOnlineExamOpen(false);
           triggerToast(`✓ Examination submitted successfully! ${wordsCount} words recorded under academic audit vault.`);
         }}
+      />
+
+      {/* AI Evaluation Key & Graded Script Modal */}
+      <EvaluationKeyModal
+        isOpen={isEvalKeyOpen}
+        onClose={() => setIsEvalKeyOpen(false)}
+        subject="Mathematics"
+        examTitle="Term 1 Periodic Assessment (Mid-Term)"
+        studentName={user?.name || 'Aarav Sharma'}
+        totalScore={22.5}
+        maxTotal={25}
+        grade="A1"
       />
 
       {/* MODAL: CREATE HOMEWORK OR PROJECT ASSIGNMENT */}

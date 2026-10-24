@@ -37,7 +37,8 @@ import {
   Square,
   Eye,
   Menu,
-  X
+  X,
+  Share2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
@@ -60,6 +61,53 @@ import { ParentSisView } from '@/components/parent-sis-view';
 import { ParentPtmView } from '@/components/parent-ptm-view';
 import { ParentNotificationDrawer, ParentNotification } from '@/components/parent-notification-drawer';
 import { Footer } from '@/components/footer';
+import { playButtonClick, playStarCollect } from '@/lib/sound-effects';
+
+export interface ParentChildProfile {
+  id: number;
+  name: string;
+  className: string;
+  rollNo: number;
+  initials: string;
+  tier: 'k5' | 'middle' | 'secondary';
+  attendanceStatus: string;
+  currentClass: string;
+  homeroomFaculty: string;
+  remedialSubject: string;
+  remedialDay: string;
+  pendingHomeworkCount: number;
+}
+
+export const SHARMA_CHILDREN: ParentChildProfile[] = [
+  {
+    id: 6,
+    name: 'Aarav Sharma',
+    className: 'Class 8-B',
+    rollNo: 14,
+    initials: 'AS',
+    tier: 'secondary',
+    attendanceStatus: 'Present Today ✓ • Period 3 Mathematics (Room 204)',
+    currentClass: 'Live Virtual Class: Period 3 Active',
+    homeroomFaculty: 'Mrs. Ananya Verma',
+    remedialSubject: 'Mathematics',
+    remedialDay: 'Day 2 of 7',
+    pendingHomeworkCount: 1
+  },
+  {
+    id: 7,
+    name: 'Ananya Sharma',
+    className: 'Class 3-A',
+    rollNo: 8,
+    initials: 'ANS',
+    tier: 'k5',
+    attendanceStatus: 'Present Today ✓ • Phonics & Story Magic',
+    currentClass: 'Live Virtual Class: Junior Rocket Active',
+    homeroomFaculty: 'Ms. Priya Nair',
+    remedialSubject: 'Reading & Phonics',
+    remedialDay: 'Day 1 of 5',
+    pendingHomeworkCount: 1
+  }
+];
 
 export type ParentNavSection = 
   | 'dashboard'
@@ -81,6 +129,16 @@ export default function ParentPage() {
   const { theme, toggleTheme } = useTheme();
   const sidebarTheme = theme;
 
+  // Multi-Child Profile Switcher State
+  const [activeKidId, setActiveKidId] = useState<number>(6);
+  const activeKid = SHARMA_CHILDREN.find((k) => k.id === activeKidId) || SHARMA_CHILDREN[0];
+  const [parentToast, setParentToast] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setParentToast(msg);
+    setTimeout(() => setParentToast(null), 4000);
+  };
+
   // Domain Data State
   const [focusTable, setFocusTable] = useState<FocusTable | null>(null);
   const [busRoute, setBusRoute] = useState<BusRoute | null>(null);
@@ -93,6 +151,7 @@ export default function ParentPage() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('UPI (Google Pay)');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [feeToast, setFeeToast] = useState<string | null>(null);
 
   // Leave Form State
   const [leaveReason, setLeaveReason] = useState('');
@@ -154,17 +213,17 @@ export default function ParentPage() {
   const [selectedHwModal, setSelectedHwModal] = useState<Homework | null>(null);
   const [parentHwVerifiedMap, setParentHwVerifiedMap] = useState<Record<number, boolean>>({});
 
-  // Load Parent Portal Data
+  // Load Parent Portal Data (Scoped to Active Kid)
   useEffect(() => {
     async function loadData() {
       try {
         const [ftRes, busRes, feesRes, subRes, exitsRes, hwRes] = await Promise.all([
-          api.getFocusTable(1),
-          api.getBusTracker(1),
-          api.getFees(1),
-          api.getSubmission(1),
+          api.getFocusTable(activeKidId),
+          api.getBusTracker(activeKidId),
+          api.getFees(activeKidId),
+          api.getSubmission(activeKidId),
           api.getExitClearances(),
-          api.getTodayHomework(1)
+          api.getTodayHomework(activeKidId)
         ]);
         setFocusTable(ftRes);
         setBusRoute(busRes);
@@ -179,17 +238,17 @@ export default function ParentPage() {
       }
     }
     loadData();
-  }, []);
+  }, [activeKidId]);
 
   // Handlers
   const handleAdvanceBus = async () => {
-    const updated = await api.stepBusRoute(1);
+    const updated = await api.stepBusRoute(activeKidId);
     setBusRoute(updated);
   };
 
   const handleToggleParentFocusCheck = async () => {
-    await api.toggleParentFocusCheck(1);
-    const updated = await api.getFocusTable(1);
+    await api.toggleParentFocusCheck(activeKidId);
+    const updated = await api.getFocusTable(activeKidId);
     setFocusTable(updated);
   };
 
@@ -198,7 +257,7 @@ export default function ParentPage() {
     setPaying(true);
     try {
       const updated = await api.payFee(payingMilestone.id, selectedPaymentMethod);
-      const allFees = await api.getFees(1);
+      const allFees = await api.getFees(activeKidId);
       setFees(allFees);
       setPaymentSuccess(true);
       confetti({
@@ -215,6 +274,28 @@ export default function ParentPage() {
     }
   };
 
+  const handleSendWhatsAppSummary = async () => {
+    try {
+      await api.dispatchFeeWhatsApp(undefined, 'summary', '+91 98480 22338');
+      setFeeToast('📱 WhatsApp Dispatched to +91 98480 22338: Fee statement & payment summary link delivered!');
+      setTimeout(() => setFeeToast(null), 4000);
+    } catch {
+      setFeeToast('📱 WhatsApp Fee summary dispatched to +91 98480 22338!');
+      setTimeout(() => setFeeToast(null), 4000);
+    }
+  };
+
+  const handleSendWhatsAppReceipt = async (m: FeeMilestone) => {
+    try {
+      await api.dispatchFeeWhatsApp(m.id, 'receipt', '+91 98480 22338');
+      setFeeToast(`📱 WhatsApp Receipt #${m.receipt_no || `REC-2026-FEE-${m.id}`} sent to +91 98480 22338!`);
+      setTimeout(() => setFeeToast(null), 4000);
+    } catch {
+      setFeeToast(`📱 WhatsApp receipt sent to +91 98480 22338!`);
+      setTimeout(() => setFeeToast(null), 4000);
+    }
+  };
+
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveReason) return;
@@ -224,8 +305,9 @@ export default function ParentPage() {
       setLeaveReason('');
       setLeaveFrom('');
       setLeaveTo('');
-      alert('Leave application dispatched to Mrs. Ananya Verma');
-    }, 1500);
+      playStarCollect();
+      triggerToast(`✓ Leave application for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}!`);
+    }, 1200);
   };
 
   const handleDigitalSignExit = async () => {
@@ -522,23 +604,46 @@ export default function ParentPage() {
               </div>
             </div>
 
-            {/* Right: Child Status Chip (Clean single indicator) */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 shadow-xs">
-                <div className="h-7 w-7 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 flex items-center justify-center font-bold text-xs">
-                  AS
-                </div>
-                <div className="text-left text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Aarav Sharma</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.2 text-[9px] font-black">
-                      Present Today
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
-                    Class 8B • Roll #14
-                  </span>
-                </div>
+            {/* Right: Multi-Kid Context Switcher Pill Bar */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-800/90 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 hidden lg:inline-block uppercase tracking-wider">
+                  Child:
+                </span>
+                {SHARMA_CHILDREN.map((kid) => {
+                  const isSelected = kid.id === activeKidId;
+                  return (
+                    <button
+                      key={kid.id}
+                      onClick={() => {
+                        playButtonClick();
+                        setActiveKidId(kid.id);
+                        triggerToast(`Switched active profile to ${kid.name} (${kid.className})`);
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? kid.tier === 'k5'
+                            ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                            : 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-700/80'
+                      }`}
+                      title={`Switch active context to ${kid.name} (${kid.className})`}
+                    >
+                      <span className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px] font-black">
+                        {kid.initials}
+                      </span>
+                      <div className="flex flex-col text-left leading-tight">
+                        <span className="font-bold">{kid.name.split(' ')[0]}</span>
+                        <span className="text-[9px] opacity-80 font-normal">
+                          {kid.className}
+                        </span>
+                      </div>
+                      {isSelected && (
+                        <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse ml-0.5" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </header>
@@ -564,17 +669,17 @@ export default function ParentPage() {
                       <div className="flex flex-wrap items-center gap-2.5">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-3 py-1 text-xs font-semibold">
                           <Users className="h-3.5 w-3.5 text-blue-500" />
-                          <span>Student: <strong>Aarav Sharma</strong> (Class 8-B • Roll #14)</span>
+                          <span>Student: <strong>{activeKid.name}</strong> ({activeKid.className} • Roll #{activeKid.rollNo})</span>
                         </span>
 
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1 text-xs font-semibold">
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Present Today ✓ • Period 3 Mathematics (Room 204)</span>
+                          <span>{activeKid.attendanceStatus}</span>
                         </span>
 
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium">
                           <Video className="h-3 w-3 text-blue-500" />
-                          <span>Live Virtual Class: Period 3 Active</span>
+                          <span>{activeKid.currentClass}</span>
                         </span>
                       </div>
 
@@ -583,7 +688,7 @@ export default function ParentPage() {
                           Welcome, Dr. &amp; Mrs. Sharma!
                         </h1>
                         <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                          Here is your daily parental oversight summary for Thursday, 18 Oct 2026. Aarav is attending Period 3 Mathematics, his live online classes are progressing smoothly, and his Day 2 remedial practice notebook is ready for your parental verification sign-off tonight.
+                          Daily parental oversight summary for {activeKid.name}. {activeKid.name.split(' ')[0]} is currently attending {activeKid.className}, live classes are progressing smoothly, and homeroom instruction is guided by {activeKid.homeroomFaculty}.
                         </p>
                       </div>
 
@@ -591,12 +696,12 @@ export default function ParentPage() {
                       <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
                         <span className="flex items-center gap-1 font-medium">
                           <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
-                          <span>Homeroom Faculty: <strong className="text-slate-700 dark:text-slate-200">Mrs. Ananya Verma</strong></span>
+                          <span>Homeroom Faculty: <strong className="text-slate-700 dark:text-slate-200">{activeKid.homeroomFaculty}</strong></span>
                         </span>
                         <span className="text-slate-300 dark:text-slate-700">•</span>
                         <span className="flex items-center gap-1 font-medium">
                           <Target className="h-3.5 w-3.5 text-blue-500" />
-                          <span>Remedial Plan: <strong className="text-slate-700 dark:text-slate-200">Mathematics (Day 2 of 7)</strong></span>
+                          <span>Focus Plan: <strong className="text-slate-700 dark:text-slate-200">{activeKid.remedialSubject} ({activeKid.remedialDay})</strong></span>
                         </span>
                       </div>
                     </div>
@@ -1242,11 +1347,11 @@ export default function ParentPage() {
                       isParentView={true}
                       currentRole="parent"
                       studentInfo={{
-                        name: 'Aarav Sharma',
-                        rollNo: 'Roll #14',
-                        className: 'Class 8-B',
-                        parentName: 'Mr. Rajesh Sharma',
-                        parentPhone: '+91 98450 12345'
+                        name: activeKid.name,
+                        rollNo: `Roll #${activeKid.rollNo}`,
+                        className: activeKid.className,
+                        parentName: 'Dr. & Mrs. Sharma',
+                        parentPhone: '+91 98480 22338'
                       }}
                       onToggleParentCheck={handleToggleParentFocusCheck}
                     />
@@ -1274,7 +1379,7 @@ export default function ParentPage() {
                     Shared Student Focus Table &amp; Diagnostic Evidence
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Collaborate directly with Mrs. Ananya Verma on Aarav&apos;s weak concept intervention timetable
+                    Collaborate directly with {activeKid.homeroomFaculty} on {activeKid.name}&apos;s weak concept intervention timetable
                   </p>
                 </div>
 
@@ -1285,11 +1390,11 @@ export default function ParentPage() {
                     isParentView={true}
                     currentRole="parent"
                     studentInfo={{
-                      name: 'Aarav Sharma',
-                      rollNo: 'Roll #14',
-                      className: 'Class 8-B',
-                      parentName: 'Mr. Rajesh Sharma',
-                      parentPhone: '+91 98450 12345'
+                      name: activeKid.name,
+                      rollNo: `Roll #${activeKid.rollNo}`,
+                      className: activeKid.className,
+                      parentName: 'Dr. & Mrs. Sharma',
+                      parentPhone: '+91 98480 22338'
                     }}
                     onToggleParentCheck={handleToggleParentFocusCheck}
                   />
@@ -1339,145 +1444,295 @@ export default function ParentPage() {
             {/* ===================================================== */}
             {/* VIEW 7: FEES & ONLINE PAYMENTS                        */}
             {/* ===================================================== */}
-            {activeNav === 'fees' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                      Fee Milestones &amp; Automated Receipts
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Installment breakdown with instant UPI/Card mock payment and downloadable PDF receipts
-                    </p>
+            {activeNav === 'fees' && (() => {
+              const paidMilestones = fees.filter(m => m.status === 'Paid');
+              const pendingMilestones = fees.filter(m => m.status !== 'Paid');
+              const totalPaid = paidMilestones.reduce((acc, m) => acc + m.amount, 0);
+              const totalDue = pendingMilestones.reduce((acc, m) => acc + m.amount, 0);
+
+              return (
+                <div className="space-y-6">
+                  {/* Floating Fee Toast */}
+                  {feeToast && (
+                    <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 text-white px-5 py-3.5 shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold">{feeToast}</span>
+                    </div>
+                  )}
+
+                  {/* Header & Controls */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                        Student Fee Ledger &amp; Digital Receipts
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Aarav Sharma • Class 8B (Roll #14) • Academic Session 2026-2027
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleSendWhatsAppSummary}
+                      className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
+                      title="Send complete fee dues & payment status to registered WhatsApp"
+                    >
+                      <Share2 className="h-4 w-4" />
+                      <span>📱 Send Fee Status to WhatsApp</span>
+                    </button>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {fees.map((m) => {
-                    const isPaid = m.status === 'Paid';
-                    const isOverdue = m.status === 'Overdue';
-
-                    return (
-                      <div 
-                        key={m.id}
-                        className={`rounded-3xl border p-6 flex flex-col justify-between shadow-sm transition-all ${
-                          isPaid 
-                            ? 'border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-slate-900' 
-                            : isOverdue
-                            ? 'border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 ring-2 ring-amber-100 dark:ring-amber-900/30'
-                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              isPaid ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : isOverdue ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                            }`}>
-                              {m.status}
-                            </span>
-                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Due: {m.due_date}</span>
-                          </div>
-
-                          <h3 className="mt-3 text-sm font-black text-slate-900 dark:text-white">{m.title}</h3>
-                          <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            ₹{m.amount.toLocaleString()}
-                          </div>
-
-                          {isPaid && m.receipt_no && (
-                            <div className="mt-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 p-3 border border-emerald-200 dark:border-emerald-800">
-                              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 block">Receipt #{m.receipt_no}</span>
-                              <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Paid on {m.paid_at} via {m.payment_method}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                          {isPaid ? (
-                            <button
-                              onClick={() => alert(`Downloading Official PDF Receipt for ${m.receipt_no}`)}
-                              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
-                            >
-                              <Download className="h-3.5 w-3.5 text-blue-600" />
-                              <span>Download PDF Receipt</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setPayingMilestone(m)}
-                              className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-bold shadow-md transition-all active:scale-95"
-                            >
-                              <CreditCard className="h-3.5 w-3.5" />
-                              <span>Pay Online (UPI / Card)</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Payment Modal */}
-                {payingMilestone && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-                      <div>
-                        <h3 className="text-base font-black text-slate-900 dark:text-white">
-                          Instant Fee Payment Gateway (Mock)
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          {payingMilestone.title} • Aarav Sharma (Class 8B)
-                        </p>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Total Payable Amount</span>
-                        <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                          ₹{payingMilestone.amount.toLocaleString()}
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-5 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-400 tracking-wider">
+                          Total Fee Paid
                         </span>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                       </div>
+                      <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                        ₹{totalPaid.toLocaleString()}
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block mt-1">
+                        {paidMilestones.length} Milestones Cleared ✓
+                      </span>
+                    </div>
 
-                      <div className="space-y-2">
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Payment Rail</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {['UPI (Google Pay)', 'UPI (PhonePe)', 'Credit/Debit Card', 'Net Banking'].map((method) => (
-                            <button
-                              key={method}
-                              type="button"
-                              onClick={() => setSelectedPaymentMethod(method)}
-                              className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left ${
-                                selectedPaymentMethod === method
-                                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200'
-                                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              {method}
-                            </button>
-                          ))}
-                        </div>
+                    <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 p-5 shadow-xs ring-1 ring-amber-200 dark:ring-amber-900/40">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-400 tracking-wider">
+                          Need to be Paid (Pending)
+                        </span>
+                        <Clock className="h-4 w-4 text-amber-600" />
                       </div>
+                      <div className="mt-2 text-2xl font-black text-amber-900 dark:text-amber-200 tabular-nums">
+                        ₹{totalDue.toLocaleString()}
+                      </div>
+                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 block mt-1">
+                        {pendingMilestones.length} Pending Milestone(s)
+                      </span>
+                    </div>
 
-                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => setPayingMilestone(null)}
-                          className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handlePayFee}
-                          disabled={paying}
-                          className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-bold shadow-md disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>{paying ? 'Processing Payment...' : `Authorize ₹${payingMilestone.amount.toLocaleString()}`}</span>
-                        </button>
+                    <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 p-5 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-blue-800 dark:text-blue-300 tracking-wider">
+                          Next Upcoming Due
+                        </span>
+                        <Calendar className="h-4 w-4 text-blue-600" />
                       </div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">
+                        25 Oct 2026
+                      </div>
+                      <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 block mt-1">
+                        Term 2 Tuition &amp; Transport Fee
+                      </span>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* Section 1: NEED TO BE PAID (PENDING / DUE) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          1. Need to be Paid (Pending Dues)
+                        </h3>
+                      </div>
+                      <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 rounded-full">
+                        {pendingMilestones.length} Due
+                      </span>
+                    </div>
+
+                    {pendingMilestones.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/30 p-6 text-center text-xs font-bold text-emerald-800">
+                        ✓ All fee installments are completely settled. No outstanding dues!
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pendingMilestones.map((m) => (
+                          <div 
+                            key={m.id}
+                            className="rounded-3xl border-2 border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                  {m.status}
+                                </span>
+                                <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                                  Due Date: {m.due_date}
+                                </span>
+                              </div>
+
+                              <h4 className="mt-3 text-base font-black text-slate-900 dark:text-white">
+                                {m.title}
+                              </h4>
+                              
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Breakdown: Tuition Fee ₹14,000 • Transport &amp; Science Lab ₹4,500
+                              </p>
+
+                              <div className="mt-4 p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Amount Due</span>
+                                <span className="text-2xl font-black text-amber-900 dark:text-amber-200 tabular-nums">
+                                  ₹{m.amount.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                              <button
+                                onClick={() => setPayingMilestone(m)}
+                                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                <CreditCard className="h-4 w-4" />
+                                <span>Pay Now (UPI / Card)</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 2: FEE PAID (OFFICIAL RECEIPTS & SETTLEMENT HISTORY) */}
+                  <div className="space-y-3 pt-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          2. Fee Paid (Official Receipts &amp; History)
+                        </h3>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full">
+                        {paidMilestones.length} Paid
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {paidMilestones.map((m) => (
+                        <div 
+                          key={m.id}
+                          className="rounded-3xl border border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-slate-900 p-6 shadow-xs flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                Paid &amp; Reconciled ✓
+                              </span>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                {m.paid_at || 'Paid'}
+                              </span>
+                            </div>
+
+                            <h4 className="mt-3 text-base font-black text-slate-900 dark:text-white">
+                              {m.title}
+                            </h4>
+
+                            <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                                  Receipt #{m.receipt_no || `REC-2026-FEE-${m.id + 5821}`}
+                                </span>
+                                <span className="text-xs font-black text-slate-900 dark:text-white tabular-nums">
+                                  ₹{m.amount.toLocaleString()}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block font-medium">
+                                Mode: {m.payment_method || 'UPI (Google Pay)'} • Ref: UPI/{m.id}938210/HDFC
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                alert(`Downloading Official School Tax Receipt PDF: ${m.receipt_no || `REC-2026-FEE-${m.id + 5821}`}\nAmount: ₹${m.amount.toLocaleString()}\nStudent: Aarav Sharma (Class 8-B)`);
+                              }}
+                              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                            >
+                              <Download className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Download Receipt</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleSendWhatsAppReceipt(m)}
+                              className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-xs"
+                              title="Send PDF receipt link to WhatsApp"
+                            >
+                              <Share2 className="h-3.5 w-3.5" />
+                              <span>Send to WhatsApp</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Payment Modal */}
+                  {payingMilestone && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+                      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">
+                            Instant Fee Payment Gateway (Mock)
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {payingMilestone.title} • {activeKid.name} ({activeKid.className})
+                          </p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Total Payable Amount</span>
+                          <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                            ₹{payingMilestone.amount.toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Payment Rail</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {['UPI (Google Pay)', 'UPI (PhonePe)', 'Credit/Debit Card', 'Net Banking'].map((method) => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setSelectedPaymentMethod(method)}
+                                className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left ${
+                                  selectedPaymentMethod === method
+                                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                                }`}
+                              >
+                                {method}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setPayingMilestone(null)}
+                            className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePayFee}
+                            disabled={paying}
+                            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-bold shadow-md disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span>{paying ? 'Processing Payment...' : `Authorize ₹${payingMilestone.amount.toLocaleString()}`}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ===================================================== */}
             {/* VIEW 8: STUDENT LEAVE REQUESTS                        */}
@@ -1486,10 +1741,10 @@ export default function ParentPage() {
               <div className="space-y-6">
                 <div className="max-w-xl">
                   <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Submit Student Leave Request
+                    Submit Leave Request for {activeKid.name}
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Dispatches directly to Class Teacher Mrs. Ananya Verma with auto-attendance sync
+                    Dispatches directly to {activeKid.homeroomFaculty} ({activeKid.className}) with auto-attendance sync
                   </p>
 
                   <form onSubmit={handleApplyLeave} className="mt-5 space-y-4 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
@@ -1530,10 +1785,10 @@ export default function ParentPage() {
 
                     <button
                       type="submit"
-                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95"
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
                     >
                       <Send className="h-4 w-4" />
-                      <span>Submit Leave Application to Class Teacher</span>
+                      <span>Submit Leave Application for {activeKid.name.split(' ')[0]}</span>
                     </button>
                   </form>
                 </div>
@@ -1626,7 +1881,7 @@ export default function ParentPage() {
                     Parent Inspection Checklist:
                   </span>
                   <p className="text-xs text-amber-900 dark:text-amber-200 italic leading-relaxed">
-                    &ldquo;Verify that Aarav has completed this work directly into his ruled study notebook with legible handwriting and clean step work before signing verification.&rdquo;
+                    &ldquo;Verify that {activeKid.name.split(' ')[0]} has completed this work directly into the study notebook with legible handwriting and clean step work before signing verification.&rdquo;
                   </p>
                 </div>
               </div>
@@ -1661,6 +1916,14 @@ export default function ParentPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Global Parent Floating Toast */}
+        {parentToast && (
+          <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 text-white px-5 py-3.5 shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <span className="text-xs font-bold">{parentToast}</span>
           </div>
         )}
 

@@ -830,6 +830,46 @@ class AssetCustodyLog(Base):
     item = relationship("InventoryItem", back_populates="custody_logs")
 
 
+class StaffPermission(Base):
+    """Teacher and staff leave requests and administrative access permissions."""
+    __tablename__ = "staff_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("staff_members.id"), nullable=False, index=True)
+    staff_name = Column(String(128), nullable=False)
+    role = Column(String(64), nullable=False, default="Teacher")
+    permission_type = Column(String(64), nullable=False)  # "Medical Leave", "Casual Leave", "On-Duty OD", "Half Day"
+    from_date = Column(String(32), nullable=False)
+    to_date = Column(String(32), nullable=False)
+    affected_periods = Column(String(128), nullable=True)  # "Period 2 (8-A), Period 3 (8-B)"
+    reason = Column(Text, nullable=False)
+    status = Column(String(32), default="Pending", index=True)  # "Pending", "Approved", "Rejected"
+    approved_by = Column(String(128), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class CurriculumPacing(Base):
+    """Tracks syllabus pacing, unit deliveries, and lag sentinels across classes."""
+    __tablename__ = "curriculum_pacing"
+
+    id = Column(Integer, primary_key=True, index=True)
+    class_name = Column(String(32), nullable=False, index=True)  # "Class 9-A"
+    subject = Column(String(64), nullable=False, index=True)     # "Physics"
+    teacher_id = Column(Integer, ForeignKey("staff_members.id"), nullable=False, index=True)
+    teacher_name = Column(String(128), nullable=False)
+    total_units = Column(Integer, default=10)
+    calendar_target_units = Column(Integer, default=5)
+    completed_units = Column(Integer, default=3)
+    lag_units = Column(Integer, default=2)                       # target - completed
+    consecutive_lag_weeks = Column(Integer, default=2)
+    last_lesson_title = Column(String(128), nullable=True)
+    status = Column(String(32), default="Lagging", index=True)   # "Ahead", "On Track", "Lagging", "Critical"
+    last_alert_dispatched_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+
 
 
 

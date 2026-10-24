@@ -76,6 +76,9 @@ export default function AdmissionsCoordinatorPage() {
 
   // Convert Modal State
   const [convertSection, setConvertSection] = useState('A');
+  const [convertAdmissionFee, setConvertAdmissionFee] = useState(25000);
+  const [convertFeeStatus, setConvertFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
+  const [convertPaymentMethod, setConvertPaymentMethod] = useState('UPI (Google Pay)');
 
   // Standalone Drop Modal State
   const [standaloneDropReason, setStandaloneDropReason] = useState('Fee Structure High');
@@ -104,13 +107,11 @@ export default function AdmissionsCoordinatorPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [todayStr, setTodayStr] = useState<string>('2026-10-24');
 
-  // Today string YYYY-MM-DD
-  const todayStr = useMemo(() => {
-    return new Date().toISOString().split('T')[0];
+  useEffect(() => {
+    setTodayStr(new Date().toISOString().split('T')[0]);
+    loadData();
   }, []);
 
   // Helper: Is Call Due Today or Overdue?
@@ -260,11 +261,27 @@ export default function AdmissionsCoordinatorPage() {
   // 7. Confirm SIS Convert
   const handleConfirmConvert = async () => {
     if (!convertModalEnquiry) return;
-    await api.convertEnquiryToStudent(convertModalEnquiry.id);
+    const studentName = convertModalEnquiry.student_name;
+    const feeAmt = Number(convertAdmissionFee);
+    const feeStat = convertFeeStatus;
+    const sec = convertSection;
+
+    await api.convertEnquiryToStudent(convertModalEnquiry.id, {
+      section: sec,
+      feeAmount: feeAmt,
+      feeStatus: feeStat,
+      paymentMethod: convertPaymentMethod
+    });
+
     setConvertModalEnquiry(null);
     const updated = await api.getEnquiries();
     setEnquiries(updated);
-    triggerToast(`${convertModalEnquiry.student_name} officially enrolled in SIS (Section ${convertSection})!`);
+
+    if (feeStat === 'Paid') {
+      triggerToast(`✓ ${studentName} enrolled in Section ${sec}! Admission Fee ₹${feeAmt.toLocaleString()} paid. Forwarded to Accounts for reconciliation.`);
+    } else {
+      triggerToast(`✓ ${studentName} enrolled in Section ${sec}! Admission Fee ₹${feeAmt.toLocaleString()} pending. Popped into Accounts Coordinator queue.`);
+    }
   };
 
   // 8. Confirm Standalone Drop
@@ -1200,14 +1217,71 @@ export default function AdmissionsCoordinatorPage() {
                 <select 
                   value={convertSection} 
                   onChange={e => setConvertSection(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs"
                 >
                   <option value="A">{convertModalEnquiry.target_grade}-A (Section A)</option>
                   <option value="B">{convertModalEnquiry.target_grade}-B (Section B)</option>
                 </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Student will be assigned roll number and credentials in the SIS directory instantly.
-                </p>
+              </div>
+
+              {/* Admission Fee & Accounts Handoff Controls */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    One-Time Admission Fee Structure
+                  </span>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
+                    Accounts Auto-Sync
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Fee Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={convertAdmissionFee}
+                      onChange={e => setConvertAdmissionFee(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-black text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Collection Status</label>
+                    <select
+                      value={convertFeeStatus}
+                      onChange={e => setConvertFeeStatus(e.target.value as 'Paid' | 'Pending')}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                    >
+                      <option value="Paid">✓ Paid Now (Immediate Collection)</option>
+                      <option value="Pending">⏳ Pending (Queue in Accounts)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {convertFeeStatus === 'Paid' ? (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Payment Method</label>
+                    <select
+                      value={convertPaymentMethod}
+                      onChange={e => setConvertPaymentMethod(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                    >
+                      <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
+                      <option value="Bank POS Card">Bank POS Debit/Credit Card</option>
+                      <option value="Cash Counter">Cash Counter Settlement</option>
+                      <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
+                    </select>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+                      ✓ Instant receipt will be issued &amp; forwarded to Accounts Coordinator for bank reconciliation.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                    ⏳ Unpaid invoice of ₹{convertAdmissionFee.toLocaleString()} will immediately pop into the Accounts Coordinator recovery queue.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
