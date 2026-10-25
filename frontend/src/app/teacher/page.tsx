@@ -753,8 +753,11 @@ export default function TeacherPage() {
 
   // Modals state
   const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [newPermType, setNewPermType] = useState('Late Arrival');
+  const [newPermType, setNewPermType] = useState('Shift Adjustment / Late Arrival');
+  const [newPermShift, setNewPermShift] = useState('Morning Shift (08:30 AM - 12:30 PM)');
   const [newPermDate, setNewPermDate] = useState('Today, 11:30 AM - 01:00 PM');
+  const [newPermPeriods, setNewPermPeriods] = useState('Period 2 (Class 8-B Math) & Period 4 (Class 9-A Math)');
+  const [newPermSubstitute, setNewPermSubstitute] = useState('Mrs. Neha Roy (TGT Science)');
   const [newPermReason, setNewPermReason] = useState('');
 
   const [showPTMModal, setShowPTMModal] = useState(false);
@@ -1188,6 +1191,9 @@ export default function TeacherPage() {
     await api.applyTeacherPermission({
       type: newPermType,
       date: newPermDate,
+      shift: newPermShift,
+      affected_periods: newPermPeriods,
+      suggested_substitute: newPermSubstitute,
       reason: newPermReason
     });
 
@@ -7290,64 +7296,103 @@ export default function TeacherPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-0.5 text-xs font-bold">
-                      Staff Self-Service
+                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                      Faculty Portal &bull; Self-Service
                     </span>
                     <span className="text-xs text-slate-500">Human Resources &amp; Approvals</span>
                   </div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    My Leaves &amp; Short-Permission Applications
+                    Faculty Leave, Shift Adjustments &amp; Permissions
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Apply for casual leave, medical leave, or short permissions (late arrival / early departure). Requests sync directly with Management.
+                    Apply for shift adjustments, short permissions, casual leave, or on-duty academic movements. Direct cross-role synchronisation with Principal &amp; Management.
                   </p>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => setShowPermissionModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 text-xs font-bold shadow-xs hover:bg-slate-800 cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>Apply Permission</span>
+                  <span>+ Apply Permission / Shift Request</span>
                 </button>
               </div>
 
-              {/* Permissions History */}
+              {/* 3 Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Total Applications</span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-white block">{myPermissions.length}</span>
+                  <span className="text-[10px] text-slate-500">Academic Year 2026–27</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Approved by Principal</span>
+                  <span className="text-2xl font-black text-emerald-600 block">
+                    {myPermissions.filter(p => p.status === 'Approved').length}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold">100% Timetable Covered</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Pending Review</span>
+                  <span className="text-2xl font-black text-amber-600 block">
+                    {myPermissions.filter(p => p.status === 'Pending').length}
+                  </span>
+                  <span className="text-[10px] text-amber-600 font-bold">Awaiting Management Sign-off</span>
+                </div>
+              </div>
+
+              {/* Permissions History Ledger */}
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Application History ({myPermissions.length})
+                    Application History &amp; Audit Trail ({myPermissions.length})
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Signed by Dr. Sunita Kapoor (Principal)
+                    Reviewed by Dr. Sunita Kapoor (Principal)
                   </span>
                 </div>
 
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
                   {myPermissions.map((perm) => (
                     <div key={perm.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-[10px] font-bold">
                             {perm.type}
                           </span>
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white">{perm.date}</h4>
+                          {perm.shift && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {perm.shift}
+                            </span>
+                          )}
                           <span className="text-[10px] text-slate-400">Applied {perm.applied_at}</span>
                         </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                          {perm.reason}
+                        <p className="text-xs text-slate-700 dark:text-slate-300 italic bg-slate-50/80 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                          &ldquo;{perm.reason}&rdquo;
                         </p>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                          {perm.affected_periods && (
+                            <span>Affected: <b>{perm.affected_periods}</b></span>
+                          )}
+                          {perm.suggested_substitute && (
+                            <span>Proxy: <b>{perm.suggested_substitute}</b></span>
+                          )}
+                        </div>
                       </div>
 
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                      <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-bold border shrink-0 ${
                         perm.status === 'Approved'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
                           : perm.status === 'Pending'
                           ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900'
                           : 'bg-red-50 text-red-700 border-red-200'
                       }`}>
-                        {perm.status === 'Approved' && <CheckCircle2 className="h-3 w-3" />}
-                        {perm.status === 'Pending' && <Clock className="h-3 w-3" />}
+                        {perm.status === 'Approved' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        {perm.status === 'Pending' && <Clock className="h-3.5 w-3.5" />}
                         {perm.status}
                       </span>
                     </div>
@@ -7851,19 +7896,19 @@ export default function TeacherPage() {
       )}
 
       {/* ===================================================== */}
-      {/* MODAL 1: APPLY SHORT-PERMISSION / LEAVE               */}
+      {/* MODAL 1: APPLY SHORT-PERMISSION / LEAVE / SHIFT       */}
       {/* ===================================================== */}
       {showPermissionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-amber-600" />
+                <Clock className="h-5 w-5 text-blue-600" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Apply Short Permission / Leave
+                  Apply Faculty Permission / Shift Adjustment
                 </h3>
               </div>
-              <button onClick={() => setShowPermissionModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -7871,44 +7916,91 @@ export default function TeacherPage() {
             <form onSubmit={handleApplyPermission} className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Permission Type
+                  Permission Nature / Request Category *
                 </label>
                 <select
                   value={newPermType}
                   onChange={(e) => setNewPermType(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 >
-                  <option value="Late Arrival">Late Arrival (1 to 2 hours)</option>
-                  <option value="Early Departure">Early Departure</option>
-                  <option value="On-Duty Movement">On-Duty Movement (Science Olympiad / Competition)</option>
-                  <option value="Casual Leave">Casual Leave (1 Day)</option>
-                  <option value="Medical Leave">Medical Leave</option>
+                  <option value="Shift Adjustment / Late Arrival">Shift Adjustment / Late Arrival (1-2 Hours)</option>
+                  <option value="Early Departure / Shift Concession">Early Departure / Shift Concession</option>
+                  <option value="Emergency Half-Day Permission">Emergency Half-Day Permission</option>
+                  <option value="On-Duty Official Academic Movement">On-Duty Official Movement (Olympiad / Competition)</option>
+                  <option value="Casual Leave (Full Day)">Casual Leave (1 Full Day)</option>
+                  <option value="Medical Leave with Doctor Memo">Medical Leave with Doctor Memo</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Shift / Time Window *
+                  </label>
+                  <select
+                    value={newPermShift}
+                    onChange={(e) => setNewPermShift(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Morning Shift (08:30 AM - 12:30 PM)">Morning Shift (08:30 AM - 12:30 PM)</option>
+                    <option value="Afternoon Shift (12:30 PM - 04:30 PM)">Afternoon Shift (12:30 PM - 04:30 PM)</option>
+                    <option value="Period 1-2 (08:30 AM - 10:15 AM)">Period 1-2 (08:30 AM - 10:15 AM)</option>
+                    <option value="Period 4-5 (11:15 AM - 01:00 PM)">Period 4-5 (11:15 AM - 01:00 PM)</option>
+                    <option value="Full Day (08:30 AM - 04:30 PM)">Full Day (08:30 AM - 04:30 PM)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Effective Date *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPermDate}
+                    onChange={(e) => setNewPermDate(e.target.value)}
+                    placeholder="e.g. Today / 26 Oct 2026"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Date &amp; Time Window
+                  Affected Class &amp; Subject Periods
                 </label>
                 <input
                   type="text"
-                  value={newPermDate}
-                  onChange={(e) => setNewPermDate(e.target.value)}
-                  placeholder="e.g. Today, 11:30 AM - 01:00 PM"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  value={newPermPeriods}
+                  onChange={(e) => setNewPermPeriods(e.target.value)}
+                  placeholder="e.g. Period 2 (Class 8-B Math) &amp; Period 4 (Class 9-A Math)"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Detailed Reason (for Principal Sign-Off)
+                  Recommended Substitute / Proxy Teacher
+                </label>
+                <input
+                  type="text"
+                  value={newPermSubstitute}
+                  onChange={(e) => setNewPermSubstitute(e.target.value)}
+                  placeholder="e.g. Mrs. Neha Roy (TGT Science) - Free in Period 2"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Detailed Justification (for Management Audit) *
                 </label>
                 <textarea
                   rows={3}
                   value={newPermReason}
                   onChange={(e) => setNewPermReason(e.target.value)}
-                  placeholder="Provide specific reason for absence or permission..."
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="State specific reason for leave, medical emergency, or shift adjustment..."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
@@ -7917,15 +8009,15 @@ export default function TeacherPage() {
                 <button
                   type="button"
                   onClick={() => setShowPermissionModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4.5 py-2 text-xs font-bold shadow-md cursor-pointer"
+                  className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4.5 py-2 text-xs font-bold shadow-md cursor-pointer transition-colors"
                 >
-                  Submit to Management
+                  Submit Request to Principal &rarr;
                 </button>
               </div>
             </form>

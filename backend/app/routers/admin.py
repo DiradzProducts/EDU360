@@ -505,6 +505,14 @@ async def list_enquiries(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdmissionEnquiry).order_by(AdmissionEnquiry.created_at.desc()))
     return result.scalars().all()
 
+@router.get("/crm/enquiries/{enquiry_id}", response_model=AdmissionEnquiryResponse)
+async def get_enquiry(enquiry_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    return enquiry
+
 @router.post("/crm/enquiries", response_model=AdmissionEnquiryResponse)
 async def create_enquiry(req: AdmissionEnquiryCreate, db: AsyncSession = Depends(get_db)):
     enquiry = AdmissionEnquiry(
@@ -614,11 +622,19 @@ async def log_call_outcome(enquiry_id: int, req: CallLogPayload, db: AsyncSessio
     await db.refresh(enquiry)
     return enquiry
 
+class DocumentUploadItem(BaseModel):
+    title: str
+    doc_type: str
+    file_url: Optional[str] = None
+    filename: Optional[str] = None
+
 class ConvertEnquiryPayload(BaseModel):
     section: Optional[str] = "A"
     admission_fee: Optional[float] = 25000.0
     fee_status: Optional[str] = "Paid"  # "Paid" | "Pending"
     payment_method: Optional[str] = "UPI"
+    uploaded_docs: Optional[list[DocumentUploadItem]] = None
+    tc_undertaking: Optional[bool] = False
 
 @router.post("/crm/enquiries/{enquiry_id}/convert")
 async def convert_enquiry_to_student(
@@ -657,6 +673,79 @@ async def convert_enquiry_to_student(
     )
     db.add(new_student)
     await db.flush()
+
+    # Promote Candidate Intake Documents to Official SIS Vault (Pending Admin Seal)
+    doc_slug = new_student.name.lower().replace(" ", "_")
+    docs_to_add: list[OfficialDocument] = []
+
+    if payload and payload.uploaded_docs:
+        for udoc in payload.uploaded_docs:
+            docs_to_add.append(
+                OfficialDocument(
+                    student_id=new_student.id,
+                    title=udoc.title or f"{udoc.doc_type} - {new_student.name}",
+                    doc_type=udoc.doc_type,
+                    file_url=udoc.file_url or f"/documents/{udoc.doc_type.lower().replace(' ', '_')}_{doc_slug}.pdf",
+                    is_official=True,
+                    uploaded_by_role="admissions_coordinator",
+                    upload_date=datetime.datetime.utcnow(),
+                    status="Pending Verification",
+                    verified_stamp="Awaiting Principal/Registry Seal"
+                )
+            )
+        if payload.tc_undertaking:
+            docs_to_add.append(
+                OfficialDocument(
+                    student_id=new_student.id,
+                    title=f"30-Day Provisional Undertaking (Transfer Certificate) - {new_student.name}",
+                    doc_type="Transfer Certificate",
+                    file_url=f"/documents/tc_undertaking_{doc_slug}.pdf",
+                    is_official=True,
+                    uploaded_by_role="admissions_coordinator",
+                    upload_date=datetime.datetime.utcnow(),
+                    status="Pending Verification",
+                    verified_stamp="Provisional Undertaking (30 Days Validity)"
+                )
+            )
+    else:
+        # Default intake documents awaiting admin seal
+        doc_report = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Previous Grade Academic Record - {new_student.name}",
+            doc_type="Marks Card",
+            file_url=f"/documents/report_card_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Pending Verification",
+            verified_stamp="Awaiting Principal/Registry Seal"
+        )
+        doc_tc = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Transfer Certificate (Incoming TC Deposited) - {new_student.name}",
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Pending Verification",
+            verified_stamp="Awaiting Principal/Registry Seal"
+        )
+        doc_birth = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Government Birth Certificate & Identity Proof - {new_student.name}",
+            doc_type="Birth Certificate",
+            file_url=f"/documents/birth_cert_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Pending Verification",
+            verified_stamp="Awaiting Principal/Registry Seal"
+        )
+        docs_to_add.extend([doc_report, doc_tc, doc_birth])
+
+    if docs_to_add:
+        db.add_all(docs_to_add)
 
     # Route fee to Accounts Coordinator
     if fee_status == "Paid":
@@ -717,6 +806,186 @@ async def convert_enquiry_to_student(
         "fee_status": fee_status
     }
 
+class DirectEnrollPayload(BaseModel):
+    student_name: str
+    parent_name: str
+    phone: str
+    email: Optional[str] = "parent@edu360.internal"
+    target_grade: str
+    section: Optional[str] = "A"
+    admission_fee: Optional[float] = 25000.0
+    fee_status: Optional[str] = "Paid"  # "Paid" | "Pending"
+    payment_method: Optional[str] = "UPI"
+    action_type: str = "direct_sis"  # "direct_sis" | "forward_vip"
+    notes: Optional[str] = None
+
+@router.post("/crm/direct-enroll")
+async def direct_enroll_or_forward_vip(
+    payload: DirectEnrollPayload,
+    db: AsyncSession = Depends(get_db)
+):
+    if payload.action_type == "direct_sis":
+        # Direct Spot Admission into SIS
+        # Generate next ID-based admission number
+        curr_year = datetime.datetime.utcnow().year
+        rand_suffix = int(datetime.datetime.utcnow().timestamp()) % 900 + 100
+        adm_no = f"EDU-{curr_year}-{rand_suffix}"
+        
+        new_student = Student(
+            name=payload.student_name,
+            roll_no=str(rand_suffix % 50 + 1),
+            class_name=payload.target_grade,
+            section=payload.section or "A",
+            admission_no=adm_no,
+            guardian_name=payload.parent_name,
+            guardian_phone=payload.phone,
+            guardian_email=payload.email or "parent@edu360.internal",
+            attendance_pct=100.0,
+            bus_route_id=4,
+            academic_average_pct=85.0,
+            status="Active"
+        )
+        db.add(new_student)
+        await db.flush()
+
+        # Create Official Documents in SIS Vault
+        doc_slug = new_student.name.lower().replace(" ", "_")
+        doc_report = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Previous Grade Academic Record - {new_student.name}",
+            doc_type="Marks Card",
+            file_url=f"/documents/report_card_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Academic Registry Sealed"
+        )
+        doc_tc = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Transfer Certificate (Incoming TC Deposited) - {new_student.name}",
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Official Seal - Original Surrendered"
+        )
+        doc_birth = OfficialDocument(
+            student_id=new_student.id,
+            title=f"Government Birth Certificate & Identity Proof - {new_student.name}",
+            doc_type="Birth Certificate",
+            file_url=f"/documents/birth_cert_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="Verified by Registrar"
+        )
+        db.add_all([doc_report, doc_tc, doc_birth])
+
+        # Financial Ledger routing to Accounts Coordinator
+        fee_amt = payload.admission_fee or 25000.0
+        fee_status = payload.fee_status or "Paid"
+        if fee_status == "Paid":
+            receipt_code = f"REC-ADM-DIR-{new_student.id + 200}"
+            new_tx = PaymentTransaction(
+                utr_number=f"UPI/{int(datetime.datetime.utcnow().timestamp())}{new_student.id}/DIRECT_ADM",
+                student_name=new_student.name,
+                class_name=f"{new_student.class_name}-{new_student.section}",
+                parent_name=new_student.guardian_name,
+                amount=fee_amt,
+                payment_method=payload.payment_method or "UPI",
+                bank_name="HDFC School Collections Gateway",
+                milestone_title=f"One-Time Spot Admission Fee ({receipt_code})",
+                status="Success",
+                reconciled=False,
+                notes=f"Admin Direct Spot Enrolment • Receipt #{receipt_code}"
+            )
+            db.add(new_tx)
+        else:
+            new_defaulter = FeeDefaulter(
+                student_id=new_student.id,
+                student_name=new_student.name,
+                class_name=f"{new_student.class_name}-{new_student.section}",
+                roll_no=new_student.roll_no,
+                parent_name=new_student.guardian_name,
+                parent_phone=new_student.guardian_phone,
+                milestone_title="One-Time Spot Admission Fee",
+                amount_due=fee_amt,
+                days_overdue=0,
+                reminder_sent=False,
+                is_admission_fee=True,
+                exam_clearance=True,
+                status="Overdue"
+            )
+            db.add(new_defaulter)
+
+        # Notify Accounts Coordinator
+        await create_system_notification(
+            db=db,
+            sender_name="Principal / Executive Office",
+            sender_role="admin",
+            recipient_role="accounts_coordinator",
+            title=f"⚡ Spot Enrolment: {new_student.name} ({new_student.class_name}-{new_student.section})",
+            message=f"Student directly admitted by Administrator. Admission fee ₹{fee_amt:,.0f} ({fee_status}). Added to Accounts ledger.",
+            notification_type="NEW_ENROLMENT",
+            priority="HIGH" if fee_status == "Pending" else "NORMAL",
+            action_url="/accounts_coordinator"
+        )
+
+        await db.commit()
+        await db.refresh(new_student)
+        return {
+            "success": True,
+            "action_type": "direct_sis",
+            "message": f"Successfully enrolled {new_student.name} into SIS ({new_student.class_name}-{new_student.section}) with Admission #{adm_no}",
+            "student": new_student,
+            "admission_no": adm_no
+        }
+    
+    else:
+        # Forward to Admissions Desk with VIP Tag
+        new_enquiry = AdmissionEnquiry(
+            student_name=payload.student_name,
+            parent_name=payload.parent_name,
+            email=payload.email or "parent@edu360.internal",
+            phone=payload.phone,
+            target_grade=payload.target_grade,
+            stage="followup",
+            lead_temperature="hot",
+            source="Management / Principal Referral",
+            doc_report_card=True,
+            doc_birth_cert=True,
+            doc_transfer_cert=True,
+            notes=f"👑 [PRINCIPAL VIP REFERRAL] {payload.notes or 'Direct referral from Principal Office. Priority follow-up required.'}"
+        )
+        db.add(new_enquiry)
+        await db.flush()
+
+        # High priority notification to Admissions Coordinator
+        await create_system_notification(
+            db=db,
+            sender_name="Principal / Executive Office",
+            sender_role="admin",
+            recipient_role="admissions_coordinator",
+            title=f"👑 Principal's VIP Referral: {payload.student_name} ({payload.target_grade})",
+            message=f"VIP Candidate referred directly by Admin. Prioritize immediate follow-up and digital onboarding.",
+            notification_type="VIP_REFERRAL",
+            priority="HIGH",
+            action_url="/admissions_coordinator"
+        )
+
+        await db.commit()
+        await db.refresh(new_enquiry)
+        return {
+            "success": True,
+            "action_type": "forward_vip",
+            "message": f"Forwarded {new_enquiry.student_name} to Admissions Coordinator desk with 👑 VIP Referral priority tag.",
+            "enquiry": new_enquiry
+        }
+
 # --- 4. SIS & Strict Document Control ---
 @router.get("/students", response_model=list[StudentResponse])
 async def list_students(db: AsyncSession = Depends(get_db)):
@@ -735,6 +1004,24 @@ async def get_student_profile(student_id: int, db: AsyncSession = Depends(get_db
 async def get_student_documents(student_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(OfficialDocument).where(OfficialDocument.student_id == student_id))
     return result.scalars().all()
+
+@router.get("/documents", response_model=list[OfficialDocumentResponse])
+async def list_all_official_documents(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(OfficialDocument).order_by(OfficialDocument.id.desc()))
+    return result.scalars().all()
+
+@router.post("/documents/{doc_id}/approve", response_model=OfficialDocumentResponse)
+async def approve_and_seal_document(doc_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(OfficialDocument).where(OfficialDocument.id == doc_id))
+    doc = result.scalars().first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc.status = "Verified"
+    doc.is_official = True
+    doc.verified_stamp = "EDU360 Official Seal - Approved by Administrator"
+    await db.commit()
+    await db.refresh(doc)
+    return doc
 
 @router.post("/documents", response_model=OfficialDocumentResponse)
 async def upload_official_document(doc_in: OfficialDocumentCreate, db: AsyncSession = Depends(get_db)):

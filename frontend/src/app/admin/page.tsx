@@ -58,6 +58,7 @@ import {
   Menu
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 import { 
   TriageAlert, 
   AdminTask, 
@@ -95,11 +96,12 @@ type AdminTab =
   | 'sis' 
   | 'substitutions'
   | 'staff' 
+  | 'permissions'
+  | 'payroll'
   | 'fees' 
-  | 'inventory' 
   | 'events'
+  | 'exams'
   | 'exit' 
-  | 'audit'
   | 'rollover';
 
 export default function AdminPage() {
@@ -174,6 +176,8 @@ export default function AdminPage() {
   // Filter State
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [staffRoleFilter, setStaffRoleFilter] = useState('All');
+  const [permFilter, setPermFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
+  const [examClassFilter, setExamClassFilter] = useState('All');
 
   // Student Remarks State (SIS)
   const [studentRemarks, setStudentRemarks] = useState<StudentRemark[]>(() => getRemarksForStudent(1));
@@ -619,11 +623,11 @@ export default function AdminPage() {
                     ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold'
                 }`}
-                title="Executive Cockpit"
+                title="Principal Dashboard"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Sparkles className="h-4 w-4 shrink-0 text-amber-400" />
-                  {!sidebarCollapsed && <span className="truncate">Executive Cockpit</span>}
+                  {!sidebarCollapsed && <span className="truncate">Principal Dashboard</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/20 text-white">
@@ -640,12 +644,12 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Priority Triage Engine"
+                title="Action Alerts"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`h-2 w-2 rounded-full shrink-0 ${urgentTriageCount > 0 ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
                   <AlertCircle className={`h-4 w-4 shrink-0 ${activeTab === 'triage' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Priority Triage</span>}
+                  {!sidebarCollapsed && <span className="truncate">Action Alerts</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
@@ -666,11 +670,11 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Task Management"
+                title="School Tasks"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <CheckSquare className={`h-4 w-4 shrink-0 ${activeTab === 'tasks' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Task Manager</span>}
+                  {!sidebarCollapsed && <span className="truncate">School Tasks</span>}
                 </div>
                 {!sidebarCollapsed && pendingTasksCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
@@ -687,11 +691,11 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Admissions CRM Pipeline"
+                title="New Admissions"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <UserPlus className={`h-4 w-4 shrink-0 ${activeTab === 'crm' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Admissions CRM</span>}
+                  {!sidebarCollapsed && <span className="truncate">New Admissions</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
@@ -708,15 +712,15 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="SIS Document Vault"
+                title="Student Directory (SIS)"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Lock className={`h-4 w-4 shrink-0 ${activeTab === 'sis' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">SIS Vault</span>}
+                  {!sidebarCollapsed && <span className="truncate">Student Directory</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Strict Lock
+                    Roster
                   </span>
                 )}
               </button>
@@ -726,7 +730,7 @@ export default function AdminPage() {
             <div className="space-y-1">
               {!sidebarCollapsed && (
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
-                  Faculty &amp; Academics
+                  Teachers &amp; Academics
                 </span>
               )}
 
@@ -738,11 +742,11 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Timetable Substitution & Period Cover Engine"
+                title="Teacher Absences & Class Cover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Shuffle className={`h-4 w-4 shrink-0 ${activeTab === 'substitutions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Substitution &amp; Cover</span>}
+                  {!sidebarCollapsed && <span className="truncate">Teacher Cover</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
@@ -755,7 +759,7 @@ export default function AdminPage() {
                 )}
               </button>
 
-              {/* Staff & Vendors */}
+              {/* Faculty Directory */}
               <button
                 onClick={() => { setActiveTab('staff'); setMobileDrawerOpen(false); }}
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
@@ -763,15 +767,57 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Staff, Salaries & Permissions"
+                title="Teacher &amp; Staff Directory"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Users className={`h-4 w-4 shrink-0 ${activeTab === 'staff' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Staff &amp; Payroll</span>}
+                  {!sidebarCollapsed && <span className="truncate">Staff Directory</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                    {staffMembers.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Faculty Permissions & Shifts */}
+              <button
+                onClick={() => { setActiveTab('permissions'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'permissions'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                }`}
+                title="Teacher Leaves &amp; Permissions"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'permissions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Teacher Leaves</span>}
                 </div>
                 {!sidebarCollapsed && pendingPermissionCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {pendingPermissionCount} Req
+                  </span>
+                )}
+              </button>
+
+              {/* Examination Center */}
+              <button
+                onClick={() => { setActiveTab('exams'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'exams'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                }`}
+                title="Exams &amp; Timetables"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'exams' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Exams</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60">
+                    Term-2
                   </span>
                 )}
               </button>
@@ -784,25 +830,25 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Annual Student Promotion & Academic Rollover"
+                title="Class Promotion &amp; Rollover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <TrendingUp className={`h-4 w-4 shrink-0 ${activeTab === 'rollover' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Academic Rollover</span>}
+                  {!sidebarCollapsed && <span className="truncate">Class Promotion</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    2027–28
+                    Annual
                   </span>
                 )}
               </button>
             </div>
 
-            {/* GROUP 3: FINANCE & INSTITUTIONAL ASSETS */}
+            {/* GROUP 3: FINANCE & OPERATIONS */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
-                  Finance &amp; Logistics
+                  Finance &amp; Operations
                 </span>
               )}
 
@@ -814,11 +860,11 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Fee Milestones & Defaulters"
+                title="Fee Collections &amp; Pending Dues"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'fees' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Fee Milestones</span>}
+                  {!sidebarCollapsed && <span className="truncate">Fee Collections</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
@@ -827,25 +873,28 @@ export default function AdminPage() {
                 )}
               </button>
 
-              {/* Inventory hidden for Online School */}
-              {false && (
+              {/* Staff Payroll & Compensation */}
               <button
-                onClick={() => { setActiveTab('inventory'); setMobileDrawerOpen(false); }}
+                onClick={() => { setActiveTab('payroll'); setMobileDrawerOpen(false); }}
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
-                  activeTab === 'inventory'
+                  activeTab === 'payroll'
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Inventory & Asset Management"
+                title="Staff Salaries &amp; Payroll"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Package className={`h-4 w-4 shrink-0 ${activeTab === 'inventory' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Inventory &amp; Assets</span>}
+                  <Receipt className={`h-4 w-4 shrink-0 ${activeTab === 'payroll' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Staff Salaries</span>}
                 </div>
+                {!sidebarCollapsed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                    Monthly
+                  </span>
+                )}
               </button>
-              )}
 
-              {/* Event Command Center */}
+              {/* School Event Center */}
               <button
                 onClick={() => { setActiveTab('events'); setMobileDrawerOpen(false); }}
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
@@ -853,11 +902,11 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Event Command Center (Annual Day 2026)"
+                title="School Events &amp; Activities"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'events' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Event Center</span>}
+                  {!sidebarCollapsed && <span className="truncate">School Events</span>}
                 </div>
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
@@ -867,7 +916,7 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* GROUP 4: REGULATORY, SECURITY & LEGAL */}
+            {/* GROUP 4: REGULATORY & LEGAL */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
@@ -883,36 +932,15 @@ export default function AdminPage() {
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
                 }`}
-                title="Student Exit & TC Handover"
+                title="Student TC &amp; Clearances"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <GraduationCap className={`h-4 w-4 shrink-0 ${activeTab === 'exit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Exit Clearance</span>}
+                  {!sidebarCollapsed && <span className="truncate">Student TC</span>}
                 </div>
                 {!sidebarCollapsed && pendingExitCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     {pendingExitCount} Pending
-                  </span>
-                )}
-              </button>
-
-              {/* Security Audit Trail */}
-              <button
-                onClick={() => { setActiveTab('audit'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
-                  activeTab === 'audit'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
-                }`}
-                title="Institutional Security & Compliance Audit Trail"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <ShieldCheck className={`h-4 w-4 shrink-0 ${activeTab === 'audit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">Security Audit</span>}
-                </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                    CBSE/FERPA
                   </span>
                 )}
               </button>
@@ -968,439 +996,99 @@ export default function AdminPage() {
         )}
 
         {/* ===================================================== */}
-        {/* 1. SUPER ADMINISTRATOR COMMAND CENTER HEADER        */}
-        {/* ===================================================== */}
-        <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-5 sm:p-6 shadow-xs relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-500/10 via-indigo-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-1/3 w-64 h-32 bg-gradient-to-t from-emerald-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-            <div className="space-y-3 max-w-2xl">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 px-3 py-1 text-xs font-semibold">
-                  <Building2 className="h-3.5 w-3.5 text-blue-500" />
-                  <span>Executive Command Center • Academic Year 2026–27</span>
+                {activeTab !== 'cockpit' && (
+          /* ===================================================== */
+          /* ISOLATED MODULE HEADER (CLEAN, NO REDUNDANT DASHBOARD) */
+          /* ===================================================== */
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
+                  {activeTab === 'crm' ? 'Admissions & Inquiries'
+                    : activeTab === 'sis' ? 'Student Directory & Records (SIS)'
+                    : activeTab === 'triage' ? "Today's Action Alerts"
+                    : activeTab === 'substitutions' ? 'Teacher Attendance & Class Cover'
+                    : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
+                    : activeTab === 'staff' ? 'Teacher & Staff Directory'
+                    : activeTab === 'permissions' ? 'Teacher Leaves & Permissions'
+                    : activeTab === 'payroll' ? 'Staff Salaries & Payroll'
+                    : activeTab === 'tasks' ? 'School Tasks & Delegations'
+                    : activeTab === 'exit' ? 'Student TC & Leaving Certificates'
+                    : activeTab === 'rollover' ? 'Class Promotion & Rollover'
+                    : activeTab === 'exams' ? 'Exams & Timetables'
+                    : 'School Events & Activities'}
                 </span>
+              </div>
 
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2.5 py-1 text-xs font-semibold">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Campus Live in Session (08:00 - 15:30)</span>
-                  </span>
-
-                  {urgentTriageCount > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25 px-2.5 py-1 text-xs font-bold">
-                      🔴 {urgentTriageCount} Urgent Actions Required Today
-                    </span>
-                  )}
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+                  {activeTab === 'crm' ? <UserPlus className="h-5 w-5" />
+                    : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" />
+                    : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" />
+                    : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" />
+                    : activeTab === 'fees' ? <CreditCard className="h-5 w-5" />
+                    : activeTab === 'staff' ? <Users className="h-5 w-5" />
+                    : activeTab === 'permissions' ? <Clock className="h-5 w-5" />
+                    : activeTab === 'payroll' ? <Receipt className="h-5 w-5" />
+                    : activeTab === 'tasks' ? <CheckSquare className="h-5 w-5" />
+                    : activeTab === 'exit' ? <GraduationCap className="h-5 w-5" />
+                    : activeTab === 'rollover' ? <TrendingUp className="h-5 w-5" />
+                    : activeTab === 'exams' ? <BookOpen className="h-5 w-5" />
+                    : <Sparkles className="h-5 w-5" />}
                 </div>
-
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                    Institutional Triage &amp; Operations Command
+                  <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
+                      : activeTab === 'sis' ? 'Student Directory & Information System (SIS)'
+                      : activeTab === 'triage' ? "Today's School Action Alerts"
+                      : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
+                      : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
+                      : activeTab === 'staff' ? 'Teacher & Staff Directory'
+                      : activeTab === 'permissions' ? 'Teacher Leave & Permission Requests'
+                      : activeTab === 'payroll' ? 'Staff Salaries & Monthly Compensation'
+                      : activeTab === 'tasks' ? 'School Tasks & Staff Assignments'
+                      : activeTab === 'exit' ? 'Student Transfer Certificates (TC) & Clearances'
+                      : activeTab === 'rollover' ? 'Annual Class Promotion & Academic Year Rollover'
+                      : activeTab === 'exams' ? 'Examinations & Class Timetables'
+                      : 'School Events & Activities'}
                   </h1>
-                  <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Actionable intelligence highlighting what needs immediate attention today, why it matters, and who to assign — across campus attendance, faculty substitutions, fee milestones, and legal exit clearances.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
+                      : activeTab === 'sis' ? 'Complete student roster, class and section filters, 360° student records, and certificates'
+                      : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
+                      : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
+                      : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
+                      : activeTab === 'staff' ? 'Manage teacher profiles, department duties, contact info, and daily attendance'
+                      : activeTab === 'permissions' ? 'Review teacher leave applications, half-day permissions, and substitute teacher cover'
+                      : activeTab === 'payroll' ? 'Monthly salary disbursements, bank statements, statutory deductions, and digital pay slips'
+                      : activeTab === 'tasks' ? 'Delegate administrative and campus tasks to coordinators and track completion'
+                      : activeTab === 'exit' ? 'Issue verified transfer certificates (TC), check departmental dues, and complete exit files'
+                      : activeTab === 'rollover' ? 'Batch promotion of student classes into the new academic year'
+                      : activeTab === 'exams' ? 'Term exam timetables, room seating plans, invigilator assignments, and hall passes'
+                      : 'Annual Day celebrations, sports day, science exhibitions, and student committees'}
                   </p>
                 </div>
-
-                {/* Operational Tags */}
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Users className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Enrollment: <strong className="text-slate-700 dark:text-slate-200">1,240 Students (94.2% Present)</strong></span>
-                  </span>
-                  <span className="text-slate-300 dark:text-slate-700">•</span>
-                  <span className="flex items-center gap-1 font-medium">
-                    <Briefcase className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Faculty: <strong className="text-slate-700 dark:text-slate-200">83 / 86 On Duty (3 on Leave)</strong></span>
-                  </span>
-                  <span className="text-slate-300 dark:text-slate-700">•</span>
-                  <span className="flex items-center gap-1 font-medium">
-                    <ShieldCheck className="h-3.5 w-3.5 text-purple-500" />
-                    <span>Security: <strong className="text-slate-700 dark:text-slate-200">Zero-Dispute SIS Protocol Active</strong></span>
-                  </span>
-                </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap lg:flex-col items-stretch lg:items-end gap-2.5 shrink-0">
+            {/* Quick Action in Header (NO Dashboard Button) */}
+            <div className="flex items-center gap-2 shrink-0">
+
+              {activeTab === 'tasks' && (
                 <button
+                  type="button"
                   onClick={() => setShowTaskModal(true)}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-200 active:scale-98 border border-blue-400/30 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                 >
-                  <Plus className="h-4 w-4" />
-                  <span>Assign Operational Task</span>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Assign Task</span>
                 </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveTab('substitutions')}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    <Shuffle className="h-3.5 w-3.5 text-amber-500" />
-                    <span>Deploy Substitutions</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowDocModal(true)}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    <Upload className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Seal SIS Document</span>
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
+        )}
 
-          {/* ===================================================== */}
-          {/* 2. 4 EXECUTIVE CAMPUS PULSE METRIC CARDS             */}
-          {/* ===================================================== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* 1. Priority Operational Triage */}
-            <div
-              onClick={() => setActiveTab('triage')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Priority Operations Triage
-                  </span>
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                    <AlertCircle className="h-5 w-5" />
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                      {urgentTriageCount} Critical Fires
-                    </h3>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
-                      Action Required
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Bus delay, chemistry spill &amp; emergency faculty leave
-                  </p>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-rose-500 h-full rounded-full" style={{ width: '40%' }} />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                <span>Open Triage Action Engine</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            {/* 2. Faculty Presence & Substitutions */}
-            <div
-              onClick={() => setActiveTab('substitutions')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Faculty &amp; Substitutions
-                  </span>
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                    <Shuffle className="h-5 w-5" />
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                      {unassignedSubCount > 0 ? `${unassignedSubCount} Open Slot` : 'All Covered'}
-                    </h3>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
-                      3 on Leave
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Class 8-A Period 4 CS requires faculty coverage
-                  </p>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full" style={{ width: '67%' }} />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                <span>Manage Faculty Coverage</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            {/* 3. Fee Collections Milestone 2 */}
-            <div
-              onClick={() => setActiveTab('fees')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Fee Milestone 2 Health
-                  </span>
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                    <CreditCard className="h-5 w-5" />
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                      ₹18.5L / ₹24.0L
-                    </h3>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
-                      77.1%
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Due in 5 days • 14 Defaulter notices issued
-                  </p>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: '77%' }} />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                <span>Inspect Accounts Ledger</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            {/* 4. Student SIS & Exit Clearances */}
-            <div
-              onClick={() => setActiveTab('exit')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    SIS &amp; Exit Clearances
-                  </span>
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                    <GraduationCap className="h-5 w-5" />
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                      {pendingExitCount} TC Pending
-                    </h3>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/60">
-                      Dual Sign TC
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Zero dispute legal exit verification protocol active
-                  </p>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-purple-500 h-full rounded-full" style={{ width: '100%' }} />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                <span>Review TC Applications</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-          </div>
-
-          {/* ===================================================== */}
-          {/* 3. STREAMLINED SEGMENTED TAB NAVIGATOR                */}
-          {/* ===================================================== */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-slate-200 dark:border-slate-800">
-            <button
-              onClick={() => setActiveTab('cockpit')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'cockpit'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              <span>Executive Cockpit</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'cockpit' ? 'bg-white/20 text-white' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'}`}>
-                Live
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('triage')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'triage'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <AlertCircle className="h-3.5 w-3.5" />
-              <span>Priority Triage</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'triage' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {urgentTriageCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('substitutions')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'substitutions'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Shuffle className="h-3.5 w-3.5" />
-              <span>Substitutions</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'substitutions' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered'}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('crm')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'crm'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              <span>Admissions CRM</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'crm' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {enquiries.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('fees')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'fees'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <CreditCard className="h-3.5 w-3.5" />
-              <span>Fee Milestones</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'fees' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                77%
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('sis')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'sis'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Lock className="h-3.5 w-3.5" />
-              <span>SIS Document Vault</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('tasks')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'tasks'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-              <span>Tasks Queue</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'tasks' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {pendingTasksCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('staff')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'staff'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Users className="h-3.5 w-3.5" />
-              <span>Staff &amp; Payroll</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'staff' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {staffMembers.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('exit')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'exit'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <GraduationCap className="h-3.5 w-3.5" />
-              <span>Exit TC</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'exit' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                {pendingExitCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'audit'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Security Audit</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'inventory'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Package className="h-3.5 w-3.5" />
-              <span>Inventory</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('rollover')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-                activeTab === 'rollover'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Rollover</span>
-            </button>
-          </div>
-
-          {/* ===================================================== */}
-          {/* TAB 1: PRIORITY TRIAGE & ACTION ENGINE               */}
-          {/* ===================================================== */}
-          {activeTab === 'cockpit' && (
+        {activeTab === 'cockpit' && (
             <AdminCockpit onNavigateTab={(tab: string) => setActiveTab(tab as AdminTab)} />
           )}
 
@@ -1690,23 +1378,6 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {activeTab === 'crm' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-indigo-100 text-indigo-800 px-2.5 py-0.5 text-xs font-bold border border-indigo-200">
-                      CRM Command
-                    </span>
-                    <span className="text-xs text-slate-500">Academic Year 2026–27 Pipeline</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Admissions CRM Pipeline &amp; AI Chatbot Leads
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Monitor enquiries captured 24/7 by AI Chatbot, review parent dialogue transcripts, and convert interested leads into SIS Student records in 1 click.
-                  </p>
-                </div>
-              </div>
-
               <CRMBoard 
                 enquiries={enquiries}
                 onStageChange={handleEnquiryStageChange}
@@ -2020,7 +1691,7 @@ export default function AdminPage() {
                     <span className="text-xs text-slate-500">Academic Year 2026–27 Fee Milestones</span>
                   </div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Fee Milestone Governance &amp; Defaulter Management
+                    Student Fee Collections &amp; Pending Dues
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Manage installment milestones, monitor overdue accounts, and trigger automated receipts via email without friction.
@@ -2069,7 +1740,7 @@ export default function AdminPage() {
                       <span className="text-[10px] text-emerald-600/70 block mt-0.5">Verified Collections</span>
                     </div>
                     <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <span className="text-[10px] uppercase font-bold text-red-600 block">Overdue Defaulters</span>
+                      <span className="text-[10px] uppercase font-bold text-red-600 block">Total Pending Dues</span>
                       <span className="text-base font-extrabold text-red-600 dark:text-red-400">
                         ₹{(feeAnalytics.total_overdue / 100000).toFixed(1)} L
                       </span>
@@ -2087,7 +1758,7 @@ export default function AdminPage() {
                   {/* Aging Analysis Bar */}
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                      <span>Aging Portfolio Analysis</span>
+                      <span>Pending Dues Timeline Breakdown</span>
                       <span className="text-[10px] text-slate-500 font-normal">Overdue maturity risk tiers</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2182,7 +1853,7 @@ export default function AdminPage() {
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Milestone 2 Defaulters Registry (Targeted Tele-caller List)
+                    Pending Fee Records &amp; Parent Follow-up List
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Parents receive automated push notifications + SMS payment links
@@ -2246,90 +1917,11 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {activeTab === 'staff' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-teal-100 text-teal-800 px-2.5 py-0.5 text-xs font-bold border border-teal-200">
-                      Human Resources &amp; Vendors
-                    </span>
-                    <span className="text-xs text-slate-500">52 Active Personnel</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Staff Directory, Teacher Leave Approvals &amp; Vendor Hub
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Approve teacher permissions, monitor daily attendance, manage monthly payroll, and track contractor duties.
-                  </p>
-                </div>
-              </div>
-
-              {/* Teacher Permissions / Leave Approvals Queue */}
-              <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/20 p-5 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-600" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Teacher Leave &amp; Short-Permission Approval Queue
-                    </h3>
-                  </div>
-                  <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-[10px] font-bold">
-                    {teacherPermissions.filter(p => p.status === 'Pending').length} Pending Management Sign-Off
-                  </span>
-                </div>
-
-                <div className="divide-y divide-amber-200/60 dark:divide-amber-900/60">
-                  {teacherPermissions.map((req) => (
-                    <div key={req.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{req.teacher_name}</h4>
-                          <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold border border-amber-300 dark:border-amber-900 text-amber-800 dark:text-amber-300">
-                            {req.type}
-                          </span>
-                          <span className="text-[10px] text-slate-500">{req.date}</span>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 italic">
-                          &ldquo;{req.reason}&rdquo;
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {req.status === 'Pending' ? (
-                          <>
-                            <button
-                              onClick={() => handleReviewPermission(req.id, 'Approved')}
-                              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
-                            >
-                              <Check className="h-3 w-3" />
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleReviewPermission(req.id, 'Rejected')}
-                              className="inline-flex items-center gap-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
-                            >
-                              <X className="h-3 w-3" />
-                              Reject
-                            </button>
-                          </>
-                        ) : (
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl ${
-                            req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {req.status === 'Approved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                            {req.status}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Staff Directory Table */}
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Personnel &amp; Vendor Directory ({staffMembers.length})
+                    Faculty &amp; Teaching Personnel Directory ({staffMembers.length})
                   </span>
                   <div className="flex items-center gap-2">
                     {['All', 'Academics', 'Sports & Estate', 'Logistics', 'External Vendor'].map(dept => (
@@ -2365,15 +1957,12 @@ export default function AdminPage() {
                               </span>
                             </div>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                              {staff.department} • {staff.phone} • {staff.assigned_duties || 'Campus Operations'}
+                              {staff.department} • {staff.phone} • {staff.assigned_duties || 'Teaching & Curriculum'}
                             </span>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <span className="text-xs font-black text-slate-700 dark:text-slate-300">
-                            ₹{(staff.salary || 65000).toLocaleString()}/mo
-                          </span>
                           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
                             (staff.status || 'Present') === 'Present' 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
@@ -2391,107 +1980,186 @@ export default function AdminPage() {
           )}
 
           {/* ===================================================== */}
-          {/* TAB 7: INVENTORY & ASSET MANAGEMENT                  */}
+          {/* TAB: FACULTY PERMISSIONS & SHIFTS                    */}
           {/* ===================================================== */}
-          {activeTab === 'inventory' && (
+          {activeTab === 'permissions' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-0.5 text-xs font-bold">
-                      Institutional Assets
-                    </span>
-                    <span className="text-xs text-slate-500">Central Stores &amp; Lab Audits</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Inventory, Equipment &amp; Asset Management
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Track stock counts across Books, Science Labs, Sports Gear, and IT hardware with reorder alerts.
-                  </p>
+              {/* Permission Status Filter Pills */}
+              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Filter Queue:</span>
+                  {(['All', 'Pending', 'Approved', 'Rejected'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setPermFilter(tab)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        permFilter === tab
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {tab}
+                      {tab === 'Pending' && pendingPermissionCount > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px]">
+                          {pendingPermissionCount}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-500 font-medium">
+                  {teacherPermissions.filter(p => permFilter === 'All' || p.status === permFilter).length} Records
+                </span>
+              </div>
+
+              {/* Permissions List */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs divide-y divide-slate-200 dark:divide-slate-800">
+                {teacherPermissions
+                  .filter(p => permFilter === 'All' || p.status === permFilter)
+                  .map((req) => (
+                    <div key={req.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{req.teacher_name}</h4>
+                          <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300">
+                            {req.type}
+                          </span>
+                          <span className="text-[10px] text-slate-400">Date: {req.date}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 italic">
+                          &ldquo;{req.reason}&rdquo;
+                        </p>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                          <span>Shift Coverage: Period 3 (Class 8-B)</span>
+                          <span>•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Auto-Proxy: Mr. Vikram Sharma</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {req.status === 'Pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewPermission(req.id, 'Approved')}
+                              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewPermission(req.id, 'Rejected')}
+                              className="inline-flex items-center gap-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-xl ${
+                            req.status === 'Approved' 
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                          }`}>
+                            {req.status === 'Approved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                            {req.status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===================================================== */}
+          {/* TAB: STAFF PAYROLL & COMPENSATION                    */}
+          {/* ===================================================== */}
+          {activeTab === 'payroll' && (
+            <div className="space-y-6">
+              {/* Monthly Payroll Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Total Monthly Budget
+                  </span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-white">₹28,50,000</span>
+                  <span className="text-xs text-slate-500 block mt-1">44 Full-Time Faculty &amp; Staff</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1">
+                    Net Disbursed (Oct 2026)
+                  </span>
+                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">₹26,20,000</span>
+                  <span className="text-xs text-slate-500 block mt-1">42 Disbursed via Bank Direct Transfer</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block mb-1">
+                    Statutory Deductions (PF/Tax)
+                  </span>
+                  <span className="text-2xl font-black text-purple-600 dark:text-purple-400">₹2,30,000</span>
+                  <span className="text-xs text-slate-500 block mt-1">EPF &amp; TDS Compliant</span>
                 </div>
               </div>
 
-              {/* Inventory Categories & Reorder Alert Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                {['All', 'Books', 'Lab Equipment', 'IT Hardware', 'Sports Gear', 'Classroom'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setInventoryCategoryFilter(cat)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                      inventoryCategoryFilter === cat
-                        ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-950/30 shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400'
-                    }`}
-                  >
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">{cat}</span>
-                    <span className="text-sm font-black text-slate-900 dark:text-white block">
-                      {cat === 'All' 
-                        ? inventoryItems.reduce((acc, i) => acc + (i.total_stock ?? (i as any).total_quantity ?? 0), 0) 
-                        : inventoryItems.filter(i => i.category === cat).reduce((acc, i) => acc + (i.total_stock ?? (i as any).total_quantity ?? 0), 0)} Units
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Inventory List */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+              {/* Payroll Register Table */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Cataloged Asset Registry ({inventoryItems.length})
+                    Faculty Compensation Register &amp; Digital Pay Slips
                   </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Audited under ISO 9001 School Facilities Standards
-                  </span>
+                  <span className="text-[11px] text-slate-500">October 2026 Cycle</span>
                 </div>
 
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {inventoryItems
-                    .filter(i => inventoryCategoryFilter === 'All' || i.category === inventoryCategoryFilter)
-                    .map((item) => (
-                      <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <div className="flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
-                            <Package className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-bold text-slate-900 dark:text-white">{item.name}</h4>
-                              <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
-                                {item.category}
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                              Location: {item.location || 'Main Store Room'} • Last Audited: {item.last_audited || 'Recent'}
+                  {staffMembers.map((staff) => {
+                    const basic = staff.salary || 65000;
+                    const hra = Math.round(basic * 0.2);
+                    const deductions = Math.round(basic * 0.1);
+                    const net = basic + hra - deductions;
+                    return (
+                      <div key={staff.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{staff.name}</h4>
+                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
+                              {staff.role}
                             </span>
                           </div>
+                          <span className="text-[11px] text-slate-500 mt-0.5 block">
+                            Basic: ₹{basic.toLocaleString()} • HRA: ₹{hra.toLocaleString()} • Deductions: -₹{deductions.toLocaleString()}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 shrink-0">
                           <div className="text-right">
                             <span className="text-xs font-black text-slate-900 dark:text-white block">
-                              {item.total_stock ?? (item as any).total_quantity ?? 0} Available / {item.issued_count ?? (item as any).issued_quantity ?? 0} Issued
+                              ₹{net.toLocaleString()}
                             </span>
-                            {(item.damaged_count ?? (item as any).damaged_quantity ?? 0) > 0 && (
-                              <span className="text-[10px] text-red-500 font-semibold block">
-                                {item.damaged_count ?? (item as any).damaged_quantity} Under Repair
-                              </span>
-                            )}
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                              Disbursed ✓
+                            </span>
                           </div>
 
                           <button
+                            type="button"
                             onClick={() => {
-                              setSelectedAsset(item);
-                              setShowIssueAssetModal(true);
+                              downloadOfficialDocumentFile('Salary Pay Slip (Oct 2026)', staff.name, `EMP-${staff.id}`);
+                              setToastMessage(`Downloaded Pay Slip for ${staff.name}`);
                             }}
-                            className="inline-flex items-center gap-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
                           >
-                            <Plus className="h-3 w-3" />
-                            Issue Asset
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Slip</span>
                           </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2635,14 +2303,87 @@ export default function AdminPage() {
           )}
 
           {/* ===================================================== */}
+          {/* TAB: ONLINE EXAMINATION CENTER                      */}
+          {/* ===================================================== */}
+          {activeTab === 'exams' && (
+            <div className="space-y-6">
+              {/* Exam Class Filter Pills */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Class Cohort:</span>
+                  {['All', 'Class 8', 'Class 9', 'Class 10'].map(cls => (
+                    <button
+                      key={cls}
+                      onClick={() => setExamClassFilter(cls)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        examClassFilter === cls
+                          ? 'bg-violet-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {cls}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">CBSE Term-2 Timetable Active</span>
+                </div>
+              </div>
+
+              {/* Exam Timetable Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
+                  { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Science Block 204', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
+                  { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Room 102', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
+                  { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Room 104', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
+                  { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Room 201', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
+                  { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
+                ]
+                  .filter(e => examClassFilter === 'All' || e.class === examClassFilter)
+                  .map(exam => (
+                    <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-violet-300 dark:hover:border-violet-700 transition-all">
+                      <div className="flex items-center justify-between text-xs mb-2">
+                        <span className="font-extrabold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-900">
+                          {exam.class}
+                        </span>
+                        <span className="text-slate-400 font-mono text-[11px]">{exam.date} • {exam.time}</span>
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
+                      <div className="mt-2 text-xs text-slate-500 space-y-0.5">
+                        <div>Seating: <strong className="text-slate-700 dark:text-slate-300">{exam.hall}</strong></div>
+                        <div>Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                          Proctor Confirmed
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadOfficialDocumentFile(`Exam Hall Pass - ${exam.name}`, exam.class, `HALL-${exam.id}`);
+                            setToastMessage(`Downloaded Hall Pass for ${exam.name}`);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Download className="h-3 w-3" />
+                          <span>Hall Pass</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===================================================== */}
           {/* TAB 9: DEDICATED TASK MANAGEMENT                      */}
           {/* ===================================================== */}
           {activeTab === 'tasks' && (() => {
             const DOMAIN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
               academic:   { label: 'Academic & Curriculum', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', icon: '📚' },
               exam:       { label: 'Examination Cell',      color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800', icon: '📝' },
-              transport:  { label: 'Yellow Bus Fleet',      color: 'text-amber-700 dark:text-amber-300',   bg: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',   icon: '🚌' },
-              inventory:  { label: 'Asset & Lab Store',     color: 'text-teal-700 dark:text-teal-300',     bg: 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800',       icon: '📦' },
               admissions: { label: 'Admissions & CRM',      color: 'text-sky-700 dark:text-sky-300',       bg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',           icon: '🎓' },
               finance:    { label: 'Finance & Bursar',      color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
               executive:  { label: 'Executive Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
@@ -2674,31 +2415,6 @@ export default function AdminPage() {
 
             return (
               <div className="space-y-6 animate-in fade-in duration-200">
-                {/* ── Header ── */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                        Decentralized Operations Center
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">4 Online Coordinator Domains · SLA-Tracked</span>
-                    </div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                      Institutional Task Operations Board
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Domain-scoped task delegation, SLA enforcement, auto-triggered operations and executive escalation.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowTaskModal(true)}
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Delegate New Task</span>
-                  </button>
-                </div>
-
                 {/* ── Executive Cockpit KPIs ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
@@ -2949,7 +2665,7 @@ export default function AdminPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 px-2.5 py-0.5 text-xs font-bold border border-violet-200 dark:border-violet-800">
-                      Faculty &amp; Academics
+                      Teachers &amp; Academics
                     </span>
                     <span className="text-xs text-slate-500">Live Period Coverage Matrix</span>
                   </div>
@@ -3139,129 +2855,6 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {/* TAB 9: REGULATORY & SECURITY AUDIT LEDGER             */}
           {/* ===================================================== */}
-          {activeTab === 'audit' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Header Banner */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 px-2.5 py-0.5 text-xs font-bold border border-slate-200 dark:border-slate-700">
-                      Regulatory &amp; Legal
-                    </span>
-                    <span className="text-xs text-slate-500">Immutable Compliance Log</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Security &amp; Regulatory Compliance Audit Ledger
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Cryptographically stamped audit trail tracking SIS document seals, permissions, financial receipts, and administrative changes (Veracross &amp; PowerSchool standard).
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={handleExportAuditLogs}
-                    className="flex items-center gap-2 rounded-xl bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    <span>Export Tamper-Proof Audit (SHA-256)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Search & Category Filter Toolbar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by actor, action, IP, or entity context..."
-                    value={auditSearch}
-                    onChange={(e) => setAuditSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-slate-500">Category:</span>
-                  <select
-                    value={auditFilter}
-                    onChange={(e) => setAuditFilter(e.target.value)}
-                    className="rounded-xl px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="ALL">All Categories ({auditLogs.length})</option>
-                    <option value="Document Control">Document Control</option>
-                    <option value="Financial">Financial / Fees</option>
-                    <option value="Faculty Permission">Faculty Permission</option>
-                    <option value="Timetable">Timetable &amp; Proxy</option>
-                    <option value="Academic Policy">Academic Rollover</option>
-                    <option value="Identity & Access">Identity &amp; Access</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Audit Ledger List */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Live Verified Event Stream ({filteredAuditLogs.length} events)
-                  </span>
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Ledger Integrity Validated
-                  </span>
-                </div>
-
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {filteredAuditLogs.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-slate-500">
-                      No audit records match your query.
-                    </div>
-                  ) : (
-                    filteredAuditLogs.map((log) => (
-                      <div key={log.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] text-slate-400">{log.timestamp}</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                              {log.action_type || log.category || 'Audit'}
-                            </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              log.status === 'SUCCESS' || log.status === 'VERIFIED'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                            }`}>
-                              {log.status}
-                            </span>
-                          </div>
-
-                          <div className="font-mono text-[10px] text-slate-400">
-                            Seal: <span className="text-slate-600 dark:text-slate-300">{log.hash_seal || 'SHA256:VERIFIED'}</span>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                          <div className="space-y-0.5">
-                            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <span>{log.action_type || log.action}</span>
-                              <span className="text-[11px] font-normal text-slate-500">➔ {log.target_entity || log.entity}</span>
-                            </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400">{log.details}</p>
-                          </div>
-
-                          <div className="text-right sm:shrink-0 text-[11px] text-slate-500">
-                            <div>Actor: <b className="text-slate-700 dark:text-slate-300">{log.actor_name || log.actor}</b> ({log.actor_role})</div>
-                            <span className="font-mono text-[10px] text-slate-400">IP: {log.ip_address}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* ===================================================== */}
           {/* TAB 10: ANNUAL ACADEMIC ROLLOVER & STUDENT PROMOTION */}
           {/* ===================================================== */}

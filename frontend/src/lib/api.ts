@@ -1,5 +1,5 @@
 import {
-  User, Student, OfficialDocument, TriageAlert, AdminTask, AdmissionEnquiry,
+  User, Student, OfficialDocument, DocumentUploadItem, TriageAlert, AdminTask, AdmissionEnquiry,
   EventItem, EventAssignment, VendorEquipment, ExitClearance,
   LiveClass, AttendanceRecord, Homework, HomeworkSubmission,
   FocusTable, LeaveRequest, FeeMilestone, BusRoute,
@@ -39,8 +39,8 @@ let fallbackTriage: TriageAlert[] = [
     id: 1,
     level: 'red',
     category: 'attendance',
-    title: 'Chronic Absenteeism: 20 Students Absent Today',
-    description: '5 students (including Kabir Mehta, Roll #15) have been absent for 3+ consecutive days without parent leave applications.',
+    title: 'Chronic Absenteeism Telemetry: 5 Students Flagged (3+ Days)',
+    description: '5 students across Class 8 & 9 have unexcused absences for 3 consecutive days. Class Teacher follow-up logged.',
     count_affected: 5,
     action_label: 'Assign Class Teacher to Call Parents',
     action_endpoint: '/api/admin/triage/1/act',
@@ -75,10 +75,10 @@ let fallbackTriage: TriageAlert[] = [
     id: 4,
     level: 'orange',
     category: 'operations',
-    title: 'Telemetry Delay: 2 School Buses (Route 4 & Route 7)',
-    description: 'Bus Route 4 GPS ping delayed by 12 mins near Outer Ring Road flyover.',
+    title: 'LMS Cloud Classroom Media Latency Alert',
+    description: 'Class 9-A Science & Class 8-B English video streams experienced transient packet jitter. Media relay rebalanced successfully.',
     count_affected: 2,
-    action_label: 'Ping Transport Supervisor & Driver Ramesh',
+    action_label: 'Acknowledge System Telemetry',
     action_endpoint: '/api/admin/triage/4/act',
     resolved: false,
     created_at: new Date().toISOString()
@@ -118,20 +118,19 @@ let fallbackTasks: AdminTask[] = [
   },
   {
     id: 2,
-    title: "Inspect Bus #7 Brake System Before Tomorrow's Route",
-    description: "Driver Ramesh flagged brake sensitivity on Bus #7 (Route 3 — Whitefield corridor). Mechanical inspection + sign-off mandatory before 6 AM departure.",
+    title: "Conduct Term-2 Remedial Batch Parent Orientation",
+    description: "Coordinate digital briefing with parents of students scoring ≤70% on Mathematics & Science 1-Week Remedial Focus plans.",
     category: "urgent",
-    domain: "transport",
-    due_date: "Today, 7:00 PM",
-    assigned_to: "Mr. Suresh Pillai",
-    assigned_to_role: "transport_coordinator",
-    created_by_name: "System Auto-Trigger",
+    domain: "academic",
+    due_date: "Today, 6:30 PM",
+    assigned_to: "Mrs. Ananya Verma",
+    assigned_to_role: "teacher",
+    created_by_name: "Principal Sharma",
     created_by_role: "admin",
     status: "Pending",
-    priority: "Critical",
+    priority: "High",
     sla_hours: 6,
-    is_auto_generated: true,
-    trigger_event: "bus_maintenance_flag",
+    is_auto_generated: false,
     is_escalated: false,
     created_at: new Date().toISOString()
   },
@@ -155,8 +154,8 @@ let fallbackTasks: AdminTask[] = [
   },
   {
     id: 4,
-    title: "Review 8 New Admission Enquiries from AI Chatbot",
-    description: "8 inbound leads from school website chatbot qualify for follow-up. 3 are campus visit bookings for this week. CRM update required.",
+    title: "Review 8 Inbound Admission Enquiries & Campus Leads",
+    description: "8 inbound prospective candidate leads from website portal qualify for follow-up. 3 campus visit bookings scheduled for this week.",
     category: "upcoming",
     domain: "admissions",
     due_date: "19 Oct, 2:00 PM",
@@ -284,10 +283,28 @@ let fallbackEnquiries: AdmissionEnquiry[] = [
   }
 ];
 
+let fallbackStudents: Student[] = [
+  { id: 1, name: "Aarav Sharma", roll_no: "8B-01", class_name: "Class 8", section: "B", admission_no: "ADM-2024-001", guardian_name: "Rajesh Sharma", guardian_phone: "+91 98765 43210", guardian_email: "rajesh@example.com", attendance_pct: 94.2, academic_average_pct: 78.5, status: "Active" },
+  { id: 2, name: "Diya Patel", roll_no: "8B-02", class_name: "Class 8", section: "B", admission_no: "ADM-2024-002", guardian_name: "Meena Patel", guardian_phone: "+91 98765 43211", guardian_email: "meena@example.com", attendance_pct: 96.0, academic_average_pct: 84.0, status: "Active" },
+  { id: 3, name: "Rohan Verma", roll_no: "9A-04", class_name: "Class 9", section: "A", admission_no: "ADM-2024-003", guardian_name: "Anil Verma", guardian_phone: "+91 98765 43212", guardian_email: "anil@example.com", attendance_pct: 91.5, academic_average_pct: 68.0, status: "Active" },
+  { id: 4, name: "Ananya Iyer", roll_no: "9A-08", class_name: "Class 9", section: "A", admission_no: "ADM-2024-004", guardian_name: "Suresh Iyer", guardian_phone: "+91 98765 43213", guardian_email: "suresh@example.com", attendance_pct: 98.0, academic_average_pct: 92.5, status: "Active" },
+  { id: 5, name: "Kabir Mehta", roll_no: "7B-12", class_name: "Class 7", section: "B", admission_no: "ADM-2024-005", guardian_name: "Pooja Mehta", guardian_phone: "+91 98765 43214", guardian_email: "pooja@example.com", attendance_pct: 88.0, academic_average_pct: 62.0, status: "Active" },
+  { id: 6, name: "Ishaan Reddy", roll_no: "10A-15", class_name: "Class 10", section: "A", admission_no: "ADM-2024-006", guardian_name: "Venkat Reddy", guardian_phone: "+91 98765 43215", guardian_email: "venkat@example.com", attendance_pct: 95.0, academic_average_pct: 88.0, status: "Active" },
+  { id: 7, name: "Sneha Nair", roll_no: "6A-03", class_name: "Class 6", section: "A", admission_no: "ADM-2024-007", guardian_name: "Gopinath Nair", guardian_phone: "+91 98765 43216", guardian_email: "gopinath@example.com", attendance_pct: 97.5, academic_average_pct: 91.0, status: "Active" },
+  { id: 8, name: "Vihaan Joshi", roll_no: "8B-03", class_name: "Class 8", section: "B", admission_no: "ADM-2024-008", guardian_name: "Alok Joshi", guardian_phone: "+91 98765 43217", guardian_email: "alok@example.com", attendance_pct: 92.0, academic_average_pct: 64.5, status: "Active" },
+  { id: 9, name: "Meera Sen", roll_no: "8B-04", class_name: "Class 8", section: "B", admission_no: "ADM-2024-009", guardian_name: "Subhash Sen", guardian_phone: "+91 98765 43218", guardian_email: "subhash@example.com", attendance_pct: 95.5, academic_average_pct: 68.0, status: "Active" },
+  { id: 10, name: "Aditya Rao", roll_no: "8A-01", class_name: "Class 8", section: "A", admission_no: "ADM-2024-010", guardian_name: "Madhav Rao", guardian_phone: "+91 98765 43219", guardian_email: "madhav@example.com", attendance_pct: 96.5, academic_average_pct: 82.0, status: "Active" },
+  { id: 11, name: "Tanvi Kulkarni", roll_no: "8A-02", class_name: "Class 8", section: "A", admission_no: "ADM-2024-011", guardian_name: "Sachin Kulkarni", guardian_phone: "+91 98765 43220", guardian_email: "sachin@example.com", attendance_pct: 89.0, academic_average_pct: 66.0, status: "Active" },
+  { id: 12, name: "Arjun Singhania", roll_no: "9B-05", class_name: "Class 9", section: "B", admission_no: "ADM-2024-012", guardian_name: "Deepak Singhania", guardian_phone: "+91 98765 43221", guardian_email: "deepak@example.com", attendance_pct: 94.0, academic_average_pct: 71.0, status: "Active" },
+  { id: 13, name: "Priya Menon", roll_no: "10A-02", class_name: "Class 10", section: "A", admission_no: "ADM-2024-013", guardian_name: "Harish Menon", guardian_phone: "+91 98765 43222", guardian_email: "harish@example.com", attendance_pct: 99.0, academic_average_pct: 94.0, status: "Active" },
+  { id: 14, name: "Karthik Pillai", roll_no: "7A-04", class_name: "Class 7", section: "A", admission_no: "ADM-2024-014", guardian_name: "Raman Pillai", guardian_phone: "+91 98765 43223", guardian_email: "raman@example.com", attendance_pct: 93.0, academic_average_pct: 79.0, status: "Active" }
+];
+
 let fallbackDocuments: OfficialDocument[] = [
   { id: 1, student_id: 1, title: "Bonafide Certificate 2025-26", doc_type: "Bonafide", file_url: "/documents/bonafide_aarav_sharma.pdf", is_official: true, uploaded_by_role: "admin", status: "Verified", verified_stamp: "EDU360 Official Seal - Reg #9921", upload_date: new Date().toISOString() },
   { id: 2, student_id: 1, title: "Term 1 Consolidated Marks Memo", doc_type: "Marks Card", file_url: "/documents/term1_marks_aarav_sharma.pdf", is_official: true, uploaded_by_role: "admin", status: "Verified", verified_stamp: "EDU360 Examination Controller", upload_date: new Date().toISOString() },
-  { id: 3, student_id: 1, title: "Municipal Birth Certificate Copy", doc_type: "Birth Certificate", file_url: "/documents/birth_cert_aarav.pdf", is_official: true, uploaded_by_role: "admin", status: "Verified", verified_stamp: "Verified by Registrar", upload_date: new Date().toISOString() }
+  { id: 3, student_id: 1, title: "Municipal Birth Certificate Copy", doc_type: "Birth Certificate", file_url: "/documents/birth_cert_aarav.pdf", is_official: true, uploaded_by_role: "admin", status: "Verified", verified_stamp: "Verified by Registrar", upload_date: new Date().toISOString() },
+  { id: 4, student_id: 2, title: "Transfer Certificate (Incoming TC Deposited) - Riya Reddy", doc_type: "Transfer Certificate", file_url: "/documents/tc_riya_reddy.pdf", is_official: true, uploaded_by_role: "admissions_coordinator", status: "Pending Verification", verified_stamp: "Awaiting Principal/Registry Seal", upload_date: new Date().toISOString() }
 ];
 
 let fallbackExitClearance: ExitClearance[] = [
@@ -1957,6 +1974,13 @@ export const api = {
   getEnquiries: async () => {
     return fetchWithFallback<AdmissionEnquiry[]>('/api/admin/crm/enquiries', undefined, fallbackEnquiries);
   },
+  getEnquiryById: async (id: number) => {
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>(`/api/admin/crm/enquiries/${id}`, undefined, fallbackEnquiries.find(e => e.id === id) || fallbackEnquiries[0]);
+    } catch {
+      return fallbackEnquiries.find(e => e.id === id) || fallbackEnquiries[0];
+    }
+  },
   createEnquiry: async (payload: {
     student_name: string;
     parent_name: string;
@@ -2124,7 +2148,14 @@ export const api = {
       return fallbackEnquiries.find(e => e.id === id);
     }
   },
-  convertEnquiryToStudent: async (id: number, options?: { section?: string; feeAmount?: number; feeStatus?: 'Paid' | 'Pending'; paymentMethod?: string }) => {
+  convertEnquiryToStudent: async (id: number, options?: { 
+    section?: string; 
+    feeAmount?: number; 
+    feeStatus?: 'Paid' | 'Pending'; 
+    paymentMethod?: string;
+    uploadedDocs?: DocumentUploadItem[];
+    tcUndertaking?: boolean;
+  }) => {
     const enq = fallbackEnquiries.find(e => e.id === id);
     const studentName = enq ? enq.student_name : 'New Student';
     const rollNo = `ADM-2026-08${String(id).padStart(2, '0')}`;
@@ -2140,6 +2171,63 @@ export const api = {
       stage: 'converted', 
       notes: `${e.notes || ''} | Enrolled as ${rollNo} in ${sectionName}. Admission Fee ₹${feeAmt} (${feeStatus}).` 
     } : e);
+
+    // Register intake documents in Admin Document Vault awaiting legal verification
+    const docSlug = studentName.toLowerCase().replace(/\s+/g, '_');
+    const newStudentDocs: OfficialDocument[] = (options?.uploadedDocs && options.uploadedDocs.length > 0)
+      ? options.uploadedDocs.map((udoc, idx) => ({
+          id: fallbackDocuments.length + 10 + idx,
+          student_id: id + 100,
+          title: udoc.title || `${udoc.doc_type} - ${studentName}`,
+          doc_type: udoc.doc_type,
+          file_url: udoc.file_url || `/documents/${udoc.doc_type.toLowerCase().replace(/\s+/g, '_')}_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: 'admissions_coordinator',
+          status: 'Pending Verification',
+          verified_stamp: 'Awaiting Principal/Registry Seal',
+          upload_date: new Date().toISOString()
+        }))
+      : [
+          {
+            id: fallbackDocuments.length + 10,
+            student_id: id + 100,
+            title: `Previous Grade Academic Record - ${studentName}`,
+            doc_type: 'Marks Card',
+            file_url: `/documents/report_card_${docSlug}.pdf`,
+            is_official: true,
+            uploaded_by_role: 'admissions_coordinator',
+            status: 'Pending Verification',
+            verified_stamp: 'Awaiting Principal/Registry Seal',
+            upload_date: new Date().toISOString()
+          },
+          {
+            id: fallbackDocuments.length + 11,
+            student_id: id + 100,
+            title: options?.tcUndertaking
+              ? `30-Day Provisional Undertaking (Transfer Certificate) - ${studentName}`
+              : `Transfer Certificate (Incoming TC Deposited) - ${studentName}`,
+            doc_type: 'Transfer Certificate',
+            file_url: `/documents/tc_${docSlug}.pdf`,
+            is_official: true,
+            uploaded_by_role: 'admissions_coordinator',
+            status: 'Pending Verification',
+            verified_stamp: options?.tcUndertaking ? 'Provisional Undertaking (30 Days)' : 'Awaiting Principal/Registry Seal',
+            upload_date: new Date().toISOString()
+          },
+          {
+            id: fallbackDocuments.length + 12,
+            student_id: id + 100,
+            title: `Government Birth Certificate & Identity Proof - ${studentName}`,
+            doc_type: 'Birth Certificate',
+            file_url: `/documents/birth_cert_${docSlug}.pdf`,
+            is_official: true,
+            uploaded_by_role: 'admissions_coordinator',
+            status: 'Pending Verification',
+            verified_stamp: 'Awaiting Principal/Registry Seal',
+            upload_date: new Date().toISOString()
+          }
+        ];
+    fallbackDocuments = [...newStudentDocs, ...fallbackDocuments];
 
     if (feeStatus === 'Paid') {
       const receiptNo = `REC-ADM-2026-${id + 100}`;
@@ -2188,7 +2276,9 @@ export const api = {
           section: options?.section || 'B',
           admission_fee: feeAmt,
           fee_status: feeStatus,
-          payment_method: payMethod
+          payment_method: payMethod,
+          uploaded_docs: options?.uploadedDocs,
+          tc_undertaking: options?.tcUndertaking
         })
       });
     } catch {
@@ -2206,6 +2296,9 @@ export const api = {
         message: `Student enrolled successfully as ${rollNo}! Admission Fee ₹${feeAmt} (${feeStatus}) dispatched to Accounts Desk.`
       };
     }
+  },
+  getStudents: async () => {
+    return fetchWithFallback<Student[]>('/api/admin/students', undefined, fallbackStudents);
   },
   getStudentDocuments: async (studentId: number) => {
     return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, fallbackDocuments);
@@ -2231,6 +2324,69 @@ export const api = {
       };
       fallbackDocuments = [newDoc, ...fallbackDocuments];
       return newDoc;
+    }
+  },
+  getAllOfficialDocuments: async () => {
+    return fetchWithFallback<OfficialDocument[]>('/api/admin/documents', undefined, fallbackDocuments);
+  },
+  approveOfficialDocument: async (docId: number) => {
+    try {
+      return await fetchWithFallback<OfficialDocument>(`/api/admin/documents/${docId}/approve`, {
+        method: 'POST'
+      });
+    } catch {
+      fallbackDocuments = fallbackDocuments.map(d => d.id === docId ? { ...d, status: 'Verified', verified_stamp: 'EDU360 Official Seal - Approved by Administrator' } : d);
+      return fallbackDocuments.find(d => d.id === docId);
+    }
+  },
+  directEnroll: async (payload: {
+    student_name: string;
+    parent_name: string;
+    phone: string;
+    email?: string;
+    target_grade: string;
+    section?: string;
+    admission_fee?: number;
+    fee_status?: 'Paid' | 'Pending';
+    payment_method?: string;
+    action_type: 'direct_sis' | 'forward_vip';
+    notes?: string;
+  }) => {
+    try {
+      return await fetchWithFallback<any>('/api/admin/crm/direct-enroll', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      if (payload.action_type === 'direct_sis') {
+        const randId = Math.floor(Math.random() * 900) + 100;
+        const admNo = `EDU-2026-${randId}`;
+        const newDoc: OfficialDocument = {
+          id: fallbackDocuments.length + 1,
+          student_id: randId,
+          title: `Transfer Certificate (Incoming TC Deposited) - ${payload.student_name}`,
+          doc_type: 'Transfer Certificate',
+          file_url: `/documents/tc_${payload.student_name.toLowerCase().replace(/\s+/g, '_')}.pdf`,
+          is_official: true,
+          uploaded_by_role: 'admin',
+          status: 'Verified',
+          verified_stamp: 'EDU360 Official Seal - Original Surrendered',
+          upload_date: new Date().toISOString()
+        };
+        fallbackDocuments = [newDoc, ...fallbackDocuments];
+        return {
+          success: true,
+          action_type: 'direct_sis',
+          message: `Successfully enrolled ${payload.student_name} into SIS (${payload.target_grade}-${payload.section || 'A'}) with Admission #${admNo}`,
+          admission_no: admNo
+        };
+      } else {
+        return {
+          success: true,
+          action_type: 'forward_vip',
+          message: `Forwarded ${payload.student_name} to Admissions Coordinator desk with 👑 VIP Referral priority tag.`
+        };
+      }
     }
   },
   getExitClearances: async () => {
@@ -2652,7 +2808,14 @@ export const api = {
   getMyTeacherPermissions: async () => {
     return fetchWithFallback<TeacherPermissionRequest[]>('/api/teacher/my-permissions', undefined, fallbackMyTeacherPermissions);
   },
-  applyTeacherPermission: async (data: { type: string; reason: string; date: string }) => {
+  applyTeacherPermission: async (data: { 
+    type: string; 
+    reason: string; 
+    date: string;
+    shift?: string;
+    affected_periods?: string;
+    suggested_substitute?: string;
+  }) => {
     try {
       return await fetchWithFallback('/api/teacher/apply-permission', {
         method: 'POST',
@@ -2660,16 +2823,20 @@ export const api = {
       });
     } catch {
       const newPerm: TeacherPermissionRequest = {
-        id: fallbackMyTeacherPermissions.length + 1,
+        id: fallbackMyTeacherPermissions.length + 10,
         teacher_id: 1,
         teacher_name: "Mrs. Ananya Verma",
-        type: data.type as any,
+        type: data.type,
         date: data.date,
+        shift: data.shift || "Morning Shift (08:30 AM - 12:30 PM)",
+        affected_periods: data.affected_periods || "Period 2 & Period 4",
+        suggested_substitute: data.suggested_substitute || "Mrs. Neha Roy (TGT Science)",
         reason: data.reason,
         status: "Pending",
-        applied_at: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+        applied_at: "Just now"
       };
       fallbackMyTeacherPermissions = [newPerm, ...fallbackMyTeacherPermissions];
+      fallbackTeacherPermissions = [newPerm, ...fallbackTeacherPermissions];
       return { success: true, permission: newPerm };
     }
   },

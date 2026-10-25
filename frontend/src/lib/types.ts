@@ -291,6 +291,13 @@ export interface Student {
   status: string;
 }
 
+export interface DocumentUploadItem {
+  title: string;
+  doc_type: string;
+  file_url?: string;
+  filename?: string;
+}
+
 export interface OfficialDocument {
   id: number;
   student_id: number;
@@ -318,6 +325,20 @@ export interface TriageAlert {
   created_at: string;
 }
 
+export interface DirectEnrollPayload {
+  student_name: string;
+  parent_name: string;
+  phone: string;
+  email?: string;
+  target_grade: string;
+  section?: string;
+  admission_fee?: number;
+  fee_status?: 'Paid' | 'Pending';
+  payment_method?: string;
+  action_type: 'direct_sis' | 'forward_vip';
+  notes?: string;
+}
+
 
 export interface AdmissionEnquiry {
   id: number;
@@ -337,6 +358,20 @@ export interface AdmissionEnquiry {
   next_followup_date?: string;
   drop_reason?: string;
   created_at: string;
+}
+
+export interface DirectEnrollPayload {
+  student_name: string;
+  parent_name: string;
+  phone: string;
+  email?: string;
+  target_grade: string;
+  section?: string;
+  admission_fee?: number;
+  fee_status?: 'Paid' | 'Pending';
+  payment_method?: string;
+  action_type: 'direct_sis' | 'forward_vip';
+  notes?: string;
 }
 
 export interface EventItem {
@@ -602,8 +637,11 @@ export interface TeacherPermissionRequest {
   id: number;
   teacher_id: number;
   teacher_name: string;
-  type: 'Casual Leave' | 'Medical Leave' | 'Late Arrival' | 'Early Departure' | 'On-Duty Movement';
+  type: string;
   date: string;
+  shift?: string;
+  affected_periods?: string;
+  suggested_substitute?: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   applied_at: string;
@@ -1243,6 +1281,20 @@ export interface PaymentTransactionItem {
   created_at: string;
 }
 
+export interface DirectEnrollPayload {
+  student_name: string;
+  parent_name: string;
+  phone: string;
+  email?: string;
+  target_grade: string;
+  section?: string;
+  admission_fee?: number;
+  fee_status?: 'Paid' | 'Pending';
+  payment_method?: string;
+  action_type: 'direct_sis' | 'forward_vip';
+  notes?: string;
+}
+
 export interface FinanceDispatchLogItem {
   id: number;
   dispatch_type: string;
@@ -1252,6 +1304,20 @@ export interface FinanceDispatchLogItem {
   dispatch_note?: string | null;
   dispatched_by: string;
   created_at: string;
+}
+
+export interface DirectEnrollPayload {
+  student_name: string;
+  parent_name: string;
+  phone: string;
+  email?: string;
+  target_grade: string;
+  section?: string;
+  admission_fee?: number;
+  fee_status?: 'Paid' | 'Pending';
+  payment_method?: string;
+  action_type: 'direct_sis' | 'forward_vip';
+  notes?: string;
 }
 
 export interface FinanceDashboardStats {

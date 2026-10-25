@@ -331,6 +331,9 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
         "reason": req.get("reason", "Personal errand"),
         "status": "Pending",
         "date": req.get("date", "Tomorrow"),
+        "shift": req.get("shift", "Morning Shift (08:30 AM - 12:30 PM)"),
+        "affected_periods": req.get("affected_periods", "Period 2 & Period 4"),
+        "suggested_substitute": req.get("suggested_substitute", "Mrs. Neha Roy (TGT Science)"),
         "applied_at": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
     }
     _my_permissions.insert(0, new_perm)
@@ -344,7 +347,10 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
             "type": new_perm["type"],
             "reason": new_perm["reason"],
             "status": "Pending",
-            "date": new_perm["date"]
+            "date": new_perm["date"],
+            "shift": new_perm["shift"],
+            "affected_periods": new_perm["affected_periods"],
+            "suggested_substitute": new_perm["suggested_substitute"]
         })
     except Exception as ex:
         print("Admin permissions queue sync warning:", ex)

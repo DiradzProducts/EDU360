@@ -78,7 +78,7 @@ export interface ParentChildProfile {
   pendingHomeworkCount: number;
 }
 
-export const SHARMA_CHILDREN: ParentChildProfile[] = [
+const SHARMA_CHILDREN: ParentChildProfile[] = [
   {
     id: 6,
     name: 'Aarav Sharma',
