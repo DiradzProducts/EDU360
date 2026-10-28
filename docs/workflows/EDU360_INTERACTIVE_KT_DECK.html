@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDU360 — Interactive Knowledge Transfer Deck</title>
+<style>
+  :root {
+    --bg-dark: #090d16;
+    --card-dark: #0f172a;
+    --border-dark: #1e293b;
+    --primary: #0284c7;
+    --cyan: #38bdf8;
+    --green: #10b981;
+    --purple: #a855f7;
+    --amber: #f59e0b;
+    --red: #f43f5e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-dark);
+    color: #f1f5f9;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .top-nav {
+    height: 56px;
+    background: #0f172a;
+    border-bottom: 1px solid var(--border-dark);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    z-index: 10;
+  }
+  .logo {
+    font-weight: 800;
+    font-size: 16px;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo span { color: var(--cyan); }
+  .slide-counter {
+    font-size: 13px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+  .nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .btn-nav {
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-nav:hover {
+    background: var(--primary);
+    border-color: var(--cyan);
+  }
+  .main-stage {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 40px 60px;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .slide.active {
+    display: flex;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-tag {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--cyan);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .slide-title {
+    font-size: 30px;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0 0 16px 0;
+    letter-spacing: -0.5px;
+  }
+  .slide-body {
+    font-size: 15px;
+    color: #94a3b8;
+    line-height: 1.6;
+    max-width: 1200px;
+  }
+  .card-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: 24px;
+    margin-top: 24px;
+  }
+  .interactive-card {
+    background: var(--card-dark);
+    border: 1.5px solid var(--border-dark);
+    border-radius: 14px;
+    padding: 24px;
+    transition: all 0.25s;
+    cursor: pointer;
+  }
+  .interactive-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--cyan);
+    box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .circuit-image-box {
+    background: #0f172a;
+    border: 1px solid var(--border-dark);
+    border-radius: 14px;
+    padding: 12px;
+    margin-top: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  .circuit-image-box img {
+    max-width: 100%;
+    max-height: 520px;
+    border-radius: 8px;
+  }
+  .speaker-drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(15, 23, 42, 0.95);
+    border-top: 1px solid #334155;
+    padding: 12px 24px;
+    font-size: 12px;
+    color: #cbd5e1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .shortcut-pill {
+    background: #1e293b;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    color: var(--cyan);
+  }
+</style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="logo">🎓 EDU<span>360</span> &bull; Master Knowledge Transfer Deck</div>
+  <div class="slide-counter" id="slideIndicator">Slide 1 / 11</div>
+  <div class="nav-controls">
+    <button class="btn-nav" onclick="prevSlide()">◀ Previous</button>
+    <button class="btn-nav" onclick="nextSlide()">Next ▶</button>
+    <button class="btn-nav" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  </div>
+</div>
+
+<div class="main-stage">
+  <!-- SLIDE 1: Title -->
+  <div class="slide active">
+    <div class="slide-tag">EXECUTIVE ARCHITECTURE OVERVIEW</div>
+    <h1 class="slide-title">EDU360: Virtual K–12 Academy Outcomes & Intelligence</h1>
+    <div class="slide-body">
+      <p style="font-size:18px; color:#e2e8f0;">
+        A production-grade Active Intelligence & Outcomes Engine built for 100% Pure Online Virtual Schooling.
+      </p>
+      <div class="card-grid-3">
+        <div class="interactive-card">
+          <div class="card-title">⚡ The Problem</div>
+          <p>Traditional ERPs are passive digital filing cabinets. They archive marks memos and log late attendance retrospectively without diagnosing why a child failed.</p>
+        </div>
+        <div class="interactive-card">
+          <div class="card-title">🎯 The 8 Canonical Roles</div>
+          <p>Laser-focused on virtual schooling: Admin, Academic Coord, Exam Coord, Accounts Coord, Admissions Coord, Teacher, Student, and Parent. (Zero bus fleet overhead).</p>
+        </div>
+        <div class="interactive-card">
+          <div class="card-title">🧠 Closed-Loop Remediation</div>
+          <p>1-Week Remedial Focus Sprint auto-enrolls students &le; 70% in Mathematics with nightly parent rough-book co-tracking sign-offs.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: The 3 Core Philosophies -->
+  <div class="slide">
+    <div class="slide-tag">FOUNDATIONAL PILLARS</div>
+    <h1 class="slide-title">The 3 Non-Negotiable Core Philosophies</h1>
+    <div class="slide-body">
+      <div class="card-grid-3">
+        <div class="interactive-card" style="border-top:4px solid var(--cyan)">
+          <div class="card-title">1. Actionable Governance</div>
+          <p>Dynamic Red/Orange/Green Triage Engine runs every 60s, evaluating 3+ consecutive unexcused absences, &ge;15% score drops, and 30+ day fee arrears.</p>
+        </div>
+        <div class="interactive-card" style="border-top:4px solid var(--purple)">
+          <div class="card-title">2. Parent Co-Tracking</div>
+          <p>Anti-spam moving notice slider eliminates WhatsApp blast fatigue. 10-Minute nightly rough-book verification lets parents sign off on daily practice targets.</p>
+        </div>
+        <div class="interactive-card" style="border-top:4px solid var(--green)">
+          <div class="card-title">3. Zero Extra Burden</div>
+          <p>10-Minute online class auto-attendance rule saves 15 minutes of live class time. In-browser SpeedGrader with digital red pen eliminates PDF downloads.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Circuit 1 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 1</div>
+    <h1 class="slide-title">Admissions Intake ➔ Atomic SIS & Fee Conversion</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_1_admissions_to_sis.png" alt="Circuit 1">
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Circuit 2 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 2</div>
+    <h1 class="slide-title">10-Minute Live Class Auto-Attendance & Escalation</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_2_auto_attendance.png" alt="Circuit 2">
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Circuit 3 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 3</div>
+    <h1 class="slide-title">Exam Moderation, SpeedGrader & 1-Week Remedial Sprint</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_3_speedgrader_remedial.png" alt="Circuit 3">
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Circuit 4 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 4</div>
+    <h1 class="slide-title">1-Week Focus Sprint & Nightly Parent Co-Tracking</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_4_rough_work_parent_cotrack.png" alt="Circuit 4">
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Circuit 5 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 5</div>
+    <h1 class="slide-title">Dynamic Timetable Governor & Substitution Allocator</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_5_timetable_substitution.png" alt="Circuit 5">
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Circuit 6 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 6</div>
+    <h1 class="slide-title">Human-in-the-Loop Faculty Workload Relief Engine</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_6_faculty_sla_relief.png" alt="Circuit 6">
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Circuit 7 -->
+  <div class="slide">
+    <div class="slide-tag">CLOSED-CIRCUIT WORKFLOW 7</div>
+    <h1 class="slide-title">Dual-Signature Student Exit & Legal Vault Lock</h1>
+    <div class="circuit-image-box">
+      <img src="circuits/circuit_7_dual_signature_exit.png" alt="Circuit 7">
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Technical Transparency -->
+  <div class="slide">
+    <div class="slide-tag">ENGINEERING INTEGRITY</div>
+    <h1 class="slide-title">Technical Transparency: Real Code vs Gemini AI vs Fallbacks</h1>
+    <div class="slide-body">
+      <div class="card-grid-3">
+        <div class="interactive-card" style="border-top:4px solid var(--green)">
+          <div class="card-title">100% Real Production Code</div>
+          <p>&bull; 60s Priority Triage Multi-Vector Evaluator<br>&bull; 10-Minute Attendance Webhook Engine<br>&bull; 15-Minute Homework Backlog Sweeper (#EVD-BKLOG)<br>&bull; Timetable Substitution Constraint Solver</p>
+        </div>
+        <div class="interactive-card" style="border-top:4px solid var(--purple)">
+          <div class="card-title">Multimodal Gemini AI Engine</div>
+          <p>&bull; 7-Day Remedial Micro-Syllabus Generator<br>&bull; Rough Work Notebook Vision Error Detector<br>&bull; Exam Paper Blueprint Pre-Scanner<br>&bull; Student Socratic Doubt Tutor (No direct answers)</p>
+        </div>
+        <div class="interactive-card" style="border-top:4px solid var(--cyan)">
+          <div class="card-title">Zero Single Point of Failure</div>
+          <p>&bull; Instant heuristic pedagogical fallback templates<br>&bull; Activates in &lt; 1ms if Gemini API is unreachable<br>&bull; Universal offline & local demo reliability guarantee</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Live Demo Walkthrough -->
+  <div class="slide">
+    <div class="slide-tag">INTERACTIVE PRESENTATION CHEAT-SHEET</div>
+    <h1 class="slide-title">Live Product Demo Runbook (Password123)</h1>
+    <div class="slide-body">
+      <div style="background:var(--card-dark); border:1px solid var(--border-dark); border-radius:12px; padding:20px; font-size:14px; line-height:1.7;">
+        <p><strong>1. Super Admin (/admin):</strong> Login as <code>admin</code> / <code>Password123</code> &rarr; Show top Red Triage card (Rahul Sharma 3 absences) + 1-Click CBSE Audit Export.</p>
+        <p><strong>2. Teacher Portal (/teacher):</strong> Login as <code>teacher_mat</code> / <code>Password123</code> &rarr; Filter Class 8-B. Show students &le; 70% in Focus Table. Click Day 2 rough work modal.</p>
+        <p><strong>3. SpeedGrader Canvas:</strong> Open worksheet. Pick Red Pen, draw tick, apply -2 rubric tag, click [Finalize Grade]. Zero file downloading.</p>
+        <p><strong>4. Parent Portal (/parent):</strong> Login as <code>parent</code> / <code>Password123</code> &rarr; Show moving slider, 10-Min Co-Tracking card. Tap [Sign-Off Rough Book].</p>
+        <p><strong>5. Junior K-5 Portal (/junior):</strong> Login as <code>junior</code> / <code>Password123</code> &rarr; Show gamified quest timetable and formula chests.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="speaker-drawer">
+  <div>
+    <strong>Presenter Tips:</strong> Use <span class="shortcut-pill">←</span> / <span class="shortcut-pill">→</span> arrow keys to navigate slides. Press <span class="shortcut-pill">F</span> for fullscreen mode.
+  </div>
+  <div>EDU360 Active Outcomes Engine &bull; Confidential &bull; For Internal & Investor KT</div>
+</div>
+
+<script>
+  let currentSlide = 0;
+  const slides = document.querySelectorAll('.slide');
+  const indicator = document.getElementById('slideIndicator');
+
+  function showSlide(index) {
+    slides.forEach((s, i) => {
+      s.classList.toggle('active', i === index);
+    });
+    currentSlide = index;
+    indicator.textContent = `Slide ${index + 1} / ${slides.length}`;
+  }
+
+  function nextSlide() {
+    if (currentSlide < slides.length - 1) {
+      showSlide(currentSlide + 1);
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) {
+      showSlide(currentSlide - 1);
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      nextSlide();
+    } else if (e.key === 'ArrowLeft') {
+      prevSlide();
+    } else if (e.key === 'f' || e.key === 'F') {
+      toggleFullscreen();
+    }
+  });
+</script>
+</body>
+</html>

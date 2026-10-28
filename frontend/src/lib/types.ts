@@ -51,11 +51,18 @@ export interface OperationalTask {
   task_type?: string;
   task_label?: string;
   labels?: string[];
+  escalated_at?: string;
+  resolved_at?: string;
   created_at?: string;
   updated_at?: string;
 }
 
 export type AdminTask = OperationalTask;
+
+export interface ResolveEscalationRequest {
+  resolution_notes?: string;
+  new_priority?: string;
+}
 
 export interface TaskReliefRequest {
   relief_reason: 'Medical Leave' | 'Academic Workload Surge' | 'Family Emergency' | string;
@@ -631,6 +638,32 @@ export interface StaffMemberItem {
   assigned_duties: string;
   salary: number;
   qualification?: string;
+  experience?: string;
+  assigned_classes?: string[];
+  leaves_taken?: number;
+  leaves_total?: number;
+  requests_submitted?: number;
+}
+
+export interface ReExamRequestItem {
+  id: number;
+  student_id: number;
+  student_name: string;
+  class_name: string;
+  section: string;
+  subject: string;
+  exam_name: string;
+  missed_date: string;
+  reason_category: 'Medical Emergency' | 'Hospitalization' | 'Bereavement' | 'Sports Representation' | 'Other';
+  reason_details: string;
+  document_name?: string;
+  document_url?: string;
+  parent_name: string;
+  parent_phone: string;
+  status: 'Pending Admin Review' | 'Approved by Admin' | 'Rejected';
+  admin_remarks?: string;
+  requested_at: string;
+  resolved_at?: string;
 }
 
 export interface TeacherPermissionRequest {

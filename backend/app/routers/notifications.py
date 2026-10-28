@@ -43,26 +43,60 @@ async def create_system_notification(
     metadata_dict: Optional[Dict[str, Any]] = None
 ) -> Notification:
     """
-    Internal helper to create and commit a persistent notification.
+    Internal helper to create and commit a persistent notification with 5-minute deduplication.
     """
-    notif = Notification(
-        recipient_user_id=recipient_user_id,
-        recipient_role=recipient_role,
-        sender_name=sender_name,
-        sender_role=sender_role,
-        title=title,
-        message=message,
-        notification_type=notification_type,
-        priority=priority,
-        action_url=action_url,
-        metadata_json=json.dumps(metadata_dict or {}),
-        is_read=False,
-        created_at=datetime.datetime.utcnow()
-    )
-    db.add(notif)
-    await db.commit()
-    await db.refresh(notif)
-    return notif
+    try:
+        # 1. 5-Minute Deduplication & Spam Protection
+        five_mins_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
+        conditions = [
+            Notification.notification_type == notification_type,
+            Notification.is_read == False,
+            Notification.created_at >= five_mins_ago
+        ]
+        if recipient_user_id is not None:
+            conditions.append(Notification.recipient_user_id == recipient_user_id)
+        if recipient_role is not None:
+            conditions.append(Notification.recipient_role == recipient_role)
+        if action_url is not None:
+            conditions.append(Notification.action_url == action_url)
+
+        existing_res = await db.execute(select(Notification).where(and_(*conditions)).limit(1))
+        existing = existing_res.scalars().first()
+        if existing:
+            existing.created_at = datetime.datetime.utcnow()
+            existing.message = message
+            existing.title = title
+            existing.priority = priority
+            if metadata_dict:
+                existing.metadata_json = json.dumps(metadata_dict)
+            await db.commit()
+            await db.refresh(existing)
+            logger.info(f"Deduplicated notification {existing.id} for {recipient_role or recipient_user_id}")
+            return existing
+
+        # 2. Insert fresh notification
+        notif = Notification(
+            recipient_user_id=recipient_user_id,
+            recipient_role=recipient_role,
+            sender_name=sender_name,
+            sender_role=sender_role,
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            priority=priority,
+            action_url=action_url,
+            metadata_json=json.dumps(metadata_dict or {}),
+            is_read=False,
+            created_at=datetime.datetime.utcnow()
+        )
+        db.add(notif)
+        await db.commit()
+        await db.refresh(notif)
+        logger.info(f"Dispatched notification {notif.id} [{priority}] to {recipient_role or recipient_user_id}: {title}")
+        return notif
+    except Exception as e:
+        logger.error(f"Failed to dispatch system notification: {e}")
+        raise
 
 @router.get("")
 async def get_notifications(

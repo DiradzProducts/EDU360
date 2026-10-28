@@ -171,6 +171,8 @@ class AdminTaskResponse(BaseModel):
     relief_justification: Optional[str] = None
     suggested_peer_teacher: Optional[str] = None
     task_type: Optional[str] = None
+    escalated_at: Optional[datetime.datetime] = None
+    resolved_at: Optional[datetime.datetime] = None
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
     class Config:
@@ -178,6 +180,10 @@ class AdminTaskResponse(BaseModel):
 
 class EscalateTaskRequest(BaseModel):
     reason: str
+
+class ResolveEscalationRequest(BaseModel):
+    resolution_notes: Optional[str] = "Principal reviewed and de-escalated task."
+    new_priority: Optional[str] = "High"
 
 class TaskReliefRequest(BaseModel):
     relief_reason: str  # 'Medical Leave' | 'Academic Workload Surge' | 'Family Emergency'
@@ -1029,6 +1035,8 @@ class FeeDefaulterBase(BaseModel):
     days_overdue: int = 0
     reminder_sent: bool = False
     reminder_count: int = 0
+    is_admission_fee: Optional[bool] = False
+    exam_clearance: Optional[bool] = False
     waiver_amount: float = 0.0
     waiver_reason: Optional[str] = None
     waiver_approved_by: Optional[str] = None
@@ -1044,6 +1052,8 @@ class FeeDefaulterUpdate(BaseModel):
     days_overdue: Optional[int] = None
     reminder_sent: Optional[bool] = None
     reminder_count: Optional[int] = None
+    is_admission_fee: Optional[bool] = None
+    exam_clearance: Optional[bool] = None
     waiver_amount: Optional[float] = None
     waiver_reason: Optional[str] = None
     waiver_approved_by: Optional[str] = None

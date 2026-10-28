@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.core.database import get_db
-from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord
+from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask
 from app.core.config import settings, get_current_gemini_key, get_current_gemini_model
 from app.routers.notifications import create_system_notification
 import httpx
@@ -540,6 +540,28 @@ async def order_question_paper(
         reviewed_by_academic_id=6
     )
     db.add(qp)
+
+    # Persist actionable task into admin_tasks for Teacher duty queue
+    try:
+        task = AdminTask(
+            title=f"QP Blueprint Draft: {req.subject} ({req.class_name})",
+            description=f"Commissioned by Academic Coordinator. Design {req.term} paper with Bloom's weighting & official answer scheme. Due: {req.due_date}.",
+            category="academic",
+            domain="exams",
+            due_date=req.due_date,
+            assigned_to=req.assigned_teacher_name,
+            assigned_to_role="teacher",
+            created_by_name="Prof. Rajeshwari Nair",
+            created_by_role="academic_coordinator",
+            status="In Progress",
+            priority="High",
+            sla_hours=48,
+            task_type="blueprint_authoring"
+        )
+        db.add(task)
+    except Exception as e:
+        logger.warning(f"Could not create admin_task for QP blueprint: {e}")
+
     await db.commit()
     await db.refresh(qp)
 
@@ -586,6 +608,20 @@ async def submit_question_paper_draft(
     qp.answer_key_url = req.answer_key_url
     qp.status = "under_review"
     qp.updated_at = datetime.datetime.utcnow()
+
+    # Synchronize and resolve corresponding teacher AdminTask
+    try:
+        task_res = await db.execute(
+            select(AdminTask).where(
+                AdminTask.assigned_to == qp.created_by_teacher_name,
+                AdminTask.title.like(f"%{qp.subject}%")
+            )
+        )
+        for t in task_res.scalars().all():
+            t.status = "Completed"
+            t.resolved_at = datetime.datetime.utcnow()
+    except Exception as e:
+        logger.warning(f"Could not auto-resolve admin_task on draft submit: {e}")
 
     await db.commit()
 

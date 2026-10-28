@@ -19,6 +19,7 @@ from app.schemas.schemas import (
     PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest
 )
 from app.services.ai_analytics import evaluate_attendance_rule
+from app.routers.notifications import create_system_notification
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
 
@@ -75,6 +76,26 @@ async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: 
     
     await db.commit()
     await db.refresh(record)
+
+    # 🔔 Dispatch In-App Notification if student is late or absent
+    if status in ["Late", "Absent"]:
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=2,  # Teacher
+                recipient_role="teacher",
+                sender_name="Live Attendance Engine",
+                sender_role="system",
+                title=f"Live Class {status}: {record.student_name}",
+                message=f"{record.student_name} joined +{req.minutes_elapsed:.1f}m into session ({rationale}). 1-click teacher review pending.",
+                notification_type="LATE_JOIN_APPROVAL",
+                priority="URGENT" if status == "Late" else "NORMAL",
+                action_url=f"/teacher/live-class/{class_id}?tab=attendance",
+                metadata_dict={"student_id": req.student_id, "minutes_late": req.minutes_elapsed, "status": status}
+            )
+        except Exception as e:
+            print(f"Failed to dispatch attendance notification: {e}")
+
     return {
         "success": True,
         "record": record,

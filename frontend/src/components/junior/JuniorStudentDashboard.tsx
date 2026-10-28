@@ -31,7 +31,12 @@ import {
   BookOpen,
   Calendar,
   Search,
-  Check
+  Check,
+  Bell,
+  ChevronDown,
+  LogOut,
+  GraduationCap,
+  UserCircle
 } from 'lucide-react';
 import {
   User,
@@ -56,6 +61,9 @@ import { JuniorRecordingsLibrary } from './JuniorRecordingsLibrary';
 import { JuniorHolidaysCalendar } from './JuniorHolidaysCalendar';
 import { JuniorHomeworkHub } from './JuniorHomeworkHub';
 import { JuniorExamsHub } from './JuniorExamsHub';
+import { JuniorTimetableHub } from './JuniorTimetableHub';
+import { JuniorTrophyHub } from './JuniorTrophyHub';
+import { JuniorNotificationDropdown } from './JuniorNotificationDropdown';
 import { playStarCollect, playButtonClick } from '@/lib/sound-effects';
 import confetti from 'canvas-confetti';
 
@@ -254,11 +262,121 @@ const scienceQuizQuestions: QuizQuestion[] = [
   }
 ];
 
+
+const defaultJuniorOverview: JuniorDashboardOverview = {
+  student_id: 6,
+  student_name: "Aarav Kumar",
+  class_name: "Class 3-A",
+  grade_tier: "k5",
+  avatar_character_url: "https://api.dicebear.com/7.x/bottts/svg?seed=AaravJunior3D",
+  profile: {
+    id: 1,
+    student_id: 6,
+    level: 3,
+    level_title: "Explorer",
+    xp_points: 450,
+    total_stars: 180,
+    attendance_streak_days: 7,
+    sound_effects_enabled: true
+  },
+  active_quests: [
+    {
+      id: 1,
+      student_id: 6,
+      title: "Count & Color 10 Stars in Chapter 2 Workbook",
+      subject: "Math",
+      xp_reward: 25,
+      stars_reward: 50,
+      status: "active",
+      teacher_reaction: "Super Star! ⭐ - Ms. Priya",
+      proof_image_url: null,
+      due_date: "Today, 4:00 PM"
+    },
+    {
+      id: 2,
+      student_id: 6,
+      title: "Draw and Name 3 Farm Animals",
+      subject: "Art & Nature",
+      xp_reward: 30,
+      stars_reward: 60,
+      status: "active",
+      teacher_reaction: "Creative Genius! 🎨 - Ms. Neha",
+      proof_image_url: null,
+      due_date: "Today, 6:00 PM"
+    },
+    {
+      id: 3,
+      student_id: 6,
+      title: "Read Aloud: The Magic Treehouse (Ch 1)",
+      subject: "English Phonics",
+      xp_reward: 20,
+      stars_reward: 40,
+      status: "completed",
+      teacher_reaction: "Brilliant Pronunciation! 🌟 - Ms. Priya",
+      proof_image_url: "/samples/storybook_audio_proof.png",
+      due_date: "Yesterday"
+    }
+  ],
+  magic_booster_chests: [
+    {
+      id: 1,
+      student_id: 6,
+      concept_title: "Number Counting & Phonics",
+      day_number: 1,
+      day_task_title: "Count 1 to 20 with Number Blocks",
+      status: "completed_claimed",
+      chest_stars: 30,
+      parent_signed: true
+    },
+    {
+      id: 2,
+      student_id: 6,
+      concept_title: "Number Counting & Phonics",
+      day_number: 2,
+      day_task_title: "Find & Circle 5 Rhyming Words",
+      status: "ready_to_open",
+      chest_stars: 30,
+      parent_signed: true
+    },
+    {
+      id: 3,
+      student_id: 6,
+      concept_title: "Number Counting & Phonics",
+      day_number: 3,
+      day_task_title: "Solve 3 Animal Addition Riddles",
+      status: "locked",
+      chest_stars: 40,
+      parent_signed: false
+    },
+    {
+      id: 4,
+      student_id: 6,
+      concept_title: "Number Counting & Phonics",
+      day_number: 4,
+      day_task_title: "Draw the Treasure Map & Spell 5 Words",
+      status: "locked",
+      chest_stars: 50,
+      parent_signed: false
+    }
+  ],
+  attendance_streak_days: 7,
+  attendance_pct: 94.2,
+  bus_route_id: 1
+};
+
+const defaultAdventureTimetable: AdventureTimetableItem[] = [
+  { id: 1, time: "08:30 AM - 09:15 AM", title: "Alphabet Safari & Phonics Fun", subject: "English Phonics", island_theme: "Phonics Island", mascot_at_node: false, icon: "🦁", duration_mins: 45, teacher_name: "Ms. Priya Rao", room: "Safari Treehouse A", completed: true },
+  { id: 2, time: "09:30 AM - 10:15 AM", title: "Magical Numbers & Star Shape Castle", subject: "Mathematics", island_theme: "Number Castle", mascot_at_node: true, icon: "🏰", duration_mins: 45, teacher_name: "Mrs. Ananya Verma", room: "Number Tower 2", completed: false },
+  { id: 3, time: "10:30 AM - 11:00 AM", title: "Fruit Feast & Jungle Juice Break", subject: "Snack & Nutrition", island_theme: "Snack Oasis", mascot_at_node: false, icon: "🍎", duration_mins: 30, teacher_name: "Coach Ramesh", room: "Oasis Garden Lawn", completed: false },
+  { id: 4, time: "11:15 AM - 12:00 PM", title: "Rainbow Finger Painting & Clay Animals", subject: "Creative Arts", island_theme: "Art Treehouse", mascot_at_node: false, icon: "🎨", duration_mins: 45, teacher_name: "Ms. Neha Kapoor", room: "Studio Color Splash", completed: false }
+];
+
 export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: JuniorStudentDashboardProps) {
   const studentId = user.student_id || 6;
   const [activeTab, setActiveTab] = useState<JuniorTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Active Quiz Modal State
   const [activeQuizModal, setActiveQuizModal] = useState<{
@@ -268,8 +386,8 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
   } | null>(null);
 
   // Core Junior State
-  const [overview, setOverview] = useState<JuniorDashboardOverview | null>(null);
-  const [timetable, setTimetable] = useState<AdventureTimetableItem[]>([]);
+  const [overview, setOverview] = useState<JuniorDashboardOverview>(defaultJuniorOverview);
+  const [timetable, setTimetable] = useState<AdventureTimetableItem[]>(defaultAdventureTimetable);
   const [busData, setBusData] = useState<JuniorBusRadar | null>(null);
 
   const [stars, setStars] = useState<number>(180);
@@ -441,28 +559,13 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
     return matchesCategory && matchesSearch;
   });
 
-  if (loading || !overview) {
-    return (
-      <div className="h-[calc(100vh-4rem)] bg-gradient-to-b from-sky-50 via-amber-50 to-pink-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-400 text-4xl shadow-2xl animate-bounce">
-          🚀
-          <span className="absolute -top-2 -right-2 text-xl animate-spin">✨</span>
-        </div>
-        <h2 className="text-xl font-black text-slate-800 mt-4 tracking-tight">
-          Packing {user.name}'s Explorer Backpack...
-        </h2>
-        <p className="text-xs font-bold text-slate-500 mt-1">
-          Loading Live Class Rocket, Star Vault, and Daily Adventures!
-        </p>
-      </div>
-    );
-  }
+  const currentOverview = overview || defaultJuniorOverview;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-[#F8FAFC] dark:bg-[#070B14] text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
+    <div className="flex h-screen w-full overflow-hidden bg-[url('/junior/junior_jungle_background.webp')] bg-cover bg-center bg-no-repeat text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
       
       {/* ========================================================= */}
-      {/* 1. LEFT SIDEBAR NAVIGATION (Matching other roles layout) */}
+      {/* 1. LEFT SIDEBAR NAVIGATION (Matching Reference Layout)     */}
       {/* ========================================================= */}
       <JuniorSidebar
         user={user}
@@ -484,42 +587,278 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
       {/* ========================================================= */}
       {/* 2. MAIN SCROLLABLE CONTENT VIEWPORT                       */}
       {/* ========================================================= */}
-      <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 bg-[#F8FAFC] dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-150">
+      <main className="relative flex-1 h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 space-y-5 bg-transparent text-slate-900 dark:text-slate-100 transition-colors duration-150">
         
         {/* Toast Notification Banner */}
         {toastMessage && (
           <div className="fixed top-20 right-8 z-50 flex items-center gap-3 rounded-2xl bg-[#0F172A] text-white px-4 py-3 shadow-2xl border border-amber-400/50 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
             <CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" />
             <span>{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
+            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white cursor-pointer">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
 
-        {/* Welcome Greeting Strip (Clean - Left Sidebar Handles All Navigation) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-amber-100 via-pink-100 to-sky-100 dark:from-amber-950/40 dark:via-pink-950/40 dark:to-sky-950/40 rounded-3xl p-5 px-6 border-2 border-amber-200 dark:border-amber-900/50 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 shadow-md text-2xl shrink-0">
-              ⭐
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
-                Welcome to Adventure Island, {user.name}! 🌟
-              </h2>
-              <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mt-0.5">
-                Next live class is <b>Mathematics with Ms. Priya</b> at 10:00 AM • <b>3 daily adventures</b> waiting!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-3.5 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/90 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-black shadow-xs flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>CBSE Class 3-A • Term 2</span>
+        {/* Framing Header Bar with Top Hanging Monkey and 'Let\'s Learn & Grow!' sign from Reference Image */}
+        <div className="relative flex items-center justify-between pb-1 select-none">
+          {/* Left: Greeting & Class Tag */}
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-2 tracking-tight drop-shadow-[0_1px_3px_rgba(255,255,255,0.95)] dark:drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+              <span>Welcome back, {user.name}!</span>
+              <span className="text-2xl select-none">🌟</span>
+            </h1>
+            <span className="hidden sm:inline-flex px-3.5 py-1 rounded-full bg-[#FEF08A] hover:bg-[#FDE047] text-amber-900 text-xs font-black border border-amber-300 shadow-2xs items-center gap-1.5 cursor-pointer">
+              <span>⭐</span>
+              <span>CBSE Class 3-A</span>
             </span>
           </div>
+
+          {/* Center: Cute Hanging Monkey from Reference Image */}
+          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 -top-2 z-20 pointer-events-none">
+            <img
+              src="/junior/extracted/top_hanging_monkey.png"
+              alt="Hanging monkey mascot"
+              className="h-16 w-auto object-contain drop-shadow-md animate-monkey-swing"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          </div>
+
+          {/* Right: Top Controls & Hanging Wooden Sign matching Reference Image */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Star Coins Widget */}
+            <div className="flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 border border-amber-300 px-3 py-1.5 shadow-sm text-xs font-black text-amber-900 dark:text-amber-300">
+              <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+              <span>{stars}</span>
+            </div>
+
+            {/* Gamified Junior Notification Dropdown */}
+            <JuniorNotificationDropdown
+              studentName={user.name}
+              onNavigateTab={(tab) => {
+                setActiveTab(tab);
+                playButtonClick();
+              }}
+              onEarnStars={(earned) => {
+                setStars((prev) => prev + earned);
+              }}
+              onShowToast={(msg) => triggerToast(msg)}
+            />
+
+            {/* Student Profile Pill & Interactive Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  playButtonClick();
+                  setProfileDropdownOpen((prev) => !prev);
+                }}
+                className="flex items-center gap-2 rounded-full bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 py-1 pl-1.5 pr-3 shadow-sm hover:shadow-md cursor-pointer transition-all hover:scale-[1.02] text-slate-800 dark:text-slate-100"
+                title="View Student Passport & Profile"
+              >
+                <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-amber-400 to-orange-400 flex items-center justify-center text-xs shadow-xs border border-white">
+                  👦
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">
+                    {user.name}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 leading-tight">
+                    Class 3-A
+                  </span>
+                </div>
+                <ChevronDown className={`h-3 w-3 text-slate-400 ml-0.5 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {profileDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setProfileDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-3xl border-2 border-amber-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-amber-400 via-orange-400 to-pink-500 flex items-center justify-center text-2xl shadow-md border-2 border-white dark:border-slate-800">
+                        👦
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-sm font-black text-slate-900 dark:text-white truncate">
+                            {user.name}
+                          </h4>
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[9px] font-black">
+                            Lvl {level}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                          Class 3-A • Roll #06 • CBSE Primary
+                        </p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                          ID: {user.school_code || 'EDU-GLOBAL-360'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Mini Stats Banner */}
+                    <div className="grid grid-cols-2 gap-2 p-2 rounded-2xl bg-amber-50/70 dark:bg-slate-800/60 border border-amber-200/50 dark:border-slate-700/50 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                        <div className="text-left">
+                          <div className="text-xs font-black text-amber-900 dark:text-amber-300">{stars}</div>
+                          <div className="text-[9px] font-bold text-amber-700/80 dark:text-amber-400/80">Stars Banked</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5 border-l border-amber-200 dark:border-slate-700 pl-2">
+                        <Flame className="h-4 w-4 fill-orange-500 text-orange-500" />
+                        <div className="text-left">
+                          <div className="text-xs font-black text-orange-900 dark:text-orange-300">{streakDays} Days</div>
+                          <div className="text-[9px] font-bold text-orange-700/80 dark:text-orange-400/80">Quest Streak</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Jump Links */}
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveTab('profile');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">🎒</span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                              My Explorer Passport
+                            </div>
+                            <div className="text-[10px] text-slate-400">View ID card, badges & bus tracker</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveTab('badges');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">🏆</span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                              Trophies & Treasure Chests
+                            </div>
+                            <div className="text-[10px] text-slate-400">Open unlocked magic chests</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveTab('timetable');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">📅</span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                              Adventure Timetable
+                            </div>
+                            <div className="text-[10px] text-slate-400">Explore today's class schedule</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveTab('exams');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">📝</span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                              Exams & Quizzes Hub
+                            </div>
+                            <div className="text-[10px] text-slate-400">Practice questions & datesheets</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveTab('holidays');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">🏖️</span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                              School Holidays Calendar
+                            </div>
+                            <div className="text-[10px] text-slate-400">Festivals and upcoming vacations</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                    </div>
+
+                    {/* Divider & Sign Out */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => {
+                          playButtonClick();
+                          setProfileDropdownOpen(false);
+                          if (onLogout) {
+                            onLogout();
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        <span>Sign Out (Log Out)</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Hanging Wooden Sign 'Let\'s Learn & Grow!' from Reference */}
+            <div className="animate-sign-sway">
+              <img
+                src="/junior/extracted/top_right_sign.png"
+                alt="Let's Learn & Grow!"
+                className="h-10 sm:h-12 w-auto object-contain drop-shadow-sm hover:scale-105 transition-transform"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+          </div>
         </div>
+
 
       {/* ========================================================
           VIEW 1: DASHBOARD / ADVENTURE HUB (LAUNCHPAD)
@@ -530,76 +869,8 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
             studentName={user.name}
             timetable={timetable}
             onOpenQuests={() => setActiveTab('adventures')}
+            onEarnStars={(earned) => setStars((prev) => prev + earned)}
           />
-
-          {/* Quick Academic Hub Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div
-              onClick={() => setActiveTab('adventures')}
-              className="cursor-pointer group rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border-2 border-amber-200 dark:border-amber-900/40 p-5 hover:shadow-md transition-all hover:scale-[1.01]"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-3xl">🧭</span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-0.5 rounded-full">
-                  3 Quests Active
-                </span>
-              </div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white mt-3 group-hover:text-amber-600 transition-colors">
-                Today&apos;s Adventures
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                Complete daily missions in Math &amp; Phonics to earn bonus stars!
-              </p>
-              <div className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 mt-3">
-                <span>Start Daily Quest</span>
-                <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-
-            <div
-              onClick={() => setActiveTab('recordings')}
-              className="cursor-pointer group rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-950/30 dark:to-pink-950/20 border-2 border-rose-200 dark:border-rose-900/40 p-5 hover:shadow-md transition-all hover:scale-[1.01]"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-3xl">🎬</span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 px-2.5 py-0.5 rounded-full">
-                  6 Replays Ready
-                </span>
-              </div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white mt-3 group-hover:text-rose-600 transition-colors">
-                Class Recordings Library
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                Missed a live session? Watch video replays anytime &amp; claim curiosity stars.
-              </p>
-              <div className="flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 mt-3">
-                <span>Explore Replays</span>
-                <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-
-            <div
-              onClick={() => setActiveTab('exams')}
-              className="cursor-pointer group rounded-2xl bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/20 border-2 border-purple-200 dark:border-purple-900/40 p-5 hover:shadow-md transition-all hover:scale-[1.01]"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-3xl">🏆</span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/60 px-2.5 py-0.5 rounded-full">
-                  Star Challenges
-                </span>
-              </div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white mt-3 group-hover:text-purple-600 transition-colors">
-                Interactive Star Quizzes
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                Voice-guided challenges in Math, English &amp; Science with instant feedback!
-              </p>
-              <div className="flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 mt-3">
-                <span>Play Star Quiz</span>
-                <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -609,8 +880,9 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
       {(activeTab === 'adventures' || activeTab === 'quests') && (
         <DailyQuests
           studentId={studentId}
-          quests={overview.active_quests}
+          quests={currentOverview.active_quests}
           onQuestCompleted={handleQuestCompleted}
+          onEarnStars={(earned) => setStars((prev) => prev + earned)}
         />
       )}
 
@@ -620,7 +892,7 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         {activeTab === 'booster' && (
           <MagicPowerBooster
             studentId={studentId}
-            chests={overview.magic_booster_chests}
+            chests={currentOverview.magic_booster_chests}
             onChestClaimed={handleChestClaimed}
           />
         )}
@@ -638,7 +910,7 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         {activeTab === 'profile' && (
           <JuniorProfileCard
             user={user}
-            profile={overview.profile}
+            profile={currentOverview.profile}
           />
         )}
 
@@ -658,10 +930,11 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         ======================================================== */}
         {activeTab === 'recordings' && (
           <JuniorRecordingsLibrary
+            studentName={user.name}
             onEarnStars={(earned) => {
               setStars((prev) => prev + earned);
-              triggerToast(`⭐ +${earned} Curiosity Stars for watching class replay!`);
             }}
+            onShowToast={(msg) => triggerToast(msg)}
           />
         )}
 
@@ -683,203 +956,18 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
             VIEW 9: BADGES & TROPHY ROOM (+ MAGIC BOOSTER & PORTFOLIO)
         ======================================================== */}
         {activeTab === 'badges' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-3 py-1 text-xs font-bold border border-amber-200 dark:border-amber-800">
-                  <Trophy className="h-3.5 w-3.5 text-amber-600" />
-                  Explorer Badges &amp; Trophy Room
-                </span>
-                <h1 className="mt-2 text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {user.name}&apos;s Hall of Fame &amp; Rewards 🏆
-                </h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Unlock trophies by completing live classes, daily quests, and star challenges!
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 px-4 py-2">
-                  <Star className="h-5 w-5 fill-amber-400 text-amber-500" />
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Stars</span>
-                    <span className="text-base font-black text-amber-900 dark:text-amber-200">{stars} Stars</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsUploadAwardModalOpen(true)}
-                  className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md shadow-purple-500/20 transition-all active:scale-95 cursor-pointer"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span>[+ Upload Certificate]</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Level 3 Progression Card */}
-            <div className="rounded-3xl border-2 border-amber-200 dark:border-amber-800/80 bg-gradient-to-r from-amber-50 via-pink-50 to-purple-50 dark:from-amber-950/20 dark:via-pink-950/20 dark:to-purple-950/20 p-6 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3.5">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-400 text-3xl shadow-md border-b-4 border-amber-600">
-                    🦊
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black uppercase">
-                        Level {level}
-                      </span>
-                      <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                        {levelTitle} {user.name}
-                      </h3>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      120 more stars to unlock <b>Level 4: Little Astronaut 🚀</b>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-xs font-mono font-bold text-slate-500">180 / 300 Stars</span>
-                  <div className="w-48 sm:w-60 h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden mt-1 shadow-inner">
-                    <div
-                      className="h-full bg-gradient-to-r from-amber-400 via-pink-500 to-purple-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(180 / 300) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3D Badges Grid */}
-            <div>
-              <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
-                Unlocked Achievement Badges (6 of 9)
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3.5">
-                {[
-                  { name: 'Star Reader', icon: '📚', desc: 'Read 20 Phonics books', unlocked: true },
-                  { name: 'Math Wizard', icon: '🧮', desc: 'Perfect addition quiz', unlocked: true },
-                  { name: '7-Day Streak', icon: '🔥', desc: 'Attended live daily', unlocked: true },
-                  { name: 'Little Picasso', icon: '🎨', desc: 'Creative corner art', unlocked: true },
-                  { name: 'Eco Ranger', icon: '🌱', desc: 'Science fair winner', unlocked: true },
-                  { name: 'Quiz Master', icon: '🏆', desc: '3 Star quizzes done', unlocked: true },
-                  { name: 'Speed Solver', icon: '⚡', desc: 'Solve in 30 seconds', unlocked: false },
-                  { name: 'Kind Helper', icon: '🤝', desc: 'Helped classmate', unlocked: false },
-                  { name: 'Grand Master', icon: '👑', desc: 'Reach Level 10', unlocked: false }
-                ].map((badge, idx) => (
-                  <div
-                    key={idx}
-                    className={`rounded-2xl border p-4 text-center transition-all ${
-                      badge.unlocked
-                        ? 'border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-900 shadow-xs hover:scale-105'
-                        : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 opacity-50'
-                    }`}
-                  >
-                    <div className="text-3xl mb-1.5">{badge.icon}</div>
-                    <span className="text-xs font-black text-slate-900 dark:text-white block truncate">
-                      {badge.name}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5 leading-tight">
-                      {badge.desc}
-                    </span>
-                    <span
-                      className={`mt-2 inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        badge.unlocked
-                          ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
-                      }`}
-                    >
-                      {badge.unlocked ? 'Unlocked ✓' : 'Locked 🔒'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Magic Power Booster Chests Section */}
-            <div className="pt-2">
-              <MagicPowerBooster
-                studentId={studentId}
-                chests={overview.magic_booster_chests}
-                onChestClaimed={handleChestClaimed}
-              />
-            </div>
-
-            {/* Side-by-Side Dual Outcomes Portfolio */}
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    School Participations &amp; Verified Certificates
-                  </h3>
-                  <p className="text-xs text-slate-500">Official portfolio record for K–5 development</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                {/* Participations (Left 50%) */}
-                <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2.5 border-b border-blue-100 dark:border-blue-900/40 pb-3">
-                    <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-400 flex items-center justify-center font-bold">
-                      <BookOpen className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Official School Participations
-                      </h4>
-                      <span className="text-[10px] text-slate-500">Events, Assemblies, and Sports</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {filteredPortfolio
-                      .filter((p) => p.category === 'participation')
-                      .map((item) => (
-                        <div key={item.id} className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white block">{item.title}</span>
-                          <p className="text-[11px] text-slate-600 dark:text-slate-400">{item.description}</p>
-                          <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 block">{item.event_name} • {item.date}</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Achievements (Right 50%) */}
-                <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2.5 border-b border-amber-100 dark:border-amber-900/40 pb-3">
-                    <div className="h-9 w-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                      <Trophy className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Verified Medals &amp; Certificates
-                      </h4>
-                      <span className="text-[10px] text-slate-500">Uploaded Certificates &amp; Awards</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {filteredPortfolio
-                      .filter((p) => p.category === 'achievement')
-                      .map((item) => (
-                        <div key={item.id} className="p-3.5 rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</span>
-                            <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold px-2 py-0.5">
-                              Verified
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-600 dark:text-slate-400">{item.description}</p>
-                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 block">{item.event_name} • {item.date}</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <JuniorTrophyHub
+            user={user}
+            stars={stars}
+            level={level}
+            levelTitle={levelTitle}
+            studentId={studentId}
+            chests={currentOverview.magic_booster_chests}
+            portfolio={portfolio}
+            onChestClaimed={handleChestClaimed}
+            onOpenUploadCertificate={() => setIsUploadAwardModalOpen(true)}
+            onShowToast={(msg) => triggerToast(msg)}
+          />
         )}
 
         {/* ========================================================
@@ -890,43 +978,17 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         )}
 
         {/* ========================================================
-            VIEW 11: CLASS TIMETABLE
+            VIEW 11: CLASS TIMETABLE (MATCHING TARGET JUNGLE REFERENCE)
         ======================================================== */}
         {activeTab === 'timetable' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
-              <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                Weekly Class Schedule
-              </span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                Class 3-A Adventure Timetable
-              </h1>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {timetable.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center justify-center">
-                      P{item.period_number ?? item.id}
-                    </span>
-                    <span className="text-xs font-mono text-slate-500">{item.time_slot ?? item.time}</span>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">{item.subject}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Teacher: {item.teacher_name}</p>
-                    <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 block mt-1">
-                      {item.room_or_link ?? item.room}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <JuniorTimetableHub
+            studentName={user.name}
+            onOpenLiveClass={() => {
+              setActiveTab('dashboard');
+              triggerToast("Launching into Mrs. Ananya Verma's Class! 🚀");
+            }}
+            onEarnStars={(earned) => setStars((prev) => prev + earned)}
+          />
         )}
 
       </main>

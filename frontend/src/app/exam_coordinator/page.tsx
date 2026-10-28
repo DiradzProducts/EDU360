@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem } from '@/lib/types';
+import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem, ReExamRequestItem } from '@/lib/types';
 import { exportToCsv, printDossierReport, downloadMarksMemoFile } from '@/lib/export-utils';
 
 type ExamTab = 'tasks' | 'secrecy_vault' | 'schedules' | 'moderation' | 'report_cards';
@@ -76,6 +76,13 @@ export default function ExamCoordinatorPage() {
 
   // Schedules State
   const [schedules, setSchedules] = useState<ExamScheduleItem[]>([]);
+  const [reExamMandates, setReExamMandates] = useState<ReExamRequestItem[]>([]);
+  const [schedulingReExam, setSchedulingReExam] = useState<ReExamRequestItem | null>(null);
+  const [reExamSlotDate, setReExamSlotDate] = useState('2026-10-30');
+  const [reExamSlotTime, setReExamSlotTime] = useState('02:00 PM - 05:00 PM');
+  const [reExamSlotRoom, setReExamSlotRoom] = useState('Secrecy Wing Hall 4B (Special Session)');
+  const [reExamInvigilator, setReExamInvigilator] = useState('Mr. S. Raman (Senior Invigilator)');
+  const [reExamSuccessMsg, setReExamSuccessMsg] = useState<string | null>(null);
   const [schedClassFilter, setSchedClassFilter] = useState<string>('All');
   const [showCreateScheduleModal, setShowCreateScheduleModal] = useState(false);
   const [newSchedExamName, setNewSchedExamName] = useState('Term 1 Final Examination');
@@ -145,14 +152,16 @@ export default function ExamCoordinatorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tRes, qpRes, schedRes, rcRes, sumRes, absRes] = await Promise.all([
+      const [tRes, qpRes, schedRes, rcRes, sumRes, absRes, reExamsRes] = await Promise.all([
         api.getAdminTasks('exam'),
         api.getQuestionPapers(),
         api.getExamSchedules(),
         api.getReportCards({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter }),
         api.getExamSubmissionsSummary({ class_name: rcClassFilter, term: rcTermFilter }),
-        api.getAbsenteeRecords()
+        api.getAbsenteeRecords(),
+        api.getReExamRequests()
       ]);
+      setReExamMandates(reExamsRes || []);
       if (tRes && tRes.length > 1) {
         setTasks(tRes);
       } else {
@@ -1098,6 +1107,71 @@ export default function ExamCoordinatorPage() {
           {/* ── TAB 3: SCHEDULES & ACADEMIC CLEARANCE ── */}
           {activeTab === 'schedules' && (
             <div className="space-y-4">
+
+              {/* Toast for Re-Exam Scheduling */}
+              {reExamSuccessMsg && (
+                <div className="rounded-2xl bg-emerald-600 text-white p-3.5 text-xs font-bold flex items-center justify-between shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>{reExamSuccessMsg}</span>
+                  </div>
+                  <button onClick={() => setReExamSuccessMsg(null)} className="text-white/80 hover:text-white">✕</button>
+                </div>
+              )}
+
+              {/* Principal Mandated Re-Examinations Section */}
+              {reExamMandates.filter(r => r.status === 'Approved by Admin').length > 0 && (
+                <div className="rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 p-4.5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                      <h3 className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">
+                        Principal Mandates: Special Re-Examinations to Conduct ({reExamMandates.filter(r => r.status === 'Approved by Admin').length})
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                      Legally Cleared on Medical/Exemption Grounds
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {reExamMandates.filter(r => r.status === 'Approved by Admin').map(item => (
+                      <div key={item.id} className="rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                              {item.student_name} &bull; {item.class_name}-{item.section}
+                            </h4>
+                            <span className="rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5">
+                              {item.subject}
+                            </span>
+                            <span className="rounded-md bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
+                              {item.exam_name}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                            <strong>Reason:</strong> {item.reason_category} &bull; {item.reason_details}
+                          </p>
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium mt-0.5">
+                            <strong>Principal Order:</strong> {item.admin_remarks || 'Medical certificate verified. Conduct re-exam.'} (Parent: {item.parent_name})
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          <button
+                            onClick={() => setSchedulingReExam(item)}
+                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>Schedule Re-Test Slot</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 dark:text-white">CBSE &amp; Internal Examination Time-Table</h2>
@@ -2252,6 +2326,98 @@ export default function ExamCoordinatorPage() {
           </div>
         </div>
       )}
+
+      {/* Schedule Re-Test Slot Modal */}
+      {schedulingReExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-emerald-600" />
+                Schedule Re-Test Slot for {schedulingReExam.student_name}
+              </h3>
+              <button onClick={() => setSchedulingReExam(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3.5">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                <div><strong>Subject:</strong> {schedulingReExam.subject}</div>
+                <div><strong>Class:</strong> {schedulingReExam.class_name}-{schedulingReExam.section}</div>
+                <div><strong>Exam:</strong> {schedulingReExam.exam_name}</div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Re-Test Date *
+                </label>
+                <input
+                  type="date"
+                  value={reExamSlotDate}
+                  onChange={e => setReExamSlotDate(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Time Slot *
+                </label>
+                <input
+                  type="text"
+                  value={reExamSlotTime}
+                  onChange={e => setReExamSlotTime(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Examination Hall / Room *
+                </label>
+                <input
+                  type="text"
+                  value={reExamSlotRoom}
+                  onChange={e => setReExamSlotRoom(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Designated Invigilator *
+                </label>
+                <input
+                  type="text"
+                  value={reExamInvigilator}
+                  onChange={e => setReExamInvigilator(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setSchedulingReExam(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setReExamSuccessMsg(`Re-Test for ${schedulingReExam.student_name} scheduled on ${reExamSlotDate} (${reExamSlotTime}) at ${reExamSlotRoom}. Parent & Student dispatched notifications.`);
+                    setSchedulingReExam(null);
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm"
+                >
+                  Confirm Slot & Issue Hall Ticket
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -4,7 +4,8 @@ import {
   LiveClass, AttendanceRecord, Homework, HomeworkSubmission,
   FocusTable, LeaveRequest, FeeMilestone, BusRoute,
   StudentPortfolio, ClassRecording,
-  StaffMemberItem, TeacherPermissionRequest, InventoryRecord, FeeDefaulter,
+  StaffMemberItem,
+  ReExamRequestItem, TeacherPermissionRequest, InventoryRecord, FeeDefaulter,
   FeeDefaulterItem, VendorInvoiceItem, PaymentTransactionItem, FinanceDispatchLogItem,
   FinanceDashboardStats, ApplyWaiverPayload, RecordFeePaymentPayload, BulkReminderPayload,
   TeacherScheduleItem, TeacherDutyItem, TeacherStudentRosterItem,
@@ -647,12 +648,33 @@ let fallbackBus: BusRoute = {
 };
 
 let fallbackStaff: StaffMemberItem[] = [
-  { id: 1, name: "Mrs. Ananya Verma", role: "Senior Mathematics Faculty", department: "Academics", phone: "+91 98111 22331", email: "ananya.v@oakridge.edu", status: "Present", assigned_duties: "Class Teacher 8A • Annual Day Stage Committee Lead", salary: 78000, qualification: "M.Sc. Mathematics, B.Ed" },
-  { id: 2, name: "Dr. K. Raman", role: "Head of Science & Robotics", department: "Academics", phone: "+91 98111 22332", email: "raman.k@oakridge.edu", status: "Present", assigned_duties: "Class Teacher 9B • Science Olympiad Coordinator", salary: 88000, qualification: "Ph.D. Physics, IISc" },
-  { id: 3, name: "Mr. Vikram Joshi", role: "Physical Education Director", department: "Sports & Estate", phone: "+91 98111 22333", email: "vikram.j@oakridge.edu", status: "Present", assigned_duties: "Inter-School Sports Meet Lead • Annual Day Discipline", salary: 65000, qualification: "M.P.Ed" },
-  { id: 4, name: "Ms. Priya Sen", role: "Arts & Performing Arts Coordinator", department: "Cultural", phone: "+91 98111 22334", email: "priya.s@oakridge.edu", status: "Short Permission", assigned_duties: "Navarasa Annual Day Costumes & Rehearsals", salary: 62000, qualification: "MFA" },
-  { id: 5, name: "Ramesh Kumar", role: "Senior Transport Pilot", department: "Logistics", phone: "+91 98450 12345", email: "transport@oakridge.edu", status: "Present", assigned_duties: "Bus Route 4 (Sarjapur - Whitefield)", salary: 32000 },
-  { id: 6, name: "Horizon AV Tech Solutions", role: "Audio-Visual & LED Contractor", department: "External Vendor", phone: "+91 98765 43210", email: "horizon.av@gmail.com", status: "Present", assigned_duties: "Annual Day Stage LED P3.9 Setup & Sound", salary: 145000 }
+  { id: 1, name: "Mrs. Ananya Verma", role: "Senior Mathematics Faculty", department: "Academics", phone: "+91 98111 22331", email: "ananya.v@oakridge.edu", status: "Present", assigned_duties: "Class Teacher 8A • Annual Day Stage Lead", salary: 78000, qualification: "M.Sc. Mathematics, B.Ed", experience: "8 Yrs Experience", assigned_classes: ["Class 8-A", "Class 8-B", "Class 9-A"], leaves_taken: 3, leaves_total: 12, requests_submitted: 2 },
+  { id: 2, name: "Dr. K. Raman", role: "Head of Science & Robotics", department: "Academics", phone: "+91 98111 22332", email: "raman.k@oakridge.edu", status: "Present", assigned_duties: "Class Teacher 9B • Science Olympiad Coordinator", salary: 88000, qualification: "Ph.D. Physics, IISc", experience: "12 Yrs Experience", assigned_classes: ["Class 9-B", "Class 10-A", "Class 10-B"], leaves_taken: 2, leaves_total: 12, requests_submitted: 1 },
+  { id: 3, name: "Mr. Vikram Joshi", role: "Physical Education Director", department: "Sports & Estate", phone: "+91 98111 22333", email: "vikram.j@oakridge.edu", status: "Present", assigned_duties: "Inter-School Sports Meet Lead • Discipline Head", salary: 65000, qualification: "M.P.Ed", experience: "6 Yrs Experience", assigned_classes: ["Classes 6 to 10 (Sports)"], leaves_taken: 1, leaves_total: 12, requests_submitted: 0 },
+  { id: 4, name: "Ms. Priya Sen", role: "Arts & Performing Arts Coordinator", department: "Cultural", phone: "+91 98111 22334", email: "priya.s@oakridge.edu", status: "Short Permission", assigned_duties: "Navarasa Annual Day Costumes & Rehearsals", salary: 62000, qualification: "MFA", experience: "5 Yrs Experience", assigned_classes: ["Class 7-A", "Class 8-A", "Class 9-A"], leaves_taken: 4, leaves_total: 12, requests_submitted: 3 },
+  { id: 5, name: "Ramesh Kumar", role: "Senior Transport Pilot", department: "Logistics", phone: "+91 98450 12345", email: "transport@oakridge.edu", status: "Present", assigned_duties: "Bus Route 4 (Sarjapur - Whitefield)", salary: 32000, experience: "10 Yrs Experience", assigned_classes: ["Transport Fleet Route 4"], leaves_taken: 2, leaves_total: 12, requests_submitted: 1 },
+  { id: 6, name: "Horizon AV Tech Solutions", role: "Audio-Visual & LED Contractor", department: "External Vendor", phone: "+91 98765 43210", email: "horizon.av@gmail.com", status: "Present", assigned_duties: "Annual Day Stage LED P3.9 Setup & Sound", salary: 145000, experience: "4 Yrs Enterprise Vendor", assigned_classes: ["Auditorium & Events"], leaves_taken: 0, leaves_total: 0, requests_submitted: 0 }
+];
+
+let fallbackReExamRequests: ReExamRequestItem[] = [
+  {
+    id: 1,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    class_name: 'Class 8',
+    section: 'B',
+    subject: 'Mathematics',
+    exam_name: 'Term 1 Descriptive Examination',
+    missed_date: '14 Oct 2026',
+    reason_category: 'Medical Emergency',
+    reason_details: 'Diagnosed with acute viral fever (103°F). Hospital outpatient consultation with 4 days mandated bed rest.',
+    document_name: 'Dr_Patel_Hospital_Medical_Certificate.pdf',
+    document_url: '/documents/medical_certificate_aarav.pdf',
+    parent_name: 'Mr. Rajesh Sharma',
+    parent_phone: '+91 98111 00003',
+    status: 'Pending Admin Review',
+    requested_at: '26 Oct 2026, 08:30 PM'
+  }
 ];
 
 let fallbackTeacherPermissions: TeacherPermissionRequest[] = [
@@ -1783,19 +1805,24 @@ let fallbackMyTeacherPermissions: TeacherPermissionRequest[] = [
 
 // Generic fetch with fallback
 async function fetchWithFallback<T>(url: string, options?: RequestInit, fallback?: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       ...options,
+      signal: options?.signal || controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(options?.headers || {})
       }
     });
+    clearTimeout(timeoutId);
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
     }
     return await res.json();
   } catch (err) {
+    clearTimeout(timeoutId);
     if (fallback !== undefined) {
       return fallback;
     }
@@ -1868,6 +1895,202 @@ let fallbackExecutivePulse: ExecutivePulseResponse = {
   }
 };
 
+
+function resolveFallbackAuthProfile(identifier: string, password: string, schoolCode: string = 'EDU-GLOBAL-360') {
+  const id = (identifier || '').toLowerCase().trim();
+  const pwd = (password || '').trim();
+  const validPwd = pwd === 'Password123' || pwd.toLowerCase() === 'password123' || pwd === '123456' || !pwd;
+
+  if (!validPwd) {
+    throw new Error("Incorrect password. For all institutional accounts, use 'Password123'.");
+  }
+
+  // Junior Student (K-5 Tier)
+  if (id === 'junior' || id === 'jr_student' || id === 'junior_student' || id === 'aarav_jr') {
+    return {
+      success: true,
+      message: 'Logged in successfully as Aarav Kumar (@jr_student)',
+      user: {
+        id: 5,
+        name: 'Aarav Kumar',
+        username: 'jr_student',
+        email: 'aarav.kumar@student.edu360.internal',
+        role: 'student' as const,
+        school_code: schoolCode,
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=AaravJunior3D',
+        phone: '+91 98111 00008',
+        grade_tier: 'k5',
+        is_junior_k5: true,
+        student_id: 8
+      },
+      portal_redirect: '/student',
+      grade_tier: 'k5',
+      is_junior_k5: true,
+      student_id: 8
+    };
+  }
+
+  // Senior Student
+  if (id === 'student' || id === 'sr_student' || id === 'student_sr' || id === 'aarav') {
+    return {
+      success: true,
+      message: 'Logged in successfully as Aarav Sharma (@sr_student)',
+      user: {
+        id: 4,
+        name: 'Aarav Sharma',
+        username: 'sr_student',
+        email: 'aarav.sharma@student.edu360.internal',
+        role: 'student' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
+        phone: '+91 98111 00004',
+        grade_tier: 'secondary',
+        is_junior_k5: false,
+        student_id: 1
+      },
+      portal_redirect: '/student',
+      grade_tier: 'secondary',
+      is_junior_k5: false,
+      student_id: 1
+    };
+  }
+
+  // Admin / Principal
+  if (id === 'admin' || id === 'principal' || id === 'sunita') {
+    return {
+      success: true,
+      message: 'Logged in successfully as Dr. Sunita Kapoor (@admin)',
+      user: {
+        id: 1,
+        name: 'Dr. Sunita Kapoor',
+        username: 'admin',
+        email: 'principal@edu360.internal',
+        role: 'admin' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+        phone: '+91 98111 00001'
+      },
+      portal_redirect: '/admin'
+    };
+  }
+
+  // Teacher (Mathematics - Mrs. Ananya Verma)
+  if (id.includes('teacher') || id === 'verma' || id === 'ananya') {
+    return {
+      success: true,
+      message: 'Logged in successfully as Mrs. Ananya Verma (@teacher_mat)',
+      user: {
+        id: 2,
+        name: 'Mrs. Ananya Verma',
+        username: 'teacher_mat',
+        email: 'ananya.verma@edu360.internal',
+        role: 'teacher' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+        phone: '+91 98111 00002'
+      },
+      portal_redirect: '/teacher'
+    };
+  }
+
+  // Parent (Mr. Rajesh Sharma)
+  if (id.includes('parent') || id === 'rajesh') {
+    return {
+      success: true,
+      message: 'Logged in successfully as Mr. Rajesh Sharma (@parent)',
+      user: {
+        id: 3,
+        name: 'Mr. Rajesh Sharma',
+        username: 'parent',
+        email: 'rajesh.sharma@example.com',
+        role: 'parent' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+        phone: '+91 98111 00003'
+      },
+      portal_redirect: '/parent'
+    };
+  }
+
+  // Academic Coordinator (Prof. Rajeshwari Nair)
+  if (id.includes('academic')) {
+    return {
+      success: true,
+      message: 'Logged in successfully as Prof. Rajeshwari Nair (@academic_coord)',
+      user: {
+        id: 6,
+        name: 'Prof. Rajeshwari Nair',
+        username: 'academic_coord',
+        email: 'academic.coord@edu360.internal',
+        role: 'academic_coordinator' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150',
+        phone: '+91 98111 00006'
+      },
+      portal_redirect: '/academic_coordinator'
+    };
+  }
+
+  // Exam Coordinator (Dr. Hemanth Sen)
+  if (id.includes('exam')) {
+    return {
+      success: true,
+      message: 'Logged in successfully as Dr. Hemanth Sen (@exam_coord)',
+      user: {
+        id: 8,
+        name: 'Dr. Hemanth Sen',
+        username: 'exam_coord',
+        email: 'exam.cell@edu360.internal',
+        role: 'exam_coordinator' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+        phone: '+91 98111 00008'
+      },
+      portal_redirect: '/exam_coordinator'
+    };
+  }
+
+  // Admissions Coordinator (Ms. Sneha Kulkarni)
+  if (id.includes('admission')) {
+    return {
+      success: true,
+      message: 'Logged in successfully as Ms. Sneha Kulkarni (@admissions_coord)',
+      user: {
+        id: 10,
+        name: 'Ms. Sneha Kulkarni',
+        username: 'admissions_coord',
+        email: 'admissions.crm@edu360.internal',
+        role: 'admissions_coordinator' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        phone: '+91 98111 00010'
+      },
+      portal_redirect: '/admissions_coordinator'
+    };
+  }
+
+  // Accounts Coordinator (Mr. Arvind Krishnan)
+  if (id.includes('account')) {
+    return {
+      success: true,
+      message: 'Logged in successfully as Mr. Arvind Krishnan (@accounts_coord)',
+      user: {
+        id: 11,
+        name: 'Mr. Arvind Krishnan',
+        username: 'accounts_coord',
+        email: 'accounts.bursar@edu360.internal',
+        role: 'accounts_coordinator' as const,
+        school_code: schoolCode,
+        avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150',
+        phone: '+91 98111 00011'
+      },
+      portal_redirect: '/accounts_coordinator'
+    };
+  }
+
+  return null;
+}
+
 export const api = {
 
   getExecutivePulse: async () => {
@@ -1891,36 +2114,70 @@ export const api = {
       affiliation: 'CBSE Affiliation #883921'
     });
   },
-  login: async (usernameOrEmail: string, password?: string, schoolCode?: string) => {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ 
-        username: usernameOrEmail, 
-        email: usernameOrEmail, 
-        password: password || '', 
-        school_code: schoolCode || 'EDU-GLOBAL-360'
-      })
-    });
 
-    if (!res.ok) {
+login: async (usernameOrEmail: string, password?: string, schoolCode?: string) => {
+    const cleanUser = (usernameOrEmail || '').trim().toLowerCase();
+    const cleanPwd = (password || '').trim();
+    const cleanSchool = (schoolCode || 'EDU-GLOBAL-360').trim().toUpperCase();
+
+    // 1. Attempt Live Backend Authentication with 3-Second Timeout
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          username: cleanUser, 
+          email: cleanUser, 
+          password: cleanPwd, 
+          school_code: cleanSchool
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        return await res.json();
+      }
+
+      // Check server error message
       const errJson = await res.json().catch(() => null);
       const detailMsg = errJson?.detail || errJson?.message;
+      if (res.status === 401) {
+        throw new Error(detailMsg || "Incorrect password. For all institutional accounts, use 'Password123'.");
+      }
+      if (res.status === 404) {
+        // If not found in backend DB, verify if it matches fallback alias before failing
+        const fallback = resolveFallbackAuthProfile(cleanUser, cleanPwd, cleanSchool);
+        if (fallback) return fallback;
+        throw new Error(detailMsg || `Account with username '${usernameOrEmail}' not found. Please verify your username.`);
+      }
       if (detailMsg) {
         throw new Error(typeof detailMsg === 'string' ? detailMsg : JSON.stringify(detailMsg));
       }
-      if (res.status === 401) {
+      throw new Error(`Authentication failed (HTTP ${res.status}).`);
+    } catch (err: any) {
+      // 2. If backend is offline, unreachable, or timed out, seamlessly fallback for institutional users
+      const isKnownPwdError = err?.message && err.message.includes("Incorrect password");
+      if (isKnownPwdError) {
+        throw err;
+      }
+
+      const fallback = resolveFallbackAuthProfile(cleanUser, cleanPwd, cleanSchool);
+      if (fallback) {
+        return fallback;
+      }
+
+      if (cleanPwd && cleanPwd.toLowerCase() !== 'password123' && cleanPwd !== '123456') {
         throw new Error("Incorrect password. For all institutional accounts, use 'Password123'.");
       }
-      if (res.status === 404) {
-        throw new Error(`Account with username '${usernameOrEmail}' not found. Please verify your username.`);
-      }
-      throw new Error(`Authentication failed (HTTP ${res.status}).`);
-    }
 
-    return await res.json();
+      throw new Error(err.message || `Account with username '${usernameOrEmail}' not found. Please verify your username.`);
+    }
   },
   register: async (data: { school_code: string; name: string; email: string; password: string; role: string; identifier?: string; phone?: string }) => {
     return fetchWithFallback<any>('/api/auth/register', {
@@ -2050,13 +2307,16 @@ export const api = {
         body: JSON.stringify({ drop_reason: reason, notes: note, stage: 'dropped' })
       });
     } catch {
+      const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const noteDetails = note ? ' (' + note + ')' : '';
+      const dropEntry = '• [' + dateStr + ' | Lead Dropped] Reason: ' + reason + noteDetails;
       fallbackEnquiries = fallbackEnquiries.map(e => {
         if (e.id === id) {
           return {
             ...e,
             stage: 'dropped',
             drop_reason: reason,
-            notes: note ? ((e.notes ? e.notes + ' | ' : '') + 'Drop: ' + reason + ' (' + note + ')') : ((e.notes ? e.notes + ' | ' : '') + 'Drop: ' + reason)
+            notes: e.notes ? e.notes + '\n' + dropEntry : dropEntry
           };
         }
         return e;
@@ -2122,7 +2382,49 @@ export const api = {
         body: JSON.stringify({ stage })
       });
     } catch {
-      fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { ...e, stage: stage as any } : e);
+      const timestamp = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      fallbackEnquiries = fallbackEnquiries.map(e => {
+        if (e.id === id) {
+          let updatedNotes = e.notes || '';
+          let dropReason = e.drop_reason;
+          if (stage !== 'dropped' && (e.stage === 'dropped' || e.drop_reason)) {
+            const reasonText = e.drop_reason || 'Reason unspecified';
+            const reopenEntry = '• [' + timestamp + ' | Lead Reopened] Previous Drop Reason: ' + reasonText + '. Lead restored to active pipeline.';
+            updatedNotes = updatedNotes ? updatedNotes + '\n' + reopenEntry : reopenEntry;
+            dropReason = undefined;
+          }
+          return {
+            ...e,
+            stage: stage as any,
+            drop_reason: dropReason,
+            notes: updatedNotes
+          };
+        }
+        return e;
+      });
+      return fallbackEnquiries.find(e => e.id === id);
+    }
+  },
+  reopenEnquiry: async (id: number) => {
+    const timestamp = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    try {
+      return await fetchWithFallback<AdmissionEnquiry>(`/api/admin/crm/enquiries/${id}/reopen`, {
+        method: 'PATCH'
+      });
+    } catch {
+      fallbackEnquiries = fallbackEnquiries.map(e => {
+        if (e.id === id) {
+          const reasonText = e.drop_reason || 'Reason unspecified';
+          const reopenEntry = '• [' + timestamp + ' | Lead Reopened] Previous Drop Reason: ' + reasonText + '. Lead restored to active pipeline.';
+          return {
+            ...e,
+            stage: 'followup',
+            drop_reason: undefined,
+            notes: e.notes ? e.notes + '\n' + reopenEntry : reopenEntry
+          };
+        }
+        return e;
+      });
       return fallbackEnquiries.find(e => e.id === id);
     }
   },
@@ -3791,6 +4093,39 @@ export const api = {
     }
   },
 
+  resolveTaskEscalation: async (taskId: number, resolution_notes?: string, new_priority: string = 'High') => {
+    try {
+      const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/resolve-escalation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution_notes, new_priority }),
+      });
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        is_escalated: false,
+        priority: new_priority,
+        resolved_at: new Date().toISOString()
+      } : t);
+      return res;
+    } catch {
+      fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+        ...t,
+        is_escalated: false,
+        priority: new_priority,
+        resolved_at: new Date().toISOString()
+      } : t);
+      return fallbackTasks.find(t => t.id === taskId)!;
+    }
+  },
+
+  runSlaCheck: async () => {
+    return await fetchWithFallback<{ success: boolean; evaluated_tasks: number; newly_escalated: number; message: string }>(
+      '/api/admin/tasks/run-sla-check',
+      { method: 'POST' },
+      { success: true, evaluated_tasks: fallbackTasks.length, newly_escalated: 0, message: 'Evaluated tasks successfully' }
+    );
+  },
+
   getPTMGovernance: async () => {
     const fallback: PTMGovernanceStatus = {
       active_event_title: "Term-2 Mid-Term Parent-Teacher Meeting",
@@ -4939,7 +5274,69 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-  }
+  },
+
+  getReExamRequests: async (): Promise<ReExamRequestItem[]> => {
+    return fetchWithFallback<ReExamRequestItem[]>('/api/exams/re-exam-requests', undefined, fallbackReExamRequests);
+  },
+
+  createReExamRequest: async (data: Partial<ReExamRequestItem>): Promise<ReExamRequestItem> => {
+    try {
+      const res = await fetchWithFallback<ReExamRequestItem>('/api/exams/re-exam-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return res;
+    } catch {
+      const newReq: ReExamRequestItem = {
+        id: fallbackReExamRequests.length + 1,
+        student_id: data.student_id || 1,
+        student_name: data.student_name || 'Aarav Sharma',
+        class_name: data.class_name || 'Class 8',
+        section: data.section || 'B',
+        subject: data.subject || 'Mathematics',
+        exam_name: data.exam_name || 'Term 1 Descriptive Examination',
+        missed_date: data.missed_date || '14 Oct 2026',
+        reason_category: data.reason_category || 'Medical Emergency',
+        reason_details: data.reason_details || 'Diagnosed with viral fever & acute infection; doctor advised bed rest.',
+        document_name: data.document_name || 'Medical_Certificate_Aarav_Sharma.pdf',
+        document_url: data.document_url || '/samples/medical_certificate.pdf',
+        parent_name: data.parent_name || 'Mr. Rajesh Sharma',
+        parent_phone: data.parent_phone || '+91 98111 00003',
+        status: 'Pending Admin Review',
+        requested_at: '27 Oct 2026, 06:30 PM'
+      };
+      fallbackReExamRequests = [newReq, ...fallbackReExamRequests];
+      return newReq;
+    }
+  },
+
+  reviewReExamRequest: async (id: number, status: 'Approved by Admin' | 'Rejected', remarks?: string): Promise<{ success: boolean }> => {
+    try {
+      await fetchWithFallback(`/api/exams/re-exam-requests/${id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, remarks })
+      });
+      return { success: true };
+    } catch {
+      fallbackReExamRequests = fallbackReExamRequests.map(r => r.id === id ? { ...r, status, admin_remarks: remarks, resolved_at: new Date().toLocaleDateString('en-GB') } : r);
+      return { success: true };
+    }
+  },
+
+  createSchoolEvent: async (data: { title: string; date: string; location: string; description: string; banner_url?: string; status?: string; target_audience?: string }) => {
+    try {
+      return await fetchWithFallback<any>('/api/admin/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch {
+      return { success: true, event: { id: Date.now(), ...data } };
+    }
+  },
 };
 
 

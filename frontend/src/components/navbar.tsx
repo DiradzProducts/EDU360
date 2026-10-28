@@ -29,6 +29,11 @@ export function Navbar() {
 
   const router = useRouter();
   const { user, role, logout } = useAuth();
+
+  // If in junior student portal (K-5), the junior dashboard renders its own full-screen illustrated theme
+  if (pathname === '/junior' || (pathname === '/student' && (user?.grade_tier === 'k5' || user?.is_junior_k5 || user?.id === 5 || user?.student_id === 6))) {
+    return null;
+  }
   const { theme, toggleTheme } = useTheme();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -43,7 +48,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full h-16 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-md transition-colors duration-150">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
         
         {/* Left: Brand Logo & Uniform Role Pill */}
         <div className="flex items-center gap-3">

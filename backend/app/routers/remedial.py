@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.services.remedial_service import RemedialService
 from app.models.models import FocusTable, RemedialSprint, WhatsAppDispatchLog, Student
+from app.routers.notifications import create_system_notification
 
 router = APIRouter(prefix="/api/remedial", tags=["remedial"])
 
@@ -48,9 +49,11 @@ class UploadRoughWorkRequest(BaseModel):
 
 class VerifyDayRequest(BaseModel):
     student_id: int
-    day_num: int = 3
-    decision: str = "approve"  # approve or return
-    remarks: Optional[str] = "Intermediate factoring steps verified in rough notebook."
+    day_num: int = 1
+    decision: Optional[str] = "approve"  # approve or return
+    action: Optional[str] = None         # frontend alias ('approve' | 'rework')
+    remarks: Optional[str] = None
+    teacher_remarks: Optional[str] = None # frontend alias
 
 class ParentVerifyRequest(BaseModel):
     student_id: int
@@ -215,6 +218,24 @@ async def upload_student_rough_work(req: UploadRoughWorkRequest, db: AsyncSessio
         sprint.updated_at = datetime.datetime.utcnow()
         await db.commit()
 
+        # 🔔 Dispatch In-App Notification to Subject Teacher
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=2,  # Mrs. Ananya Verma
+                recipient_role="teacher",
+                sender_name="Remedial Focus Engine",
+                sender_role="system",
+                title=f"Remedial Rough Work Submitted: Student #{req.student_id}",
+                message=f"Rough solution sheet uploaded for Day {req.day_num} ({sprint.subject}). Ready for SpeedGrader verification.",
+                notification_type="REMEDIAL_SUBMISSION",
+                priority="URGENT",
+                action_url=f"/teacher/focus/{req.student_id}?tab=remedial&day={req.day_num}",
+                metadata_dict={"student_id": req.student_id, "day": req.day_num, "subject": sprint.subject}
+            )
+        except Exception as e:
+            print(f"Failed to dispatch rough work upload notification: {e}")
+
     return result
 
 @router.post("/verify-day")
@@ -224,11 +245,15 @@ async def verify_sprint_day(req: VerifyDayRequest, db: AsyncSession = Depends(ge
     If approved, marks day Completed and advances sprint. Persists to RemedialSprint.
     When Day 7 completes, auto-promotes the next queued subject sprint (Ascending Priority Queue).
     """
+    raw_decision = (req.action or req.decision or "approve").strip().lower()
+    norm_decision = "return" if raw_decision in ["rework", "return", "revision"] else "approve"
+    norm_remarks = (req.teacher_remarks or req.remarks or "").strip()
+
     result = RemedialService.verify_day(
         student_id=req.student_id,
         day_num=req.day_num,
-        decision=req.decision,
-        remarks=req.remarks or ""
+        decision=norm_decision,
+        remarks=norm_remarks
     )
     
     # Sync with DB RemedialSprint & FocusTable
@@ -240,9 +265,9 @@ async def verify_sprint_day(req: VerifyDayRequest, db: AsyncSession = Depends(ge
     )
     sprint = sprint_res.scalars().first()
     if sprint:
-        if req.decision == "approve":
+        if norm_decision == "approve":
             sprint.current_day = min(sprint.total_days, req.day_num + 1)
-            sprint.teacher_verification_notes = req.remarks
+            sprint.teacher_verification_notes = norm_remarks
             sprint.updated_at = datetime.datetime.utcnow()
             
             # If all 7 days verified, mark completed
@@ -261,16 +286,67 @@ async def verify_sprint_day(req: VerifyDayRequest, db: AsyncSession = Depends(ge
                     next_queued.current_day = 1
                     next_queued.updated_at = datetime.datetime.utcnow()
         else:
-            sprint.teacher_verification_notes = f"[Rework Requested]: {req.remarks}"
+            sprint.teacher_verification_notes = f"[Rework Requested]: {norm_remarks}"
+            sprint.updated_at = datetime.datetime.utcnow()
         await db.commit()
 
     ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.student_id))
     ft = ft_res.scalars().first()
     if ft:
-        ft.teacher_action = f"[Day {req.day_num} {req.decision.title()}d]: {req.remarks}"
-        if req.decision == "approve":
+        ft.teacher_action = f"[Day {req.day_num} {norm_decision.title()}d]: {norm_remarks}"
+        if norm_decision == "approve":
             ft.status = "in_progress"
         await db.commit()
+
+    # 🔔 Dispatch In-App Notification to Student and Parent
+    try:
+        subject = sprint.subject if sprint else "Mathematics"
+        if norm_decision == "approve":
+            # Notify Student
+            await create_system_notification(
+                db=db,
+                recipient_user_id=4,  # Aarav Sharma
+                recipient_role="student",
+                sender_name="Mrs. Ananya Verma",
+                sender_role="teacher",
+                title=f"Remedial Day {req.day_num} Approved! ({subject})",
+                message=f"Mrs. Verma approved your Day {req.day_num} solution. Day {min(7, req.day_num + 1)} is now unlocked.",
+                notification_type="REMEDIAL_DAY_READY",
+                priority="NORMAL",
+                action_url=f"/student?tab=remedial&day={min(7, req.day_num + 1)}",
+                metadata_dict={"day": req.day_num, "status": "approved"}
+            )
+            # Notify Parent
+            await create_system_notification(
+                db=db,
+                recipient_user_id=3,  # Mr. Rajesh Sharma
+                recipient_role="parent",
+                sender_name="Mrs. Ananya Verma",
+                sender_role="teacher",
+                title=f"Aarav's Day {req.day_num} Rough Work Verified",
+                message=f"Day {req.day_num} remedial milestone verified with sign-off remarks: '{norm_remarks or 'Good effort!'}'.",
+                notification_type="REMEDIAL_ALERT",
+                priority="NORMAL",
+                action_url="/parent?tab=academics&view=focus-plan",
+                metadata_dict={"student_id": req.student_id, "day": req.day_num}
+            )
+        else:
+            # Notify Student for rework
+            await create_system_notification(
+                db=db,
+                recipient_user_id=4,
+                recipient_role="student",
+                sender_name="Mrs. Ananya Verma",
+                sender_role="teacher",
+                title=f"Revision Requested: Day {req.day_num} ({subject})",
+                message=f"Mrs. Verma requested step revisions: '{norm_remarks or 'Please re-check your calculations.'}'.",
+                notification_type="HOMEWORK_RETURNED",
+                priority="URGENT",
+                action_url=f"/student?tab=remedial&day={req.day_num}",
+                metadata_dict={"day": req.day_num, "status": "revision_requested"}
+            )
+    except Exception as e:
+        print(f"Failed to dispatch remedial verification notifications: {e}")
 
     return result
 

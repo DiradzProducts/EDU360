@@ -95,3 +95,10 @@ Thumbs.db
 *.zip
 *.tar.gz
 k-5.mp4
+
+# ------------------------------------------
+# Temporary PDF & Build Artifacts
+# ------------------------------------------
+*.tmp.pdf
+raw_temp_*.pdf
+scratch/

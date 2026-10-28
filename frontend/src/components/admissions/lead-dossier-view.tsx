@@ -204,7 +204,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
   const handleReopenLead = async () => {
     if (!enquiry) return;
     try {
-      await api.updateEnquiryStage(enquiry.id, 'followup');
+      await api.reopenEnquiry(enquiry.id);
       await loadEnquiry();
       triggerToast(`Lead #${enquiry.id} restored to Active Pipeline!`);
     } catch (err) {
@@ -441,6 +441,22 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
               <button
                 type="button"
                 onClick={() => {
+                  const formEl = document.getElementById('log-call-form');
+                  if (formEl) {
+                    formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const textarea = formEl.querySelector('textarea');
+                    if (textarea) textarea.focus();
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="Add New Follow-Up Interaction"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>+ Add Follow-up</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setStandaloneDropReason('Fee Structure High');
                   setStandaloneDropNote('');
                   setShowDropModal(true);
@@ -604,12 +620,12 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
           
           {/* Section 1: Interaction Logging Form */}
           {!isConverted && !isDropped && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+            <div id="log-call-form" className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    Log Parent Conversation / Call Interaction
+                    Add Follow-Up / Log Parent Call
                   </h2>
                 </div>
                 <span className="text-[10px] font-bold text-slate-400">Live Call CRM</span>
@@ -672,7 +688,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    <span>{isSubmittingLog ? 'Saving...' : 'Save Interaction Log'}</span>
+                    <span>{isSubmittingLog ? 'Saving...' : '+ Add Follow-up Log'}</span>
                   </button>
                 </div>
               </form>

@@ -194,21 +194,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(role);
-    router.replace(getRoleRoute(role));
+    if (typeof window !== 'undefined') {
+      window.location.replace(getRoleRoute(role));
+    } else {
+      router.replace(getRoleRoute(role));
+    }
   };
 
   const loginWithCredentials = (newUser: User) => {
     setUser(newUser);
     localStorage.setItem('edu360_active_user', JSON.stringify(newUser));
     syncSessionCookie(newUser.role);
-    router.replace(getRoleRoute(newUser.role));
+    if (typeof window !== 'undefined') {
+      window.location.replace(getRoleRoute(newUser.role));
+    } else {
+      router.replace(getRoleRoute(newUser.role));
+    }
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('edu360_active_user');
     syncSessionCookie(null);
-    router.replace('/login');
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
+    } else {
+      router.replace('/login');
+    }
   };
 
   const switchRole = (newRole: UserRole) => {
@@ -216,7 +228,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(selected);
     localStorage.setItem('edu360_active_user', JSON.stringify(selected));
     syncSessionCookie(newRole);
-    router.replace(getRoleRoute(newRole));
+    if (typeof window !== 'undefined') {
+      window.location.replace(getRoleRoute(newRole));
+    } else {
+      router.replace(getRoleRoute(newRole));
+    }
   };
 
   const role: UserRole = user ? user.role : 'teacher';

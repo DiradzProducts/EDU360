@@ -28,6 +28,7 @@ import {
   ChevronRight,
   CreditCard,
   ArrowRight,
+  ArrowLeft,
   X,
   Download,
   Send,
@@ -66,6 +67,8 @@ import {
   OfficialDocument, 
   ExitClearance, 
   StaffMemberItem,
+  Student,
+  ReExamRequestItem,
   TeacherPermissionRequest,
   InventoryRecord,
   FeeDefaulter,
@@ -167,16 +170,82 @@ export default function AdminPage() {
   const [taskCockpit, setTaskCockpit] = useState<TaskExecutiveCockpitResponse | null>(null);
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
   const [escalateReason, setEscalateReason] = useState('');
+  const [reassignTaskId, setReassignTaskId] = useState<number | null>(null);
+  const [reassignPeer, setReassignPeer] = useState<string>('Mrs. Neha Roy');
+  const [resolveEscalateTaskId, setResolveEscalateTaskId] = useState<number | null>(null);
+  const [resolveEscalateNotes, setResolveEscalateNotes] = useState<string>('');
 
   const [showIssueAssetModal, setShowIssueAssetModal] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<InventoryRecord | null>(null);
   const [issueToRecipient, setIssueToRecipient] = useState('');
   const [issueQty, setIssueQty] = useState(1);
 
+  // Student Directory & Clarified SIS State
+  const [studentsList, setStudentsList] = useState<Student[]>([]);
+  const [selectedStudentForSIS, setSelectedStudentForSIS] = useState<Student | null>(null);
+  const [studentClassFilter, setStudentClassFilter] = useState('All');
+  const [studentSectionFilter, setStudentSectionFilter] = useState('All');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [sisActiveSubTab, setSisActiveSubTab] = useState<'profile' | 'academic' | 'certificates' | 'fees'>('profile');
+
+  // Staff Directory Search & Modal State
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [selectedStaffForModal, setSelectedStaffForModal] = useState<StaffMemberItem | null>(null);
+
+  // Exams & Re-Exam Requests State
+  const [examSubTab, setExamSubTab] = useState<'upcoming' | 'overdue' | 'reexam'>('upcoming');
+  const [reExamRequests, setReExamRequests] = useState<ReExamRequestItem[]>([]);
+  const [selectedReExamModal, setSelectedReExamModal] = useState<ReExamRequestItem | null>(null);
+  const [reExamAdminRemarks, setReExamAdminRemarks] = useState('');
+
+  // Fee Collections Sub-tab State
+  const [feeSubTab, setFeeSubTab] = useState<'today' | 'aging' | 'milestones'>('today');
+
+  // Convert to SIS Modal State (Admissions CRM)
+  const [convertModalEnquiry, setConvertModalEnquiry] = useState<AdmissionEnquiry | null>(null);
+  const [convertSection, setConvertSection] = useState('A');
+  const [convertAdmissionFee, setConvertAdmissionFee] = useState(25000);
+  const [convertFeeStatus, setConvertFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
+  const [convertPaymentMethod, setConvertPaymentMethod] = useState('UPI (Google Pay)');
+
+  // School Events State & Modal
+  const [schoolEvents, setSchoolEvents] = useState<any[]>([
+    {
+      id: 1,
+      title: 'Annual Day 2026: Navarasa (Rhythms of Tomorrow)',
+      date: '24 Oct 2026 • 5:30 PM',
+      location: 'Main Auditorium & Open Air Amphitheatre',
+      description: 'Our flagship cultural showcase featuring 400+ student performers, orchestra, and robotics exhibition.',
+      category: 'Cultural',
+      target_audience: 'All School (Parents, Students, Staff)',
+      status: 'Active Preparation'
+    },
+    {
+      id: 2,
+      title: 'Inter-School STEM & Robotics Expo',
+      date: '12 Nov 2026 • 09:30 AM',
+      location: 'STEM Labs & Indoor Sports Complex',
+      description: 'Annual inter-school competitive science and coding exhibition with 15 participating schools.',
+      category: 'Academic',
+      target_audience: 'All School (Parents, Students, Staff)',
+      status: 'Upcoming'
+    }
+  ]);
+  const [showAddEventModal, setShowAddEventModal] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventCategory, setNewEventCategory] = useState('Academic');
+  const [newEventDate, setNewEventDate] = useState('15 Nov 2026');
+  const [newEventTime, setNewEventTime] = useState('09:30 AM');
+  const [newEventLocation, setNewEventLocation] = useState('Main Auditorium');
+  const [newEventAudience, setNewEventAudience] = useState('All School');
+  const [newEventDesc, setNewEventDesc] = useState('');
+
   // Filter State
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [staffRoleFilter, setStaffRoleFilter] = useState('All');
   const [permFilter, setPermFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
+  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'pacing'>('all');
+  const [taskOriginFilter, setTaskOriginFilter] = useState<'all' | 'auto' | 'staff' | 'critical' | 'relief'>('all');
   const [examClassFilter, setExamClassFilter] = useState('All');
 
   // Student Remarks State (SIS)
@@ -220,24 +289,7 @@ export default function AdminPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [
-          alertsRes, 
-          tasksRes, 
-          enqRes, 
-          docsRes, 
-          exitsRes,
-          staffRes,
-          permsRes,
-          invRes,
-          defaultersRes,
-          subsRes,
-          facultyRes,
-          auditRes,
-          feeAnalyticsRes,
-          rolloverRes,
-          cockpitRes,
-          remedialRes
-        ] = await Promise.all([
+        const results = await Promise.allSettled([
           api.getTriageAlerts(),
           api.getTasks(),
           api.getEnquiries(),
@@ -253,24 +305,29 @@ export default function AdminPage() {
           api.getFeeFinancialAnalytics(),
           api.getRolloverPreview(),
           api.getTaskExecutiveCockpit(),
-          api.getRemedialAdminOverview()
+          api.getRemedialAdminOverview(),
+          api.getStudents(),
+          api.getReExamRequests()
         ]);
-        setTriageAlerts(alertsRes);
-        setTasks(tasksRes);
-        setEnquiries(enqRes);
-        setDocuments(docsRes);
-        setExitClearances(exitsRes);
-        setStaffMembers(staffRes);
-        setTeacherPermissions(permsRes);
-        setInventoryItems(invRes);
-        setFeeDefaulters(defaultersRes);
-        setSubstitutions(subsRes);
-        setAvailableFaculty(facultyRes);
-        setAuditLogs(auditRes);
-        setFeeAnalytics(feeAnalyticsRes);
-        setRolloverClasses(rolloverRes);
-        setTaskCockpit(cockpitRes);
-        if (remedialRes) setRemedialOverview(remedialRes);
+
+        if (results[0].status === 'fulfilled') setTriageAlerts(results[0].value);
+        if (results[1].status === 'fulfilled') setTasks(results[1].value);
+        if (results[2].status === 'fulfilled') setEnquiries(results[2].value);
+        if (results[3].status === 'fulfilled') setDocuments(results[3].value);
+        if (results[4].status === 'fulfilled') setExitClearances(results[4].value);
+        if (results[5].status === 'fulfilled') setStaffMembers(results[5].value);
+        if (results[6].status === 'fulfilled') setTeacherPermissions(results[6].value);
+        if (results[7].status === 'fulfilled') setInventoryItems(results[7].value);
+        if (results[8].status === 'fulfilled') setFeeDefaulters(results[8].value);
+        if (results[9].status === 'fulfilled') setSubstitutions(results[9].value);
+        if (results[10].status === 'fulfilled') setAvailableFaculty(results[10].value);
+        if (results[11].status === 'fulfilled') setAuditLogs(results[11].value);
+        if (results[12].status === 'fulfilled') setFeeAnalytics(results[12].value);
+        if (results[13].status === 'fulfilled') setRolloverClasses(results[13].value);
+        if (results[14].status === 'fulfilled') setTaskCockpit(results[14].value);
+        if (results[15].status === 'fulfilled' && results[15].value) setRemedialOverview(results[15].value);
+        if (results[16] && results[16].status === 'fulfilled') setStudentsList(results[16].value as Student[]);
+        if (results[17] && results[17].status === 'fulfilled') setReExamRequests(results[17].value as ReExamRequestItem[]);
       } catch (err) {
         console.error("Error loading admin dashboard", err);
       } finally {
@@ -336,6 +393,66 @@ export default function AdminPage() {
     setEscalateTaskId(null);
     setEscalateReason('');
     triggerToast('Task escalated to Critical — Principal notified.');
+  };
+
+  const handleApproveRelief = async (task: AdminTask, targetPeer?: string) => {
+    const peer = targetPeer || task.suggested_peer_teacher || 'Mrs. Neha Roy';
+    try {
+      await api.approveTaskRelief(task.id, {
+        new_assigned_to: peer,
+        new_sla_hours: 48,
+        notes: `Academic Coordinator approved migration to ${peer}`
+      });
+      const [updated, cockpit] = await Promise.all([
+        api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+        api.getTaskExecutiveCockpit()
+      ]);
+      setTasks(updated);
+      setTaskCockpit(cockpit);
+      setReassignTaskId(null);
+      triggerToast(`Relief approved! Task migrated to ${peer} with fresh 48h SLA.`);
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to approve relief');
+    }
+  };
+
+  const handleExtendSla = async (taskId: number) => {
+    try {
+      await api.extendTaskSla(taskId, {
+        additional_hours: 24,
+        extension_reason: 'Coordinator granted +24h extension for faculty workload relief'
+      });
+      const [updated, cockpit] = await Promise.all([
+        api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+        api.getTaskExecutiveCockpit()
+      ]);
+      setTasks(updated);
+      setTaskCockpit(cockpit);
+      triggerToast('Granted +24h SLA extension. Assignee notified.');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to extend SLA');
+    }
+  };
+
+  const handleResolveEscalation = async (taskId: number) => {
+    if (!resolveEscalateNotes.trim()) {
+      triggerToast('Please provide a brief resolution note.');
+      return;
+    }
+    try {
+      await api.resolveTaskEscalation(taskId, resolveEscalateNotes.trim());
+      const [updated, cockpit] = await Promise.all([
+        api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+        api.getTaskExecutiveCockpit()
+      ]);
+      setTasks(updated);
+      setTaskCockpit(cockpit);
+      setResolveEscalateTaskId(null);
+      setResolveEscalateNotes('');
+      triggerToast('Escalation resolved! Task restored to standard queue.');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to resolve escalation');
+    }
   };
 
   const handleCreateTask = async (e: React.FormEvent) => {
@@ -1093,287 +1210,136 @@ export default function AdminPage() {
           )}
 
           {activeTab === 'triage' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in duration-200">
               
-              {/* SCHOOL-WIDE REMEDIAL OVERSIGHT COCKPIT */}
-              {remedialOverview && (
-                <div className="rounded-3xl border border-amber-200/90 dark:border-amber-800/80 bg-gradient-to-br from-amber-50/60 via-white to-amber-50/20 dark:from-slate-900 dark:via-slate-900/95 dark:to-amber-950/25 p-5 sm:p-6 shadow-xs space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-100 dark:border-amber-900/40 pb-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 px-3 py-1 text-xs font-bold">
-                          <Target className="h-3.5 w-3.5 text-amber-600" />
-                          <span>Academic Outcomes &bull; 1-Week Remedial Oversight Cockpit</span>
-                        </span>
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                          Mastery Threshold: &le; 70%
-                        </span>
-                      </div>
-                      <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                        School-Wide Remedial Focus Health &amp; Improvement Batches
-                      </h2>
-                      <p className="text-xs text-slate-600 dark:text-slate-300">
-                        Targeted 7-day remedial sprints for students scoring &le;70% in term assessments. Baseline mastery (&gt;70%) students are exempt.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black border border-emerald-300 dark:border-emerald-800">
-                        {remedialOverview.overall_recovery_rate}% Recovery Rate
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 4 Executive Metric Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Total on Focus Plans</span>
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-black text-slate-900 dark:text-white">
-                          {remedialOverview.total_remedial_students} Students
-                        </span>
-                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                          {remedialOverview.active_sprints_on_track} On Track
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Across 4 Class Sections</span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Section Breakdown</span>
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {Object.entries(remedialOverview.section_breakdown).map(([sec, cnt]) => (
-                          <span key={sec} className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                            {sec}: <strong>{cnt}</strong>
-                          </span>
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Class 8-B, 8-A, 9-A, 9-B</span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Highest Concentration</span>
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-lg font-black text-purple-700 dark:text-purple-300">Mathematics</span>
-                        <span className="text-xs font-bold text-purple-600 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded">
-                          {remedialOverview.subject_breakdown['Mathematics'] || 8} Students
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Algebraic Factoring &amp; Fractions</span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-amber-200/60 dark:border-slate-700 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Early Warning Pacing</span>
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-2xl font-black text-orange-600 dark:text-orange-400">
-                          {remedialOverview.early_warning_pacing_triage.length} Flagged
-                        </span>
-                        <span className="text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-950 px-1.5 py-0.5 rounded">
-                          2+ Days Inactive
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Pending Rough Work Review</span>
-                    </div>
-                  </div>
-
-                  {/* EARLY WARNING PACING TRIAGE WIDGET */}
-                  {remedialOverview.early_warning_pacing_triage.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-amber-100 dark:border-amber-900/40 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full bg-orange-500 animate-ping" />
-                          <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 dark:text-orange-300">
-                            🟠 Early Warning Pacing Triage: Students Inactive for 2+ Days on Day 2
-                          </h3>
-                        </div>
-                        <span className="text-[11px] text-slate-400">
-                          Requires Principal PTM Briefing &amp; Class Teacher Notice
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {remedialOverview.early_warning_pacing_triage.map((warn) => (
-                          <div
-                            key={warn.student_id}
-                            className="rounded-2xl border border-orange-200/80 dark:border-orange-900/60 bg-white dark:bg-slate-800 p-4 space-y-3 shadow-2xs flex flex-col justify-between"
-                          >
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-black text-slate-900 dark:text-white">
-                                  {warn.name}
-                                </span>
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
-                                  {warn.class_name}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                <span>{warn.subject}: <strong>{warn.exam_score_pct}%</strong></span>
-                                <span className="text-orange-600 font-bold">Day {warn.current_day} ({warn.days_inactive}d Inactive)</span>
-                              </div>
-
-                              <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
-                                <strong>Bottleneck:</strong> {warn.weak_concept}
-                              </p>
-
-                              <div className="pt-1 text-[10px] text-slate-400">
-                                Parent: <strong className="text-slate-600 dark:text-slate-300">{warn.parent_name}</strong> ({warn.parent_phone})
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              disabled={notifyingStudentId === warn.student_id}
-                              onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
-                              className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                            >
-                              {notifyingStudentId === warn.student_id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Bell className="h-3 w-3" />
-                              )}
-                              <span>Notify Class Teacher &amp; Request PTM Briefing</span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Daily Action Engine Cards */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
-                      Daily Action Engine (🔴 Critical / 🟠 Warning / 🟢 Resolved)
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Proactively flags what needs immediate executive intervention today, why it matters, and who to delegate
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                    {triageAlerts.filter(a => !a.resolved).length} Pending Actions
+              {/* Filter Tabs for Action Alerts */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    Alert Type:
                   </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {triageAlerts.map((alert) => (
-                    <TriageCard 
-                      key={alert.id} 
-                      alert={alert} 
-                      onAction={handleTriageAction} 
-                    />
+                  {[
+                    { id: 'all', label: 'All Alerts', count: triageAlerts.filter(a => !a.resolved).length + (remedialOverview?.early_warning_pacing_triage.length || 0) },
+                    { id: 'urgent', label: '🔴 Urgent School Alerts', count: triageAlerts.filter(a => !a.resolved).length },
+                    { id: 'pacing', label: '🟠 Remedial Inactivity', count: remedialOverview?.early_warning_pacing_triage.length || 0 },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setAlertFilter(tab.id as any)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        alertFilter === tab.id
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        alertFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
                   ))}
+                </div>
+                <div className="text-xs text-slate-500 font-medium">
+                  Auto-detected exceptions requiring administrative intervention
                 </div>
               </div>
 
-              {/* Urgent & Upcoming Tasks Widgets */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-                
-                {/* Left 7 cols: Urgent Tasks */}
-                <div className="lg:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 font-black text-xs">
-                        !
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Urgent Operational Priorities</h3>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">Due today &amp; tomorrow across campus</span>
-                      </div>
+              {/* SECTION A: Remedial Pacing Early Warnings (Orange Alert Cards) */}
+              {(alertFilter === 'all' || alertFilter === 'pacing') && remedialOverview && remedialOverview.early_warning_pacing_triage.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-amber-200/60 dark:border-amber-900/40 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-orange-500 animate-ping" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 dark:text-orange-300">
+                        🟠 Remedial Pacing Warnings: Students Inactive for 2+ Days
+                      </h3>
                     </div>
-                    <span className="rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 px-2.5 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900">
-                      {tasks.filter(t => t.category === 'urgent' && t.status !== 'Completed').length} Pending
-                    </span>
+                    <span className="text-[11px] text-slate-500">Requires Class Teacher Contact</span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {tasks.filter(t => t.category === 'urgent').map((task) => (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {remedialOverview.early_warning_pacing_triage.map((warn) => (
                       <div
-                        key={task.id}
-                        onClick={() => handleToggleTask(task.id, task.status)}
-                        className="flex items-start justify-between gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 cursor-pointer transition-all"
+                        key={warn.student_id}
+                        className="rounded-2xl border border-orange-200/80 dark:border-orange-900/60 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs flex flex-col justify-between"
                       >
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={task.status === 'Completed'}
-                            onChange={() => {}}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          />
-                          <div>
-                            <span className={`text-xs font-bold block ${task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                              {task.title}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-900 dark:text-white">
+                              {warn.name}
                             </span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">Assigned: {task.assigned_to} • Due: {task.due_date}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
+                              {warn.class_name}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <span>{warn.subject}: <strong>{warn.exam_score_pct}%</strong></span>
+                            <span className="text-orange-600 font-bold">Day {warn.current_day} ({warn.days_inactive}d Inactive)</span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
+                            <strong>Weak Concept:</strong> {warn.weak_concept}
+                          </p>
+
+                          <div className="pt-1 text-[10px] text-slate-400">
+                            Parent: <strong className="text-slate-600 dark:text-slate-300">{warn.parent_name}</strong> ({warn.parent_phone})
                           </div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                        }`}>
-                          {task.status}
-                        </span>
+
+                        <button
+                          type="button"
+                          disabled={notifyingStudentId === warn.student_id}
+                          onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          {notifyingStudentId === warn.student_id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Bell className="h-3 w-3" />
+                          )}
+                          <span>Notify Class Teacher &amp; Briefing</span>
+                        </button>
                       </div>
                     ))}
                   </div>
                 </div>
+              )}
 
-                {/* Right 5 cols: Faculty Substitution Emergency Snapshot */}
-                <div className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 font-black text-xs">
-                        <Shuffle className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Emergency Teacher Substitution</h3>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">Daily period cover matrix</span>
-                      </div>
+              {/* SECTION B: Critical Operational Exceptions (Red / Amber Cards) */}
+              {(alertFilter === 'all' || alertFilter === 'urgent') && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                        🔴 Immediate Operational Alerts (Attendance, Fees &amp; Academics)
+                      </h3>
                     </div>
-                    <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900">
-                      {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered ✓'}
+                    <span className="text-[11px] text-slate-500">
+                      {triageAlerts.filter(a => !a.resolved).length} Pending
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/60 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-amber-900 dark:text-amber-300">Period 4 • Computer Science</span>
-                        <span className="font-mono text-[10px] font-bold text-amber-700 dark:text-amber-400">11:15 - 12:00</span>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300">
-                        Class 8-A • Lab 1 • Regular Faculty Mr. V. Nair on emergency leave.
-                      </p>
-                      <div className="pt-1 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">● Substitute Not Assigned</span>
-                        <button
-                          onClick={() => setActiveTab('substitutions')}
-                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                        >
-                          Deploy Substitute
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 dark:text-slate-400 font-medium">8 Available free faculty in Period 4</span>
-                      <button
-                        onClick={() => setActiveTab('substitutions')}
-                        className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                      >
-                        View Full Grid →
-                      </button>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {triageAlerts.map((alert) => (
+                      <TriageCard 
+                        key={alert.id} 
+                        alert={alert} 
+                        onAction={handleTriageAction} 
+                      />
+                    ))}
                   </div>
                 </div>
+              )}
 
-              </div>
             </div>
           )}
-                    {/* ===================================================== */}
+          {/* ===================================================== */}
           {/* TAB 2: ADMISSIONS & ENQUIRY CRM                      */}
           {/* ===================================================== */}
           {activeTab === 'crm' && (
@@ -1381,320 +1347,548 @@ export default function AdminPage() {
               <CRMBoard 
                 enquiries={enquiries}
                 onStageChange={handleEnquiryStageChange}
-                onConvertToStudent={handleConvertToStudent}
+                onConvertToStudent={async (id: number) => {
+                  const enq = enquiries.find(e => e.id === id);
+                  if (enq) {
+                    setConvertModalEnquiry(enq);
+                    setConvertSection(enq.target_grade?.includes('B') ? 'B' : 'A');
+                  } else {
+                    await handleConvertToStudent(id);
+                  }
+                }}
               />
             </div>
           )}
 
           {/* ===================================================== */}
-          {/* TAB 3: SIS DOCUMENT VAULT (STRICT ADMIN EDIT LOCK)    */}
+          {/* TAB 3: STUDENT DIRECTORY & COMPLETE CLARIFIED SIS     */}
           {/* ===================================================== */}
           {activeTab === 'sis' && (
             <div className="space-y-6">
-              
-              {/* Strict Security Banner */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs relative overflow-hidden">
-                <div className="flex items-start gap-3.5">
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0">
-                    <Lock className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Strict Document Security Rule Active
-                      </h3>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 text-[10px] font-bold">
-                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                        Admin Edit Only
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                      Official certificates (Bonafide, Transfer Certificate, Marks Cards) can <b>ONLY</b> be uploaded and edited by Administration. Teachers, Parents, and Students have strictly <b>View/Download-Only</b> access.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowDocModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span>Upload Official Certificate</span>
-                </button>
-              </div>
-
-              {/* Student Profile Quick Bar */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-950/80 flex items-center justify-center font-bold text-blue-700 dark:text-blue-300 text-base">
-                    AS
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Aarav Sharma • Class 8-A (Roll #14)</h3>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Admission No: EDU-2024-082 • Guardian: Mr. Rajesh Sharma (+91 98111 00003)</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Attendance</span>
-                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">94.2% Safe</span>
-                  </div>
-                  <div className="text-right pl-3 border-l border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Academic Avg</span>
-                    <span className="text-sm font-bold text-blue-600 dark:text-blue-400">76.8% (Focus in Math)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Institutional Student Remarks & Conduct Ledger */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-3 py-0.5 text-xs font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
-                        <MessageSquareQuote className="h-3.5 w-3.5" />
-                        Official Student Remarks &amp; Conduct Ledger
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Admin Audit &bull; Faculty &amp; Parent Synchronized (Student Excluded)
-                      </span>
-                    </div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                      Faculty Observations, Behavioral Notes &amp; Disciplinary Records
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Review continuous qualitative feedback logged by Aarav Sharma&apos;s Class Teacher, Subject Mentors, and Principal.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => setShowAdminRemarkModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Administrative Remark</span>
-                  </button>
-                </div>
-
-                {/* Filter Pills */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-400 mr-2 flex items-center gap-1">
-                    <Filter className="h-3 w-3" />
-                    Filter:
-                  </span>
-                  {['ALL', 'Academic Excellence', 'Behavioral & Conduct', 'Special Commendation', 'Remedial / Focus Area'].map((cat) => {
-                    const count = cat === 'ALL' ? studentRemarks.length : studentRemarks.filter(r => r.category === cat).length;
-                    const isSelected = adminRemarkFilter === cat;
-                    return (
+              {selectedStudentForSIS ? (
+                /* ======================================================= */
+                /* COMPLETE CLARIFIED SIS (STUDENT INFORMATION SYSTEM)     */
+                /* ======================================================= */
+                <div className="space-y-6">
+                  {/* Top Bar / Navigation */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
                       <button
-                        key={cat}
-                        onClick={() => setAdminRemarkFilter(cat)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-600 text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                        onClick={() => setSelectedStudentForSIS(null)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
                       >
-                        {cat} ({count})
+                        <ArrowLeft className="h-4 w-4" />
+                        <span>Back to Student Directory</span>
                       </button>
-                    );
-                  })}
-                </div>
-
-                {/* Remarks Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {studentRemarks
-                    .filter(r => adminRemarkFilter === 'ALL' || r.category === adminRemarkFilter)
-                    .map((remark) => (
-                      <div
-                        key={remark.id}
-                        className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4.5 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col justify-between space-y-3.5"
-                      >
-                        <div className="space-y-2.5">
-                          <div className="flex items-start justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2.5">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-bold text-slate-900 dark:text-white">{remark.author_name}</h4>
-                                <span className="rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
-                                  {remark.author_role}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{remark.date} &bull; {remark.timestamp}</span>
-                            </div>
-
-                            <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold">
-                              {remark.category}
-                            </span>
-                          </div>
-
-                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                            &ldquo;{remark.remark_text}&rdquo;
-                          </p>
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs">
-                          {remark.acknowledged_by_parent ? (
-                            <span className="text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>Acknowledged by Parent ({remark.parent_ack_by})</span>
-                            </span>
-                          ) : (
-                            <span className="text-amber-600 dark:text-amber-400 font-bold text-[10px] flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              <span>Pending Parent Acknowledgment</span>
-                            </span>
-                          )}
-
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            Priority: {remark.priority}
-                          </span>
-                        </div>
+                      <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span>Directory</span>
+                        <span>/</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedStudentForSIS.class_name} - {selectedStudentForSIS.section}</span>
+                        <span>/</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">{selectedStudentForSIS.name}</span>
                       </div>
-                    ))}
-                </div>
-              </div>
+                    </div>
 
-              {/* Verified Documents Table */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Verified Legal Certificates ({documents.length})</span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">All certificates sealed with official SHA-256 verification hash</span>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>Official SIS Record • AY 2026–27</span>
+                      </span>
+                    </div>
+                  </div>
 
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                          <FileText className="h-5 w-5" />
+                  {/* Student Hero Header Card */}
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
+                          {selectedStudentForSIS.name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{doc.title}</h4>
-                            <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2 py-0.5 text-[9px] font-bold">
-                              {doc.doc_type}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                              {selectedStudentForSIS.name}
+                            </h2>
+                            <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                              {selectedStudentForSIS.class_name}-{selectedStudentForSIS.section}
+                            </span>
+                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-mono font-bold">
+                              Roll #{selectedStudentForSIS.roll_no}
+                            </span>
+                            <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 text-[11px] font-bold border border-emerald-200/80">
+                              ✓ {selectedStudentForSIS.status || 'Active Enrolled'}
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                            Seal: {doc.verified_stamp} • Uploaded by Administrator
-                          </span>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <span>Admission ID: <strong className="text-slate-700 dark:text-slate-200 font-mono">{selectedStudentForSIS.admission_no}</strong></span>
+                            <span>Guardian: <strong className="text-slate-700 dark:text-slate-200">{selectedStudentForSIS.guardian_name}</strong> ({selectedStudentForSIS.guardian_phone})</span>
+                            <span>Board: <strong className="text-slate-700 dark:text-slate-200 font-mono">CBSE Affiliation #103049</strong></span>
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900">
-                          <ShieldCheck className="h-3 w-3" />
-                          Official School Seal
-                        </span>
-                        <a
-                          href={doc.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors"
-                        >
-                          View
-                        </a>
-                        <button
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                          title="Delete Document"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      {/* Quick Metrics */}
+                      <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Attendance</span>
+                          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {selectedStudentForSIS.attendance_pct || 94.2}%
+                          </span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Academic Avg</span>
+                          <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">
+                            {selectedStudentForSIS.academic_average_pct || 78.5}%
+                          </span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Fee Balance</span>
+                          <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                            ₹18,500
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+
+                    {/* Sub-Tabs Switcher */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {[
+                        { key: 'profile', label: '📋 Demographic & Personal Profile' },
+                        { key: 'academic', label: '📊 Academic Records & Standing' },
+                        { key: 'certificates', label: '📑 Legal Certificates Vault (Admin Edit Only)' },
+                        { key: 'fees', label: '💳 Fee & Accounts Ledger' }
+                      ].map(tab => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setSisActiveSubTab(tab.key as any)}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            sisActiveSubTab === tab.key
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* SUB-PANEL 1: PERSONAL & GUARDIAN PROFILE */}
+                  {sisActiveSubTab === 'profile' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Users className="h-4 w-4 text-blue-600" />
+                          <span>Personal &amp; Demographic Data</span>
+                        </h3>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Date of Birth:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">12 May 2012 (14 Yrs)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Gender &amp; Blood Group:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">Male • B+ Positive</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Aadhaar / National ID:</span>
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">XXXX-XXXX-4819 (Verified)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Mother Tongue &amp; Category:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">Telugu / Hindi • General (CBSE)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Permanent Address:</span>
+                            <span className="font-medium text-slate-800 dark:text-slate-200 text-right max-w-xs">#42, 4th Cross, Green Glen Layout, Bellandur, Bangalore 560103</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <PhoneCall className="h-4 w-4 text-emerald-600" />
+                          <span>Parent &amp; Emergency Guardians</span>
+                        </h3>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Father / Guardian:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{selectedStudentForSIS.guardian_name} (Sr. Director)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Father Contact &amp; Email:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{selectedStudentForSIS.guardian_phone} • {selectedStudentForSIS.guardian_email}</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Mother Name:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">Mrs. Priya Sharma (Consultant)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Emergency Phone:</span>
+                            <span className="font-mono font-bold text-red-600 dark:text-red-400">+91 98450 99881 (24/7 Priority)</span>
+                          </div>
+                          <div className="py-2.5 flex justify-between">
+                            <span className="text-slate-500">Transport Fleet Stop:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">Bus Route #4 (Sarjapur - Bellandur Junction)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB-PANEL 2: ACADEMIC RECORDS & STANDING */}
+                  {sisActiveSubTab === 'academic' && (
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Academic Performance Ledger • CBSE Class 8 Cohort</h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Homeroom Mentor: Mrs. Ananya Verma • Term 1 Assessment Status: Completed</p>
+                        </div>
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-xl">
+                          Term GPA: 8.2 / 10.0
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        {[
+                          { subject: 'Mathematics', score: '72/100', grade: 'B1', status: 'Focus: Quadratic Factorization' },
+                          { subject: 'Physics & Chem', score: '84/100', grade: 'A2', status: 'Optimal Lab Performance' },
+                          { subject: 'English Lit', score: '88/100', grade: 'A1', status: 'Distinction in Prose' },
+                          { subject: 'Social Studies', score: '79/100', grade: 'B1', status: 'Good History Mapping' },
+                          { subject: 'Computer Sci', score: '92/100', grade: 'A1', status: 'Exemplary Python Code' }
+                        ].map(sub => (
+                          <div key={sub.subject} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">{sub.subject}</span>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-base font-black text-slate-900 dark:text-white">{sub.score}</span>
+                              <span className="text-xs font-bold text-blue-600">{sub.grade}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block line-clamp-1">{sub.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB-PANEL 3: OFFICIAL CERTIFICATES VAULT (ADMIN EDIT ONLY) */}
+                  {sisActiveSubTab === 'certificates' && (
+                    <div className="space-y-6">
+                      {/* Security Banner */}
+                      <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                            <Lock className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Strict Legal Certificate Authority (Admin Only)</h4>
+                              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">Admin Edit Rights</span>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                              Only School Administration has rights to upload, sign, and revoke legal certificates. Teachers and parents have strictly read-only access.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setShowDocModal(true)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span>+ Upload Official Certificate</span>
+                        </button>
+                      </div>
+
+                      {/* Documents List */}
+                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                            Verified Legal Certificates ({documents.length})
+                          </h4>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            All certificates sealed with official SHA-256 verification hash
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {documents.map(doc => (
+                            <div key={doc.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 p-2 rounded-xl transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                                  <FileText className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">{doc.title}</h5>
+                                    <span className="rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[9px] font-bold">
+                                      {doc.doc_type}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                                    Seal: {doc.verified_stamp || 'EDU360 Official Seal - Reg #9921'} &bull; Uploaded by Administrator
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <ShieldCheck className="h-3 w-3" />
+                                  Official School Seal
+                                </span>
+                                <button
+                                  onClick={() => downloadOfficialDocumentFile(doc.title, selectedStudentForSIS.name, `CERT-${doc.id}`)}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDocument(doc.id)}
+                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                  title="Revoke Certificate"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB-PANEL 4: FEES & TRANSACTION HISTORY */}
+                  {sisActiveSubTab === 'fees' && (
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Fee Statement &amp; Cleared Milestone Receipts</h4>
+                        <span className="text-xs font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-xl">
+                          Outstanding: ₹18,500 (Term 2)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/60">
+                          <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 block">Term 1 Tuition</span>
+                          <span className="text-base font-black text-emerald-700 dark:text-emerald-400">₹35,000 Paid</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">Cleared 12 Jul 2026 • Ref: UPI-9842</span>
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/60">
+                          <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 block">Annual Lab &amp; STEM</span>
+                          <span className="text-base font-black text-emerald-700 dark:text-emerald-400">₹15,000 Paid</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">Cleared 12 Jul 2026 • Ref: HDFC-4412</span>
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/60">
+                          <span className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-300 block">Term 2 Tuition &amp; Bus</span>
+                          <span className="text-base font-black text-amber-700 dark:text-amber-400">₹18,500 Pending</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">Due Date: 25 Oct 2026</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              ) : (
+                /* ======================================================= */
+                /* STUDENT DIRECTORY PAGE (ROSTER & FILTERS)               */
+                /* ======================================================= */
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                          Central Roster
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">AY 2026–27 &bull; CBSE Affiliated</span>
+                      </div>
+                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                        👥 Student Directory &amp; Records (SIS)
+                      </h1>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Complete student directory with class and section filters. Open student profiles to inspect full clarified SIS and manage official certificates.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                        Total Students: <strong className="text-slate-900 dark:text-white font-mono">{studentsList.length}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* FILTERS & SEARCH ROW */}
+                  <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      {/* Class Filter Chips */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        <span className="text-xs font-bold text-slate-400 shrink-0">Class:</span>
+                        {['All', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map(cls => (
+                          <button
+                            key={cls}
+                            onClick={() => setStudentClassFilter(cls)}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                              studentClassFilter === cls
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            {cls}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Section Filter Chips */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        <span className="text-xs font-bold text-slate-400 shrink-0">Section:</span>
+                        {['All', 'A', 'B'].map(sec => (
+                          <button
+                            key={sec}
+                            onClick={() => setStudentSectionFilter(sec)}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                              studentSectionFilter === sec
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            {sec === 'All' ? 'All Sections' : `Sec ${sec}`}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Search Bar */}
+                      <div className="relative min-w-[240px]">
+                        <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={studentSearchQuery}
+                          onChange={e => setStudentSearchQuery(e.target.value)}
+                          placeholder="Search by student, roll no, parent..."
+                          className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {studentSearchQuery && (
+                          <button onClick={() => setStudentSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* STUDENTS ROSTER TABLE */}
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
+                            <th className="py-3 px-4">Roll</th>
+                            <th className="py-3 px-4">Student Name &amp; ID</th>
+                            <th className="py-3 px-4">Class &amp; Sec</th>
+                            <th className="py-3 px-4">Parent / Guardian Contact</th>
+                            <th className="py-3 px-4">Attendance</th>
+                            <th className="py-3 px-4">Academic Avg</th>
+                            <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {studentsList
+                            .filter(s => {
+                              const matchClass = studentClassFilter === 'All' || s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
+                              const matchSec = studentSectionFilter === 'All' || s.section.toUpperCase() === studentSectionFilter.toUpperCase();
+                              const q = studentSearchQuery.trim().toLowerCase();
+                              const matchQ = !q || s.name.toLowerCase().includes(q) || s.admission_no.toLowerCase().includes(q) || s.guardian_name.toLowerCase().includes(q) || s.roll_no.toLowerCase().includes(q);
+                              return matchClass && matchSec && matchQ;
+                            })
+                            .map((student) => (
+                              <tr key={student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group">
+                                <td className="py-3.5 px-4 font-mono font-bold text-slate-500">
+                                  #{student.roll_no}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
+                                      {student.name.split(' ').map(n => n[0]).join('')}
+                                    </div>
+                                    <div>
+                                      <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 transition-colors">
+                                        {student.name}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-slate-400">
+                                        {student.admission_no}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                                    {student.class_name}-{student.section}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">
+                                    {student.guardian_name}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-400">
+                                    {student.guardian_phone}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                    (student.attendance_pct || 90) >= 90
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                      : (student.attendance_pct || 90) >= 75
+                                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                                        : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300'
+                                  }`}>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                    {student.attendance_pct || 94.2}%
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
+                                  {student.academic_average_pct || 78.5}%
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-bold">
+                                    {student.status || 'Active'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <button
+                                    onClick={() => setSelectedStudentForSIS(student)}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-white px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                                  >
+                                    <span>Open Full SIS</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ===================================================== */}
-          {/* TAB 4: STUDENT EXIT & DUAL-SIGNATURE TC CLEARANCE    */}
-          {/* ===================================================== */}
-          {activeTab === 'exit' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-xs font-bold border border-amber-200">
-                      Zero-Dispute Protocol
-                    </span>
-                    <span className="text-xs text-slate-500">Legal Exit &amp; Transfer Registry</span>
-                  </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Student Exit &amp; Dual-Signature TC Clearance
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Eliminates future disputes by combining in-app parent digital sign-off with scanned physical handover register signatures.
-                  </p>
-                </div>
-              </div>
-
-              {exitClearances.map((clearance) => (
-                <ExitClearanceView
-                  key={clearance.id}
-                  clearance={clearance}
-                  onVerifyPhysical={handleVerifyPhysicalExit}
-                  role="admin"
-                />
-              ))}
-
-              {/* Gate Entry & Visitor Logs */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-blue-600" />
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Campus Gate Access &amp; Delivery Log</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">Today&apos;s Active Gate Entries</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">VENDOR ENTRY</span>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">Horizon AV Tech Solutions</h4>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">P3.9 LED Backdrop Panels (40x20 ft)</span>
-                    <span className="text-[10px] text-emerald-600 font-semibold block mt-1">Gate 2 • Checked-In: 09:30 AM</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">VISITOR ENTRY</span>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">Mr. Rajesh Sharma (Guardian)</h4>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">Special Admission Counseling Tour</span>
-                    <span className="text-[10px] text-blue-600 font-semibold block mt-1">Main Gate • Pass #VST-2026-88</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">DISPATCH CLEARANCE</span>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">CBSE Examination Memo Courier</h4>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">BlueDart Express (Air Waybill #88412)</span>
-                    <span className="text-[10px] text-purple-600 font-semibold block mt-1">Admin Office • Dispatched: 11:45 AM</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ===================================================== */}
-          {/* TAB 5: FEE MILESTONES & RECEIPT LOGS                 */}
+          {/* TAB 5: FEE COLLECTIONS, AGING & MILESTONE REALIZATION */}
           {/* ===================================================== */}
           {activeTab === 'fees' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-bold border border-emerald-200">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
                       Finance &amp; Accounts
                     </span>
-                    <span className="text-xs text-slate-500">Academic Year 2026–27 Fee Milestones</span>
+                    <span className="text-xs text-slate-500">AY 2026–27 Collections</span>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Student Fee Collections &amp; Pending Dues
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    💳 Student Fee Collections &amp; Pending Dues
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Manage installment milestones, monitor overdue accounts, and trigger automated receipts via email without friction.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Monitor today&apos;s live collections, track aging dues across maturity buckets, and inspect institutional financial health.
                   </p>
                 </div>
 
@@ -1704,282 +1898,496 @@ export default function AdminPage() {
                     className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    <span>Send Batch Fee Reminder (All {feeDefaulters.length})</span>
+                    <span>Send Batch Reminders ({feeDefaulters.length} Overdue)</span>
                   </button>
                 </div>
               </div>
 
-              {/* Real-time Financial Health & Aging Analytics Banner */}
-              {feeAnalytics && (
-                <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-blue-500/5 p-4.5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800/60 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              {/* Sub-tab Navigation */}
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { key: 'today', label: "💵 Today's Fee Collections", badge: "₹1.45 Lakhs Today" },
+                  { key: 'aging', label: '⏳ Aging & Overdue Dues', badge: `${feeDefaulters.length} Defaulters` },
+                  { key: 'milestones', label: '📊 Budget Milestones & Health', badge: 'AY 2026–27' }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setFeeSubTab(tab.key as any)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      feeSubTab === tab.key
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                      feeSubTab === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {tab.badge}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* SUB-SECTION 1: TODAY'S FEE COLLECTIONS */}
+              {feeSubTab === 'today' && (
+                <div className="space-y-5">
+                  {/* Today's KPI Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Collected Today</span>
+                      <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">₹1,45,000</span>
+                      <span className="text-[11px] text-slate-500 block">7 Verified Receipts</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">UPI / Razorpay Gateway</span>
+                      <span className="text-xl font-black text-blue-600 dark:text-blue-400">₹95,000</span>
+                      <span className="text-[11px] text-slate-500 block">4 Instant Auto-Settled</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Bank Transfer / NEFT</span>
+                      <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">₹35,000</span>
+                      <span className="text-[11px] text-slate-500 block">2 Verified by Accounts</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">School Cash Counter</span>
+                      <span className="text-xl font-black text-amber-600 dark:text-amber-400">₹15,000</span>
+                      <span className="text-[11px] text-slate-500 block">1 Physical Cash Slip</span>
+                    </div>
+                  </div>
+
+                  {/* Today's Transactions Table */}
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Institutional Fee Realization Engine ({feeAnalytics.academic_year || 'AY 2026–27'})
+                        Today&apos;s Receipts Ledger (28 Oct 2026)
+                      </span>
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                        Real-time Bank Integration Active
                       </span>
                     </div>
-                    <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
-                      Realization Rate: {feeAnalytics.collection_rate_pct}%
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Budget Target</span>
-                      <span className="text-base font-extrabold text-slate-900 dark:text-white">
-                        ₹{(feeAnalytics.total_target / 100000).toFixed(1)} L
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Budgeted 2026–27</span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <span className="text-[10px] uppercase font-bold text-emerald-600 block">Realized In Bank</span>
-                      <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
-                        ₹{(feeAnalytics.total_collected / 100000).toFixed(1)} L
-                      </span>
-                      <span className="text-[10px] text-emerald-600/70 block mt-0.5">Verified Collections</span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <span className="text-[10px] uppercase font-bold text-red-600 block">Total Pending Dues</span>
-                      <span className="text-base font-extrabold text-red-600 dark:text-red-400">
-                        ₹{(feeAnalytics.total_overdue / 100000).toFixed(1)} L
-                      </span>
-                      <span className="text-[10px] text-red-600/70 block mt-0.5">{feeAnalytics.defaulters_count} Active Accounts</span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <span className="text-[10px] uppercase font-bold text-blue-600 block">Auto Recovery Mode</span>
-                      <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">
-                        WhatsApp Active
-                      </span>
-                      <span className="text-[10px] text-blue-600/70 block mt-0.5">Direct Razorpay/UPI Links</span>
-                    </div>
-                  </div>
-
-                  {/* Aging Analysis Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                      <span>Pending Dues Timeline Breakdown</span>
-                      <span className="text-[10px] text-slate-500 font-normal">Overdue maturity risk tiers</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
-                        <div>
-                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block">0–15 Days</span>
-                          <span className="text-[10px] text-slate-500">Early Overdue</span>
-                        </div>
-                        <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">
-                          ₹{(feeAnalytics.aging_summary.days_0_to_15 / 100000).toFixed(2)} L
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
-                        <div>
-                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block">16–30 Days</span>
-                          <span className="text-[10px] text-slate-500">Mid-tier Attention</span>
-                        </div>
-                        <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">
-                          ₹{(feeAnalytics.aging_summary.days_16_to_30 / 100000).toFixed(2)} L
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
-                        <div>
-                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block">30+ Days</span>
-                          <span className="text-[10px] text-slate-500">Critical Follow-up</span>
-                        </div>
-                        <span className="text-xs font-extrabold text-red-600 dark:text-red-400">
-                          ₹{(feeAnalytics.aging_summary.days_over_30 / 100000).toFixed(2)} L
-                        </span>
-                      </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                            <th className="py-3 px-4">Receipt #</th>
+                            <th className="py-3 px-4">Student &amp; Class</th>
+                            <th className="py-3 px-4">Fee Head</th>
+                            <th className="py-3 px-4">Amount</th>
+                            <th className="py-3 px-4">Payment Mode</th>
+                            <th className="py-3 px-4">Ref UTR / Transaction</th>
+                            <th className="py-3 px-4">Time</th>
+                            <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4 text-right">Receipt</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {[
+                            { recNo: 'REC-2026-1028-01', name: 'Aarav Sharma', classSec: 'Class 8-B', head: 'Term 2 Tuition Fee', amount: 25000, mode: 'UPI (GPay)', ref: 'UPI-984210982', time: '10:45 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-02', name: 'Diya Patel', classSec: 'Class 8-B', head: 'Term 2 Tuition & Lab', amount: 28500, mode: 'HDFC NetBanking', ref: 'NEFT-202610289', time: '10:30 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-03', name: 'Kabir Mehta', classSec: 'Class 8-B', head: 'Term 2 Transport Fee', amount: 15000, mode: 'Cash Counter', ref: 'CASH-REC-0082', time: '10:15 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-04', name: 'Rohan Verma', classSec: 'Class 9-A', head: 'Term 2 Tuition Fee', amount: 22000, mode: 'UPI (PhonePe)', ref: 'UPI-778219012', time: '09:50 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-05', name: 'Ananya Iyer', classSec: 'Class 9-A', head: 'Annual STEM & Robotics', amount: 18500, mode: 'UPI (Paytm)', ref: 'UPI-661298411', time: '09:40 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-06', name: 'Ishaan Reddy', classSec: 'Class 10-A', head: 'Term 2 Tuition Fee', amount: 20000, mode: 'ICICI NetBanking', ref: 'NEFT-441298410', time: '09:15 AM', status: 'Bank Cleared' },
+                            { recNo: 'REC-2026-1028-07', name: 'Sneha Nair', classSec: 'Class 6-A', head: 'Term 2 Tuition Fee', amount: 16000, mode: 'UPI (GPay)', ref: 'UPI-334190822', time: '08:55 AM', status: 'Bank Cleared' },
+                          ].map(row => (
+                            <tr key={row.recNo} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                                {row.recNo}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="font-bold text-slate-900 dark:text-white block">{row.name}</span>
+                                <span className="text-[10px] text-slate-400">{row.classSec}</span>
+                              </td>
+                              <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">
+                                {row.head}
+                              </td>
+                              <td className="py-3 px-4 font-black text-slate-900 dark:text-white">
+                                ₹{row.amount.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                                  {row.mode}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[10px] text-slate-500">
+                                {row.ref}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
+                                {row.time}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                                  <Check className="h-3 w-3" />
+                                  {row.status}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    downloadOfficialDocumentFile(`Fee Receipt - ${row.recNo}`, row.name, row.recNo);
+                                    setToastMessage(`Downloaded Receipt ${row.recNo}`);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  <span>PDF</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* 3 Milestones Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                      Milestone 1 • Closed
-                    </span>
-                    <span className="text-xs font-bold text-emerald-600">96.8% Paid</span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 1 Tuition &amp; Curriculum</h4>
-                    <span className="text-xs text-slate-500">Due: 15 Jul 2026 • ₹35,000 / student</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
-                    <div className="bg-emerald-500 h-2 rounded-full w-[96.8%]" />
-                  </div>
-                  <span className="text-[11px] text-slate-500 block">Collected: ₹33.88 Lakhs</span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3 relative shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                      Milestone 2 • Overdue
-                    </span>
-                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400">30 Overdue</span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Transport</h4>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Due: 25 Oct 2026 • ₹18,500 / student</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
-                    <div className="bg-amber-500 h-2 rounded-full w-[78.2%]" />
-                  </div>
-                  <span className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold block">Pending: ₹5,55,000 across 30 students</span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                      Milestone 3 • Scheduled
-                    </span>
-                    <span className="text-xs font-bold text-blue-600">Upcoming</span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 3 Activities &amp; Annual Day</h4>
-                    <span className="text-xs text-slate-500">Due: 15 Jan 2027 • ₹15,000 / student</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full w-[15%]" />
-                  </div>
-                  <span className="text-[11px] text-slate-500 block">Early bird prepayments: ₹4.5 Lakhs</span>
-                </div>
-              </div>
-
-              {/* Defaulters Call List Table */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Pending Fee Records &amp; Parent Follow-up List
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Parents receive automated push notifications + SMS payment links
-                  </span>
-                </div>
-
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {feeDefaulters.map((defaulter) => (
-                    <div key={defaulter.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
-                          <CreditCard className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{defaulter.student_name}</h4>
-                            <span className="rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-mono">
-                              {defaulter.class_name} • Roll #{defaulter.roll_no}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                            Parent: {defaulter.parent_name} ({defaulter.parent_phone}) • {defaulter.milestone_title}
-                          </span>
-                        </div>
+              {/* SUB-SECTION 2: AGING & OVERDUE DEFAULTERS */}
+              {feeSubTab === 'aging' && (
+                <div className="space-y-5">
+                  {/* Aging Analysis Bar */}
+                  {feeAnalytics && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 via-amber-500/5 to-blue-500/5 border border-red-500/20 space-y-3">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-900 dark:text-white">Overdue Dues Aging Maturity Breakdown</span>
+                        <span className="text-red-600 font-extrabold">Total Overdue: ₹{(feeAnalytics.total_overdue / 100000).toFixed(2)} L</span>
                       </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <span className="text-xs font-black text-red-600 dark:text-red-400 block">
-                            ₹{defaulter.amount_due.toLocaleString()} Due
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-blue-600 block">0–15 Days (Early Overdue)</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white">
+                            ₹{(feeAnalytics.aging_summary.days_0_to_15 / 100000).toFixed(2)} L
                           </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {defaulter.days_overdue} Days Overdue
-                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">Gentle WhatsApp Notification</span>
                         </div>
-
-                        {defaulter.reminder_sent ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-xl">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Reminder Sent
+                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-amber-600 block">16–30 Days (Mid-Tier Overdue)</span>
+                          <span className="text-base font-black text-slate-900 dark:text-white">
+                            ₹{(feeAnalytics.aging_summary.days_16_to_30 / 100000).toFixed(2)} L
                           </span>
-                        ) : (
-                          <button
-                            onClick={() => handleSendFeeReminder(defaulter.id, defaulter.student_name)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                          >
-                            <Send className="h-3 w-3" />
-                            <span>Remind Parent</span>
-                          </button>
-                        )}
+                          <span className="text-[10px] text-slate-400 block mt-0.5">Automated SMS &amp; Email Notice</span>
+                        </div>
+                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-red-600 block">30+ Days (Critical Action)</span>
+                          <span className="text-base font-black text-red-600 dark:text-red-400">
+                            ₹{(feeAnalytics.aging_summary.days_over_30 / 100000).toFixed(2)} L
+                          </span>
+                          <span className="text-[10px] text-red-500 block mt-0.5">Coordinator Direct Call Priority</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Defaulters Table */}
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Overdue Student Accounts ({feeDefaulters.length} accounts pending)
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {feeDefaulters.map((defaulter) => (
+                        <div key={defaulter.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                          <div className="flex items-start gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 flex items-center justify-center text-red-600 dark:text-red-400 font-bold shrink-0">
+                              {defaulter.student_name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-bold text-slate-900 dark:text-white">{defaulter.student_name}</h4>
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
+                                  {defaulter.class_name}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                                Guardian: {defaulter.parent_name} • {defaulter.parent_phone}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <span className="text-sm font-extrabold text-red-600 dark:text-red-400 block">
+                                ₹{defaulter.amount_due.toLocaleString()}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {defaulter.days_overdue} days overdue
+                              </span>
+                            </div>
+
+                            {defaulter.reminder_sent ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-xl">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Reminder Sent
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleSendFeeReminder(defaulter.id, defaulter.student_name)}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                              >
+                                <Send className="h-3 w-3" />
+                                <span>Remind Parent</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* SUB-SECTION 3: BUDGET MILESTONES & REALIZATION */}
+              {feeSubTab === 'milestones' && (
+                <div className="space-y-5">
+                  {feeAnalytics && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Budget Target</span>
+                        <span className="text-lg font-black text-slate-900 dark:text-white">
+                          ₹{(feeAnalytics.total_target / 100000).toFixed(1)} Lakhs
+                        </span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-emerald-600 block">Realized In Bank</span>
+                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                          ₹{(feeAnalytics.total_collected / 100000).toFixed(1)} Lakhs
+                        </span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-red-600 block">Total Pending Dues</span>
+                        <span className="text-lg font-black text-red-600 dark:text-red-400">
+                          ₹{(feeAnalytics.total_overdue / 100000).toFixed(1)} Lakhs
+                        </span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-blue-600 block">Collection Rate</span>
+                        <span className="text-lg font-black text-blue-600 dark:text-blue-400">
+                          {feeAnalytics.collection_rate_pct}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          Milestone 1 • Closed
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600">96.8% Paid</span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 1 Tuition &amp; Curriculum</h4>
+                        <span className="text-xs text-slate-500">Due: 15 Jul 2026 • ₹35,000 / student</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
+                        <div className="bg-emerald-500 h-2 rounded-full w-[96.8%]" />
+                      </div>
+                      <span className="text-[11px] text-slate-500 block">Collected: ₹33.88 Lakhs</span>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3 relative shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          Milestone 2 • Overdue
+                        </span>
+                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400">30 Overdue</span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Transport</h4>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Due: 25 Oct 2026 • ₹18,500 / student</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
+                        <div className="bg-amber-500 h-2 rounded-full w-[78.2%]" />
+                      </div>
+                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold block">Pending: ₹5,55,000 across 30 students</span>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          Milestone 3 • Scheduled
+                        </span>
+                        <span className="text-xs font-bold text-blue-600">Upcoming</span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 3 Activities &amp; Annual Day</h4>
+                        <span className="text-xs text-slate-500">Due: 15 Jan 2027 • ₹15,000 / student</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
+                        <div className="bg-blue-500 h-2 rounded-full w-[15%]" />
+                      </div>
+                      <span className="text-[11px] text-slate-500 block">Early bird prepayments: ₹4.5 Lakhs</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ===================================================== */}
-          {/* TAB 6: STAFF & VENDOR HUB                             */}
+          {/* TAB 6: STAFF & FACULTY DIRECTORY (COMPREHENSIVE)       */}
           {/* ===================================================== */}
           {activeTab === 'staff' && (
             <div className="space-y-6">
-              {/* Staff Directory Table */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Faculty &amp; Teaching Personnel Directory ({staffMembers.length})
+              {/* Header & Controls */}
+              <div className="overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4 p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                      👨‍🏫 Faculty &amp; Teaching Personnel Directory
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Institutional records: salary compensation, experience, assigned classes, leave balances, and pending requests.
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                    Total Staff: <strong className="text-slate-900 dark:text-white">{staffMembers.length}</strong>
                   </span>
-                  <div className="flex items-center gap-2">
-                    {['All', 'Academics', 'Sports & Estate', 'Logistics', 'External Vendor'].map(dept => (
+                </div>
+
+                {/* Filters and Search Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {['All', 'Academics', 'Sports & Estate', 'Cultural', 'Logistics', 'External Vendor'].map(dept => (
                       <button
                         key={dept}
                         onClick={() => setStaffRoleFilter(dept)}
-                        className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+                        className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 ${
                           staffRoleFilter === dept
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         {dept}
                       </button>
                     ))}
                   </div>
+
+                  <div className="relative min-w-[240px]">
+                    <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={staffSearchQuery}
+                      onChange={e => setStaffSearchQuery(e.target.value)}
+                      placeholder="Search staff, class, role..."
+                      className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {staffSearchQuery && (
+                      <button onClick={() => setStaffSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {staffMembers
-                    .filter(s => staffRoleFilter === 'All' || s.department === staffRoleFilter)
-                    .map((staff) => (
-                      <div key={staff.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <div className="flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-900 flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold shrink-0">
-                            {(staff.name || 'Staff Member').split(' ').map(n => n[0]).slice(0, 2).join('')}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-bold text-slate-900 dark:text-white">{staff.name}</h4>
-                              <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
-                                {staff.role}
+                {/* Staff Roster Table */}
+                <div className="overflow-x-auto pt-2">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                        <th className="py-3 px-4">Faculty / Staff Member</th>
+                        <th className="py-3 px-4">Experience &amp; Workload</th>
+                        <th className="py-3 px-4">Assigned Classes</th>
+                        <th className="py-3 px-4">Monthly Salary</th>
+                        <th className="py-3 px-4">Leave Quota</th>
+                        <th className="py-3 px-4">Requests</th>
+                        <th className="py-3 px-4">Attendance</th>
+                        <th className="py-3 px-4 text-right">Dossier</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {staffMembers
+                        .filter(s => {
+                          const matchDept = staffRoleFilter === 'All' || s.department === staffRoleFilter;
+                          const q = staffSearchQuery.trim().toLowerCase();
+                          const matchQ = !q || s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q) || (s.assigned_classes && s.assigned_classes.some(c => c.toLowerCase().includes(q)));
+                          return matchDept && matchQ;
+                        })
+                        .map((staff) => (
+                          <tr key={staff.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-900 flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold shrink-0">
+                                  {staff.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-900 dark:text-white">{staff.name}</h4>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{staff.role} • {staff.qualification || staff.department}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                {staff.experience || '7 Yrs Experience'}
                               </span>
-                            </div>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                              {staff.department} • {staff.phone} • {staff.assigned_duties || 'Teaching & Curriculum'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                            (staff.status || 'Present') === 'Present' 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
-                              : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900'
-                          }`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${(staff.status || 'Present') === 'Present' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                            {staff.status || 'Present'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                              <span className="text-[10px] text-slate-400">{staff.department}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex flex-wrap gap-1 max-w-xs">
+                                {(staff.assigned_classes || ['Class 8-A', 'Class 8-B']).map((cls, idx) => (
+                                  <span key={idx} className="rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 text-[10px] font-bold border border-blue-200/60 dark:border-blue-900/60">
+                                    {cls}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-black text-slate-900 dark:text-white">
+                              ₹{(staff.salary || 65000).toLocaleString()} <span className="text-[10px] font-normal text-slate-400">/mo</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[10px] font-bold">
+                                  <span className="text-slate-600 dark:text-slate-400">{staff.leaves_taken || 2} / {staff.leaves_total || 12} Taken</span>
+                                  <span className="text-emerald-600 font-mono">{(staff.leaves_total || 12) - (staff.leaves_taken || 2)} left</span>
+                                </div>
+                                <div className="w-24 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="bg-emerald-500 h-1.5 rounded-full"
+                                    style={{ width: `${Math.min(100, (((staff.leaves_taken || 2) / (staff.leaves_total || 12)) * 100))}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300 block text-[11px]">
+                                {staff.requests_submitted ?? 1} Submitted
+                              </span>
+                              <span className="text-[10px] text-slate-400">0 Pending Action</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                (staff.status || 'Present') === 'Present' 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300'
+                              }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${(staff.status || 'Present') === 'Present' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                {staff.status || 'Present'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={() => setSelectedStaffForModal(staff)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                              >
+                                <span>Inspect</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ===================================================== */}
           {/* TAB: FACULTY PERMISSIONS & SHIFTS                    */}
           {/* ===================================================== */}
           {activeTab === 'permissions' && (
@@ -2166,135 +2574,95 @@ export default function AdminPage() {
           )}
 
           {/* ===================================================== */}
-          {/* TAB 8: TRANSPARENT EVENT & VENDOR COMMAND CENTER     */}
+          {/* TAB 8: SCHOOL EVENTS & ACTIVITY COMMAND CENTER         */}
           {/* ===================================================== */}
           {activeTab === 'events' && (
             <div className="space-y-6">
-              
-              {/* Flagship Event Banner */}
-              <div className="rounded-3xl bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 p-6 text-white shadow-xl relative overflow-hidden border border-purple-500/30">
-                <div className="relative z-10 max-w-2xl space-y-2">
-                  <span className="rounded-full bg-purple-500/20 text-purple-200 border border-purple-400/30 px-3 py-1 text-xs font-bold inline-block">
-                    Flagship Institutional Event
-                  </span>
-                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                    Annual Day 2026: Navarasa (Rhythms of Tomorrow)
+              {/* Header with Add Event Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 px-2.5 py-0.5 text-xs font-bold border border-purple-200 dark:border-purple-800">
+                      Campus Life &amp; Calendar
+                    </span>
+                    <span className="text-xs text-slate-500">AY 2026–27 Activities</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    🎉 Institutional Events &amp; Activity Command Center
                   </h2>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    24 Oct 2026 • 5:30 PM • Main Auditorium &amp; Open Air Amphitheatre. 400+ student performers, orchestra, and robotics exhibition.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Plan and announce official school events, coordinate staff committees, and broadcast instant notifications to parents and students.
                   </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowAddEventModal(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>+ Add New School Event</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Committee Hierarchy: Staff -> Student Volunteers Tree */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+              {/* Event Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {schoolEvents.map((evt) => (
+                  <div key={evt.id} className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-3 relative overflow-hidden group hover:border-purple-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 px-2.5 py-0.5 text-xs font-bold">
+                        {evt.category}
+                      </span>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {evt.target_audience}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                      {evt.title}
+                    </h3>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {evt.description}
+                    </p>
+
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                      <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
+                        <Calendar className="h-3.5 w-3.5 text-purple-600" />
+                        {evt.date}
+                      </span>
+                      <span>📍 {evt.location}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Committee Hierarchy */}
+              <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   Staff &amp; Student Task Hierarchy (Committee Mapping)
                 </h3>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  
-                  {/* Committee 1 */}
-                  <div className="rounded-2xl border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-900 dark:text-purple-200">Mrs. Ananya Verma</span>
-                      <span className="text-[10px] font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full">Lead Faculty</span>
-                    </div>
-                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block">Stage Coordination &amp; Choir</span>
-                    <div className="pt-2 border-t border-purple-200 dark:border-purple-900">
-                      <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 block mb-1">Student Volunteers Assigned:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-900">Aarav Sharma</span>
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-900">Diya Patel</span>
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-purple-200 dark:border-purple-900">Rohan Iyer</span>
-                      </div>
+                  <div className="rounded-2xl border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-2">
+                    <span className="text-xs font-bold text-purple-900 dark:text-purple-200 block">Mrs. Ananya Verma • Lead Faculty</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Stage Coordination &amp; Choir</span>
+                    <div className="pt-2 border-t border-purple-200 dark:border-purple-900 text-[10px] text-slate-600 dark:text-slate-300">
+                      Volunteers: Aarav Sharma, Diya Patel, Rohan Iyer
                     </div>
                   </div>
-
-                  {/* Committee 2 */}
-                  <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Mr. Vikram Joshi</span>
-                      <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full">Lead Faculty</span>
-                    </div>
-                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block">Discipline &amp; VIP Logistics</span>
-                    <div className="pt-2 border-t border-blue-200 dark:border-blue-900">
-                      <span className="text-[10px] font-bold text-blue-900 dark:text-blue-300 block mb-1">Student Volunteers Assigned:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-blue-200 dark:border-blue-900">Kabir Mehta</span>
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-blue-200 dark:border-blue-900">Vivaan Sen</span>
-                      </div>
+                  <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-2">
+                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200 block">Mr. Vikram Joshi • Lead Faculty</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Discipline &amp; VIP Logistics</span>
+                    <div className="pt-2 border-t border-blue-200 dark:border-blue-900 text-[10px] text-slate-600 dark:text-slate-300">
+                      Volunteers: Kabir Mehta, Vivaan Sen
                     </div>
                   </div>
-
-                  {/* Committee 3 */}
-                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Ms. Priya Sen</span>
-                      <span className="text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">Lead Faculty</span>
-                    </div>
-                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block">Costume Design &amp; Green Room</span>
-                    <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900">
-                      <span className="text-[10px] font-bold text-emerald-900 dark:text-emerald-300 block mb-1">Student Volunteers Assigned:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-emerald-200 dark:border-emerald-900">Ananya Gupta</span>
-                        <span className="rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-emerald-200 dark:border-emerald-900">Pooja Hegde</span>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Vendor Equipment & Handover Tracker */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Vendor Equipment &amp; Timestamped Handover Tracker
-                </h3>
-
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">Digital P3.9 LED Backdrop Wall (40 x 20 ft)</h4>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">Vendor: Horizon AV Tech Solutions (+91 98765 43210)</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-900">
-                        Delivered: 22 Oct, 09:30 AM
-                      </span>
-                      <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 px-2.5 py-0.5 text-[10px] font-bold">
-                        Delivered
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">Concert Sound System + 8 Wireless Shure Mics</h4>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">Vendor: AcousticPro Live Bangalore (+91 98765 43211)</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-900">
-                        Delivered: 22 Oct, 11:15 AM
-                      </span>
-                      <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 px-2.5 py-0.5 text-[10px] font-bold">
-                        Delivered
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">600 Velvet Banquet Chairs &amp; Canopies</h4>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">Vendor: Royal Events &amp; Tenting (+91 98765 43212)</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-900">
-                        Scheduled Handover: 23 Oct, 2:00 PM
-                      </span>
-                      <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 px-2.5 py-0.5 text-[10px] font-bold">
-                        Ordered
-                      </span>
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-2">
+                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">Dr. K. Raman • Lead Faculty</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Science &amp; Robotics Exhibition Lead</span>
+                    <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900 text-[10px] text-slate-600 dark:text-slate-300">
+                      Volunteers: Ishaan Reddy, Ananya Iyer
                     </div>
                   </div>
                 </div>
@@ -2302,12 +2670,55 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ===================================================== */}
-          {/* TAB: ONLINE EXAMINATION CENTER                      */}
+          {/* TAB: ONLINE EXAMINATION CENTER & RE-EXAM WORKFLOW   */}
           {/* ===================================================== */}
           {activeTab === 'exams' && (
             <div className="space-y-6">
-              {/* Exam Class Filter Pills */}
+              {/* Header with Sub-tabs */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-300 px-2.5 py-0.5 text-xs font-bold border border-violet-200 dark:border-violet-800">
+                      Examination Cell
+                    </span>
+                    <span className="text-xs text-slate-500">CBSE Term Assessments</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    📝 Examinations, Timetables &amp; Re-Exam Approvals
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Review upcoming exam schedules, track overdue papers, and evaluate student medical re-exam requests with coordinator notifications.
+                  </p>
+                </div>
+
+                {/* Sub-tabs */}
+                <div className="flex items-center gap-2">
+                  {[
+                    { key: 'upcoming', label: '📅 Upcoming Timetables' },
+                    { key: 'overdue', label: '⏳ Overdue Exams' },
+                    { key: 'reexam', label: '🏥 Re-Exam Requests', count: reExamRequests.filter(r => r.status === 'Pending Admin Review').length }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setExamSubTab(tab.key as any)}
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        examSubTab === tab.key
+                          ? 'bg-violet-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      {tab.count !== undefined && tab.count > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Class Filter Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-violet-600 dark:text-violet-400" />
@@ -2331,53 +2742,217 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Exam Timetable Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
+              {/* SUB-VIEW 1: UPCOMING EXAMS */}
+              {examSubTab === 'upcoming' && (() => {
+                const upcomingExams = [
                   { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
                   { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Science Block 204', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
                   { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Room 102', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
                   { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Room 104', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
                   { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Room 201', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
                   { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
-                ]
-                  .filter(e => examClassFilter === 'All' || e.class === examClassFilter)
-                  .map(exam => (
-                    <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-violet-300 dark:hover:border-violet-700 transition-all">
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="font-extrabold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-900">
-                          {exam.class}
-                        </span>
-                        <span className="text-slate-400 font-mono text-[11px]">{exam.date} • {exam.time}</span>
-                      </div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
-                      <div className="mt-2 text-xs text-slate-500 space-y-0.5">
-                        <div>Seating: <strong className="text-slate-700 dark:text-slate-300">{exam.hall}</strong></div>
-                        <div>Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                          Proctor Confirmed
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            downloadOfficialDocumentFile(`Exam Hall Pass - ${exam.name}`, exam.class, `HALL-${exam.id}`);
-                            setToastMessage(`Downloaded Hall Pass for ${exam.name}`);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <Download className="h-3 w-3" />
-                          <span>Hall Pass</span>
-                        </button>
-                      </div>
+                ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
+
+                if (upcomingExams.length === 0) {
+                  return (
+                    <div className="p-12 text-center rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2">
+                      <BookOpen className="h-10 w-10 text-slate-400 mx-auto opacity-50" />
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Exams Scheduled</h3>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        There are currently no upcoming examinations scheduled for {examClassFilter}.
+                      </p>
                     </div>
-                  ))}
-              </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {upcomingExams.map(exam => (
+                      <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-violet-300 dark:hover:border-violet-700 transition-all">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="font-extrabold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-900">
+                            {exam.class}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[11px]">{exam.date} • {exam.time}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
+                        <div className="mt-2 text-xs text-slate-500 space-y-0.5">
+                          <div>Seating: <strong className="text-slate-700 dark:text-slate-300">{exam.hall}</strong></div>
+                          <div>Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                            Proctor Confirmed
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadOfficialDocumentFile(`Exam Hall Pass - ${exam.name}`, exam.class, `HALL-${exam.id}`);
+                              setToastMessage(`Downloaded Hall Pass for ${exam.name}`);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <Download className="h-3 w-3" />
+                            <span>Hall Pass</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* SUB-VIEW 2: OVERDUE EXAMS */}
+              {examSubTab === 'overdue' && (() => {
+                const overdueExams = [
+                  { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Room 102', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
+                ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
+
+                if (overdueExams.length === 0) {
+                  return (
+                    <div className="p-12 text-center rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2">
+                      <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto opacity-70" />
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Overdue Exams</h3>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        All examination evaluations and mark submissions for {examClassFilter} are on schedule.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {overdueExams.map(exam => (
+                      <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 shadow-xs">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="font-extrabold text-red-700 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-md">
+                            {exam.class} • Overdue
+                          </span>
+                          <span className="text-slate-400 font-mono text-[11px]">{exam.date}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* SUB-VIEW 3: RE-EXAM PERMISSION REQUESTS */}
+              {examSubTab === 'reexam' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
+                      Parents raise re-examination permissions for missed assessments due to medical emergencies or excused leaves. Upon Administration approval, an automated instruction is dispatched to the <strong>Exam Coordinator</strong> to schedule the re-test and the student &amp; parent are notified.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {reExamRequests.map(req => (
+                      <div key={req.id} className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-violet-50 dark:bg-violet-950 text-violet-700 font-bold flex items-center justify-center shrink-0">
+                              {req.student_name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">{req.student_name}</h4>
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold">
+                                  {req.class_name}-{req.section}
+                                </span>
+                                <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
+                                  {req.reason_category}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                                Subject: <strong className="text-slate-800 dark:text-slate-200">{req.subject}</strong> ({req.exam_name}) &bull; Missed Date: {req.missed_date}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                              req.status === 'Approved by Admin'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : req.status === 'Rejected'
+                                  ? 'bg-red-50 text-red-700'
+                                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                            }`}>
+                              {req.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl">
+                          <div>
+                            <span className="text-slate-400 font-bold block mb-0.5">Parent Explanation:</span>
+                            <p className="text-slate-700 dark:text-slate-300 italic">&ldquo;{req.reason_details}&rdquo;</p>
+                            <span className="text-[10px] text-slate-500 block mt-1">Submitted by {req.parent_name} ({req.parent_phone})</span>
+                          </div>
+                          <div className="sm:border-l sm:border-slate-200 dark:sm:border-slate-700 sm:pl-3 space-y-1">
+                            <span className="text-slate-400 font-bold block mb-0.5">Supporting Medical Evidence:</span>
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">{req.document_name || 'Medical_Certificate.pdf'}</span>
+                            </div>
+                            <span className="text-[10px] text-emerald-600 block">✓ Digital Hospital Stamp Verified</span>
+                          </div>
+                        </div>
+
+                        {req.status === 'Pending Admin Review' && (
+                          <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                              onClick={() => {
+                                api.reviewReExamRequest(req.id, 'Rejected', 'Reason did not meet medical exemption criteria');
+                                setReExamRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Rejected' } : r));
+                                triggerToast(`Re-exam request for ${req.student_name} rejected.`);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl border border-red-200 dark:border-red-900 text-red-600 text-xs font-bold hover:bg-red-50 cursor-pointer"
+                            >
+                              Reject Request
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await api.reviewReExamRequest(req.id, 'Approved by Admin', 'Approved by Administration based on verified medical documentation.');
+                                // Broadcast notification to exam coordinator
+                                await api.sendNotification({
+                                  recipient_role: 'exam_coordinator',
+                                  sender_name: 'Dr. Radhakrishnan (Principal)',
+                                  sender_role: 'admin',
+                                  title: `Re-Exam Mandate: ${req.student_name} (${req.subject})`,
+                                  message: `Principal has officially APPROVED re-examination for ${req.student_name} (${req.class_name}-${req.section}) in ${req.subject}. Please schedule venue & question paper.`,
+                                  priority: 'High'
+                                });
+                                // Broadcast to parent & student
+                                await api.sendNotification({
+                                  recipient_role: 'parent',
+                                  sender_name: 'Principal Office',
+                                  sender_role: 'admin',
+                                  title: `Re-Exam Approved: ${req.subject}`,
+                                  message: `Your medical re-exam request for ${req.student_name} in ${req.subject} has been officially approved. Exam coordinator is scheduling the re-test.`,
+                                  priority: 'Normal'
+                                });
+                                setReExamRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved by Admin' } : r));
+                                triggerToast(`✓ Re-exam APPROVED! Notified Exam Coordinator & Parent.`);
+                              }}
+                              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                            >
+                              ✓ Approve Re-Exam &amp; Dispatch to Coordinator
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ===================================================== */}
           {/* TAB 9: DEDICATED TASK MANAGEMENT                      */}
           {/* ===================================================== */}
           {activeTab === 'tasks' && (() => {
@@ -2385,128 +2960,99 @@ export default function AdminPage() {
               academic:   { label: 'Academic & Curriculum', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', icon: '📚' },
               exam:       { label: 'Examination Cell',      color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800', icon: '📝' },
               admissions: { label: 'Admissions & CRM',      color: 'text-sky-700 dark:text-sky-300',       bg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',           icon: '🎓' },
-              finance:    { label: 'Finance & Bursar',      color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
-              executive:  { label: 'Executive Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
+              finance:    { label: 'Finance & Accounts',    color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
+              executive:  { label: 'Principal Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
               campus_ops: { label: 'Campus Operations',     color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800', icon: '🏫' },
             };
+
             const PRIORITY_BADGE: Record<string, string> = {
-              Critical: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
-              High:     'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
-              Medium:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-              Low:      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              Critical: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+              High:     'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800',
+              Medium:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+              Low:      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
             };
+
             const STATUS_BADGE: Record<string, string> = {
-              'Pending':        'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
-              'In Progress':    'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-              'Pending Review': 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-              'Completed':      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+              'Pending':        'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+              'In Progress':    'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+              'Pending Review': 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+              'Completed':      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
             };
 
             const filteredTasks = tasks.filter(t => {
-              const domainMatch = taskDomainFilter === 'all' || t.domain === taskDomainFilter;
               const statusMatch = taskStatusFilter === 'all' || t.status === taskStatusFilter;
-              return domainMatch && statusMatch;
+              if (taskOriginFilter === 'auto') return t.is_auto_generated && statusMatch;
+              if (taskOriginFilter === 'staff') return !t.is_auto_generated && statusMatch;
+              if (taskOriginFilter === 'critical') return (t.is_escalated || t.priority === 'Critical') && statusMatch;
+              if (taskOriginFilter === 'relief') return t.relief_requested && statusMatch;
+              return statusMatch;
             });
 
             const openCount   = tasks.filter(t => t.status !== 'Completed').length;
-            const criticalCount = tasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
-            const overdueCount = tasks.filter(t => t.category === 'urgent' && t.status !== 'Completed').length;
             const autoCount   = tasks.filter(t => t.is_auto_generated).length;
+            const criticalCount = tasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
+            const completedCount = tasks.filter(t => t.status === 'Completed').length;
+            const reliefCount = tasks.filter(t => t.relief_requested).length;
 
             return (
               <div className="space-y-6 animate-in fade-in duration-200">
-                {/* ── Executive Cockpit KPIs ── */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* ── 4 Crisp High-Level KPI Cards ── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
                   {[
-                    { label: 'Open Tasks',      value: openCount,    color: 'text-blue-700 dark:text-blue-300',    bg: 'bg-blue-50 dark:bg-blue-950/30',    icon: <ClipboardCheck className="h-4 w-4" /> },
-                    { label: 'Escalated / Critical', value: criticalCount, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50 dark:bg-rose-950/30', icon: <AlertTriangle className="h-4 w-4" /> },
-                    { label: 'Urgent Overdue',  value: overdueCount, color: 'text-amber-700 dark:text-amber-300',  bg: 'bg-amber-50 dark:bg-amber-950/30',  icon: <Clock className="h-4 w-4" /> },
-                    { label: 'Auto-Triggered',  value: autoCount,    color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/30', icon: <Sparkles className="h-4 w-4" /> },
+                    { label: 'Active School Tasks', value: openCount, color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50/70 dark:bg-blue-950/30', border: 'border-blue-200/60 dark:border-blue-800/60', icon: <ClipboardCheck className="h-4 w-4" /> },
+                    { label: '⚡ Auto-Triggered Rules', value: autoCount, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50/70 dark:bg-violet-950/30', border: 'border-violet-200/60 dark:border-violet-800/60', icon: <Sparkles className="h-4 w-4" /> },
+                    { label: '🚨 Critical Priorities', value: criticalCount, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50/70 dark:bg-rose-950/30', border: 'border-rose-200/60 dark:border-rose-800/60', icon: <AlertTriangle className="h-4 w-4" /> },
+                    { label: '✓ Completed Tasks', value: completedCount, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50/70 dark:bg-emerald-950/30', border: 'border-emerald-200/60 dark:border-emerald-800/60', icon: <CheckCircle2 className="h-4 w-4" /> },
                   ].map((kpi) => (
-                    <div key={kpi.label} className={`rounded-2xl border border-slate-200 dark:border-slate-800 ${kpi.bg} p-4 flex items-center gap-3`}>
-                      <span className={`${kpi.color}`}>{kpi.icon}</span>
+                    <div key={kpi.label} className={`rounded-2xl border ${kpi.border} ${kpi.bg} p-4 flex items-center gap-3.5 shadow-2xs`}>
+                      <span className={`p-2 rounded-xl bg-white dark:bg-slate-900 ${kpi.color} shadow-2xs`}>{kpi.icon}</span>
                       <div>
-                        <div className={`text-xl font-black ${kpi.color}`}>{kpi.value}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{kpi.label}</div>
+                        <div className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">{kpi.label}</div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* ── Department SLA Progress Strip ── */}
-                {taskCockpit?.department_stats && taskCockpit.department_stats.length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <Activity className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                        Live Department Resolution &amp; SLA Compliance Rates
-                      </span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Database Synced</span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-                      {taskCockpit.department_stats.map((dept: any) => {
-                        const meta = DOMAIN_META[dept.domain];
-                        const rate = dept.completion_rate_pct ?? 100;
-                        return (
-                          <div 
-                            key={dept.domain} 
-                            onClick={() => setTaskDomainFilter(dept.domain)}
-                            className={`rounded-xl border p-2 cursor-pointer transition-all hover:scale-[1.02] ${
-                              taskDomainFilter === dept.domain 
-                                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-1 ring-blue-500' 
-                                : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-[11px] font-bold">
-                              <span className="truncate text-slate-800 dark:text-slate-200">{meta?.icon || '•'} {dept.domain.slice(0, 5).toUpperCase()}</span>
-                              <span className={`text-[10px] font-black ${rate === 100 ? 'text-emerald-600 dark:text-emerald-400' : rate < 50 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                                {rate}%
-                              </span>
-                            </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1.5">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  rate === 100 ? 'bg-emerald-500' : rate < 50 ? 'bg-rose-500' : 'bg-amber-500'
-                                }`} 
-                                style={{ width: `${Math.max(5, rate)}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 mt-1">
-                              <span>{dept.open_tasks} open</span>
-                              <span>{dept.total_tasks} total</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Domain Filter Bar ── */}
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mr-1">Domain</span>
-                  {['all', 'academic', 'exam', 'transport', 'inventory', 'admissions', 'finance', 'executive'].map(d => {
-                    const meta = DOMAIN_META[d];
-                    const active = taskDomainFilter === d;
-                    return (
+                {/* ── Filter Toolbar ── */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  {/* Task Origin / Type Pills */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1">Task Type:</span>
+                    {[
+                      { id: 'all', label: 'All Tasks', count: tasks.length },
+                      { id: 'auto', label: '⚡ Auto-Triggered', count: autoCount },
+                      { id: 'staff', label: '👤 Staff Delegated', count: tasks.length - autoCount },
+                      { id: 'critical', label: '🚨 Critical Only', count: criticalCount },
+                      { id: 'relief', label: '⚠️ Workload Relief', count: reliefCount },
+                    ].map(tab => (
                       <button
-                        key={d}
-                        onClick={() => setTaskDomainFilter(d)}
-                        className={`rounded-full px-3 py-1 text-[10px] font-bold border transition-all cursor-pointer ${
-                          active
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white'
-                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setTaskOriginFilter(tab.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          taskOriginFilter === tab.id
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
-                        {d === 'all' ? 'All Domains' : `${meta?.icon} ${meta?.label}`}
+                        <span>{tab.label}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                          taskOriginFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {tab.count}
+                        </span>
                       </button>
-                    );
-                  })}
-                  <div className="ml-auto flex items-center gap-2">
+                    ))}
+                  </div>
+
+                  {/* Status Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">Status:</span>
                     <select
                       value={taskStatusFilter}
                       onChange={e => setTaskStatusFilter(e.target.value)}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[11px] font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     >
                       <option value="all">All Statuses</option>
                       <option value="Pending">Pending</option>
@@ -2517,131 +3063,328 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* ── Task Cards ── */}
+                {/* ── Clean Task List Cards ── */}
                 <div className="space-y-3">
                   {filteredTasks.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-10 text-center">
+                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center">
                       <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-3" />
-                      <p className="text-sm font-bold text-slate-600 dark:text-slate-400">No tasks match this filter.</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">Try a different domain or status filter.</p>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No tasks match this filter.</p>
+                      <p className="text-xs text-slate-400 mt-1">Try switching to All Tasks or change status filter.</p>
                     </div>
                   )}
+
                   {filteredTasks.map((task) => {
                     const meta = DOMAIN_META[task.domain as string] || DOMAIN_META['executive'];
                     const isExpanded = taskExpandedId === task.id;
                     const priorityClass = PRIORITY_BADGE[task.priority as string] || PRIORITY_BADGE['Low'];
                     const statusClass = STATUS_BADGE[task.status as string] || STATUS_BADGE['Pending'];
+
                     return (
                       <div
                         key={task.id}
-                        className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-sm transition-all overflow-hidden ${
+                        className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all overflow-hidden ${
                           task.is_escalated
                             ? 'border-rose-300 dark:border-rose-700 ring-1 ring-rose-200 dark:ring-rose-900'
-                            : 'border-slate-200 dark:border-slate-800'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
-                        {/* Card Top Row */}
+                        {/* Task Header Row */}
                         <div
-                          className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                          className="flex items-start justify-between gap-4 p-4.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                           onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
                         >
-                          {/* Domain Icon Badge */}
-                          <div className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-black ${meta.bg}`}>
-                            {meta.icon}
+                          <div className="flex items-start gap-3.5 min-w-0">
+                            {/* Domain Icon */}
+                            <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border text-base font-black ${meta.bg}`}>
+                              {meta.icon}
+                            </div>
+
+                            <div className="space-y-1 min-w-0">
+                              {/* Badges */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${meta.bg} ${meta.color}`}>
+                                  {meta.label}
+                                </span>
+                                {task.is_auto_generated && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 border border-violet-200 dark:border-violet-800 flex items-center gap-1">
+                                    <Sparkles className="h-3 w-3" /> Auto-Triggered Rule
+                                  </span>
+                                )}
+                                {task.is_escalated && (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse">
+                                    🚨 Escalated to Principal
+                                  </span>
+                                )}
+                                {task.relief_requested && (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                    <AlertCircle className="h-3 w-3 text-amber-600" /> Relief Requested ({task.relief_reason || 'Workload'})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Title */}
+                              <h4 className={`text-sm font-bold ${
+                                task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'
+                              }`}>
+                                {task.title}
+                              </h4>
+
+                              {/* Meta Info */}
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5">
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  👤 Assigned: <strong>{task.assigned_to}</strong>
+                                </span>
+                                <span>•</span>
+                                <span>Due: <strong>{task.due_date}</strong></span>
+                                {task.sla_hours && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                      ⏱️ SLA {task.sla_hours}h
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Main Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
-                                {meta.label}
-                              </span>
-                              {task.is_auto_generated && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                                  ⚡ Auto-Triggered
-                                </span>
-                              )}
-                              {task.is_escalated && (
-                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800 animate-pulse">
-                                  🔺 ESCALATED
-                                </span>
-                              )}
-                            </div>
-                            <p className={`text-xs font-bold ${ task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white' }`}>
-                              {task.title}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                              <span>👤 {task.assigned_to}</span>
-                              <span>•</span>
-                              <span>🕐 {task.due_date}</span>
-                              {task.sla_hours && <><span>•</span><span>SLA {task.sla_hours}h</span></>}
-                              {task.created_by_name && <><span>•</span><span>By {task.created_by_name}</span></>}
-                            </div>
-                          </div>
-
-                          {/* Right: Status + Priority */}
+                          {/* Status and Priority Badges */}
                           <div className="shrink-0 flex flex-col items-end gap-1.5">
-                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${statusClass}`}>
+                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg ${statusClass}`}>
                               {task.status}
                             </span>
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${priorityClass}`}>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${priorityClass}`}>
                               {task.priority}
                             </span>
                           </div>
                         </div>
 
-                        {/* Expanded Detail Panel */}
+                        {/* Expanded Panel */}
                         {isExpanded && (
-                          <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3 bg-slate-50/60 dark:bg-slate-800/20">
+                          <div className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 space-y-3">
                             {task.description && (
-                              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{task.description}</p>
+                              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                {task.description}
+                              </p>
                             )}
-                            {task.escalation_reason && (
-                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 px-3 py-2">
-                                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">🔺 Escalation Reason: {task.escalation_reason}</p>
+
+                            {/* Faculty Relief Request Callout with 1-Click Approval */}
+                            {task.relief_requested && (
+                              <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/40 p-3.5 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                                    Faculty Relief Request Submitted ({task.relief_reason || 'Workload Surge'})
+                                  </span>
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                                    SLA Paused (Zero Penalty)
+                                  </span>
+                                </div>
+
+                                {task.relief_justification && (
+                                  <p className="text-xs text-amber-900 dark:text-amber-200 italic bg-white/80 dark:bg-slate-900/70 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900">
+                                    "{task.relief_justification}"
+                                  </p>
+                                )}
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                                  <span className="text-amber-800 dark:text-amber-300">
+                                    Suggested Peer Faculty: <strong>{task.suggested_peer_teacher || 'Mrs. Neha Roy'}</strong>
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReassignTaskId(task.id);
+                                        setReassignPeer(task.suggested_peer_teacher || 'Mrs. Neha Roy');
+                                      }}
+                                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-all shadow-xs"
+                                    >
+                                      Approve Peer Migration
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleExtendSla(task.id);
+                                      }}
+                                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold cursor-pointer transition-all"
+                                    >
+                                      +24h SLA Extension
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Inline Peer Selection Confirmation */}
+                                {reassignTaskId === task.id && (
+                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300 dark:border-amber-800 space-y-2 mt-2">
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                      Confirm Peer Faculty to Reassign Mandate (SLA will reset to fresh 48 Hours):
+                                    </label>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <select
+                                        value={reassignPeer}
+                                        onChange={(e) => setReassignPeer(e.target.value)}
+                                        className="flex-1 min-w-[200px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                      >
+                                        <option value="Mrs. Neha Roy">Mrs. Neha Roy (English)</option>
+                                        <option value="Dr. Suresh Babu">Dr. Suresh Babu (Science)</option>
+                                        <option value="Mr. Vikram Sharma">Mr. Vikram Sharma (Physics)</option>
+                                        <option value="Mrs. Rekha Sharma">Mrs. Rekha Sharma (Hindi)</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleApproveRelief(task, reassignPeer);
+                                        }}
+                                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                                      >
+                                        Confirm Reassignment
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setReassignTaskId(null);
+                                        }}
+                                        className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
 
-                            {/* Action Buttons Row */}
-                            <div className="flex flex-wrap gap-2">
-                              {['Pending','In Progress','Pending Review','Completed'].map(s => (
-                                <button
-                                  key={s}
-                                  onClick={() => handleUpdateTaskStatus(task.id, s)}
-                                  disabled={task.status === s}
-                                  className={`rounded-xl px-3 py-1.5 text-[10px] font-bold border transition-all cursor-pointer ${
-                                    task.status === s
-                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-blue-500 hover:text-blue-600'
-                                  }`}
-                                >
-                                  {s}
-                                </button>
-                              ))}
+                            {/* Escalation Callout with Principal Resolve Action */}
+                            {task.is_escalated && (
+                              <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3.5 space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                                    🚨 Escalation Rationale: {task.escalation_reason || 'Critical Priority'}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setResolveEscalateTaskId(task.id);
+                                      setResolveEscalateNotes('Discussed with faculty, issue resolved and resumed normally.');
+                                    }}
+                                    className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Resolve Escalation
+                                  </button>
+                                </div>
+
+                                {resolveEscalateTaskId === task.id && (
+                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-rose-300 dark:border-rose-800 space-y-2 mt-2">
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                      Principal Resolution Note (Restores task to standard monitoring queue):
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={resolveEscalateNotes}
+                                      onChange={(e) => setResolveEscalateNotes(e.target.value)}
+                                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                      placeholder="e.g. Counseled teacher, parent contacted, workload stabilized."
+                                    />
+                                    <div className="flex items-center justify-end gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setResolveEscalateTaskId(null);
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleResolveEscalation(task.id);
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                                      >
+                                        Confirm Resolution
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Status Change Stepper */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-500 mr-1">Update Status:</span>
+                                {['Pending', 'In Progress', 'Completed'].map(s => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateTaskStatus(task.id, s);
+                                    }}
+                                    disabled={task.status === s}
+                                    className={`rounded-xl px-3 py-1 text-xs font-bold border transition-all cursor-pointer ${
+                                      task.status === s
+                                        ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 border-slate-300 dark:border-slate-600 cursor-not-allowed'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600'
+                                    }`}
+                                  >
+                                    {s === 'Completed' ? '✓ Mark Done' : s}
+                                  </button>
+                                ))}
+                              </div>
+
                               {!task.is_escalated && (
                                 <button
-                                  onClick={() => { setEscalateTaskId(task.id); setEscalateReason(''); }}
-                                  className="rounded-xl px-3 py-1.5 text-[10px] font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer ml-auto"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEscalateTaskId(task.id);
+                                    setEscalateReason('');
+                                  }}
+                                  className="rounded-xl px-3 py-1 text-xs font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer"
                                 >
-                                  🔺 Escalate to Principal
+                                  🚨 Escalate to Principal
                                 </button>
                               )}
                             </div>
 
-                            {/* Inline Escalation Form */}
+                            {/* Escalation Form */}
                             {escalateTaskId === task.id && (
-                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 p-3 space-y-2">
-                                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">Enter escalation reason:</p>
+                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 p-3.5 space-y-2 mt-2">
+                                <p className="text-xs font-bold text-rose-700 dark:text-rose-300">
+                                  State rationale for escalating this task to Principal:
+                                </p>
                                 <textarea
                                   rows={2}
                                   value={escalateReason}
                                   onChange={e => setEscalateReason(e.target.value)}
-                                  placeholder="e.g. Vendor threatens to pull out 48 hrs before Annual Day..."
-                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-[11px] text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                  placeholder="e.g. Teacher requested medical relief or deadline exceeded by 48 hours..."
+                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
                                 />
                                 <div className="flex gap-2 justify-end">
-                                  <button onClick={() => setEscalateTaskId(null)} className="text-[10px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 cursor-pointer">Cancel</button>
-                                  <button onClick={() => handleEscalateTask(task.id)} className="text-[10px] px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer">Confirm Escalation</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEscalateTaskId(null)}
+                                    className="text-xs px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEscalateTask(task.id)}
+                                    className="text-xs px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                                  >
+                                    Confirm Escalation
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -2654,7 +3397,6 @@ export default function AdminPage() {
               </div>
             );
           })()}
-
           {/* ===================================================== */}
           {/* TAB 8: SUBSTITUTION & TIMETABLE COVERAGE ENGINE        */}
           {/* ===================================================== */}
@@ -3443,7 +4185,387 @@ export default function AdminPage() {
           {/* Footer */}
           <Footer />
         </main>
-      </div>
+      
+      {/* ========================================================= */}
+      {/* MODAL: 1-CLICK SIS ENROLLMENT & DOSSIER (ADMISSIONS CRM)  */}
+      {/* ========================================================= */}
+      {convertModalEnquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                  🎓
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">1-Click SIS Enrollment &amp; Dossier</h3>
+                  <p className="text-[11px] text-slate-500">Verify documents and promote lead to active Student Profile</p>
+                </div>
+              </div>
+              <button onClick={() => setConvertModalEnquiry(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Student Name:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.student_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Grade / Target Class:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.target_grade}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Parent &amp; Phone:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.parent_name} ({convertModalEnquiry.phone})</span>
+                </div>
+              </div>
+
+              {/* Document Readiness Summary */}
+              <div className="p-2.5 rounded-xl border text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  Academic Certificates &amp; Birth Records Verified by Admissions Desk
+                </span>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Assign Classroom Section</label>
+                <select 
+                  value={convertSection} 
+                  onChange={e => setConvertSection(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs"
+                >
+                  <option value="A">{convertModalEnquiry.target_grade}-A (Section A)</option>
+                  <option value="B">{convertModalEnquiry.target_grade}-B (Section B)</option>
+                </select>
+              </div>
+
+              {/* Admission Fee & Accounts Handoff Controls */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    One-Time Admission Fee Structure
+                  </span>
+                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full">
+                    Accounts Auto-Sync
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Fee Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={convertAdmissionFee}
+                      onChange={e => setConvertAdmissionFee(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-black text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Collection Status</label>
+                    <select
+                      value={convertFeeStatus}
+                      onChange={e => setConvertFeeStatus(e.target.value as 'Paid' | 'Pending')}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                    >
+                      <option value="Paid">✓ Paid Now (Immediate Receipt)</option>
+                      <option value="Pending">⏳ Pending (Queue in Accounts)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Payment Method</label>
+                  <select
+                    value={convertPaymentMethod}
+                    onChange={e => setConvertPaymentMethod(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                  >
+                    <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
+                    <option value="Net Banking / NEFT">Net Banking / NEFT</option>
+                    <option value="Debit / Credit Card">Debit / Credit Card (POS Counter)</option>
+                    <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
+                    <option value="Cash Payment">Cash Payment at Counter</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertModalEnquiry(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await api.convertEnquiryToStudent(convertModalEnquiry.id);
+                    const updatedEnq = await api.getEnquiries();
+                    setEnquiries(updatedEnq);
+                    const updatedStudents = await api.getStudents();
+                    setStudentsList(updatedStudents);
+                    setConvertModalEnquiry(null);
+                    triggerToast(`✓ ${convertModalEnquiry.student_name} officially enrolled into SIS with Section ${convertSection} allotment!`);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Confirm Enrollment</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: STAFF DOSSIER INSPECTOR                            */}
+      {/* ========================================================= */}
+      {selectedStaffForModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950 text-teal-600 font-black flex items-center justify-center">
+                  {selectedStaffForModal.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">{selectedStaffForModal.name}</h3>
+                  <p className="text-xs text-slate-500">{selectedStaffForModal.role} • {selectedStaffForModal.department}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedStaffForModal(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px]">Monthly Compensation:</span>
+                  <span className="text-base font-black text-slate-900 dark:text-white">₹{selectedStaffForModal.salary.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px]">Teaching Experience:</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedStaffForModal.experience || '8 Yrs Experience'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px]">Leave Quota Balance:</span>
+                  <span className="text-sm font-bold text-emerald-600">{(selectedStaffForModal.leaves_total || 12) - (selectedStaffForModal.leaves_taken || 2)} Days Remaining</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px]">Total Leave Requests:</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedStaffForModal.requests_submitted || 2} Submitted</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Assigned Classes &amp; Academic Duties:</span>
+                <p className="text-slate-600 dark:text-slate-300 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
+                  {selectedStaffForModal.assigned_duties || 'Homeroom Mentorship & Subject Classes'}
+                </p>
+              </div>
+
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Contact:</span>
+                <p className="text-slate-600 dark:text-slate-300">{selectedStaffForModal.phone} &bull; {selectedStaffForModal.email}</p>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-right">
+              <button
+                onClick={() => setSelectedStaffForModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Close Dossier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: ADD NEW SCHOOL EVENT (PRINCIPAL AUTHORITY)          */}
+      {/* ========================================================= */}
+      {showAddEventModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center font-bold">
+                  🎉
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Announce New School Event</h3>
+                  <p className="text-[11px] text-slate-500">Principal authority • Broadcast to all members</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAddEventModal(false)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newEventTitle.trim()) return;
+
+                const createdEvt = {
+                  id: schoolEvents.length + 1,
+                  title: newEventTitle.trim(),
+                  category: newEventCategory,
+                  date: `${newEventDate} • ${newEventTime}`,
+                  location: newEventLocation,
+                  target_audience: newEventAudience,
+                  description: newEventDesc || 'Official institutional event coordinated by Principal Office.',
+                  status: 'Upcoming'
+                };
+
+                setSchoolEvents(prev => [createdEvt, ...prev]);
+
+                // Broadcast notification to Parents, Students, and Staff
+                await api.sendNotification({
+                  recipient_role: 'parent',
+                  sender_name: 'Dr. Radhakrishnan (Principal)',
+                  sender_role: 'admin',
+                  title: `📢 New School Event: ${newEventTitle}`,
+                  message: `All parents and students are invited to "${newEventTitle}" scheduled on ${newEventDate} at ${newEventLocation}.`,
+                  priority: 'Normal'
+                });
+
+                await api.sendNotification({
+                  recipient_role: 'student',
+                  sender_name: 'Principal Office',
+                  sender_role: 'admin',
+                  title: `🎉 School Event: ${newEventTitle}`,
+                  message: `Join us for "${newEventTitle}" on ${newEventDate} at ${newEventLocation}.`,
+                  priority: 'Normal'
+                });
+
+                setShowAddEventModal(false);
+                setNewEventTitle('');
+                setNewEventDesc('');
+                triggerToast(`🎉 Event "${createdEvt.title}" officially announced and notifications broadcast!`);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Event Title</label>
+                <input
+                  type="text"
+                  required
+                  value={newEventTitle}
+                  onChange={e => setNewEventTitle(e.target.value)}
+                  placeholder="e.g. Inter-School Robotics Championship 2026"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Category</label>
+                  <select
+                    value={newEventCategory}
+                    onChange={e => setNewEventCategory(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="Academic">Academic</option>
+                    <option value="Cultural">Cultural</option>
+                    <option value="Sports">Sports Day</option>
+                    <option value="Science Expo">Science &amp; Robotics</option>
+                    <option value="PTM">Parent-Teacher Meet</option>
+                    <option value="Holiday">School Holiday</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target Audience</label>
+                  <select
+                    value={newEventAudience}
+                    onChange={e => setNewEventAudience(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="All School">All School (Parents, Students, Staff)</option>
+                    <option value="Parents & Students">Parents &amp; Students</option>
+                    <option value="Staff Only">Staff Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Date</label>
+                  <input
+                    type="text"
+                    value={newEventDate}
+                    onChange={e => setNewEventDate(e.target.value)}
+                    placeholder="15 Nov 2026"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Time</label>
+                  <input
+                    type="text"
+                    value={newEventTime}
+                    onChange={e => setNewEventTime(e.target.value)}
+                    placeholder="09:30 AM"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Venue / Location</label>
+                <input
+                  type="text"
+                  value={newEventLocation}
+                  onChange={e => setNewEventLocation(e.target.value)}
+                  placeholder="Main Auditorium & Open Air Grounds"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Description &amp; Agenda</label>
+                <textarea
+                  rows={2}
+                  value={newEventDesc}
+                  onChange={e => setNewEventDesc(e.target.value)}
+                  placeholder="Details regarding registration, schedule, and participation..."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddEventModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Megaphone className="h-4 w-4" />
+                  <span>Broadcast Event</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
     </RoleGuard>
   );
 }

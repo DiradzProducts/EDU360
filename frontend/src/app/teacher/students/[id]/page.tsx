@@ -441,7 +441,7 @@ function StudentDetailContent() {
 
   const idNum = Number(params?.id) || 1;
   const [student, setStudent] = useState<StudentDossier>(() => getStudentData(idNum));
-  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'transport' | 'vault'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault'>('profile');
   const [remarks, setRemarks] = useState<StudentRemark[]>(() => getRemarksForStudent(idNum));
   const [remarkCategoryFilter, setRemarkCategoryFilter] = useState<string>('ALL');
   const [showAddRemarkModal, setShowAddRemarkModal] = useState<boolean>(false);
@@ -654,7 +654,6 @@ function StudentDetailContent() {
             { id: 'academics', label: 'Academic Standing & Grades', icon: BookOpen },
             { id: 'remarks', label: `Faculty Remarks & Conduct (${remarks.length})`, icon: MessageSquareQuote },
             { id: 'attendance', label: 'Attendance & Biometrics', icon: CalendarCheck },
-            { id: 'transport', label: 'Bus Fleet & Transport', icon: Bus },
             { id: 'vault', label: 'Official Documents Vault', icon: FileText }
           ].map((tab) => {
             const IconComponent = tab.icon;
@@ -1206,102 +1205,6 @@ function StudentDetailContent() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: BUS FLEET & TRANSPORT */}
-        {activeTab === 'transport' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Bus className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      Designated Bus Fleet Assignment
-                    </span>
-                  </div>
-                  <span className="rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-bold border border-blue-200 dark:border-blue-800">
-                    Live Telemetry Active
-                  </span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Route Information</span>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                      {student.bus_fleet.route_name}
-                    </h4>
-                    <span className="font-mono text-slate-500">Vehicle Plate: {student.bus_fleet.bus_number}</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Assigned Campus Driver:</span>
-                      <strong className="text-slate-900 dark:text-white">{student.bus_fleet.driver_name}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Driver Contact:</span>
-                      <a href={`tel:${student.bus_fleet.driver_phone}`} className="font-mono font-bold text-blue-600 hover:underline">
-                        {student.bus_fleet.driver_phone}
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Morning Pickup</span>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white font-mono mt-0.5 block">{student.bus_fleet.pickup_time}</span>
-                      <span className="text-[10px] text-slate-500">{student.bus_fleet.designated_stop}</span>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Evening Drop</span>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white font-mono mt-0.5 block">{student.bus_fleet.drop_time}</span>
-                      <span className="text-[10px] text-slate-500">{student.bus_fleet.designated_stop}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Live GPS Radar Simulation */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col justify-between space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Navigation className="h-4 w-4 text-emerald-500 animate-pulse" />
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      YellowBus Live Radar &amp; Geo-Fence
-                    </span>
-                  </div>
-                  <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">
-                    Speed: {student.bus_fleet.live_speed}
-                  </span>
-                </div>
-
-                <div className="flex-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[160px]">
-                  <div className="h-12 w-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold">
-                    <Bus className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
-                      Bus Approaching Varthur Radial
-                    </h5>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      GPS Signal 100% Locked &bull; {student.bus_fleet.current_gps_status}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Telemetry synced with Parent Companion App in real-time
-                  </span>
-                </div>
-
-                <div className="text-xs text-slate-500 italic">
-                  Automated parent push notification dispatched 5 minutes prior to bus arrival at {student.bus_fleet.designated_stop}.
-                </div>
-              </div>
-
             </div>
           </div>
         )}

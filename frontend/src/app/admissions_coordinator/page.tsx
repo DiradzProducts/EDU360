@@ -66,6 +66,7 @@ export default function AdmissionsCoordinatorPage() {
   const [regStudentName, setRegStudentName] = useState('');
   const [regParentName, setRegParentName] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [regPhoneError, setRegPhoneError] = useState<string | null>(null);
   const [regEmail, setRegEmail] = useState('');
   const [regGrade, setRegGrade] = useState('Class 8');
   const [regSource, setRegSource] = useState('Website Form');
@@ -226,6 +227,44 @@ export default function AdmissionsCoordinatorPage() {
       triggerToast('Please provide Student Name, Parent Name, and Phone.');
       return;
     }
+
+    // Phone Number Strict Validation (Indian 10-digit mobile with optional +91 / 0)
+    const digitsOnly = regPhone.replace(/\D/g, '');
+    let isValidMobile = false;
+    let phoneErrorMsg = '';
+
+    if (!digitsOnly) {
+      phoneErrorMsg = 'Phone number is required.';
+    } else if (digitsOnly.length === 10) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly)) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = '10-digit mobile number must start with 6, 7, 8, or 9.';
+      }
+    } else if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly.slice(2))) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = 'Mobile number must start with 6, 7, 8, or 9 after country code +91.';
+      }
+    } else if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly.slice(1))) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = 'Mobile number must start with 6, 7, 8, or 9 after leading 0.';
+      }
+    } else if (digitsOnly.length < 10) {
+      phoneErrorMsg = `Incomplete phone number (${digitsOnly.length}/10 digits entered).`;
+    } else {
+      phoneErrorMsg = 'Please enter a valid 10-digit mobile number (e.g. +91 98450 99881).';
+    }
+
+    if (!isValidMobile) {
+      setRegPhoneError(phoneErrorMsg);
+      triggerToast(phoneErrorMsg);
+      return;
+    }
+    setRegPhoneError(null);
     const emailVal = regEmail.trim() || `${regStudentName.toLowerCase().replace(/\s+/g, '')}.parent@edu360.internal`;
     await api.createEnquiry({
       student_name: regStudentName.trim(),
@@ -246,6 +285,7 @@ export default function AdmissionsCoordinatorPage() {
     setRegStudentName('');
     setRegParentName('');
     setRegPhone('');
+    setRegPhoneError(null);
     setRegEmail('');
     setRegNotes('');
     setRegFollowupDate('');
@@ -333,15 +373,30 @@ export default function AdmissionsCoordinatorPage() {
 
   // 9. Reopen Dropped Lead
   const handleReopenLead = async (id: number) => {
-    await api.updateEnquiryStage(id, 'new');
+    await api.reopenEnquiry(id);
     const updated = await api.getEnquiries();
     setEnquiries(updated);
-    triggerToast('Lead reopened and restored to active pipeline.');
+    triggerToast('Lead reopened and restored to active pipeline (previous drop reason saved to history).');
   };
 
   // 10. Export CSV
   const handleExportCsv = () => {
-    const headers = ['Enquiry ID', 'Student Name', 'Parent Name', 'Target Grade', 'Phone', 'Source', 'Priority', 'Report Card', 'Birth Cert', 'Stage', 'Next Call Date', 'Drop Reason'];
+    const headers = [
+      'Enquiry ID', 
+      'Student Name', 
+      'Parent Name', 
+      'Target Grade', 
+      'Phone', 
+      'Source', 
+      'Priority', 
+      'Report Card', 
+      'Birth Cert', 
+      'Transfer Cert',
+      'Stage', 
+      'Next Call Date', 
+      'Drop Reason',
+      'Call History & Discussion Notes'
+    ];
     const rows = enquiries.map(e => [
       e.id, 
       e.student_name, 
@@ -352,9 +407,11 @@ export default function AdmissionsCoordinatorPage() {
       e.lead_temperature || 'warm',
       e.doc_report_card ? 'Yes' : 'No',
       e.doc_birth_cert ? 'Yes' : 'No',
+      e.doc_transfer_cert ? 'Yes' : 'No',
       e.stage,
       e.next_followup_date || 'None',
-      e.drop_reason || 'N/A'
+      e.drop_reason || 'N/A',
+      e.notes ? e.notes.replace(/\r?\n/g, ' | ') : 'No notes recorded'
     ]);
     exportToCsv('EDU360_Admissions_Pipeline', headers, rows);
     triggerToast('Admissions pipeline exported as CSV.');
@@ -543,11 +600,14 @@ export default function AdmissionsCoordinatorPage() {
               <span>Export Pipeline</span>
             </button>
             <button
-              onClick={() => setShowRegisterModal(true)}
+              onClick={() => {
+                setRegPhoneError(null);
+                setShowRegisterModal(true);
+              }}
               className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>+ Register New Enquiry</span>
+              <span>Register New Enquiry</span>
             </button>
           </div>
         </div>
@@ -816,16 +876,29 @@ export default function AdmissionsCoordinatorPage() {
                   {/* Actions Footer */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80" onClick={(e) => e.stopPropagation()}>
                     {enq.stage !== 'converted' && enq.stage !== 'dropped' ? (
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/admissions_coordinator/leads/${enq.id}`)}
-                        className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 group cursor-pointer"
-                        title="View Full Details, Call Logs, Document Verification & SIS Enrollment"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>View Details &amp; SIS Enrollment</span>
-                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCallModal(enq);
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Add New Follow-Up Call & Outcome"
+                        >
+                          <PhoneCall className="h-3.5 w-3.5" />
+                          <span>+ Add Follow-up</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/admissions_coordinator/leads/${enq.id}`)}
+                          className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="View Full Lead Dossier & Enrollment"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" />
+                          <span>View Details</span>
+                        </button>
+                      </div>
                     ) : enq.stage === 'converted' ? (
                       <div className="w-full flex items-center justify-between text-xs py-1">
                         <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
@@ -1052,10 +1125,24 @@ export default function AdmissionsCoordinatorPage() {
                     type="tel" 
                     required
                     value={regPhone} 
-                    onChange={e => setRegPhone(e.target.value)} 
+                    onChange={e => {
+                      const cleanVal = e.target.value.replace(/[^0-9+\-\s]/g, '');
+                      setRegPhone(cleanVal);
+                      if (regPhoneError) setRegPhoneError(null);
+                    }} 
                     placeholder="e.g. +91 98450 12345" 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className={`w-full rounded-xl border p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${
+                      regPhoneError 
+                        ? 'border-rose-500 focus:ring-rose-500/20' 
+                        : 'border-slate-300 dark:border-slate-700 focus:ring-blue-500/20'
+                    }`}
                   />
+                  {regPhoneError && (
+                    <p className="text-[11px] text-rose-500 font-semibold mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      <span>{regPhoneError}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 

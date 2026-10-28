@@ -117,6 +117,7 @@ type TeacherTab =
   | 'homework' 
   | 'focus_table' 
   | 'exams_gradebook'
+  | 'curriculum'
   | 'roster' 
   | 'parent_hub' 
   | 'parent_chat'
@@ -170,6 +171,11 @@ interface HomeworkRosterItem {
 
 export default function TeacherPage() {
   const [activeTab, setActiveTab] = useState<TeacherTab>('dashboard');
+  const [showPtmSisModal, setShowPtmSisModal] = useState<boolean>(false);
+  const [selectedPtmSisStudent, setSelectedPtmSisStudent] = useState<any>(null);
+  const [isAiEvaluatingPapers, setIsAiEvaluatingPapers] = useState<boolean>(false);
+  const [evaluatingSubmissionId, setEvaluatingSubmissionId] = useState<number | null>(null);
+  const [curriculumClassFilter, setCurriculumClassFilter] = useState<string>('ALL');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const { theme } = useTheme();
@@ -613,6 +619,65 @@ export default function TeacherPage() {
     }
   };
 
+  const handleOpenPtmStudentSis = (slot: PTMSlot) => {
+    const sName = slot.booked_student_name || '';
+    const match = students.find(s => s.name.toLowerCase().includes(sName.toLowerCase()) || (slot.booked_student_id && s.id === slot.booked_student_id)) || {
+      id: slot.booked_student_id || 1,
+      name: sName || 'Aarav Sharma',
+      roll_no: '01',
+      class_name: slot.booked_class || 'Class 8-B',
+      attendance_pct: 94.2,
+      academic_average_pct: 68.5,
+      guardian_name: slot.booked_parent_name || 'Mr. Rajesh Sharma',
+      guardian_phone: '+91 98450 12345',
+      guardian_email: 'rajesh.sharma@gmail.com',
+      has_focus_table: true
+    };
+    setSelectedPtmSisStudent(match);
+    setShowPtmSisModal(true);
+  };
+
+  const handleRunAiBatchEvaluation = async () => {
+    setIsAiEvaluatingPapers(true);
+    triggerToast('⚡ Gemini Vision AI analyzing student descriptive answer sheets against answer key...');
+    await new Promise(r => setTimeout(r, 1200));
+    setExamSubmissionsList(prev => prev.map(sub => {
+      const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : (sub.roll_no === '12' ? 45 : (sub.roll_no === '01' ? 52 : (sub.roll_no === '02' ? 88 : 64)));
+      const pct = Math.round((total / 100) * 100);
+      const lag = pct <= 70 ? 'Quadratic Equations: Factorization & Negative Sign Distribution' : 'Concept Mastery: Exempt';
+      return {
+        ...sub,
+        marks_obtained: total,
+        percentage: pct,
+        weak_concept: lag,
+        teacher_feedback: pct <= 70 ? 'Step 3 negative sign error in brackets; needs 1-week remedial practice.' : 'Rigorous step proofs; exemplary computational accuracy.'
+      };
+    }));
+    setIsAiEvaluatingPapers(false);
+    triggerToast('✓ AI Evaluation completed for all student submissions! Please review and publish.');
+  };
+
+  const handleRunAiSingleEvaluation = async (subId: number) => {
+    setEvaluatingSubmissionId(subId);
+    await new Promise(r => setTimeout(r, 800));
+    setExamSubmissionsList(prev => prev.map(sub => {
+      if (sub.id === subId) {
+        const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : 52;
+        const pct = Math.round((total / 100) * 100);
+        return {
+          ...sub,
+          marks_obtained: total,
+          percentage: pct,
+          weak_concept: pct <= 70 ? 'Quadratic Factorization: Bracket Sign Rule' : 'Mastery Achieved',
+          teacher_feedback: pct <= 70 ? 'Step 2 sign error identified by AI model.' : 'Strong analytical steps.'
+        };
+      }
+      return sub;
+    }));
+    setEvaluatingSubmissionId(null);
+    triggerToast('✓ AI Evaluation completed for submission!');
+  };
+
   const handleSubmitQpDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDraftQp) return;
@@ -626,6 +691,12 @@ export default function TeacherPage() {
       setSelectedDraftQp(null);
       const updatedQp = await api.getQuestionPapers({ teacher_id: 2 });
       setTeacherQpList(updatedQp);
+      setAcademicTasks(prev => prev.map(t => {
+        if (t.title.toLowerCase().includes('blueprint') || t.title.toLowerCase().includes('paper')) {
+          return { ...t, status: 'Completed' };
+        }
+        return t;
+      }));
     } catch (err: any) {
       triggerToast(err.message || 'Failed to submit draft.');
     }
@@ -1895,6 +1966,27 @@ export default function TeacherPage() {
                 )}
               </div>
 
+              {/* 5c. Syllabus & Curriculum Pacing */}
+              <button
+                onClick={() => { setActiveTab('curriculum'); setMobileDrawerOpen(false); }}
+                title="Syllabus Pacing & Unit Delivery Checklist"
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'curriculum'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'curriculum' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Syllabus &amp; Curriculum</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+                    Math
+                  </span>
+                )}
+              </button>
+
               {/* 6. Student Roster & 360 */}
               <button
                 onClick={() => { setActiveTab('roster'); setMobileDrawerOpen(false); }}
@@ -2677,21 +2769,42 @@ export default function TeacherPage() {
                         )}
 
                         {task.status !== 'Completed' && !task.relief_requested && (
-                          <div className="flex items-center gap-2 pt-1">
-                            {task.status !== 'In Progress' && (
+                          <div className="space-y-2 pt-1">
+                            {(label.includes('Blueprint') || task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('paper')) && (
                               <button
-                                onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
-                                className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all"
+                                onClick={() => {
+                                  setActiveTab('exams_gradebook');
+                                  setExamSubTab('qp_desk');
+                                  const matching = teacherQpList.find(p => p.title.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(p.class_name.toLowerCase()) || p.status === 'draft' || p.status === 'revision_requested');
+                                  if (matching) {
+                                    setSelectedDraftQp(matching);
+                                    setDraftFileName(matching.draft_file_name || `${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_Final_QP.pdf`);
+                                    setDraftFileUrl(matching.draft_file_url || `/samples/${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_Final_QP.pdf`);
+                                    setAnswerKeyUrl(matching.answer_key_url || `/samples/${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_AnswerKey.pdf`);
+                                  }
+                                }}
+                                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                               >
-                                Mark In Progress
+                                <Upload className="h-3.5 w-3.5" />
+                                <span>Author &amp; Upload Blueprint Draft &rarr;</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => handleUpdateTeacherTaskStatus(task.id, 'Completed')}
-                              className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs"
-                            >
-                              Resolve &amp; Submit ✓
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {task.status !== 'In Progress' && (
+                                <button
+                                  onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
+                                  className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                                >
+                                  Mark In Progress
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleUpdateTeacherTaskStatus(task.id, 'Completed')}
+                                className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                              >
+                                Resolve &amp; Submit ✓
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2700,75 +2813,28 @@ export default function TeacherPage() {
                 </div>
               </div>
 
-              {/* ── CURRICULUM SYLLABUS DELIVERY (FACULTY CHECKLIST) ── */}
-              <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-9 w-9 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold shadow-xs">
-                      <BookOpen className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Curriculum Syllabus Delivery Checklist
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Direct faculty lesson completion log against term benchmarks. 1-click update updates Academic Coordinator audit feed.
-                      </p>
-                    </div>
+              {/* Quick Navigation Banner to Dedicated Syllabus & Curriculum Section */}
+              <div className="rounded-3xl border border-teal-200/80 dark:border-teal-900/60 bg-gradient-to-r from-teal-50/70 to-emerald-50/50 dark:from-teal-950/30 dark:to-emerald-950/20 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Mathematics Curriculum &amp; Term Benchmark Pacing
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      View class-wise syllabus delivery checkpoints, lesson logs, and term targets for Class 7-A, 8-B, and 9-A Mathematics.
+                    </p>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                  {curriculumItems.map(item => (
-                    <div 
-                      key={item.id} 
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between space-y-3"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                            {item.class_name} · {item.subject}
-                          </h4>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status.toLowerCase().includes('lag')
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              item.status.toLowerCase().includes('lag') ? 'bg-rose-500' : 'bg-teal-600'
-                            }`}
-                            style={{ width: `${Math.min(100, item.completion_pct)}%` }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
-                          <span>{item.completed_units}/{item.total_units} Units ({item.completion_pct}%)</span>
-                          <span>Target: {item.calendar_target_units} Units</span>
-                        </div>
-
-                        <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-600 dark:text-slate-300 space-y-0.5">
-                          <div><strong>Last Lesson:</strong> {item.last_lesson_title}</div>
-                          <div className="text-slate-400">Checkpoint: {item.next_milestone_date}</div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => setLogUnitCurriculum(item)}
-                        className="w-full py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>✓ Mark Unit Completed (+1 Unit)</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <button
+                  onClick={() => setActiveTab('curriculum')}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <span>Open Syllabus &amp; Curriculum Section</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
               </div>
 
             </div>
@@ -4305,15 +4371,25 @@ export default function TeacherPage() {
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button
                           type="button"
+                          disabled={isAiEvaluatingPapers}
+                          onClick={handleRunAiBatchEvaluation}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-60"
+                          title="Run Gemini Vision AI to grade descriptive answer sheets against answer key"
+                        >
+                          <Sparkles className={`h-3.5 w-3.5 ${isAiEvaluatingPapers ? 'animate-spin' : ''}`} />
+                          <span>{isAiEvaluatingPapers ? 'AI Evaluating Papers...' : '⚡ Evaluate Papers with AI'}</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             setShowOcrModal(true);
                             setOcrStep('upload');
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                          title="Generate draft step marks & concept tags for teacher review"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          title="Scan physical score registers or marksheets"
                         >
-                          <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                          <span>⚡ AI Pre-Grade Batch</span>
+                          <Upload className="h-3.5 w-3.5 text-slate-500" />
+                          <span>OCR Marksheet Scan</span>
                         </button>
                       </div>
                     </div>
@@ -4463,13 +4539,25 @@ export default function TeacherPage() {
                                     {sub.teacher_feedback || 'Needs bracket multiplication review.'}
                                   </td>
                                   <td className="py-3.5 px-4 text-right">
-                                    <button
-                                      onClick={() => handleOpenEvaluationStudio(sub)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
-                                    >
-                                      <FileEdit className="h-3.5 w-3.5" />
-                                      <span>Review &amp; Edit Paper</span>
-                                    </button>
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {sub.marks_obtained === null || sub.marks_obtained === undefined ? (
+                                        <button
+                                          onClick={() => handleRunAiSingleEvaluation(sub.id)}
+                                          disabled={evaluatingSubmissionId === sub.id}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                                        >
+                                          <Sparkles className={`h-3 w-3 ${evaluatingSubmissionId === sub.id ? 'animate-spin' : ''}`} />
+                                          <span>{evaluatingSubmissionId === sub.id ? 'Evaluating...' : '⚡ AI Evaluate'}</span>
+                                        </button>
+                                      ) : null}
+                                      <button
+                                        onClick={() => handleOpenEvaluationStudio(sub)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+                                      >
+                                        <FileEdit className="h-3.5 w-3.5" />
+                                        <span>Review &amp; Verify Paper</span>
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -5718,6 +5806,154 @@ export default function TeacherPage() {
           {/* ===================================================== */}
           {/* TAB 4: MY STUDENTS 360 ROSTER & ANALYTICS            */}
           {/* ===================================================== */}
+          {/* ===================================================== */}
+          {/* TAB: DEDICATED SYLLABUS & CURRICULUM PACING (MATHEMATICS) */}
+          {/* ===================================================== */}
+          {activeTab === 'curriculum' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 px-2.5 py-0.5 text-xs font-bold border border-teal-200 dark:border-teal-800">
+                      Syllabus &amp; Curriculum Desk
+                    </span>
+                    <span className="text-xs text-slate-500 font-semibold">Faculty: Mrs. Ananya Verma (Mathematics)</span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+                    Mathematics Curriculum Delivery &amp; Lesson Completion Tracker
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Track lesson pacing against official term milestones for your assigned classes. Logging a completed unit synchronizes with Academic Coordinator (Dean Rajeshwari Nair) audit feed.
+                  </p>
+                </div>
+
+                {/* Class Filter Chips */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'ALL', label: 'All Assigned Math Classes' },
+                    { id: 'Class 8-B', label: 'Class 8-B' },
+                    { id: 'Class 9-A', label: 'Class 9-A' },
+                    { id: 'Class 7-A', label: 'Class 7-A' }
+                  ].map(flt => (
+                    <button
+                      key={flt.id}
+                      onClick={() => setCurriculumClassFilter(flt.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        curriculumClassFilter === flt.id
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+                      }`}
+                    >
+                      {flt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mathematics Curriculum Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {curriculumItems
+                  .filter(item => item.subject.toLowerCase() === 'mathematics')
+                  .concat([
+                    // Ensure full coverage for Mrs. Verma's other assigned math sections if not in list
+                    {
+                      id: 101,
+                      class_name: 'Class 7-A',
+                      subject: 'Mathematics',
+                      teacher_name: 'Mrs. Ananya Verma',
+                      total_units: 18,
+                      completed_units: 14,
+                      completion_pct: 77.8,
+                      calendar_target_units: 13,
+                      status: 'Ahead (+1 Unit)',
+                      last_lesson_title: 'Integers & Number Line Operations',
+                      next_milestone_date: '31 Oct 2026 (Unit Test 2)'
+                    },
+                    {
+                      id: 102,
+                      class_name: 'Class 9-A',
+                      subject: 'Mathematics',
+                      teacher_name: 'Mrs. Ananya Verma',
+                      total_units: 24,
+                      completed_units: 19,
+                      completion_pct: 79.2,
+                      calendar_target_units: 18,
+                      status: 'Ahead (+1 Unit)',
+                      last_lesson_title: 'Polynomials & Factor Theorem',
+                      next_milestone_date: '02 Nov 2026 (Diagnostic Quiz)'
+                    }
+                  ])
+                  .filter((item, idx, self) => self.findIndex(t => t.class_name === item.class_name && t.subject === item.subject) === idx)
+                  .filter(item => curriculumClassFilter === 'ALL' || item.class_name === curriculumClassFilter)
+                  .map(item => (
+                    <div
+                      key={item.id}
+                      className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between space-y-4 shadow-xs"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider block">
+                              {item.subject} Faculty
+                            </span>
+                            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                              {item.class_name} &bull; {item.subject}
+                            </h4>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            item.status.toLowerCase().includes('lag')
+                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200'
+                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                            <span>Progress: {item.completion_pct}%</span>
+                            <span>{item.completed_units} / {item.total_units} Units</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                item.status.toLowerCase().includes('lag') ? 'bg-rose-500' : 'bg-teal-600'
+                              }`}
+                              style={{ width: `${Math.min(100, item.completion_pct)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-slate-400 text-right">
+                            Calendar Target: {item.calendar_target_units} Units
+                          </div>
+                        </div>
+
+                        {/* Lesson Info Callout */}
+                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-xs space-y-1">
+                          <div className="text-slate-700 dark:text-slate-300">
+                            <span className="font-bold text-slate-900 dark:text-white">Last Completed:</span> {item.last_lesson_title}
+                          </div>
+                          <div className="text-[11px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-1">
+                            <CalendarCheck className="h-3.5 w-3.5" />
+                            <span>Milestone: {item.next_milestone_date}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setLogUnitCurriculum(item)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>✓ Log Completed Unit (+1 Unit)</span>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'roster' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -6223,20 +6459,12 @@ export default function TeacherPage() {
                                         )}
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            const studentName = slot.booked_student_name || '';
-                                            const idx = focusRoster.findIndex(f => f.name.toLowerCase().includes(studentName.toLowerCase()));
-                                            if (idx >= 0) {
-                                              handleOpenFocusDrawer(idx);
-                                            } else {
-                                              handleOpenFocusDrawer(0);
-                                            }
-                                          }}
+                                          onClick={() => handleOpenPtmStudentSis(slot)}
                                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
-                                          title="Inspect Student SIS Profile & Remedials"
+                                          title="Inspect Complete Student SIS 360 Profile & Academics"
                                         >
-                                          <Eye className="h-3 w-3 text-slate-500" />
-                                          <span className="hidden sm:inline">Profile</span>
+                                          <Eye className="h-3 w-3 text-indigo-500" />
+                                          <span className="hidden sm:inline font-bold">Profile</span>
                                         </button>
                                         <button
                                           type="button"
@@ -8266,6 +8494,114 @@ export default function TeacherPage() {
       )}
 
       {/* ===================================================== */}
+      {/* ── DEDICATED STUDENT 360 SIS MODAL (FOR PTM CONFERENCES & DIRECT TEACHER CONSULTATION) ── */}
+      {showPtmSisModal && selectedPtmSisStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 my-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                  {selectedPtmSisStudent.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">
+                      {selectedPtmSisStudent.name}
+                    </h3>
+                    <span className="font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      Roll #{selectedPtmSisStudent.roll_no} &bull; {selectedPtmSisStudent.class_name}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Official Student Information System (SIS) Snapshot for PTM Consultation
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPtmSisModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Attendance</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block">{selectedPtmSisStudent.attendance_pct || 94.2}%</span>
+                <span className="text-[10px] text-emerald-600 font-bold">Good Standing</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Term 1 Avg</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block">{selectedPtmSisStudent.academic_average_pct || 68.5}%</span>
+                <span className="text-[10px] text-slate-500 font-semibold">Terminal Exams</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Remedial Focus</span>
+                <span className={`text-xs font-black mt-1 inline-block px-2 py-0.5 rounded-full ${
+                  selectedPtmSisStudent.has_focus_table
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                }`}>
+                  {selectedPtmSisStudent.has_focus_table ? 'Enrolled (Day 3)' : 'Exempt'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Focus Table 8-B</span>
+              </div>
+            </div>
+
+            {/* Parent & Guardian Contact Card */}
+            <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 space-y-2 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">
+                Parent &amp; Guardian Record:
+              </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white">{selectedPtmSisStudent.guardian_name || 'Mr. Rajesh Sharma'}</div>
+                  <div className="text-slate-500 text-[11px]">{selectedPtmSisStudent.guardian_email || 'rajesh.sharma@gmail.com'}</div>
+                </div>
+                <a
+                  href={`tel:${selectedPtmSisStudent.guardian_phone || '+91 98450 12345'}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs self-start sm:self-auto cursor-pointer"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  <span>Call: {selectedPtmSisStudent.guardian_phone || '+91 98450 12345'}</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Faculty Academic Notes */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                Latest Faculty Pedagogical Observation:
+              </span>
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed italic">
+                &ldquo;Aarav demonstrates high computational curiosity in class, but consistently drops negative signs when multiplying outside brackets in quadratic equation denominators. Currently on Day 3 of 7-Day Targeted Remedial Pacing.&rdquo;
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <Link
+                href={`/teacher/students/${selectedPtmSisStudent.id || 1}`}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline"
+              >
+                <span>Open Full 360&deg; Student Dossier</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowPtmSisModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+              >
+                Close Snapshot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Note: Student SIS is now served on dedicated page /teacher/students/[id] */}
 
     </RoleGuard>

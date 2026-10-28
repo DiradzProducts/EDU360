@@ -420,7 +420,7 @@ function TeacherFocusDetailContent() {
               title="Upload new exam paper and homework worksheet to run AI Multimodal Scan"
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>{showScanner ? 'Hide Scanner' : 'Upload & Scan Papers'}</span>
+              <span>{showScanner ? 'Hide Paper Scanner' : 'Upload Exam & HW Papers'}</span>
             </button>
 
             <button
@@ -436,13 +436,14 @@ function TeacherFocusDetailContent() {
 
             <button
               onClick={() => {
-                triggerToast(`Opening 1-on-1 PTM scheduler for ${currentStudent.name}...`);
-                router.push(`/teacher?tab=ptm_conferences&student=${encodeURIComponent(currentStudent.name)}`);
+                triggerToast(`Viewing PTM conference bookings for ${currentStudent.name}...`);
+                router.push(`/teacher?tab=parent_hub&student=${encodeURIComponent(currentStudent.name)}`);
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors shadow-2xs cursor-pointer"
+              title="Inspect parent-booked PTM slots for this student"
             >
-              <Video className="h-3.5 w-3.5" />
-              <span>Schedule PTM</span>
+              <Video className="h-3.5 w-3.5 text-blue-500" />
+              <span className="hidden sm:inline">View PTM Bookings</span>
             </button>
           </div>
 
@@ -818,38 +819,28 @@ function TeacherFocusDetailContent() {
 
         {/* TAB 1: 1-WEEK (7-DAY) TARGETED REMEDIAL ACTION PLAN */}
         {activeTab === '7day_sprint' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-600" />
-                  AI-Generated 7-Day Targeted Remedial Plan ({currentStudent.subject})
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Calibrated to bridge the {currentStudent.exam_score_pct}% &rarr; &gt;70% exam mastery gap. Check previous day work or toggle status with buttons below.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={isGeneratingSprint}
-                  onClick={handleGenerateAISprint}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  title="Run Google Gemini Diagnostic to regenerate or enrich the 7-Day sprint schedule"
-                >
-                  <Sparkles className={`h-3.5 w-3.5 ${isGeneratingSprint ? 'animate-spin' : ''}`} />
-                  <span>{isGeneratingSprint ? 'Analyzing with Gemini...' : 'AI Sprint: Regenerate with Gemini'}</span>
-                </button>
-                <div className="text-xs font-semibold text-slate-500">
-                  Completed: <strong className="text-emerald-600">{completedDaysCount} of 7 Days</strong>
+            {/* ── SECTION 1: AI DIAGNOSTIC & LAG INTELLIGENCE CARD ── */}
+            <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                      AI Diagnostic &amp; Misconception Evidence
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Multi-artifact lag synthesis from scanned answer sheets, homework backlogs, and customized classroom pedagogy.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* AI MULTI-SOURCE ARTIFACT SCAN & TEACHER STRATEGY (EXAM + HW + ASSIGNMENTS) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* 3 AI Evidence Columns */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               
               {/* 1. SCANNED ACADEMIC ARTIFACTS */}
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3 shadow-2xs">
@@ -979,8 +970,45 @@ function TeacherFocusDetailContent() {
 
             </div>
 
-            {/* Day-by-Day Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            </div>
+            {/* END SECTION 1 */}
+
+            {/* ── SECTION 2: 7-DAY REMEDIAL SPRINT ROADMAP CARD ── */}
+            <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                      7-Day Remedial Pacing Roadmap ({currentStudent.subject})
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Structured daily practice calibrated to bridge the {currentStudent.exam_score_pct}% &rarr; &gt;70% exam mastery benchmark.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={isGeneratingSprint}
+                    onClick={handleGenerateAISprint}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-50"
+                    title="Run Google Gemini Diagnostic to regenerate or enrich the 7-Day sprint schedule"
+                  >
+                    <Sparkles className={`h-3.5 w-3.5 ${isGeneratingSprint ? 'animate-spin' : ''}`} />
+                    <span>{isGeneratingSprint ? 'Analyzing with Gemini...' : 'AI Sprint: Regenerate with Gemini'}</span>
+                  </button>
+                  <div className="text-xs font-semibold text-slate-500">
+                    Completed: <strong className="text-emerald-600">{completedDaysCount} of 7 Days</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Day-by-Day Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {currentStudent.plan_days.map((day) => {
                 const isCurrent = day.day_num === currentStudent.current_day;
                 const isPrevious = day.day_num < currentStudent.current_day;
@@ -1158,8 +1186,9 @@ function TeacherFocusDetailContent() {
                   </div>
                 );
               })}
+              </div>
             </div>
-
+            {/* END SECTION 2 */}
           </div>
         )}
 

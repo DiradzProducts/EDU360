@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -28,13 +28,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const isLoggingInRef = useRef(false);
 
   // Auto-forward active sessions away from /login back to their rightful portal
   useEffect(() => {
-    if (mounted && isAuthenticated && user?.role) {
-      router.replace(`/${user.role}`);
+    if (mounted && isAuthenticated && user?.role && !isLoggingInRef.current) {
+      if (typeof window !== 'undefined') {
+        window.location.replace(`/${user.role}`);
+      } else {
+        router.replace(`/${user.role}`);
+      }
     }
-  }, [mounted, isAuthenticated, user, router]);
+  }, [mounted, isAuthenticated, user]);
 
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +48,7 @@ export default function LoginPage() {
       return;
     }
 
+    isLoggingInRef.current = true;
     setLoading(true);
     setErrorMessage('');
 
@@ -57,6 +63,7 @@ export default function LoginPage() {
         throw new Error('Invalid authentication response. Please verify credentials.');
       }
     } catch (err: any) {
+      isLoggingInRef.current = false;
       setErrorMessage(err.message || 'Incorrect credentials. Please verify your institutional username and password.');
       setLoading(false);
     }

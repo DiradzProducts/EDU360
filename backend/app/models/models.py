@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -109,8 +109,15 @@ class AdminTask(Base):
     relief_justification = Column(Text, nullable=True)
     suggested_peer_teacher = Column(String(100), nullable=True)
     task_type = Column(String(50), nullable=True)
+    escalated_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_admin_tasks_status_escalated", "status", "is_escalated"),
+        Index("ix_admin_tasks_assignee_status", "assigned_to", "status"),
+    )
 
 class AdmissionEnquiry(Base):
     __tablename__ = "admission_enquiries"
@@ -195,6 +202,9 @@ class LiveClass(Base):
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
+    __table_args__ = (
+        Index("ix_attendance_student_date", "student_id", "date"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     class_id = Column(Integer, ForeignKey("live_classes.id"), nullable=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
@@ -292,8 +302,11 @@ class LeaveRequest(Base):
 
 class FeeMilestone(Base):
     __tablename__ = "fee_milestones"
+    __table_args__ = (
+        Index("ix_fee_milestones_student_status", "student_id", "status"),
+    )
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
     title = Column(String(100), nullable=False)
     amount = Column(Float, nullable=False)
     due_date = Column(String(30), nullable=False)
@@ -431,6 +444,9 @@ class Exam(Base):
 
 class ExamSubmission(Base):
     __tablename__ = "exam_submissions"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "student_id", name="uq_exam_student_submission"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     exam_id = Column(Integer, ForeignKey("exams.id"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
@@ -570,6 +586,11 @@ class AbsenteeRecord(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_unread_sort", "recipient_user_id", "is_read", "id"),
+        Index("ix_notifications_role_unread_sort", "recipient_role", "is_read", "id"),
+        Index("ix_notifications_cleanup", "is_read", "created_at"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     recipient_user_id = Column(Integer, nullable=True, index=True)
     recipient_role = Column(String(50), nullable=True, index=True)
@@ -593,6 +614,10 @@ class Notification(Base):
 class FeeDefaulter(Base):
     """Per-student overdue fee record with aging, reminder tracking, and waiver support."""
     __tablename__ = "fee_defaulters"
+    __table_args__ = (
+        Index("ix_fee_defaulter_admission_status", "is_admission_fee", "status"),
+        Index("ix_fee_defaulter_aging_status", "days_overdue", "status"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
     student_name = Column(String(100), nullable=False)
@@ -606,6 +631,8 @@ class FeeDefaulter(Base):
     reminder_sent = Column(Boolean, default=False)
     reminder_count = Column(Integer, default=0)
     last_reminder_at = Column(DateTime, nullable=True)
+    is_admission_fee = Column(Boolean, default=False, index=True)
+    exam_clearance = Column(Boolean, default=False, index=True)
     # Waiver / concession
     waiver_amount = Column(Float, default=0.0)
     waiver_reason = Column(String(255), nullable=True)

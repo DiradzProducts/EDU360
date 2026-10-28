@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { downloadMarksMemoFile } from '@/lib/export-utils';
 import { api } from '@/lib/api';
-import { ReportCardItem } from '@/lib/types';
+import { ReportCardItem, ReExamRequestItem } from '@/lib/types';
 import { EvaluationKeyModal } from '@/components/evaluation-key-modal';
 
 interface SubjectMark {
@@ -49,6 +49,17 @@ export function ParentMarksView() {
 
   // Admit Card (Hall Ticket) Modal State
   const [showAdmitCardModal, setShowAdmitCardModal] = useState(false);
+
+  // Re-Exam Permission Workflow State
+  const [reExamRequests, setReExamRequests] = useState<ReExamRequestItem[]>([]);
+  const [showReExamModal, setShowReExamModal] = useState(false);
+  const [reExamSubject, setReExamSubject] = useState('Mathematics');
+  const [reExamExamName, setReExamExamName] = useState('Term 1 Descriptive Examination');
+  const [reExamMissedDate, setReExamMissedDate] = useState('2026-10-14');
+  const [reExamCategory, setReExamCategory] = useState<'Medical Emergency' | 'Hospitalization' | 'Bereavement' | 'Sports Representation' | 'Other'>('Medical Emergency');
+  const [reExamDetails, setReExamDetails] = useState('Diagnosed with acute viral fever (103°F). Hospital outpatient consultation with 4 days mandated bed rest.');
+  const [reExamDocName, setReExamDocName] = useState('Dr_Patel_Hospital_Medical_Certificate.pdf');
+  const [submittingReExam, setSubmittingReExam] = useState(false);
   const [admitCardData, setAdmitCardData] = useState<any>(null);
   const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
 
@@ -74,6 +85,8 @@ export function ParentMarksView() {
         if (cards && cards.length > 0) {
           setLiveReportCard(cards[0]);
         }
+        const reExams = await api.getReExamRequests();
+        setReExamRequests(reExams || []);
       } catch (err) {
         console.error('Failed to fetch parent report card:', err);
       }
@@ -193,6 +206,36 @@ export function ParentMarksView() {
         setEmailModalOpen(false);
       }, 2500);
     }, 1200);
+  };
+
+  const handleCreateReExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingReExam(true);
+    try {
+      const created = await api.createReExamRequest({
+        student_id: 1,
+        student_name: 'Aarav Sharma',
+        class_name: 'Class 8',
+        section: 'B',
+        subject: reExamSubject,
+        exam_name: reExamExamName,
+        missed_date: reExamMissedDate,
+        reason_category: reExamCategory,
+        reason_details: reExamDetails,
+        document_name: reExamDocName || 'Medical_Certificate_Aarav.pdf',
+        document_url: '/documents/medical_certificate_aarav.pdf',
+        parent_name: 'Mr. Rajesh Sharma',
+        parent_phone: '+91 98111 00003'
+      });
+      setReExamRequests(prev => [created, ...prev.filter(r => r.id !== created.id)]);
+      setShowReExamModal(false);
+      setDownloadToast('Re-Examination Request submitted to Principal successfully!');
+      setTimeout(() => setDownloadToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to submit re-exam request:', err);
+    } finally {
+      setSubmittingReExam(false);
+    }
   };
 
   const handleDownloadMemo = () => {
@@ -842,6 +885,174 @@ export function ParentMarksView() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+
+      {/* Re-Exam Request Modal */}
+      {showReExamModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900">
+                  <RefreshCw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Request Re-Examination (Medical / Exemption)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Submit parent exemption application to Principal for student re-test approval
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowReExamModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateReExam} className="mt-4 space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Candidate</span>
+                <span className="text-xs font-black text-slate-900 dark:text-white">
+                  Aarav Sharma &bull; Class 8-B (Roll #14)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Subject for Re-Examination *
+                </label>
+                <select
+                  value={reExamSubject}
+                  onChange={(e) => setReExamSubject(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="Science">Science (Physics, Chemistry, Biology)</option>
+                  <option value="English">English Communicative</option>
+                  <option value="Social Science">Social Science (History, Civics, Geography)</option>
+                  <option value="Hindi">Hindi Course-B</option>
+                  <option value="Sanskrit">Sanskrit (Third Language)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Examination Name *
+                </label>
+                <select
+                  value={reExamExamName}
+                  onChange={(e) => setReExamExamName(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="Term 1 Descriptive Examination">Term 1 Descriptive Examination</option>
+                  <option value="Periodic Assessment 2 (UT2)">Periodic Assessment 2 (UT2)</option>
+                  <option value="Mid-Term Diagnostic Assessment">Mid-Term Diagnostic Assessment</option>
+                  <option value="Pre-Board Practical Evaluation">Pre-Board Practical Evaluation</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Missed Exam Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={reExamMissedDate}
+                    onChange={(e) => setReExamMissedDate(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Reason Category *
+                  </label>
+                  <select
+                    value={reExamCategory}
+                    onChange={(e) => setReExamCategory(e.target.value as any)}
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="Medical Emergency">Medical Emergency</option>
+                    <option value="Hospitalization">Hospitalization / Bed Rest</option>
+                    <option value="Bereavement">Bereavement / Family Emergency</option>
+                    <option value="Sports Representation">Sports / Olympiad Representation</option>
+                    <option value="Other">Other Legitimate Grounds</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Doctor's Diagnosis & Detailed Justification *
+                </label>
+                <textarea
+                  rows={3}
+                  value={reExamDetails}
+                  onChange={(e) => setReExamDetails(e.target.value)}
+                  placeholder="Explain symptoms, hospitalization or doctor's prescribed bed rest period..."
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Upload Medical Certificate / Supporting Document (PDF / Scan) *
+                </label>
+                <div className="flex items-center gap-2 p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
+                  <FileText className="h-5 w-5 text-amber-500 shrink-0" />
+                  <input
+                    type="text"
+                    value={reExamDocName}
+                    onChange={(e) => setReExamDocName(e.target.value)}
+                    placeholder="Filename or prescription ref..."
+                    className="flex-1 text-xs bg-transparent border-0 text-slate-900 dark:text-white focus:outline-none"
+                    required
+                  />
+                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-md">
+                    Attached
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Doctor's seal and registration number must be clearly visible on the certificate.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowReExamModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingReExam}
+                  className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 text-xs font-bold shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {submittingReExam ? (
+                    <>
+                      <Clock className="h-4 w-4 animate-spin" />
+                      <span>Submitting to Principal...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      <span>Submit Re-Exam Application</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

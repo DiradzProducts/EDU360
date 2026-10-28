@@ -20,9 +20,13 @@ export function RoleGuard({ allowedRole, children }: RoleGuardProps) {
 
   useEffect(() => {
     if (mounted && !user) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+      if (typeof window !== 'undefined') {
+        window.location.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+      } else {
+        router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+      }
     }
-  }, [mounted, user, router, pathname]);
+  }, [mounted, user, pathname]);
 
   // While checking session credentials during hydration
   if (!mounted) {

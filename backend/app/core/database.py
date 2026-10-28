@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import text
 from app.core.config import settings
 
 engine = create_async_engine(
@@ -21,6 +22,8 @@ Base = declarative_base()
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:
+            if "sqlite" in settings.DATABASE_URL:
+                await session.execute(text("PRAGMA foreign_keys=ON;"))
             yield session
         finally:
             await session.close()

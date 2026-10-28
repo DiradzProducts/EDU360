@@ -2,7 +2,7 @@ import datetime
 import json
 from typing import Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from app.core.database import get_db
@@ -15,7 +15,7 @@ from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
     TriageAlertResponse, TriageActionRequest,
     AdminTaskResponse, AdminTaskCreate, AdminTaskUpdate,
-    EscalateTaskRequest, AutoTriggerTaskRequest, TaskExecutiveCockpitResponse,
+    EscalateTaskRequest, ResolveEscalationRequest, AutoTriggerTaskRequest, TaskExecutiveCockpitResponse,
     AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate, CallLogPayload,
     StudentResponse, OfficialDocumentResponse, OfficialDocumentCreate,
     ExitClearanceResponse, ExitClearancePhysicalUpload,
@@ -317,6 +317,7 @@ async def escalate_admin_task(task_id: int, req: EscalateTaskRequest, db: AsyncS
     task.is_escalated = True
     task.escalation_reason = req.reason
     task.priority = "Critical"
+    task.escalated_at = datetime.datetime.utcnow()
     task.updated_at = datetime.datetime.utcnow()
     
     # Push into Super Admin's Priority Triage Command Center
@@ -333,6 +334,94 @@ async def escalate_admin_task(task_id: int, req: EscalateTaskRequest, db: AsyncS
     await db.commit()
     await db.refresh(task)
     return task
+
+@router.post("/tasks/{task_id}/resolve-escalation", response_model=AdminTaskResponse)
+async def resolve_task_escalation(task_id: int, req: ResolveEscalationRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.is_escalated = False
+    task.priority = req.new_priority or "High"
+    task.resolved_at = datetime.datetime.utcnow()
+    task.updated_at = datetime.datetime.utcnow()
+    if req.resolution_notes:
+        existing_desc = task.description or ""
+        task.description = f"{existing_desc}\n[Resolution Note: {req.resolution_notes}]".strip()
+
+    # Resolve any associated triage alerts for this task
+    alert_result = await db.execute(
+        select(TriageAlert).where(
+            TriageAlert.action_endpoint.like(f"%taskId={task.id}%"),
+            TriageAlert.resolved == False
+        )
+    )
+    for alert in alert_result.scalars().all():
+        alert.resolved = True
+        alert.resolved_at = datetime.datetime.utcnow()
+
+    _add_audit_log(
+        actor_name="Dr. Sunita Kapoor",
+        actor_role="principal",
+        action_type="TASK_ESCALATION_RESOLVED",
+        target_entity=task.title,
+        status="VERIFIED",
+        details=f"Principal resolved escalation: {req.resolution_notes}"
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+@router.post("/tasks/run-sla-check")
+async def run_sla_breach_check(db: AsyncSession = Depends(get_db)):
+    now = datetime.datetime.utcnow()
+    result = await db.execute(
+        select(AdminTask).where(
+            AdminTask.status.notin_(["Completed", "Done"]),
+            AdminTask.relief_requested == False,
+            AdminTask.is_escalated == False
+        )
+    )
+    tasks = result.scalars().all()
+    escalated_count = 0
+    for task in tasks:
+        if task.created_at and task.sla_hours:
+            elapsed_hours = (now - task.created_at).total_seconds() / 3600.0
+            if elapsed_hours > task.sla_hours:
+                task.is_escalated = True
+                task.priority = "Critical"
+                task.escalated_at = now
+                task.escalation_reason = f"Automated SLA Breach: Elapsed {int(elapsed_hours)}h exceeded SLA target of {task.sla_hours}h."
+                
+                triage_alert = TriageAlert(
+                    level="red",
+                    category="sla_breach",
+                    title=f"AUTOMATED SLA BREACH: {task.title}",
+                    description=f"Task #{task.id} exceeded {task.sla_hours}h SLA limit. Assigned to: {task.assigned_to}.",
+                    action_label="Review Overdue Task",
+                    action_endpoint=f"/admin?tab=tasks&taskId={task.id}",
+                    resolved=False
+                )
+                db.add(triage_alert)
+                escalated_count += 1
+                
+                _add_audit_log(
+                    actor_name="EDU360 SLA Sentinel",
+                    actor_role="system",
+                    action_type="TASK_SLA_BREACH_AUTO_ESCALATED",
+                    target_entity=task.title,
+                    status="ESCALATED",
+                    details=f"Task #{task.id} breached {task.sla_hours}h SLA limit ({int(elapsed_hours)}h elapsed). Auto-escalated to Principal."
+                )
+
+    await db.commit()
+    return {
+        "success": True,
+        "evaluated_tasks": len(tasks),
+        "newly_escalated": escalated_count,
+        "message": f"Evaluated {len(tasks)} active tasks. Escalated {escalated_count} SLA breaches."
+    }
 
 @router.post("/tasks/{task_id}/request-relief", response_model=AdminTaskResponse)
 async def request_task_relief(task_id: int, req: TaskReliefRequest, db: AsyncSession = Depends(get_db)):
@@ -358,6 +447,25 @@ async def request_task_relief(task_id: int, req: TaskReliefRequest, db: AsyncSes
     )
     await db.commit()
     await db.refresh(task)
+
+    # 🔔 Dispatch In-App Notification to Academic Coordinator
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=6,  # Prof. Rajeshwari Nair
+            recipient_role="academic_coordinator",
+            sender_name=task.assigned_to or "Faculty Member",
+            sender_role="teacher",
+            title=f"Workload Relief Requested: {task.title}",
+            message=f"{task.assigned_to} requested SLA relief ({req.relief_reason}): '{req.justification}'.",
+            notification_type="TASK_RELIEF_REQUESTED",
+            priority="URGENT",
+            action_url="/admin?tab=tasks&filter=relief-requested",
+            metadata_dict={"task_id": task.id, "reason": req.relief_reason}
+        )
+    except Exception as e:
+        print(f"Failed to dispatch relief request notification: {e}")
+
     return task
 
 @router.post("/tasks/{task_id}/approve-relief", response_model=AdminTaskResponse)
@@ -385,6 +493,25 @@ async def approve_task_relief(task_id: int, req: ApproveReliefRequest, db: Async
     )
     await db.commit()
     await db.refresh(task)
+
+    # 🔔 Dispatch In-App Notification to Newly Assigned Teacher
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,  # Teacher
+            recipient_role="teacher",
+            sender_name="Prof. Rajeshwari Nair",
+            sender_role="academic_coordinator",
+            title=f"Reassigned Mandate: {task.title}",
+            message=f"Mandate transferred from {old_assignee} to you. Fresh SLA: {task.sla_hours} hours.",
+            notification_type="TASK_ASSIGNED",
+            priority="NORMAL",
+            action_url=f"/teacher?tab=duties&taskId={task.id}",
+            metadata_dict={"task_id": task.id, "sla_hours": task.sla_hours}
+        )
+    except Exception as e:
+        print(f"Failed to dispatch task migration notification: {e}")
+
     return task
 
 @router.post("/tasks/{task_id}/extend-sla", response_model=AdminTaskResponse)
@@ -409,6 +536,25 @@ async def extend_task_sla(task_id: int, req: ExtendSlaRequest, db: AsyncSession 
     )
     await db.commit()
     await db.refresh(task)
+
+    # 🔔 Dispatch In-App Notification to Teacher for Extension Granted
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,  # Teacher
+            recipient_role="teacher",
+            sender_name="Prof. Rajeshwari Nair",
+            sender_role="academic_coordinator",
+            title=f"SLA Extension Granted: +{req.additional_hours}h",
+            message=f"Your request was approved. Target deadline extended by {req.additional_hours} hours without penalty.",
+            notification_type="TASK_ASSIGNED",
+            priority="NORMAL",
+            action_url=f"/teacher?tab=duties&taskId={task.id}",
+            metadata_dict={"task_id": task.id, "added_hours": req.additional_hours}
+        )
+    except Exception as e:
+        print(f"Failed to dispatch SLA extension notification: {e}")
+
     return task
 
 @router.post("/tasks/auto-trigger", response_model=AdminTaskResponse)
@@ -541,6 +687,15 @@ async def update_enquiry_stage(enquiry_id: int, req: AdmissionEnquiryUpdate, db:
     enquiry = result.scalars().first()
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    # If reopening a dropped enquiry, record previous drop reason into notes and clear drop_reason
+    if req.stage and req.stage != "dropped" and (enquiry.stage == "dropped" or enquiry.drop_reason):
+        timestamp = datetime.datetime.utcnow().strftime("%d %b, %I:%M %p")
+        reason_text = enquiry.drop_reason or "Reason unspecified"
+        reopen_entry = f"[{timestamp} | Lead Reopened] Previous Drop Reason: {reason_text}. Lead restored to active pipeline."
+        enquiry.notes = f"{enquiry.notes}\n• {reopen_entry}" if enquiry.notes else f"• {reopen_entry}"
+        enquiry.drop_reason = None
+
     if req.stage:
         enquiry.stage = req.stage
     if req.notes:
@@ -559,6 +714,24 @@ async def update_enquiry_stage(enquiry_id: int, req: AdmissionEnquiryUpdate, db:
         enquiry.next_followup_date = req.next_followup_date
     if req.drop_reason:
         enquiry.drop_reason = req.drop_reason
+    await db.commit()
+    await db.refresh(enquiry)
+    return enquiry
+
+@router.patch("/crm/enquiries/{enquiry_id}/reopen", response_model=AdmissionEnquiryResponse)
+async def reopen_enquiry(enquiry_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    
+    timestamp = datetime.datetime.utcnow().strftime("%d %b, %I:%M %p")
+    reason_text = enquiry.drop_reason or "Reason unspecified"
+    reopen_entry = f"[{timestamp} | Lead Reopened] Previous Drop Reason: {reason_text}. Lead restored to active pipeline."
+    enquiry.notes = f"{enquiry.notes}\n• {reopen_entry}" if enquiry.notes else f"• {reopen_entry}"
+    enquiry.drop_reason = None
+    enquiry.stage = "followup"
+    
     await db.commit()
     await db.refresh(enquiry)
     return enquiry
@@ -587,8 +760,13 @@ async def drop_enquiry(enquiry_id: int, req: AdmissionEnquiryUpdate, db: AsyncSe
     enquiry.stage = "dropped"
     if req.drop_reason:
         enquiry.drop_reason = req.drop_reason
-    if req.notes:
-        enquiry.notes = f"{enquiry.notes or ''} | Drop: {req.drop_reason} ({req.notes})".strip(" | ")
+    
+    timestamp = datetime.datetime.utcnow().strftime("%d %b, %I:%M %p")
+    reason_text = req.drop_reason or enquiry.drop_reason or "Reason unspecified"
+    note_details = f" ({req.notes})" if req.notes else ""
+    drop_entry = f"[{timestamp} | Lead Dropped] Reason: {reason_text}{note_details}"
+    enquiry.notes = f"{enquiry.notes}\n• {drop_entry}" if enquiry.notes else f"• {drop_entry}"
+    
     await db.commit()
     await db.refresh(enquiry)
     return enquiry
@@ -1474,7 +1652,7 @@ async def list_available_faculty():
     return _available_faculty
 
 @router.post("/substitutions/assign")
-async def assign_substitution(req: AssignSubstitutionRequest):
+async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession = Depends(get_db)):
     for slot in _substitutions_slots:
         if slot["id"] == req.slot_id:
             slot["substitute_teacher_id"] = req.substitute_teacher_id
@@ -1498,6 +1676,24 @@ async def assign_substitution(req: AssignSubstitutionRequest):
             for task in _in_memory_tasks:
                 if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
                     task["status"] = "Completed"
+
+            # 🔔 Dispatch In-App Notification to Assigned Proxy Teacher
+            try:
+                await create_system_notification(
+                    db=db,
+                    recipient_user_id=req.substitute_teacher_id or 2,
+                    recipient_role="teacher",
+                    sender_name="Academic Coordinator",
+                    sender_role="academic_coordinator",
+                    title=f"Proxy Cover Injected: Period {slot['period_number']} ({slot['class_name']})",
+                    message=f"Assigned as proxy cover for {slot['class_name']} {slot['subject']} replacing absent faculty {slot['absent_teacher_name']}.",
+                    notification_type="PROXY_ASSIGNED",
+                    priority="CRITICAL",
+                    action_url="/teacher?tab=schedule",
+                    metadata_dict={"period_number": slot["period_number"], "class_name": slot["class_name"]}
+                )
+            except Exception as e:
+                print(f"Failed to dispatch substitution notification: {e}")
             
             _add_audit_log(
                 actor_name="Academic Coordinator",
@@ -1515,7 +1711,7 @@ async def assign_substitution(req: AssignSubstitutionRequest):
     raise HTTPException(status_code=404, detail="Substitution slot not found")
 
 @router.post("/substitutions/auto-resolve")
-async def auto_resolve_substitutions():
+async def auto_resolve_substitutions(db: AsyncSession = Depends(get_db)):
     resolved_count = 0
     for slot in _substitutions_slots:
         if slot["status"] == "Unassigned":
@@ -1546,6 +1742,24 @@ async def auto_resolve_substitutions():
                 for task in _in_memory_tasks:
                     if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
                         task["status"] = "Completed"
+
+                # 🔔 Dispatch In-App Notification to Proxy Teacher
+                try:
+                    await create_system_notification(
+                        db=db,
+                        recipient_user_id=match["id"] or 2,
+                        recipient_role="teacher",
+                        sender_name="AI Timetable Governor",
+                        sender_role="system",
+                        title=f"Proxy Cover Auto-Assigned: Period {slot['period_number']} ({slot['class_name']})",
+                        message=f"Timetable Governor assigned you as proxy cover for {slot['class_name']} {slot['subject']} replacing {slot['absent_teacher_name']}.",
+                        notification_type="PROXY_ASSIGNED",
+                        priority="CRITICAL",
+                        action_url="/teacher?tab=schedule",
+                        metadata_dict={"period_number": slot["period_number"], "class_name": slot["class_name"]}
+                    )
+                except Exception as e:
+                    print(f"Failed to dispatch auto-resolve notification: {e}")
     
     _add_audit_log(
         actor_name="AI Timetable Governor",
@@ -1646,6 +1860,23 @@ async def export_security_audit_logs():
         "records_count": len(_security_audit_logs),
         "checksum": "SHA256:7f9a2b8e3c1d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a"
     }
+
+@router.get("/audit-logs/export/{filename}")
+async def download_audit_logs_export(filename: str):
+    """
+    Exports CBSE compliance audit trail as CSV for statutory inspection.
+    """
+    csv_rows = ["timestamp,actor,role,action,resource,ip_address,status,severity,hash"]
+    for log in _security_audit_logs:
+        csv_rows.append(
+            f'"{log.get("timestamp","")}","{log.get("actor","")}","{log.get("role","")}","{log.get("action","")}","{log.get("resource","")}","{log.get("ip_address","")}","{log.get("status","")}","{log.get("severity","")}","{log.get("hash","")}"'
+        )
+    csv_content = "\n".join(csv_rows)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 # --- 10. Academic Promotion & Annual Rollover Engine ---
 _rollover_classes = [
@@ -1798,11 +2029,33 @@ _curriculum_pacing_items = [
 ]
 
 @router.get("/academic/curriculum-pacing", response_model=list[CurriculumPacingItem])
-async def get_curriculum_pacing():
+async def get_curriculum_pacing(db: AsyncSession = Depends(get_db)):
+    try:
+        res = await db.execute(select(CurriculumPacing))
+        rows = res.scalars().all()
+        if rows:
+            return [
+                CurriculumPacingItem(
+                    id=r.id,
+                    class_name=r.class_name,
+                    subject=r.subject,
+                    teacher_name=r.teacher_name,
+                    completed_units=r.completed_units,
+                    total_units=r.total_units,
+                    calendar_target_units=r.calendar_target_units,
+                    completion_pct=round((r.completed_units / r.total_units) * 100, 1) if r.total_units else 0.0,
+                    status=r.status,
+                    last_lesson_title=r.last_lesson_title or "Unit Lesson",
+                    next_milestone_date="31 Oct 2026 (Unit Checkpoint)"
+                )
+                for r in rows
+            ]
+    except Exception as e:
+        logger.warning(f"Fallback to memory for curriculum pacing: {e}")
     return _curriculum_pacing_items
 
 @router.post("/academic/curriculum-pacing/{item_id}/log-lesson")
-async def log_curriculum_lesson(item_id: int, req: LogLessonRequest):
+async def log_curriculum_lesson(item_id: int, req: LogLessonRequest, db: AsyncSession = Depends(get_db)):
     for item in _curriculum_pacing_items:
         if item["id"] == item_id:
             new_completed = min(item["total_units"], item["completed_units"] + req.units_to_add)
@@ -1821,6 +2074,20 @@ async def log_curriculum_lesson(item_id: int, req: LogLessonRequest):
             if req.lesson_title:
                 item["last_lesson_title"] = req.lesson_title
                 
+            # Persist update directly into SQLite curriculum_pacing table
+            try:
+                p_res = await db.execute(select(CurriculumPacing).where(CurriculumPacing.id == item_id))
+                p_row = p_res.scalars().first()
+                if p_row:
+                    p_row.completed_units = new_completed
+                    p_row.status = item["status"]
+                    if req.lesson_title:
+                        p_row.last_lesson_title = req.lesson_title
+                    p_row.updated_at = datetime.datetime.utcnow()
+                    await db.commit()
+            except Exception as e:
+                logger.warning(f"Could not persist curriculum pacing update to DB: {e}")
+
             _add_audit_log(
                 actor_name="Academic Coordinator",
                 actor_role="academic_coordinator",

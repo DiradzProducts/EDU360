@@ -1593,63 +1593,274 @@ async def seed_data():
         ]
         db.add_all(cards)
 
-        # 26. Initial Real-Time Institutional Notifications
+        # 26. Initial Real-Time Institutional Notifications (All 8 Online Schooling Roles)
         initial_notifications = [
+            # --- Role 1: Teacher (Mrs. Ananya Verma - User ID: 2) ---
             Notification(
                 recipient_user_id=2,
                 recipient_role="teacher",
-                sender_name="Prof. Rajeshwari Nair",
+                sender_name="Academic Coordinator",
                 sender_role="academic_coordinator",
-                title="Commissioned: Term 1 Mathematics Question Paper",
-                message="Prof. Rajeshwari Nair has commissioned the Class 8-B Term 1 Mathematics paper blueprint. Max Marks: 80. Blueprint specifications and units covered are ready for review.",
-                notification_type="QP_ASSIGNED",
-                priority="URGENT",
-                action_url="/teacher?tab=exams_gradebook&subtab=qp_desk&paperId=1",
-                metadata_json=json.dumps({"paper_id": 1, "subject": "Mathematics", "class_name": "Class 8-B"}),
+                title="Proxy Substitution Assigned: Period 3",
+                message="You have been assigned as proxy cover for Class 8-B (Mathematics) replacing absent colleague Dr. Raman.",
+                notification_type="PROXY_ASSIGNED",
+                priority="CRITICAL",
+                action_url="/teacher?tab=schedule",
+                metadata_json=json.dumps({"period_number": 3, "class_name": "Class 8-B"}),
                 is_read=False,
-                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=25)
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=10)
             ),
             Notification(
                 recipient_user_id=2,
                 recipient_role="teacher",
                 sender_name="Exam Outcomes Engine",
                 sender_role="system",
-                title="1-Week Remedial Focus Table Alert",
-                message="5 students scored <= 70% in Unit Test 2 and are auto-enrolled in Mrs. Verma's Quadratic Equations remedial sprint.",
-                notification_type="REMEDIAL_ALERT",
+                title="Remedial Solution Submitted: Aarav Sharma",
+                message="Aarav Sharma uploaded rough practice notebook for Day 2 Quadratic Factoring. Ready for SpeedGrader inspection.",
+                notification_type="REMEDIAL_SUBMISSION",
+                priority="URGENT",
+                action_url="/teacher/focus/1?tab=remedial&day=2",
+                metadata_json=json.dumps({"student_id": 1, "day": 2}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=25)
+            ),
+            Notification(
+                recipient_user_id=2,
+                recipient_role="teacher",
+                sender_name="Prof. Rajeshwari Nair",
+                sender_role="academic_coordinator",
+                title="Commissioned: Term 1 Mathematics Blueprint",
+                message="Prof. Rajeshwari Nair has commissioned the Class 8-B Term 1 Mathematics paper blueprint. Max Marks: 80.",
+                notification_type="QP_ASSIGNED",
                 priority="NORMAL",
-                action_url="/teacher?tab=focus_table",
-                metadata_json=json.dumps({"class_name": "Class 8-B"}),
+                action_url="/teacher?tab=exams_gradebook&subtab=qp_desk&paperId=1",
+                metadata_json=json.dumps({"paper_id": 1, "subject": "Mathematics", "class_name": "Class 8-B"}),
                 is_read=False,
                 created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=2)
             ),
+
+            # --- Role 2: Student (Aarav Sharma - User ID: 4) ---
             Notification(
-                recipient_user_id=None,
-                recipient_role="academic_coordinator",
+                recipient_user_id=4,
+                recipient_role="student",
+                sender_name="Live Class Engine",
+                sender_role="system",
+                title="Live Mathematics Starting in 10 Mins",
+                message="Class 8-B Mathematics live virtual room is open. Session begins promptly at 10:00 AM.",
+                notification_type="LIVE_CLASS_COUNTDOWN",
+                priority="CRITICAL",
+                action_url="/student/live-class/1",
+                metadata_json=json.dumps({"class_id": 1, "subject": "Mathematics"}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
+            ),
+            Notification(
+                recipient_user_id=4,
+                recipient_role="student",
                 sender_name="Mrs. Ananya Verma",
                 sender_role="teacher",
-                title="Mathematics Draft Ready for Audit",
-                message="Mrs. Ananya Verma has drafted the Term 1 Mathematics paper for Class 8-B. Ready for syllabus pacing & Bloom's taxonomy audit.",
-                notification_type="QP_SUBMITTED",
+                title="Homework Corrections Requested",
+                message="Mrs. Ananya Verma reviewed your Chapter 4 Homework and added red-pen feedback on Q3. Please review.",
+                notification_type="HOMEWORK_RETURNED",
+                priority="URGENT",
+                action_url="/student?tab=homework&id=4",
+                metadata_json=json.dumps({"homework_id": 4}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+            ),
+            Notification(
+                recipient_user_id=4,
+                recipient_role="student",
+                sender_name="Focus Sprint System",
+                sender_role="system",
+                title="Remedial Day 2 Worksheet Ready",
+                message="Step-by-step guided worksheet for quadratic formulas is unlocked on your dashboard.",
+                notification_type="REMEDIAL_DAY_READY",
                 priority="NORMAL",
-                action_url="/academic_coordinator?tab=paper_blueprints",
-                metadata_json=json.dumps({"paper_id": 1}),
+                action_url="/student?tab=remedial&day=2",
+                metadata_json=json.dumps({"day": 2}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=3)
+            ),
+
+            # --- Role 3: Parent (Mr. Rajesh Sharma - User ID: 3) ---
+            Notification(
+                recipient_user_id=3,
+                recipient_role="parent",
+                sender_name="Exam Outcomes Engine",
+                sender_role="system",
+                title="Focus Table Action Plan Sign-off",
+                message="7-Day Remedial Action Sprint generated for Aarav in Term 1 Math (Score: 58%). Parent review required.",
+                notification_type="FOCUS_PLAN_REVIEW",
+                priority="URGENT",
+                action_url="/parent?tab=academics&view=focus-plan",
+                metadata_json=json.dumps({"student_name": "Aarav Sharma"}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=30)
+            ),
+            Notification(
+                recipient_user_id=3,
+                recipient_role="parent",
+                sender_name="Accounts Bursar",
+                sender_role="accounts_coordinator",
+                title="Tuition Fee Milestone Overdue",
+                message="Quarter 3 Tuition Fee ₹18,500 is overdue for Aarav Sharma. Pay online to prevent exam hold.",
+                notification_type="FEE_OVERDUE",
+                priority="CRITICAL",
+                action_url="/parent?tab=finance&action=pay",
+                metadata_json=json.dumps({"amount": 18500.0}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=4)
+            ),
+
+            # --- Role 4: Admin (Dr. Sunita Kapoor - User ID: 1) ---
+            Notification(
+                recipient_user_id=1,
+                recipient_role="admin",
+                sender_name="Curriculum Pacing Engine",
+                sender_role="system",
+                title="Syllabus Lag Escalation: Class 8-B Science",
+                message="Class 8-B Science (Dr. Suresh Babu) has fallen 2 units behind CBSE calendar milestone.",
+                notification_type="PACING_LAG_CRITICAL",
+                priority="URGENT",
+                action_url="/admin?tab=curriculum&view=pacing",
+                metadata_json=json.dumps({"class_name": "Class 8-B", "lag_units": 2}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=40)
+            ),
+            Notification(
+                recipient_user_id=1,
+                recipient_role="admin",
+                sender_name="Admissions CRM",
+                sender_role="admissions_coordinator",
+                title="VIP Trustee Referral Inquiry Logged",
+                message="Admissions enquiry from Board Trustee referral awaiting priority review and tour scheduling.",
+                notification_type="VIP_REFERRAL",
+                priority="URGENT",
+                action_url="/admin?tab=crm&filter=vip",
+                metadata_json=json.dumps({"lead_name": "Rohan Malhotra"}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=2)
+            ),
+
+            # --- Role 5: Academic Coordinator (Prof. Rajeshwari Nair - User ID: 6) ---
+            Notification(
+                recipient_user_id=6,
+                recipient_role="academic_coordinator",
+                sender_name="Timetable Governor",
+                sender_role="system",
+                title="Unmanned Period Alert: Period 3 Class 8-B",
+                message="Dr. Raman approved medical leave. Class 8-B Period 3 needs substitute faculty coverage.",
+                notification_type="UNMANNED_PERIOD",
+                priority="CRITICAL",
+                action_url="/admin?tab=substitutions",
+                metadata_json=json.dumps({"period": 3, "class": "Class 8-B"}),
                 is_read=False,
                 created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
             ),
             Notification(
-                recipient_user_id=None,
+                recipient_user_id=6,
+                recipient_role="academic_coordinator",
+                sender_name="Dr. Suresh Babu",
+                sender_role="teacher",
+                title="Faculty Workload Relief Requested",
+                message="Dr. Suresh Babu requested +48h SLA extension on Mid-Term Lab Practical grading.",
+                notification_type="TASK_RELIEF_REQUESTED",
+                priority="URGENT",
+                action_url="/admin?tab=tasks&filter=relief-requested",
+                metadata_json=json.dumps({"task_id": 2}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+            ),
+
+            # --- Role 6: Admissions Coordinator (Ms. Sneha Kulkarni - User ID: 10) ---
+            Notification(
+                recipient_user_id=10,
+                recipient_role="admissions_coordinator",
+                sender_name="Online Admissions Portal",
+                sender_role="system",
+                title="Virtual Campus Tour Scheduled",
+                message="Live 1-on-1 virtual curriculum tour scheduled via Zoom for tomorrow 4:00 PM with Parent Rajesh.",
+                notification_type="TOUR_SCHEDULED",
+                priority="URGENT",
+                action_url="/admin?tab=crm&view=tours",
+                metadata_json=json.dumps({"enquiry_id": 8}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
+            ),
+            Notification(
+                recipient_user_id=10,
+                recipient_role="admissions_coordinator",
+                sender_name="Accounts Desk",
+                sender_role="accounts_coordinator",
+                title="Admission Registration Fee Cleared",
+                message="Candidate Aarav Kumar completed ₹25,000 admission payment. Assign roll number and section.",
+                notification_type="NEW_ENROLMENT",
+                priority="CRITICAL",
+                action_url="/admin?tab=crm&action=enrol",
+                metadata_json=json.dumps({"student_name": "Aarav Kumar"}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=2)
+            ),
+
+            # --- Role 7: Accounts Coordinator (Mr. Arvind Krishnan - User ID: 11) ---
+            Notification(
+                recipient_user_id=11,
+                recipient_role="accounts_coordinator",
+                sender_name="Online Fee Gateway",
+                sender_role="system",
+                title="Online Fee Payment Received: ₹45,000",
+                message="Term 2 Tuition Fee cleared for Aarav Sharma (Txn: TXN-8921). Digital cryptographic seal generated.",
+                notification_type="PAYMENT_RECEIVED",
+                priority="NORMAL",
+                action_url="/finance?tab=receipts&id=1",
+                metadata_json=json.dumps({"amount": 45000.0, "student_id": 1}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=10)
+            ),
+            Notification(
+                recipient_user_id=11,
+                recipient_role="accounts_coordinator",
+                sender_name="Exam Controller",
+                sender_role="exam_coordinator",
+                title="Exam Hall Ticket Hold Applied",
+                message="Term 1 examination cell active. 14 fee defaulters placed on automated hall ticket lock.",
+                notification_type="EXAM_HOLD_TRIGGERED",
+                priority="CRITICAL",
+                action_url="/finance?tab=defaulters",
+                metadata_json=json.dumps({"defaulter_count": 14}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=3)
+            ),
+
+            # --- Role 8: Exam Coordinator (Dr. Hemanth Sen - User ID: 8) ---
+            Notification(
+                recipient_user_id=8,
                 recipient_role="exam_coordinator",
                 sender_name="Examination Cell",
                 sender_role="system",
+                title="Exam Cycle Concluded: 5-Day Moderation SLA",
+                message="Term 1 examination cycle ended. 5-Day SLA countdown started for all subject teachers to submit verified marks.",
+                notification_type="MODERATION_START",
+                priority="CRITICAL",
+                action_url="/exams?tab=moderation",
+                metadata_json=json.dumps({"sla_days": 5}),
+                is_read=False,
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=50)
+            ),
+            Notification(
+                recipient_user_id=8,
+                recipient_role="exam_coordinator",
+                sender_name="Academic Verification",
+                sender_role="academic_coordinator",
                 title="Strongroom Custody: Term 1 Mathematics",
-                message="Term 1 Mathematics Paper has received Academic Clearance. Strongroom seating and envelope seals ready for print scheduling.",
+                message="Term 1 Mathematics Paper has received Academic Clearance. Strongroom vault lock sealed.",
                 notification_type="QP_IN_VAULT",
                 priority="NORMAL",
                 action_url="/exam_coordinator?tab=vault",
                 metadata_json=json.dumps({"paper_id": 1}),
                 is_read=False,
-                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=45)
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(hours=2)
             )
         ]
         db.add_all(initial_notifications)

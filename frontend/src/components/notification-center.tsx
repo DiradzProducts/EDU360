@@ -8,13 +8,19 @@ import {
   CheckCheck, 
   Clock, 
   AlertTriangle, 
+  AlertOctagon,
   FileText, 
   Sparkles, 
   Award, 
   ExternalLink, 
   X,
   Layers,
-  ShieldCheck
+  ShieldCheck,
+  Video,
+  CreditCard,
+  Calendar,
+  TrendingDown,
+  Users
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { NotificationItem } from '@/lib/types';
@@ -127,20 +133,43 @@ export function NotificationCenter({
     : notifications;
 
   const getTypeIcon = (type: string, priority: string) => {
+    if (priority === 'CRITICAL') {
+      return <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />;
+    }
     if (priority === 'URGENT') {
-      return <AlertTriangle className="h-4 w-4 text-rose-500" />;
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
     }
     switch (type) {
+      case 'LIVE_CLASS_COUNTDOWN':
+        return <Video className="h-4 w-4 text-blue-500" />;
+      case 'FEE_OVERDUE':
+      case 'PAYMENT_RECEIVED':
+      case 'EXAM_HOLD_TRIGGERED':
+        return <CreditCard className="h-4 w-4 text-emerald-500" />;
+      case 'PROXY_ASSIGNED':
+      case 'UNMANNED_PERIOD':
+        return <Calendar className="h-4 w-4 text-indigo-500" />;
+      case 'PACING_LAG_CRITICAL':
+        return <TrendingDown className="h-4 w-4 text-rose-500" />;
+      case 'VIP_REFERRAL':
+      case 'NEW_ENROLMENT':
+      case 'TOUR_SCHEDULED':
+        return <Users className="h-4 w-4 text-purple-500" />;
       case 'QP_ASSIGNED':
       case 'QP_SUBMITTED':
       case 'QP_REVISION':
         return <FileText className="h-4 w-4 text-purple-500" />;
       case 'QP_APPROVED':
       case 'QP_IN_VAULT':
+      case 'MODERATION_START':
         return <ShieldCheck className="h-4 w-4 text-emerald-500" />;
       case 'TASK_ASSIGNED':
+      case 'TASK_RELIEF_REQUESTED':
         return <Layers className="h-4 w-4 text-blue-500" />;
       case 'REMEDIAL_ALERT':
+      case 'REMEDIAL_SUBMISSION':
+      case 'REMEDIAL_DAY_READY':
+      case 'FOCUS_PLAN_REVIEW':
         return <Award className="h-4 w-4 text-amber-500" />;
       default:
         return <Sparkles className="h-4 w-4 text-indigo-500" />;
@@ -191,6 +220,7 @@ export function NotificationCenter({
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={handleMarkAllRead}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/60 transition-all cursor-pointer"
                   title="Mark all as read"
@@ -200,8 +230,11 @@ export function NotificationCenter({
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                title="Close notifications"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -211,6 +244,7 @@ export function NotificationCenter({
           {/* Filter Tabs */}
           <div className="px-4 pt-2.5 pb-1 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 text-xs">
             <button
+              type="button"
               onClick={() => setActiveTab('all')}
               className={`pb-2 font-bold transition-all cursor-pointer relative ${
                 activeTab === 'all'
@@ -221,6 +255,7 @@ export function NotificationCenter({
               All ({notifications.length})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('unread')}
               className={`pb-2 font-bold transition-all cursor-pointer relative ${
                 activeTab === 'unread'
@@ -288,9 +323,11 @@ export function NotificationCenter({
 
                   {!notif.is_read && (
                     <button
+                      type="button"
                       onClick={(e) => handleMarkAsRead(notif.id, e)}
-                      className="mt-1 p-1 rounded-md text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/60 transition-all"
+                      className="mt-1 p-1 rounded-md text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/60 transition-all cursor-pointer"
                       title="Mark as read"
+                      aria-label="Mark as read"
                     >
                       <Check className="h-3 w-3" />
                     </button>

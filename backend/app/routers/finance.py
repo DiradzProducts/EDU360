@@ -365,6 +365,27 @@ async def apply_fee_waiver(
     return defaulter
 
 
+@router.post("/defaulters/{id}/exam-clearance")
+async def toggle_exam_clearance(
+    id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Toggles institutional examination clearance for a student fee defaulter.
+    Directly persists to SQLite DB so exam coordinator hall-ticket engine is in sync.
+    """
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id))
+    defaulter = res.scalars().first()
+    if not defaulter:
+        raise HTTPException(status_code=404, detail="Defaulter record not found")
+
+    defaulter.exam_clearance = not bool(defaulter.exam_clearance)
+    await db.commit()
+    await db.refresh(defaulter)
+    return {"success": True, "exam_clearance": defaulter.exam_clearance, "id": defaulter.id}
+
+
+
 # =========================================================================
 # 3. ONLINE PAYMENT GATEWAY & RECONCILIATION LEDGER
 # =========================================================================

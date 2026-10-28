@@ -231,3 +231,55 @@ div[data-nextjs-dev-indicators] {
   font-weight: 600;
 }
 
+/* Junior K-5 Portal Micro-Animations */
+@keyframes monkey-swing {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+.animate-monkey-swing {
+  transform-origin: top center;
+  animation: monkey-swing 3.6s ease-in-out infinite;
+}
+
+@keyframes sign-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.animate-sign-sway {
+  transform-origin: top center;
+  animation: sign-sway 4.2s ease-in-out infinite;
+}
+
+@keyframes float-pencil {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-7px) rotate(2deg); }
+}
+.animate-float-pencil {
+  animation: float-pencil 3s ease-in-out infinite;
+}
+
+@keyframes rocket-bob {
+  0%, 100% { transform: translateY(0px) rotate(-8deg); }
+  50% { transform: translateY(-6px) rotate(-2deg); }
+}
+.animate-rocket-bob {
+  animation: rocket-bob 2.8s ease-in-out infinite;
+}
+
+@keyframes water-spray {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.04); }
+}
+.animate-water-spray {
+  animation: water-spray 2.4s ease-in-out infinite;
+}
+
+@keyframes sun-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.animate-sun-spin {
+  animation: sun-spin 16s linear infinite;
+}
+
+
