@@ -44,6 +44,13 @@ export interface OperationalTask {
   is_escalated?: boolean;
   escalation_reason?: string;
   completion_proof_url?: string;
+  submission_notes?: string;
+  submitted_at?: string;
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
+  is_admin_override?: boolean;
+  admin_override_reason?: string;
   relief_requested?: boolean;
   relief_reason?: string;
   relief_justification?: string;
@@ -58,6 +65,26 @@ export interface OperationalTask {
 }
 
 export type AdminTask = OperationalTask;
+
+
+export interface SubmitTaskWorkRequest {
+  submission_notes: string;
+  completion_proof_url?: string;
+}
+
+export interface ApproveTaskRequest {
+  approved_by?: string;
+  remarks?: string;
+}
+
+export interface RejectTaskRequest {
+  rejection_reason: string;
+}
+
+export interface AdminOverrideTaskRequest {
+  override_reason: string;
+  override_by?: string;
+}
 
 export interface ResolveEscalationRequest {
   resolution_notes?: string;
@@ -448,7 +475,7 @@ export interface AttendanceRecord {
   student_name: string;
   join_timestamp?: string;
   minutes_late: number;
-  status: 'Present' | 'Late' | 'Absent' | 'Leave';
+  status: 'Present' | 'Late' | 'Absent' | 'Leave' | 'Excused Leave';
   teacher_override: boolean;
   date: string;
 }
@@ -560,6 +587,10 @@ export interface LeaveRequest {
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   teacher_notes?: string;
+  is_medical?: boolean;
+  attachment_name?: string;
+  attachment_url?: string;
+  approval_stage?: 'Submitted' | 'Under Review' | 'Principal Approved' | 'Attendance Adjusted' | string;
   applied_at: string;
 }
 
@@ -660,10 +691,14 @@ export interface ReExamRequestItem {
   document_url?: string;
   parent_name: string;
   parent_phone: string;
-  status: 'Pending Admin Review' | 'Approved by Admin' | 'Rejected';
+  status: 'Pending Admin Review' | 'Approved by Admin' | 'Scheduled' | 'Rejected';
   admin_remarks?: string;
   requested_at: string;
   resolved_at?: string;
+  re_exam_date?: string;
+  re_exam_time?: string;
+  re_exam_venue?: string;
+  coordinator_assigned?: string;
 }
 
 export interface TeacherPermissionRequest {
@@ -764,6 +799,8 @@ export interface TeacherScheduleItem {
   room: string;
   status: 'Completed' | 'Live Now' | 'Upcoming';
   is_live?: boolean;
+  is_substitution?: boolean;
+  substitute_for?: string;
 }
 
 export interface TeacherDutyItem {
@@ -783,13 +820,26 @@ export interface TeacherStudentRosterItem {
   name: string;
   roll_no: string;
   class_name: string;
+  raw_class?: string;
+  section?: string;
   attendance_pct: number;
+  missed_classes_count?: number;
   academic_average_pct: number;
   guardian_name: string;
   guardian_phone: string;
   has_focus_table: boolean;
+  focus_concept?: string | null;
   homework_status: 'Submitted' | 'Pending' | 'Graded';
   last_active: string;
+  is_on_leave?: boolean;
+  is_leave_pending?: boolean;
+  leave_status?: 'Approved Leave' | 'Pending Approval' | 'None';
+  leave_reason?: string | null;
+  is_medical_leave?: boolean;
+  leave_from_date?: string | null;
+  leave_to_date?: string | null;
+  today_attendance_status?: 'Present' | 'Late' | 'Absent' | 'Excused Leave' | 'Leave Pending';
+  attendance_flag?: 'EXCUSED_LEAVE' | 'PENDING_LEAVE' | 'ABSENT' | 'PRESENT' | 'LATE';
 }
 
 // --- New Admin Modules & Modern ERP Features ---
@@ -995,6 +1045,9 @@ export interface PTMSlot {
   sibling_student_name?: string;
   meeting_url?: string;
   focus_table_agenda?: string[];
+  cancellation_reason?: string;
+  cancelled_by?: string;
+  cancelled_at?: string;
 }
 
 export interface CurriculumPacingItem {
@@ -1095,6 +1148,8 @@ export interface ExamItem {
   exam_date: string;
   is_published: boolean;
   published_at: string | null;
+  is_locked?: boolean;
+  locked_at?: string | null;
   total_students: number;
   graded_count: number;
   remedial_count: number;
@@ -1170,6 +1225,8 @@ export interface QuestionPaperItem {
 export interface ExamScheduleItem {
   id: number;
   exam_id?: number | null;
+  question_paper_id?: number | null;
+  question_paper_title?: string;
   title: string;
   exam_name?: string;
   subject: string;
@@ -1240,6 +1297,50 @@ export interface ReportCardItem {
   is_moderated: boolean;
   is_published: boolean;
   published_at?: string | null;
+  parent_signed_at?: string | null;
+  parent_signer_name?: string | null;
+  parent_signature_hash?: string | null;
+  parent_remarks?: string | null;
+}
+
+export interface ParentTeacherChatMessage {
+  id: number;
+  student_id: number;
+  student_name?: string;
+  sender_role: 'PARENT' | 'TEACHER';
+  sender_name: string;
+  receiver_role: 'PARENT' | 'TEACHER';
+  receiver_name: string;
+  message_text: string;
+  attachment_name?: string;
+  attachment_url?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface TaxCertificateData {
+  success: boolean;
+  certificate_no: string;
+  issue_date: string;
+  financial_year: string;
+  assessment_year: string;
+  school_info: {
+    name: string;
+    cbse_affiliation_no: string;
+    school_code: string;
+    pan: string;
+    address: string;
+  };
+  student_info: {
+    student_id: number;
+    student_name: string;
+    class_name: string;
+    guardian_name: string;
+    admission_no: string;
+  };
+  eligible_tuition_fee: number;
+  tax_section: string;
+  certification_text: string;
 }
 
 export interface NotificationItem {
@@ -1406,6 +1507,23 @@ export interface PayrollBatchItem {
   bank_batch_ref?: string | null;
   notes?: string | null;
   created_at?: string;
+}
+
+export interface StaffSalaryInquiryItem {
+  id: number;
+  teacher_id?: number;
+  teacher_name: string;
+  department?: string;
+  month: string;
+  reason: string;
+  message: string;
+  net_salary?: number;
+  utr?: string;
+  status: 'Pending' | 'Under Review' | 'Resolved' | 'Rejected';
+  resolution_notes?: string;
+  resolved_by?: string;
+  resolved_at?: string;
+  created_at: string;
 }
 
 export interface StaffPayslipItem {

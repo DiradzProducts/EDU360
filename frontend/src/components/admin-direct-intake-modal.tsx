@@ -15,7 +15,8 @@ import {
   GraduationCap, 
   ArrowRight,
   ShieldAlert,
-  Building
+  Building,
+  Users
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -44,12 +45,49 @@ export function AdminDirectIntakeModal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Sibling & Phone Deduplication State
+  const [siblingMatch, setSiblingMatch] = useState<{
+    exists: boolean;
+    guardian_name?: string;
+    guardian_phone?: string;
+    existing_student_name?: string;
+    existing_class?: string;
+    existing_student_id?: number;
+  } | null>(null);
+  const [checkingPhone, setCheckingPhone] = useState(false);
+  const [isSiblingConfirmed, setIsSiblingConfirmed] = useState<boolean | null>(null);
+
+  const handlePhoneBlur = async () => {
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length >= 7) {
+      setCheckingPhone(true);
+      try {
+        const res = await api.checkGuardianPhone(phone.trim());
+        if (res && res.exists) {
+          setSiblingMatch(res);
+          setIsSiblingConfirmed(null);
+        } else {
+          setSiblingMatch(null);
+          setIsSiblingConfirmed(null);
+        }
+      } catch (err) {
+        console.error('Sibling lookup failed', err);
+      } finally {
+        setCheckingPhone(false);
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim() || !parentName.trim() || !phone.trim()) {
       setErrorMsg('Please enter student name, parent name, and phone number.');
+      return;
+    }
+    if (siblingMatch?.exists && isSiblingConfirmed === false) {
+      setErrorMsg('Duplicate Phone Conflict: This number is assigned to an existing family profile. Please provide a unique phone number for an independent account.');
       return;
     }
     setErrorMsg(null);
@@ -67,7 +105,10 @@ export function AdminDirectIntakeModal({
         fee_status: feeStatus,
         payment_method: paymentMethod,
         action_type: activeTab,
-        notes: vipNotes.trim()
+        notes: vipNotes.trim(),
+        is_sibling_link: isSiblingConfirmed === true,
+        sibling_student_id: siblingMatch?.existing_student_id,
+        sibling_discount_pct: 15.0
       });
 
       if (res?.success) {
@@ -137,7 +178,7 @@ export function AdminDirectIntakeModal({
               }`}
             >
               <Zap className="h-3.5 w-3.5 text-blue-500" />
-              ⚡ Direct SIS Enrolment
+              Direct SIS Enrolment
             </button>
             <button
               type="button"
@@ -149,7 +190,7 @@ export function AdminDirectIntakeModal({
               }`}
             >
               <Crown className="h-3.5 w-3.5 text-amber-500" />
-              👑 Forward as VIP Referral
+              Forward as VIP Referral
             </button>
           </div>
         </div>
@@ -215,17 +256,28 @@ export function AdminDirectIntakeModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
-                Primary Phone *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Primary Phone *
+                </label>
+                {checkingPhone && (
+                  <span className="text-[10px] text-blue-500 font-bold animate-pulse">
+                    Checking family record...
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Phone className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="tel"
                   required
-                  placeholder="+91 98765 43210"
+                  placeholder="+91 98111 00003"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    if (isSiblingConfirmed !== null) setIsSiblingConfirmed(null);
+                  }}
+                  onBlur={handlePhoneBlur}
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -242,6 +294,9 @@ export function AdminDirectIntakeModal({
                   onChange={(e) => setTargetGrade(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                  <option value="Class 3">Class 3 (Primary Wing)</option>
+                  <option value="Class 4">Class 4 (Primary Wing)</option>
+                  <option value="Class 5">Class 5 (Primary Wing)</option>
                   <option value="Class 6">Class 6</option>
                   <option value="Class 7">Class 7</option>
                   <option value="Class 8">Class 8</option>
@@ -253,6 +308,81 @@ export function AdminDirectIntakeModal({
               </div>
             </div>
           </div>
+
+          {/* Sibling Detection / Deduplication Confirmation Dialog */}
+          {siblingMatch?.exists && isSiblingConfirmed === null && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/40 border-2 border-amber-400 dark:border-amber-600 shadow-md space-y-3 animate-in fade-in duration-200">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-amber-950 dark:text-amber-200 uppercase tracking-wide">
+                      Existing Family Record Detected
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100">
+                      Smart Deduplication
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed font-medium">
+                    Guardian <strong>{siblingMatch.guardian_name}</strong> is already registered with ward <strong>{siblingMatch.existing_student_name}</strong> ({siblingMatch.existing_class}).
+                  </p>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white pt-1">
+                    Is <span className="text-blue-600 dark:text-blue-400 font-extrabold underline">{studentName || 'this applicant'}</span> a sibling of {siblingMatch.existing_student_name}?
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-900/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSiblingConfirmed(true);
+                    setAdmissionFee(prev => Math.round(prev * 0.85));
+                    if (!parentName) setParentName(siblingMatch.guardian_name || '');
+                  }}
+                  className="w-full sm:flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-98"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Yes, Link Sibling (Apply 15% Sibling Concession)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSiblingConfirmed(false);
+                    setErrorMsg(`Duplicate Phone Conflict: ${phone} is already bound to guardian ${siblingMatch.guardian_name}. Under school privacy guidelines, independent applicants require a unique primary guardian number. Please enter a different phone number.`);
+                  }}
+                  className="w-full sm:w-auto py-2.5 px-3 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-700 dark:text-slate-300 hover:text-rose-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>No, Different Family</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isSiblingConfirmed === true && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>Sibling Link Active:</strong> Linked to <em>{siblingMatch?.existing_student_name}</em>. 15% Sibling Concession applied (Fee: ₹{admissionFee.toLocaleString()}). Will appear in Parent Portal multi-child switcher!
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSiblingConfirmed(null);
+                  setAdmissionFee(25000);
+                }}
+                className="text-[11px] underline text-emerald-700 hover:text-emerald-900 font-bold ml-2 shrink-0 cursor-pointer"
+              >
+                Change
+              </button>
+            </div>
+          )}
 
           {/* Direct SIS Enrolment Specifics */}
           {activeTab === 'direct_sis' && (

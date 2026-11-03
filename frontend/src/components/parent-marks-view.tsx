@@ -16,7 +16,10 @@ import {
   ShieldCheck,
   AlertCircle,
   GraduationCap,
-  RefreshCw
+  RefreshCw,
+  Ticket,
+  Video,
+  Upload
 } from 'lucide-react';
 import { downloadMarksMemoFile } from '@/lib/export-utils';
 import { api } from '@/lib/api';
@@ -35,9 +38,23 @@ interface SubjectMark {
   teacherRemarks: string;
 }
 
-export function ParentMarksView() {
+interface ParentMarksViewProps {
+  studentId?: number;
+  studentName?: string;
+  className?: string;
+}
+
+export function ParentMarksView({
+  studentId = 1,
+  studentName = 'Aarav Sharma',
+  className = 'Class 8-B'
+}: ParentMarksViewProps = {}) {
   const [selectedTerm, setSelectedTerm] = useState<'term1' | 'ut2' | 'midterm' | 'ut1'>('term1');
   const [liveReportCard, setLiveReportCard] = useState<ReportCardItem | null>(null);
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [signerName, setSignerName] = useState('Rajesh Sharma (Father)');
+  const [signRemarks, setSignRemarks] = useState('Reviewed Term 1 results with class teacher feedback.');
+  const [isSigning, setIsSigning] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
@@ -53,12 +70,15 @@ export function ParentMarksView() {
   // Re-Exam Permission Workflow State
   const [reExamRequests, setReExamRequests] = useState<ReExamRequestItem[]>([]);
   const [showReExamModal, setShowReExamModal] = useState(false);
+  const [selectedRetestPass, setSelectedRetestPass] = useState<ReExamRequestItem | null>(null);
   const [reExamSubject, setReExamSubject] = useState('Mathematics');
   const [reExamExamName, setReExamExamName] = useState('Term 1 Descriptive Examination');
   const [reExamMissedDate, setReExamMissedDate] = useState('2026-10-14');
   const [reExamCategory, setReExamCategory] = useState<'Medical Emergency' | 'Hospitalization' | 'Bereavement' | 'Sports Representation' | 'Other'>('Medical Emergency');
   const [reExamDetails, setReExamDetails] = useState('Diagnosed with acute viral fever (103°F). Hospital outpatient consultation with 4 days mandated bed rest.');
   const [reExamDocName, setReExamDocName] = useState('Dr_Patel_Hospital_Medical_Certificate.pdf');
+  const [reExamFile, setReExamFile] = useState<File | null>(null);
+  const [reExamFileSize, setReExamFileSize] = useState<string>('340 KB');
   const [submittingReExam, setSubmittingReExam] = useState(false);
   const [admitCardData, setAdmitCardData] = useState<any>(null);
   const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
@@ -67,7 +87,7 @@ export function ParentMarksView() {
     setLoadingAdmitCard(true);
     setShowAdmitCardModal(true);
     try {
-      const res = await api.getStudentHallTicket(1);
+      const res = await api.getStudentHallTicket(studentId);
       if (res && res.success && res.ticket) {
         setAdmitCardData(res.ticket);
       }
@@ -81,7 +101,7 @@ export function ParentMarksView() {
   useEffect(() => {
     const fetchLiveCard = async () => {
       try {
-        const cards = await api.getReportCards({ student_id: 1 });
+        const cards = await api.getReportCards({ student_id: studentId });
         if (cards && cards.length > 0) {
           setLiveReportCard(cards[0]);
         }
@@ -92,11 +112,82 @@ export function ParentMarksView() {
       }
     };
     fetchLiveCard();
-  }, []);
+  }, [studentId]);
 
   const guardianEmail = 'rajesh.sharma@example.com';
 
-  const subjectMarksData: SubjectMark[] = [
+  const isJuniorKid = studentId === 7 || (className && (className.includes('3') || className.toLowerCase().includes('primary') || className.includes('K5')));
+
+  const juniorSubjectMarksData: SubjectMark[] = [
+    {
+      id: 'reading',
+      subject: 'English Reading & Phonics',
+      marksObtained: 24.5,
+      maxMarks: 25,
+      grade: 'A1+',
+      classAverage: 19.2,
+      highestMarks: 25.0,
+      teacherName: 'Ms. Priya Nair',
+      teacherRemarks: 'Outstanding phonemic awareness, expressive reading tone, and storytelling enthusiasm in morning circle.'
+    },
+    {
+      id: 'math',
+      subject: 'Junior Mathematics',
+      marksObtained: 24.0,
+      maxMarks: 25,
+      grade: 'A1+',
+      classAverage: 18.5,
+      highestMarks: 24.5,
+      teacherName: 'Mrs. Kavitha Reddy',
+      teacherRemarks: 'Superb 2-digit mental calculations, place value grip, and geometric shapes recognition.'
+    },
+    {
+      id: 'evs',
+      subject: 'Environmental Studies (EVS)',
+      marksObtained: 23.5,
+      maxMarks: 25,
+      grade: 'A1',
+      classAverage: 18.0,
+      highestMarks: 24.0,
+      teacherName: 'Ms. Priya Nair',
+      teacherRemarks: 'Deep curiosity regarding seed germination, plant parts, and animal habitats in nature studies.'
+    },
+    {
+      id: 'arts',
+      subject: 'Creative Arts & Expression',
+      marksObtained: 25.0,
+      maxMarks: 25,
+      grade: 'O (Outstanding)',
+      classAverage: 20.0,
+      highestMarks: 25.0,
+      teacherName: 'Mrs. Shalini Sen',
+      teacherRemarks: 'Exceptional color blending, clay sculpture modeling, and neat origami construction.'
+    },
+    {
+      id: 'hindi',
+      subject: 'Hindi / Second Language',
+      marksObtained: 22.5,
+      maxMarks: 25,
+      grade: 'A1',
+      classAverage: 17.5,
+      highestMarks: 23.5,
+      teacherName: 'Mrs. Meenakshi Sundaram',
+      teacherRemarks: 'Confident aksharmala handwriting, Matra recognition, and polite conversational phrases.'
+    },
+    {
+      id: 'gk',
+      subject: 'General Knowledge & Values',
+      marksObtained: 24.0,
+      maxMarks: 25,
+      grade: 'A1+',
+      classAverage: 19.0,
+      highestMarks: 25.0,
+      teacherName: 'Ms. Priya Nair',
+      teacherRemarks: 'Kind peer collaboration, empathetic classroom sharing, and active questions during science curiosities.'
+    }
+  ];
+
+  const secondarySubjectMarksData: SubjectMark[] = [
     {
       id: 'math',
       subject: 'Mathematics',
@@ -176,6 +267,8 @@ export function ParentMarksView() {
     }
   ];
 
+  const subjectMarksData: SubjectMark[] = isJuniorKid ? juniorSubjectMarksData : secondarySubjectMarksData;
+
   const totalObtained = subjectMarksData.reduce((acc, curr) => acc + curr.marksObtained, 0);
   const totalMax = subjectMarksData.reduce((acc, curr) => acc + curr.maxMarks, 0);
   const percentage = ((totalObtained / totalMax) * 100).toFixed(1);
@@ -214,8 +307,8 @@ export function ParentMarksView() {
     try {
       const created = await api.createReExamRequest({
         student_id: 1,
-        student_name: 'Aarav Sharma',
-        class_name: 'Class 8',
+        student_name: studentName,
+        class_name: className,
         section: 'B',
         subject: reExamSubject,
         exam_name: reExamExamName,
@@ -239,7 +332,7 @@ export function ParentMarksView() {
   };
 
   const handleDownloadMemo = () => {
-    downloadMarksMemoFile('Aarav Sharma', isTerm1 ? 'Term 1 Official CBSE Memo' : 'Term 2 Periodic Assessment');
+    downloadMarksMemoFile(studentName, isTerm1 ? 'Term 1 Official CBSE Memo' : 'Term 2 Periodic Assessment');
     setDownloadToast(isTerm1 ? 'Official Term 1 CBSE marks memo downloaded.' : 'Official CBSE marks memo downloaded (Ref: EDU-2026-UT2-88B14)');
     setTimeout(() => setDownloadToast(null), 4000);
   };
@@ -268,41 +361,47 @@ export function ParentMarksView() {
             </span>
           </div>
           <h2 className="mt-2 text-xl font-black text-slate-900 dark:text-white">
-            Aarav Sharma — Examination Marks &amp; Progress Memo
+            {studentName} — Examination Marks &amp; Progress Memo
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Class 8B • Roll #14 • Board Affiliation #CBSE-103049 • Verified by Examination Controller Dr. Hemanth Sen
+            {className} • Roll #14 • Board Affiliation #CBSE-103049 • Verified by Examination Controller Dr. Hemanth Sen
           </p>
         </div>
 
-        {/* Action Buttons: Admit Card, Email to Parent, AI Evaluation Key & Download Memo */}
+        {/* Action Buttons: Admit Card, Re-Exam Exemption Request & Download Memo */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => {
-              setSelectedEvalSubject('Mathematics');
-              setEvalModalOpen(true);
-            }}
-            className="flex items-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
-          >
-            <Sparkles className="h-4 w-4 text-amber-300" />
-            <span>🔍 View Evaluation Key &amp; AI Script</span>
-          </button>
-
           <button
             onClick={handleOpenAdmitCard}
             className="flex items-center gap-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
           >
             <Award className="h-4 w-4" />
-            <span>🎟️ Official Admit Card &amp; Timetable</span>
+            <span>Official Admit Card &amp; Timetable</span>
           </button>
 
           <button
-            onClick={() => setEmailModalOpen(true)}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+            onClick={() => setShowReExamModal(true)}
+            className="flex items-center gap-2 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
           >
-            <Mail className="h-4 w-4" />
-            <span>Email Report Card to My Mail</span>
+            <RefreshCw className="h-4 w-4" />
+            <span>Request Re-Exam (Medical / Exemption)</span>
           </button>
+
+          {liveReportCard && liveReportCard.is_published && (
+            liveReportCard.parent_signed_at ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Digitally Sealed ({liveReportCard.parent_signer_name?.split(' ')[0]})</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowSignModal(true)}
+                className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Digitally Sign Memo</span>
+              </button>
+            )
+          )}
 
           <button
             onClick={handleDownloadMemo}
@@ -313,6 +412,17 @@ export function ParentMarksView() {
           </button>
         </div>
       </div>
+
+      {/* Official Release Pending Notice for Parents */}
+      {liveReportCard && !liveReportCard.is_published && (
+        <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 p-4 flex items-center gap-3 text-xs text-blue-900 dark:text-blue-200">
+          <Clock className="h-5 w-5 text-blue-600 shrink-0" />
+          <div>
+            <span className="font-bold block">Official Report Card Under Final Examination Moderation</span>
+            <span>Term 1 marks are undergoing final validation by the Academic &amp; Examination Cell. The official marks memo and Gemini AI narrative will be released as soon as the Exam Coordinator issues publication.</span>
+          </div>
+        </div>
+      )}
 
       {/* Remedial Active Alert if Student has score <= 70% in any subject */}
       {hasRemedial && (
@@ -326,7 +436,7 @@ export function ParentMarksView() {
                 Active 1-Week Remedial Focus Sprint (Mathematics · Score: 68%)
               </span>
               <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
-                Aarav scored $\le 70\%$ in Mathematics and has been enrolled in Mrs. Ananya Verma&apos;s 1-Week targeted quadratic equations remediation with daily rough paper review.
+                {studentName} scored $\le 70\%$ in foundational subjects and has been enrolled in homeroom faculty&apos;s 1-Week targeted quadratic equations remediation with daily rough paper review.
               </p>
             </div>
           </div>
@@ -404,24 +514,169 @@ export function ParentMarksView() {
 
       </div>
 
-      {/* Gemini AI Pedagogical Growth & Teacher Observations Banner */}
-      {isTerm1 && liveReportCard?.ai_teacher_narrative && (
-        <div className="rounded-3xl border border-violet-200 dark:border-violet-800/60 bg-gradient-to-br from-violet-50/90 via-white to-fuchsia-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-violet-950/30 p-5 shadow-xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 text-xs font-black">
-              <Sparkles className="h-4 w-4 text-violet-600" />
-              <span>Gemini AI Pedagogical Growth &amp; Teacher Observations (Term 1)</span>
+      {/* Medical Re-Examination & Exemption Status Tracker */}
+      {reExamRequests.length > 0 && (
+        <div className="rounded-3xl border-2 border-amber-200 dark:border-amber-900/60 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/20 p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold border border-amber-200 dark:border-amber-800">
+                <RefreshCw className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Medical Re-Examination &amp; Concession Tracker</span>
+                  <span className="text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    {reExamRequests.length} Active {reExamRequests.length === 1 ? 'Record' : 'Records'}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Track Principal clearance, Examination Cell slot allocation, and download your proctored re-test admit pass
+                </p>
+              </div>
             </div>
-            <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-950 px-2 py-0.5 rounded-full">
-              Automated AI Synthesis
-            </span>
+
+            <button
+              onClick={() => setShowReExamModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3.5 py-2 shadow-xs transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Apply Another Concession</span>
+            </button>
           </div>
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
-            &ldquo;{liveReportCard.ai_teacher_narrative}&rdquo;
-          </p>
-          <div className="text-[10px] text-slate-400 pt-1 flex items-center justify-between border-t border-violet-100 dark:border-violet-900/40">
-            <span>Synthesized from Exam Score Matrix, 1-Week Remedial Analytics &amp; SIS Attendance</span>
-            <span className="font-semibold text-slate-600 dark:text-slate-300">Class Teacher: Mrs. Ananya Verma</span>
+
+          <div className="grid grid-cols-1 gap-3">
+            {reExamRequests.map((req) => {
+              const isScheduled = req.status === 'Scheduled';
+              const isApproved = req.status === 'Approved by Admin';
+              const isPending = req.status === 'Pending Admin Review';
+              const isRejected = req.status === 'Rejected';
+
+              return (
+                <div
+                  key={req.id}
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-4.5 shadow-xs space-y-3.5"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black text-slate-900 dark:text-white">
+                        {req.subject}
+                      </span>
+                      <span className="rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold px-2 py-0.5">
+                        {req.exam_name}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        • Missed: {req.missed_date}
+                      </span>
+                    </div>
+
+                    <div>
+                      {isScheduled && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-3 py-1 text-[11px] font-black border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Retest Slot Confirmed &amp; Admit Pass Ready
+                        </span>
+                      )}
+                      {isApproved && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-3 py-1 text-[11px] font-black border border-blue-200 dark:border-blue-800">
+                          <Clock className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                          Approved by Principal • Scheduling Slot...
+                        </span>
+                      )}
+                      {isPending && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-3 py-1 text-[11px] font-black border border-amber-200 dark:border-amber-800">
+                          <Clock className="h-3.5 w-3.5 text-amber-500" />
+                          Under Medical Review by Principal
+                        </span>
+                      )}
+                      {isRejected && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1 text-[11px] font-black border border-rose-200 dark:border-rose-800">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          Request Not Approved
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4-Step Progress Indicator */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block">Step 1: Submitted</span>
+                      <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">Doctor Note Attached ✓</span>
+                    </div>
+
+                    <div className={`p-2 rounded-xl border ${
+                      isApproved || isScheduled
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60'
+                        : isRejected
+                        ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60'
+                        : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60'
+                    }`}>
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Step 2: Principal Review</span>
+                      <span className={`text-[11px] font-black ${
+                        isApproved || isScheduled ? 'text-emerald-700 dark:text-emerald-400' : isRejected ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'
+                      }`}>
+                        {isApproved || isScheduled ? 'Approved by Admin ✓' : isRejected ? 'Rejected' : 'In Review ⏳'}
+                      </span>
+                    </div>
+
+                    <div className={`p-2 rounded-xl border ${
+                      isScheduled
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400'
+                    }`}>
+                      <span className="text-[10px] font-bold block">Step 3: Slot Allocation</span>
+                      <span className={`text-[11px] font-black ${isScheduled ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                        {isScheduled ? 'Slot Assigned ✓' : 'Awaiting Controller'}
+                      </span>
+                    </div>
+
+                    <div className={`p-2 rounded-xl border ${
+                      isScheduled
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400'
+                    }`}>
+                      <span className="text-[10px] font-bold block">Step 4: Admit Pass</span>
+                      <span className={`text-[11px] font-black ${isScheduled ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                        {isScheduled ? 'Ready for Download 🎫' : 'Pending Slot'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Scheduled Slot Details & Admit Card Action */}
+                  {isScheduled ? (
+                    <div className="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-emerald-950 dark:text-emerald-200">
+                            🗓️ Date: {req.re_exam_date || '30 Oct 2026'} ({req.re_exam_time || '02:00 PM - 05:00 PM'})
+                          </span>
+                        </div>
+                        <div className="text-emerald-900/80 dark:text-emerald-300/80 text-[11px]">
+                          <strong>Virtual Room:</strong> {req.re_exam_venue || 'Virtual Room A (Camera AI Proctor)'} • <strong>Proctor:</strong> {req.coordinator_assigned || 'Mr. S. Raman'}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedRetestPass(req)}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                      >
+                        <Ticket className="h-4 w-4" />
+                        <span>View Digital Retest Pass 🎫</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <strong>Reason Citing:</strong> {req.reason_details} {req.document_name && `• Document: ${req.document_name}`}
+                      {req.admin_remarks && (
+                        <div className="text-emerald-700 dark:text-emerald-400 font-medium mt-1">
+                          <strong>Principal Remark:</strong> {req.admin_remarks}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -505,38 +760,61 @@ export function ParentMarksView() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {isTerm1 && liveReportCard ? (
-                Object.entries(liveReportCard.grades_grid || {}).map(([sub, detail]) => (
-                  <tr key={sub} className={detail.remedial_flag ? 'bg-amber-50/40 dark:bg-amber-950/20' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'}>
-                    <td className="py-4 px-5 font-black text-slate-900 dark:text-white">
-                      {sub}
-                      {detail.remedial_flag && (
-                        <span className="ml-2 text-[9px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-300">
-                          1-Week Remedial Focus Active
+                Object.entries(liveReportCard.grades_grid || {}).map(([sub, detail]) => {
+                  const subjectAiObservations: Record<string, string> = {
+                    'Mathematics': 'Gemini AI Diagnostic: Identified misconception in distributive sign multiplication during quadratic binomial expansion. Recommendation: Daily 15-min sign bracket drills before bedtime.',
+                    'Science & Physics': 'Gemini AI Diagnostic: Strong ray diagram conceptual grasp. Minor Cartesian sign convention lapses in mirror focal length substitution. Enrolled in 1-Week Optics remedial.',
+                    'English Literature': 'Gemini AI Diagnostic: Expressive vocabulary. Needs structured PEEL paragraph arguments (Point, Evidence, Explanation, Link) with direct Merchant of Venice citations.',
+                    'Social Science': 'Gemini AI Diagnostic: High factual recall of democratic principles. Strengthen chronological timeline sequencing of 1920 Non-Cooperation and 1930 Civil Disobedience.',
+                    'Second Language (Hindi)': 'Gemini AI Diagnostic: Good grammar comprehension. Practice Vyakaran sandhi rules and formal letter drafting.',
+                    'Computer Science': 'Gemini AI Diagnostic: Exemplary algorithmic thinking in Python loops. Ready to advance into nested 2D matrix traversal and dictionary comprehension.'
+                  };
+
+                  return (
+                    <tr key={sub} className={detail.remedial_flag ? 'bg-amber-50/40 dark:bg-amber-950/20' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'}>
+                      <td className="py-4 px-5 font-black text-slate-900 dark:text-white align-top">
+                        <div className="flex items-center gap-2">
+                          <span>{sub}</span>
+                          {detail.remedial_flag && (
+                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-300">
+                              1-Week Remedial Focus Active
+                            </span>
+                          )}
+                        </div>
+                        {/* Subject-Wise AI Pedagogical Observation directly below the subject */}
+                        <div className="mt-2 p-2 rounded-xl bg-violet-50/80 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 text-[11px] space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-violet-800 dark:text-violet-300 font-bold">
+                            <Sparkles className="h-3 w-3 text-violet-600" />
+                            <span>AI Pedagogical Observation:</span>
+                          </div>
+                          <p className="text-slate-600 dark:text-slate-300 italic font-normal">
+                            {subjectAiObservations[sub] || 'Automated AI synthesis indicates consistent progress across formative objectives.'}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-black text-slate-900 dark:text-white text-sm text-center align-top">
+                        {detail.score}
+                      </td>
+                      <td className="py-4 px-4 text-slate-500 dark:text-slate-400 font-medium text-center align-top">
+                        {detail.max}
+                      </td>
+                      <td className="py-4 px-4 text-center align-top">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${
+                          detail.grade.startsWith('A') 
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : detail.grade.startsWith('B')
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          {detail.grade}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 font-black text-slate-900 dark:text-white text-sm text-center">
-                      {detail.score}
-                    </td>
-                    <td className="py-4 px-4 text-slate-500 dark:text-slate-400 font-medium text-center">
-                      {detail.max}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black ${
-                        detail.grade.startsWith('A') 
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : detail.grade.startsWith('B')
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                      }`}>
-                        {detail.grade}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-slate-600 dark:text-slate-300 italic max-w-xs leading-relaxed">
-                      &quot;{detail.remarks}&quot;
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="py-4 px-5 text-slate-600 dark:text-slate-300 italic max-w-xs leading-relaxed align-top">
+                        &quot;{detail.remarks}&quot;
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 subjectMarksData.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
@@ -612,6 +890,97 @@ export function ParentMarksView() {
 
       </div>
 
+      {/* ========================================================= */}
+      {/* UPCOMING EXAMINATION SCHEDULE & SYLLABUS PORTION          */}
+      {/* ========================================================= */}
+      <div className="rounded-3xl border border-blue-200 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/40 via-white to-indigo-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 dark:border-blue-900/40 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                CBSE Academic Schedule
+              </span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Class 8-B Term 2 Horizon</span>
+            </div>
+            <h3 className="text-base font-black text-slate-900 dark:text-white mt-1">
+              Upcoming Examination Schedule &amp; Preparation Portions
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Official CBSE timetable, syllabus chapters covered, hall ticket clearance, and re-exam request permissions
+            </p>
+          </div>
+          <button
+            onClick={handleOpenAdmitCard}
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer self-start sm:self-auto"
+          >
+            <Award className="h-4 w-4" />
+            <span>Download Upcoming Admit Card</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Exam 1 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                Starts 18 Nov 2026
+              </span>
+              <span className="text-[11px] font-bold text-amber-600">30 Days Left</span>
+            </div>
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+              Term 2 CBSE Pre-Board Examination
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Full CBSE 80-Mark descriptive paper across all 6 core curriculum subjects.
+            </p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+              <div><strong>Portion: </strong>NCERT Chapters 1 to 14 (Full Board Syllabus)</div>
+              <div><strong>Admit Card: </strong>Clearance Issued &bull; Hall Ticket #OIS-8814</div>
+            </div>
+          </div>
+
+          {/* Exam 2 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                Starts 02 Dec 2026
+              </span>
+              <span className="text-[11px] font-bold text-slate-400">Upcoming</span>
+            </div>
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+              Unit Test 3 Formative Assessment
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              25-Mark periodic test targeting post-midterm chapters and practical applications.
+            </p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+              <div><strong>Portion: </strong>Math Ch 11-12, Science Ch 13-14, English Units 5-6</div>
+              <div><strong>Timetable: </strong>Published by Examination Controller</div>
+            </div>
+          </div>
+
+          {/* Exam 3 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Starts 15 Jan 2027
+              </span>
+              <span className="text-[11px] font-bold text-slate-400">Annual</span>
+            </div>
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+              Annual Science Practical &amp; Python Lab Viva
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Hands-on lab experiment evaluation and coding viva conducted by external CBSE evaluators.
+            </p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+              <div><strong>Portion: </strong>Optics Bench Experiments &amp; Python 2D Matrix Labs</div>
+              <div><strong>Lab Manual: </strong>Submission due by 10 Jan 2027</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Email Report Card Modal */}
       {emailModalOpen && (
         <div 
@@ -668,7 +1037,7 @@ export function ParentMarksView() {
                     <span>Attached Document:</span>
                   </span>
                   <p className="text-[11px] text-blue-800 dark:text-blue-300">
-                    Aarav_Sharma_Class8B_UnitTest2_ReportCard.pdf (Signed by Principal with SHA-256 Checksum)
+                    {studentName.replace(/\s+/g, '_')}_{className.replace(/\s+/g, '_')}_ReportCard.pdf (Signed by Principal with SHA-256 Checksum)
                   </p>
                 </div>
 
@@ -711,7 +1080,7 @@ export function ParentMarksView() {
                     CBSE Board &amp; Term Examination Admit Card
                   </h3>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    Candidate: Aarav Sharma · Document Ref: EDU-ADM-{admitCardData?.roll_number || '14'}-2026
+                    Candidate: {studentName} · Document Ref: EDU-ADM-{admitCardData?.roll_number || '14'}-2026
                   </span>
                 </div>
               </div>
@@ -920,7 +1289,7 @@ export function ParentMarksView() {
               <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Candidate</span>
                 <span className="text-xs font-black text-slate-900 dark:text-white">
-                  Aarav Sharma &bull; Class 8-B (Roll #14)
+                  {studentName} &bull; {className}
                 </span>
               </div>
 
@@ -1007,21 +1376,78 @@ export function ParentMarksView() {
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Upload Medical Certificate / Supporting Document (PDF / Scan) *
                 </label>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
-                  <FileText className="h-5 w-5 text-amber-500 shrink-0" />
-                  <input
-                    type="text"
-                    value={reExamDocName}
-                    onChange={(e) => setReExamDocName(e.target.value)}
-                    placeholder="Filename or prescription ref..."
-                    className="flex-1 text-xs bg-transparent border-0 text-slate-900 dark:text-white focus:outline-none"
-                    required
-                  />
-                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-md">
-                    Attached
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
+                <input
+                  type="file"
+                  id="reexam-doctor-file-input"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setReExamFile(file);
+                      setReExamDocName(file.name);
+                      const kb = Math.round(file.size / 1024);
+                      setReExamFileSize(kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`);
+                    }
+                  }}
+                />
+
+                {reExamDocName ? (
+                  <div className="flex items-center justify-between p-3 rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-9 w-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div className="truncate">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {reExamDocName}
+                        </p>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          {reExamFileSize} • Attached &amp; ready for Principal verification
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label
+                        htmlFor="reexam-doctor-file-input"
+                        className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer transition-all hover:shadow-xs"
+                      >
+                        Change File
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReExamFile(null);
+                          setReExamDocName('');
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer transition-colors"
+                        title="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="reexam-doctor-file-input"
+                    className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100/70 dark:bg-slate-800/40 dark:hover:bg-slate-800/70 cursor-pointer transition-all text-center group"
+                  >
+                    <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Click to upload Doctor's Note / Medical Certificate
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        PDF, JPG, PNG or WEBP up to 10MB
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-500 shrink-0" />
                   Doctor's seal and registration number must be clearly visible on the certificate.
                 </p>
               </div>
@@ -1063,11 +1489,107 @@ export function ParentMarksView() {
         onClose={() => setEvalModalOpen(false)}
         subject={selectedEvalSubject}
         examTitle={isTerm1 ? 'Term 1 Periodic Assessment (Mid-Term)' : 'Unit Test 2 Assessment'}
-        studentName="Aarav Sharma"
+        studentName={studentName}
         totalScore={22.5}
         maxTotal={25}
         grade="A1"
       />
+
+      {/* Re-Exam Admit Pass Modal */}
+      {selectedRetestPass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4">
+            
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Ticket className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Official Supplementary Retest Admit Docket
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Sanctioned under Medical Exemption Clause • Ref: EDU-2026-RET-{selectedRetestPass.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedRetestPass(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Candidate & Exam Metadata Docket */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Candidate Name</span>
+                  <strong className="text-slate-900 dark:text-white">{selectedRetestPass.student_name}</strong>
+                  <span className="text-[10px] text-slate-400 block font-mono">Roll #14 • Class 8-B</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Examination Subject</span>
+                  <strong className="text-purple-600 dark:text-purple-400">{selectedRetestPass.subject}</strong>
+                  <span className="text-[10px] text-slate-400 block">{selectedRetestPass.exam_name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Retest Date &amp; Time</span>
+                  <strong className="text-slate-900 dark:text-white">{selectedRetestPass.re_exam_date || '30 Oct 2026'}</strong>
+                  <span className="text-[10px] text-emerald-600 font-bold block">{selectedRetestPass.re_exam_time || '02:00 PM - 05:00 PM IST'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Online Proctored Venue</span>
+                  <strong className="text-slate-900 dark:text-white">{selectedRetestPass.re_exam_venue || 'Virtual Room A'}</strong>
+                  <span className="text-[10px] text-slate-400 block">Invigilator: {selectedRetestPass.coordinator_assigned || 'Mr. S. Raman'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Proctoring Guidelines */}
+            <div className="rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-3 text-xs space-y-1.5">
+              <span className="font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5 text-[11px]">
+                <ShieldCheck className="h-4 w-4 text-purple-600" />
+                Online Schooling AI Proctor Protocols:
+              </span>
+              <ul className="text-[10px] text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+                <li>Primary web-camera must have an unblocked view of the candidate&apos;s face and desk.</li>
+                <li>Live AI tracking detects eye-gaze shifts, multiple faces, and secondary device screens.</li>
+                <li>System mic will remain unmuted for ambient anomaly monitoring throughout the 180 mins.</li>
+              </ul>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  downloadMarksMemoFile(selectedRetestPass.student_name, `Retest Admit Card - ${selectedRetestPass.subject}`);
+                  setDownloadToast(`Retest Admit Pass for ${selectedRetestPass.subject} downloaded successfully.`);
+                  setTimeout(() => setDownloadToast(null), 3000);
+                }}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Download Pass PDF</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setDownloadToast(`Connecting to ${selectedRetestPass.re_exam_venue}... Camera & AI Proctor test passed!`);
+                  setTimeout(() => setDownloadToast(null), 4000);
+                }}
+                className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <Video className="h-3.5 w-3.5" />
+                <span>Join Proctored Session</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

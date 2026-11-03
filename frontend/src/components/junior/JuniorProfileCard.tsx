@@ -61,7 +61,7 @@ export function JuniorProfileCard({ user, profile }: JuniorProfileCardProps) {
       date: 'Permanent Vault Record',
       seal: 'CBSE Registrar Verified',
       icon: '📜',
-      description: 'Certified institutional student record for Aarav Kumar (Admission #EDU-2025-032).'
+      description: 'Certified institutional student record for Ananya Sharma (Admission #EDU-2025-032).'
     }
   ];
 

@@ -1207,7 +1207,7 @@ export function JuniorHomeworkHub({
                 }`}
               >
                 <Camera className="w-3.5 h-3.5" />
-                <span>📸 Snap Photo</span>
+                <span>Snap Photo</span>
               </button>
 
               <button
@@ -1223,7 +1223,7 @@ export function JuniorHomeworkHub({
                 }`}
               >
                 <Palette className="w-3.5 h-3.5" />
-                <span>🎨 Magic Canvas</span>
+                <span>Magic Canvas</span>
               </button>
 
               <button

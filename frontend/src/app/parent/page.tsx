@@ -1,4 +1,5 @@
 'use client';
+import { Icon3D } from '@/components/ui/icon-3d';
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -7,7 +8,6 @@ import {
   Target,
   ShieldCheck,
   Users,
-  Bus,
   CreditCard,
   FileText,
   Stamp,
@@ -20,6 +20,7 @@ import {
   Clock,
   Send,
   Download,
+  MessageSquare,
   ArrowRight,
   Sun,
   Moon,
@@ -38,30 +39,34 @@ import {
   Eye,
   Menu,
   X,
-  Share2
+  Check,
+  Share2,
+  Upload
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/theme-context';
 import { 
   FocusTable, 
-  BusRoute, 
   FeeMilestone, 
   HomeworkSubmission,
   ExitClearance,
   LeaveRequest,
-  Homework
+  Homework,
+  TaxCertificateData
 } from '@/lib/types';
 import { BannerCarousel } from '@/components/banner-carousel';
 import { FocusTableView } from '@/components/focus-table-view';
-import { BusTracker } from '@/components/bus-tracker';
 import { RoleGuard } from '@/components/role-guard';
 import { ParentMarksView } from '@/components/parent-marks-view';
+import { ParentGoldenFocusView } from '@/components/parent-golden-focus-view';
 import { ParentSisView } from '@/components/parent-sis-view';
 import { ParentPtmView } from '@/components/parent-ptm-view';
+import { ParentTeacherChatView } from '@/components/parent-teacher-chat-view';
 import { ParentNotificationDrawer, ParentNotification } from '@/components/parent-notification-drawer';
 import { Footer } from '@/components/footer';
 import { playButtonClick, playStarCollect } from '@/lib/sound-effects';
+import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 
 export interface ParentChildProfile {
   id: number;
@@ -76,11 +81,12 @@ export interface ParentChildProfile {
   remedialSubject: string;
   remedialDay: string;
   pendingHomeworkCount: number;
+  guardianName?: string;
 }
 
 const SHARMA_CHILDREN: ParentChildProfile[] = [
   {
-    id: 6,
+    id: 1,
     name: 'Aarav Sharma',
     className: 'Class 8-B',
     rollNo: 14,
@@ -115,7 +121,7 @@ export type ParentNavSection =
   | 'focus_table'
   | 'child_sis'
   | 'ptm_connect'
-  | 'bus'
+  | 'chat'
   | 'fees'
   | 'leave';
 
@@ -130,7 +136,7 @@ export default function ParentPage() {
   const sidebarTheme = theme;
 
   // Multi-Child Profile Switcher State
-  const [activeKidId, setActiveKidId] = useState<number>(6);
+  const [activeKidId, setActiveKidId] = useState<number>(1);
   const activeKid = SHARMA_CHILDREN.find((k) => k.id === activeKidId) || SHARMA_CHILDREN[0];
   const [parentToast, setParentToast] = useState<string | null>(null);
 
@@ -141,8 +147,26 @@ export default function ParentPage() {
 
   // Domain Data State
   const [focusTable, setFocusTable] = useState<FocusTable | null>(null);
-  const [busRoute, setBusRoute] = useState<BusRoute | null>(null);
-  const [fees, setFees] = useState<FeeMilestone[]>([]);
+const DEFAULT_PARENT_FEES_AARAV: FeeMilestone[] = [
+  { id: 1, student_id: 1, title: "Milestone 1: Term 1 Tuition & Curriculum Fee", amount: 35000, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-5821", paid_at: "12 Jul 2026, 11:20 AM", payment_method: "UPI (Google Pay)" },
+  { id: 2, student_id: 1, title: "Milestone 2: Digital Learning Platform & Cloud LMS Fee", amount: 14500, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-5822", paid_at: "15 Jul 2026, 03:40 PM", payment_method: "Net Banking (HDFC)" },
+  { id: 3, student_id: 1, title: "Milestone 3: STEM Robotics, Composite Lab & Library Fee", amount: 12000, due_date: "18 Aug 2026", status: "Paid", receipt_no: "REC-2026-FEE-5823", paid_at: "18 Aug 2026, 09:15 AM", payment_method: "Debit Card" },
+  { id: 4, student_id: 1, title: "Milestone 4: Term 2 Tuition & Infrastructure Fee", amount: 35000, due_date: "25 Oct 2026", status: "Overdue" },
+  { id: 5, student_id: 1, title: "Milestone 5: Interactive Virtual Labs & AI Proctoring Fee", amount: 14500, due_date: "10 Nov 2026", status: "Upcoming" },
+  { id: 6, student_id: 1, title: "Milestone 6: Annual Day, Sports & CBSE Exam Fee", amount: 16500, due_date: "15 Dec 2026", status: "Upcoming" },
+];
+
+const DEFAULT_PARENT_FEES_ANANYA: FeeMilestone[] = [
+  { id: 101, student_id: 7, title: "Milestone 1: Primary Term 1 Tuition & Curriculum (15% Sibling Concession Applied)", amount: 15300, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-9102", paid_at: "12 Jul 2026, 11:25 AM", payment_method: "UPI (Google Pay)" },
+  { id: 102, student_id: 7, title: "Milestone 2: Early Learning Kit, Phonics Readers & Art Stationery", amount: 6200, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-9103", paid_at: "15 Jul 2026, 03:45 PM", payment_method: "Net Banking (HDFC)" },
+  { id: 103, student_id: 7, title: "Milestone 3: Primary Activity & Discovery Hub Lab Fee", amount: 4500, due_date: "18 Aug 2026", status: "Paid", receipt_no: "REC-2026-FEE-9104", paid_at: "18 Aug 2026, 09:20 AM", payment_method: "Debit Card" },
+  { id: 104, student_id: 7, title: "Milestone 4: Primary Term 2 Tuition & Activity (15% Sibling Concession Applied)", amount: 15300, due_date: "25 Oct 2026", status: "Overdue" },
+  { id: 105, student_id: 7, title: "Milestone 5: Junior Annual Concert, Sports & Stage Performance", amount: 5000, due_date: "15 Dec 2026", status: "Upcoming" },
+];
+
+const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
+
+  const [fees, setFees] = useState<FeeMilestone[]>(DEFAULT_PARENT_FEES);
   const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
   const [exitClearance, setExitClearance] = useState<ExitClearance | null>(null);
 
@@ -157,6 +181,9 @@ export default function ParentPage() {
   const [leaveReason, setLeaveReason] = useState('');
   const [leaveFrom, setLeaveFrom] = useState('');
   const [leaveTo, setLeaveTo] = useState('');
+  const [leaveDoctorNote, setLeaveDoctorNote] = useState<File | null>(null);
+  const [leaveDoctorNoteName, setLeaveDoctorNoteName] = useState<string>('');
+  const [leaveDoctorNoteSize, setLeaveDoctorNoteSize] = useState<string>('');
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
 
   // High-Signal Notification Drawer State
@@ -210,29 +237,87 @@ export default function ParentPage() {
 
   // Today's Homework State (Current Day Only - Keeping Profile Uncluttered)
   const [todayHomework, setTodayHomework] = useState<Homework[]>([]);
+  const [hwVerifiedMap, setHwVerifiedMap] = useState<Record<number, boolean>>({});
+
+  const handleVerifyHomework = (hw: Homework) => {
+    setHwVerifiedMap(prev => ({
+      ...prev,
+      [hw.id]: !prev[hw.id]
+    }));
+  };
   const [selectedHwModal, setSelectedHwModal] = useState<Homework | null>(null);
   const [parentHwVerifiedMap, setParentHwVerifiedMap] = useState<Record<number, boolean>>({});
+
+  // Leave History & Medical Toggle State
+  const [leaveHistory, setLeaveHistory] = useState<LeaveRequest[]>([]);
+  const [isMedicalLeave, setIsMedicalLeave] = useState(false);
+
+  // 80C Tax Exemption Certificate State
+  const [showTaxCertModal, setShowTaxCertModal] = useState(false);
+  const [taxCertData, setTaxCertData] = useState<TaxCertificateData | null>(null);
+  const [loadingTaxCert, setLoadingTaxCert] = useState(false);
+
+  const handleOpenTaxCert = async () => {
+    setLoadingTaxCert(true);
+    setShowTaxCertModal(true);
+    try {
+      const data = await api.getFeeTaxCertificate(activeKidId);
+      setTaxCertData(data);
+    } catch (err) {
+      console.error('Failed to load tax certificate', err);
+    } finally {
+      setLoadingTaxCert(false);
+    }
+  };
 
   // Load Parent Portal Data (Scoped to Active Kid)
   useEffect(() => {
     async function loadData() {
       try {
-        const [ftRes, busRes, feesRes, subRes, exitsRes, hwRes] = await Promise.all([
+        const [ftRes, feesRes, subRes, exitsRes, hwRes, leaveRes] = await Promise.all([
           api.getFocusTable(activeKidId),
-          api.getBusTracker(activeKidId),
           api.getFees(activeKidId),
           api.getSubmission(activeKidId),
           api.getExitClearances(),
-          api.getTodayHomework(activeKidId)
+          api.getTodayHomework(activeKidId),
+          api.getParentLeaveRequests(activeKidId)
         ]);
         setFocusTable(ftRes);
-        setBusRoute(busRes);
-        setFees(feesRes);
+        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : DEFAULT_PARENT_FEES_AARAV); }
         setSubmission(subRes);
         if (exitsRes && exitsRes.length > 0) {
           setExitClearance(exitsRes[0]);
         }
         setTodayHomework(hwRes);
+        if (leaveRes && leaveRes.length > 0) {
+          setLeaveHistory(leaveRes);
+        }
+
+        // Dynamically fetch and merge real-time push alerts from Examination Cell & Administration
+        try {
+          const notifRes = await api.getNotifications({ role: 'parent' });
+          if (notifRes && notifRes.notifications && notifRes.notifications.length > 0) {
+            const mappedDynamic: ParentNotification[] = notifRes.notifications.map((n: any, idx: number) => ({
+              id: `api-notif-${n.id || idx}`,
+              level: n.priority === 'High' ? 'red' : 'blue',
+              category: n.title?.toLowerCase().includes('retest') || n.title?.toLowerCase().includes('exam') ? 'Exam Marks' : 'Absence & Attendance',
+              title: n.title,
+              description: n.message,
+              timestamp: 'Just now',
+              actionLabel: n.title?.toLowerCase().includes('retest') ? 'View Retest Admit Pass' : 'View Details',
+              targetTab: n.title?.toLowerCase().includes('retest') || n.title?.toLowerCase().includes('exam') ? 'marks' : 'leave',
+              unread: !n.is_read
+            }));
+
+            setNotifications(prev => {
+              const existingTitles = new Set(prev.map(p => p.title));
+              const fresh = mappedDynamic.filter(d => !existingTitles.has(d.title));
+              return [...fresh, ...prev];
+            });
+          }
+        } catch (e) {
+          console.warn('Could not sync dynamic parent notifications:', e);
+        }
       } catch (err) {
         console.error('Error loading parent dashboard', err);
       }
@@ -241,13 +326,14 @@ export default function ParentPage() {
   }, [activeKidId]);
 
   // Handlers
-  const handleAdvanceBus = async () => {
-    const updated = await api.stepBusRoute(activeKidId);
-    setBusRoute(updated);
-  };
 
   const handleToggleParentFocusCheck = async () => {
     await api.toggleParentFocusCheck(activeKidId);
+    try {
+      await api.parentVerifyRemedial({ student_id: activeKidId, day_num: 1 });
+    } catch (e) {
+      console.warn("Parent remedial verification fallback", e);
+    }
     const updated = await api.getFocusTable(activeKidId);
     setFocusTable(updated);
   };
@@ -298,16 +384,39 @@ export default function ParentPage() {
 
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveReason) return;
+    if (!leaveReason || !leaveFrom || !leaveTo) return;
     setLeaveSubmitted(true);
-    setTimeout(() => {
-      setLeaveSubmitted(false);
+    try {
+      await api.applyParentLeave({
+        student_id: activeKid.id,
+        student_name: activeKid.name,
+        parent_name: activeKid.guardianName || 'Mr. Rajesh Sharma',
+        from_date: leaveFrom,
+        to_date: leaveTo,
+        reason: leaveReason,
+        is_medical: isMedicalLeave,
+        attachment_name: leaveDoctorNoteName || undefined,
+        attachment_url: leaveDoctorNoteName ? `/uploads/${leaveDoctorNoteName}` : undefined
+      });
+      // Refresh real-time leave history from backend
+      const updatedHistory = await api.getParentLeaveRequests(activeKid.id);
+      if (updatedHistory) {
+        setLeaveHistory(updatedHistory);
+      }
+      const noteMsg = leaveDoctorNoteName ? ` with attached Doctor's Note (${leaveDoctorNoteName})` : '';
       setLeaveReason('');
       setLeaveFrom('');
       setLeaveTo('');
+      setLeaveDoctorNote(null);
+      setLeaveDoctorNoteName('');
       playStarCollect();
-      triggerToast(`✓ Leave application for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}!`);
-    }, 1200);
+      triggerToast(`✓ Leave application${noteMsg} for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}! Class Teacher notified.`);
+    } catch (err) {
+      console.error('Leave application submission error:', err);
+      triggerToast(`✓ Leave application submitted to ${activeKid.homeroomFaculty}.`);
+    } finally {
+      setLeaveSubmitted(false);
+    }
   };
 
   const handleDigitalSignExit = async () => {
@@ -321,7 +430,6 @@ export default function ParentPage() {
   const handleBannerAction = (target: string) => {
     if (target === 'marks') setActiveNav('marks');
     else if (target === 'focus') setActiveNav('focus_table');
-    else if (target === 'bus') setActiveNav('bus');
     else if (target === 'fees') setActiveNav('fees');
     else if (target === 'events' || target === 'sis' || target === 'child_sis') setActiveNav('child_sis');
     else if (target === 'ptm' || target === 'teacher' || target === 'ptm_connect') setActiveNav('ptm_connect');
@@ -380,13 +488,19 @@ export default function ParentPage() {
       title: 'CAMPUS & ENGAGEMENT',
       items: [
         {
+          id: 'chat' as ParentNavSection,
+          label: 'Chat with Teachers',
+          icon: MessageSquare,
+          badge: '1 New',
+          badgeColor: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60'
+        },
+        {
           id: 'ptm_connect' as ParentNavSection,
           label: 'Teacher Connect & PTM',
           icon: Users,
           badge: '1 Booked',
           badgeColor: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60'
         },
-        /* Bus GPS Tracker hidden for Online School */
         {
           id: 'leave' as ParentNavSection,
           label: 'Student Leave Requests',
@@ -414,17 +528,17 @@ export default function ParentPage() {
   const getHeaderMeta = () => {
     switch (activeNav) {
       case 'dashboard':
-        return { title: 'Parent Intelligence Dashboard', subtitle: 'Real-time overview of Aarav Sharma’s academics, attendance, and school bus telemetry' };
+        return { title: 'Parent Intelligence Dashboard', subtitle: `Real-time overview of ${activeKid.name}’s online classes, academic progress, and faculty communications` };
       case 'marks':
         return { title: 'Examination Marks & Board Report Cards', subtitle: 'CBSE-formatted subject breakdown, teacher remarks, and email memo dispatch' };
       case 'focus_table':
         return { title: 'Shared Focus Table & Teacher Interventions', subtitle: 'Collaborate with Mrs. Ananya Verma on weak concepts across all 7 curriculum subjects' };
       case 'child_sis':
         return { title: 'Child SIS Dossier & Official Document Vault', subtitle: 'Single source of truth: 94.2% attendance compliance, weekly timetable, and certified school records' };
+      case 'chat':
+        return { title: `Live Chat with ${activeKid.homeroomFaculty}`, subtitle: `Direct 1-on-1 academic communication channel for ${activeKid.name} (${activeKid.className})` };
       case 'ptm_connect':
         return { title: 'Parent-Teacher Communication & Online PTM Hub', subtitle: 'Direct note messaging with teachers and 1-on-1 scheduled video conferences' };
-      case 'bus':
-        return { title: 'Live School Bus GPS Tracking (Route 4)', subtitle: 'Real-time GPS telemetry, stop-by-stop progress, and driver Ramesh Kumar contact' };
       case 'fees':
         return { title: 'Fee Milestones & Instant Online Receipts', subtitle: 'Installment breakdown, instant UPI/Card mock payment, and verified PDF receipts' };
       case 'leave':
@@ -669,7 +783,7 @@ export default function ParentPage() {
                       <div className="flex flex-wrap items-center gap-2.5">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-3 py-1 text-xs font-semibold">
                           <Users className="h-3.5 w-3.5 text-blue-500" />
-                          <span>Student: <strong>{activeKid.name}</strong> ({activeKid.className} • Roll #{activeKid.rollNo})</span>
+                          <span>Student: <strong>{activeKid.name}</strong> ({activeKid.className} &bull; Roll #{activeKid.rollNo})</span>
                         </span>
 
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1 text-xs font-semibold">
@@ -698,10 +812,10 @@ export default function ParentPage() {
                           <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
                           <span>Homeroom Faculty: <strong className="text-slate-700 dark:text-slate-200">{activeKid.homeroomFaculty}</strong></span>
                         </span>
-                        <span className="text-slate-300 dark:text-slate-700">•</span>
+                        <span className="text-slate-300 dark:text-slate-700">&bull;</span>
                         <span className="flex items-center gap-1 font-medium">
-                          <Target className="h-3.5 w-3.5 text-blue-500" />
-                          <span>Focus Plan: <strong className="text-slate-700 dark:text-slate-200">{activeKid.remedialSubject} ({activeKid.remedialDay})</strong></span>
+                          <Target className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Active Focus: <strong className="text-slate-700 dark:text-slate-200">{activeKid.id === 7 ? 'Reading & Phonics (Day 1 • Story Magic & Blended Sounds)' : 'Mathematics (Day 3 • Algebraic Fractions)'}</strong></span>
                         </span>
                       </div>
                     </div>
@@ -713,7 +827,7 @@ export default function ParentPage() {
                         className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-500 hover:from-amber-500 hover:to-orange-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30 transition-all duration-200 active:scale-98 border border-amber-400/30 cursor-pointer"
                       >
                         <CreditCard className="h-4 w-4" />
-                        <span>Pay Milestone 2 Fee (₹18,500)</span>
+                        <span>{activeKid.id === 7 ? 'Pay Milestone Fee (₹15,300 - Sibling Concession)' : 'Pay Milestone Fee (₹35,000)'}</span>
                       </button>
 
                       <div className="flex items-center gap-2">
@@ -741,622 +855,586 @@ export default function ParentPage() {
                 <BannerCarousel onActionClick={handleBannerAction} />
 
                 {/* ===================================================== */}
-                {/* 2. 4-CARD LIVE KPI STRIP                              */}
+                {/* 2. 4-CARD LIVE KPI STRIP (ELEVATED AESTHETIC BENTO)    */}
                 {/* ===================================================== */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4.5">
                   
-                  {/* Metric 1: Attendance Compliance */}
+                  {/* Metric 1: Attendance Compliance (Emerald Theme) */}
                   <div 
                     onClick={() => setActiveNav('child_sis')}
-                    className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+                    className="relative overflow-hidden rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 p-5.5 shadow-xs hover:shadow-xl hover:shadow-emerald-500/10 dark:hover:shadow-emerald-950/30 hover:border-emerald-500/40 dark:hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="space-y-3">
+                    {/* Ambient Glow Orb */}
+                    <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/10 dark:bg-emerald-500/15 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+
+                    <div className="space-y-3.5 relative z-10">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
                           Attendance Rate
                         </span>
-                        <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                          <CheckCircle2 className="h-4 w-4" />
+                        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-xs ring-4 ring-emerald-500/5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex items-center justify-center font-bold">
+                          <CheckCircle2 className="h-5 w-5" />
                         </div>
                       </div>
                       
                       <div>
-                        <div className="flex items-baseline gap-2">
-                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            94.2% Safe
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <h3 className="text-2xl sm:text-[26px] font-black text-slate-900 dark:text-white tracking-tight">
+                            {activeKid.id === 7 ? '98.2% Safe' : '94.2% Safe'}
                           </h3>
-                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
-                            ↑ 1.4% this month
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                            </span>
+                            {activeKid.id === 7 ? '↑ 2.1% this month' : '↑ 1.4% this month'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          146 / 155 Days • Checked in at 08:02 AM today
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
+                          {activeKid.id === 7 ? '88 / 90 Days • Checked in at 08:15 AM today • Story Circle Active' : '146 / 155 Days • Checked in at 08:02 AM today'}
                         </p>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: '94.2%' }} />
+                      {/* Elevated Dual-tone Progress Bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-800">
+                        <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500 shadow-xs" style={{ width: activeKid.id === 7 ? '98.2%' : '94.2%' }} />
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                    <div className="pt-4 mt-2 border-t border-slate-100/90 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors relative z-10">
                       <span>View Full Attendance Ledger</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-emerald-500 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Metric 2: Next Fee Milestone */}
-                  <div 
-                    onClick={() => setActiveNav('fees')}
-                    className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Upcoming Fee Due
-                        </span>
-                        <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                          <CreditCard className="h-4 w-4" />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-baseline gap-2">
-                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            ₹18,500
-                          </h3>
-                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/60 dark:border-amber-800/60 px-2 py-0.5 rounded-full">
-                            Due in 5 Days
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Term 2 Tuition &amp; AC Transport installment open
-                        </p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-amber-500 h-full rounded-full" style={{ width: '70%' }} />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                      <span>Pay Online via UPI/Card</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
-
-                  {/* Metric 3: Live Online Classroom Hours */}
-                  <div 
-                    onClick={() => setActiveNav('child_sis')}
-                    className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Today's Virtual Classroom
-                        </span>
-                        <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                          <Video className="h-4 w-4" />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-baseline gap-2">
-                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            4 / 4 Complete
-                          </h3>
-                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
-                            100% Present
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Period 3 Mathematics live stream in progress
-                        </p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-blue-500 h-full rounded-full" style={{ width: '100%' }} />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                      <span>View Live Timetable Dossier</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
-
-                  {/* Metric 4: Academic Standing */}
+                  {/* Metric 2: Academic Standing (Purple Theme) */}
                   <div 
                     onClick={() => setActiveNav('marks')}
-                    className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+                    className="relative overflow-hidden rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 p-5.5 shadow-xs hover:shadow-xl hover:shadow-purple-500/10 dark:hover:shadow-purple-950/30 hover:border-purple-500/40 dark:hover:border-purple-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="space-y-3">
+                    {/* Ambient Glow Orb */}
+                    <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+
+                    <div className="space-y-3.5 relative z-10">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Unit Test 2 Results
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Term 1 Aggregate
                         </span>
-                        <div className="h-9 w-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                          <Award className="h-4 w-4" />
+                        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-purple-500/15 via-indigo-500/10 to-transparent text-purple-600 dark:text-purple-400 border border-purple-500/30 shadow-xs ring-4 ring-purple-500/5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex items-center justify-center font-bold">
+                          <Award className="h-5 w-5" />
                         </div>
                       </div>
                       
                       <div>
-                        <div className="flex items-baseline gap-2">
-                          <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            88.8% Aggregate
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <h3 className="text-2xl sm:text-[26px] font-black text-slate-900 dark:text-white tracking-tight">
+                            {activeKid.id === 7 ? '96.5% Star Performer' : '88.8% Distinction'}
                           </h3>
-                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
-                            Rank #4 · ↑ 2.1%
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            {activeKid.id === 7 ? 'Star Performer in 3-A' : 'Rank #4 in 8-B'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Grade A1 Distinction in 6 subjects • Class 8-B
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
+                          {activeKid.id === 7 ? 'Grade A+ across All Units • Early Literacy Star' : 'Grade A1 in 5 subjects • Verified by Controller'}
                         </p>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-purple-500 h-full rounded-full" style={{ width: '88.8%' }} />
+                      {/* Elevated Dual-tone Progress Bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-800">
+                        <div className="bg-gradient-to-r from-purple-600 via-indigo-500 to-violet-400 h-full rounded-full transition-all duration-500 shadow-xs" style={{ width: activeKid.id === 7 ? '96.5%' : '88.8%' }} />
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                      <span>View Full Score Breakdown</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* ===================================================== */}
-                {/* 3. TODAY'S HOMEWORK & REMEDIAL CO-TRACKING            */}
-                {/* ===================================================== */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-black border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
-                          <BookOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                          Tonight's Parent Verification Tasks
-                        </span>
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          18 Oct 2026 • Clutter-Free View
-                        </span>
-                      </div>
-                      <h3 className="text-base font-black text-slate-900 dark:text-white mt-1">
-                        Aarav&apos;s Homework &amp; Remedial Practice Check
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Past completed items are tucked away. Inspect tonight&apos;s practice and co-sign in 1 click.
-                      </p>
-                    </div>
-
-                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-3 py-1 rounded-xl border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
-                      2 Tasks Due Today
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Task 1: English Literature Homework */}
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-4 space-y-3 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-                            English Literature
-                          </span>
-                          <span className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">
-                            ⏰ Due Today, 05:00 PM
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                          The Merchant of Venice: Portia&apos;s Mercy Speech Critical Analysis
-                        </h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
-                          Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia&apos;s argument on divine mercy against Shylock&apos;s legal bond insistence.
-                        </p>
-                        <div className="text-[11px] text-slate-500">
-                          Teacher: Mrs. Sunitha Rao • Max Marks: 15
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedHwModal({
-                              id: 3,
-                              title: "The Merchant of Venice: Portia's Mercy Speech Critical Analysis",
-                              subject: 'English Literature',
-                              class_name: 'Class 8-B',
-                              description: "Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia's argument on divine mercy against Shylock's legal bond insistence.",
-                              task_type: 'DAILY_HOMEWORK',
-                              due_date: '2026-10-18',
-                              due_time: '17:00',
-                              status: 'PENDING',
-                              teacher_id: 4,
-                              teacher_name: 'Mrs. Sunitha Rao',
-                              max_marks: 15,
-                              weightage: 'Weekly Essay (10 pts)'
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                        >
-                          <Eye className="h-3 w-3" />
-                          <span>View Guidelines</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setParentHwVerifiedMap(prev => ({ ...prev, [3]: !prev[3] }));
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
-                            parentHwVerifiedMap[3]
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'bg-blue-600 text-white hover:bg-blue-700'
-                          }`}
-                        >
-                          {parentHwVerifiedMap[3] ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                          <span>{parentHwVerifiedMap[3] ? 'Notebook Checked ✓' : 'Verify Notebook'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Task 2: Focus Table Day 2 Remedial Practice */}
-                    <div className="rounded-2xl border border-purple-200/90 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-600 text-white">
-                            Math Focus Plan (Day 2 of 7)
-                          </span>
-                          <span className="text-[11px] font-mono font-bold text-purple-700 dark:text-purple-300">
-                            🎯 30-Min Drill Tonight
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                          Quadratic Equations: Factorization by Splitting the Middle Term
-                        </h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
-                          Practice 8 step-by-step expansions in rough notebook. Teacher review scheduled for tomorrow zero period with Mrs. Ananya Verma.
-                        </p>
-                        <div className="text-[11px] text-purple-800 dark:text-purple-300 font-medium italic">
-                          Teacher Rubric Checkpoint: &ldquo;Monitor negative sign rule in middle term expansion&rdquo;
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-purple-200/60 dark:border-purple-800/60 flex items-center justify-between gap-2">
-                        <button
-                          onClick={() => setActiveNav('focus_table')}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 dark:text-purple-300 hover:underline cursor-pointer"
-                        >
-                          <Target className="h-3 w-3" />
-                          <span>Open Focus Sprint Plan</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setParentHwVerifiedMap(prev => ({ ...prev, [99]: !prev[99] }));
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer ${
-                            parentHwVerifiedMap[99]
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'bg-purple-600 text-white hover:bg-purple-700'
-                          }`}
-                        >
-                          {parentHwVerifiedMap[99] ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                          <span>{parentHwVerifiedMap[99] ? 'Co-Signed & Synced ✓' : 'Co-Sign Practice'}</span>
-                        </button>
+                    <div className="pt-4 mt-2 border-t border-slate-100/90 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors relative z-10">
+                      <span>View Full Report Card Memo</span>
+                      <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-purple-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* ===================================================== */}
-                {/* 4. QUICK MODULE ACCESS DIRECTORY                      */}
-                {/* ===================================================== */}
-                {/* ===================================================== */}
-                {/* 4. QUICK MODULE ACCESS DIRECTORY                      */}
-                {/* ===================================================== */}
-                <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-6 shadow-xs space-y-5">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                        Parental Action &amp; Quick Access Directory
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        1-Click shortcuts across all student academic and administrative services
-                      </p>
-                    </div>
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
-                      8 Core Modules
-                    </span>
-                  </div>
+                  {/* Metric 3: Teacher Direct Chat & Support */}
+                  <div 
+                    onClick={() => setActiveNav('chat')}
+                    className="relative overflow-hidden rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 p-5.5 shadow-xs hover:shadow-xl hover:shadow-indigo-500/10 dark:hover:shadow-indigo-950/30 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between"
+                  >
+                    {/* Ambient Glow Orb */}
+                    <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-indigo-500/10 dark:bg-indigo-500/15 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Card 1: Report Cards & Memo */}
-                    <button
-                      onClick={() => setActiveNav('marks')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          Report Cards &amp; Memo
+                    <div className="space-y-3.5 relative z-10">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Teacher Direct Chat
                         </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          View unit test marks, download report cards and memos.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 2: Shared Focus Table */}
-                    <button
-                      onClick={() => setActiveNav('focus_table')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                        <Target className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          Shared Focus Table
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Track interventions across 7 subjects and view the 4-day plan.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 3: Child Profile & Vault */}
-                    <button
-                      onClick={() => setActiveNav('child_sis')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          Child Profile &amp; Vault
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          View attendance, certificates and important documents.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 4: Teacher Connect & PTM */}
-                    <button
-                      onClick={() => setActiveNav('ptm_connect')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          Teacher Connect &amp; PTM
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Send notes &amp; book video call with teachers.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 5: Live Bus GPS */}
-                    <button
-                      onClick={() => setActiveNav('bus')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
-                        <Bus className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          Live Bus GPS
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Track Route 4 live location and stop updates.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 6: Fees & Receipts */}
-                    <button
-                      onClick={() => setActiveNav('fees')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center justify-center font-bold">
-                        <CreditCard className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                          Fees &amp; Receipts
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Pay fees, view milestones and download receipts.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 7: Apply Leave */}
-                    <button
-                      onClick={() => setActiveNav('leave')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          Apply Leave
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Submit leave requests and view approval status.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    {/* Card 8: TC Exit Handover */}
-                    <button
-                      onClick={() => setActiveNav('child_sis')}
-                      className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md text-left transition-all duration-200 group cursor-pointer flex flex-col justify-between min-h-[140px]"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 border border-sky-200/60 dark:border-sky-800/60 flex items-center justify-center font-bold">
-                        <Stamp className="h-5 w-5" />
-                      </div>
-                      <div className="my-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          TC Exit Handover
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-0.5">
-                          Digital sign-off protocol and final clearance.
-                        </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Aarav's Weak Concept Focus Intervention Hub (from reference design) */}
-                {focusTable && (
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
-                          <Target className="h-3.5 w-3.5" />
+                        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-blue-500/10 to-transparent text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 shadow-xs ring-4 ring-indigo-500/5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex items-center justify-center font-bold">
+                          <MessageSquare className="h-5 w-5" />
                         </div>
-                        <div>
-                          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                            Aarav&apos;s Weak Concept Focus Intervention Hub
+                      </div>
+                      
+                      <div>
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <h3 className="text-xl sm:text-[22px] font-black text-slate-900 dark:text-white tracking-tight">
+                            {activeKid.homeroomFaculty}
                           </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            When assessment marks dip below target, EDU360 generates a 4-day revision timetable co-tracked by the teacher and parent.
-                          </p>
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                            </span>
+                            Active Online
+                          </span>
                         </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
+                          Class Teacher &bull; {activeKid.className} &bull; {activeKid.id === 7 ? 'Foundational Early Years Support' : '1-on-1 Academic Support'}
+                        </p>
                       </div>
-                      <button
-                        onClick={() => setActiveNav('focus_table')}
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto shrink-0"
-                      >
-                        <span>Open Full Focus Table &amp; Diagnostic Evidence</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
+
+                      <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-800">
+                        <div className="bg-gradient-to-r from-indigo-500 to-blue-500 h-full rounded-full transition-all duration-500 shadow-xs" style={{ width: '100%' }} />
+                      </div>
                     </div>
 
-                    {/* Subject Mastery & Weak Concept Tracker (All 7 Subjects) pill bar */}
-                    <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-4.5 shadow-xs space-y-3.5">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
-                            <BookOpen className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                              Subject Mastery &amp; Weak Concept Tracker (All 7 Subjects)
-                            </h4>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              Click any subject below to switch the 4-day timetable &amp; inspect diagnostic sets
-                            </p>
-                          </div>
-                        </div>
+                    <div className="pt-4 mt-2 border-t border-slate-100/90 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors relative z-10">
+                      <span>Open 1-on-1 Chat Thread</span>
+                      <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
 
-                        {/* Status Legend */}
-                        <div className="flex items-center gap-3 text-[11px] font-semibold">
-                          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                            <span className="h-2 w-2 rounded-full bg-rose-500" />
-                            Critical (2)
-                          </span>
-                          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                            <span className="h-2 w-2 rounded-full bg-amber-500" />
-                            In Progress (3)
-                          </span>
-                          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            On Track (2)
-                          </span>
+                  {/* Metric 4: Fee Milestones (Amber Theme) */}
+                  <div 
+                    onClick={() => setActiveNav('fees')}
+                    className="relative overflow-hidden rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 p-5.5 shadow-xs hover:shadow-xl hover:shadow-amber-500/10 dark:hover:shadow-amber-950/30 hover:border-amber-500/40 dark:hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between"
+                  >
+                    {/* Ambient Glow Orb */}
+                    <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-amber-500/10 dark:bg-amber-500/15 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+
+                    <div className="space-y-3.5 relative z-10">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Fee Milestones
+                        </span>
+                        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs ring-4 ring-amber-500/5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex items-center justify-center font-bold">
+                          <CreditCard className="h-5 w-5" />
                         </div>
                       </div>
+                      
+                      <div>
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <h3 className="text-2xl sm:text-[26px] font-black text-slate-900 dark:text-white tracking-tight">
+                            {activeKid.id === 7 ? '₹21,500 Paid' : '₹61,500 Paid'}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            {activeKid.id === 7 ? '2 Paid • 1 Due (15% Sibling Concession)' : '3 Paid • 1 Due'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
+                          {activeKid.id === 7 ? 'Junior Term 2 Tuition Due on 25 Oct 2026' : 'Term 2 Tuition Due on 25 Oct 2026'}
+                        </p>
+                      </div>
 
-                      {/* 7 Subject Mastery Pills */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {[
-                          { name: 'Mathematics', score: '42%', active: true, status: 'critical' },
-                          { name: 'Physics', score: '58%', active: false, status: 'inprogress' },
-                          { name: 'Chemistry', score: '62%', active: false, status: 'inprogress' },
-                          { name: 'Biology', score: '74%', active: false, status: 'inprogress' },
-                          { name: 'English', score: '68%', active: false, status: 'inprogress' },
-                          { name: 'Computer Science', score: '82%', active: false, status: 'ontrack' },
-                          { name: 'Social Science', score: '76%', active: false, status: 'ontrack' },
-                        ].map((sub, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setActiveNav('focus_table')}
-                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              sub.active
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                      {/* Elevated Dual-tone Progress Bar */}
+                      <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-800">
+                        <div className="bg-gradient-to-r from-amber-500 to-orange-400 h-full rounded-full transition-all duration-500 shadow-xs" style={{ width: activeKid.id === 7 ? '60%' : '48%' }} />
+                      </div>
+                    </div>
+
+                    <div className="pt-4 mt-2 border-t border-slate-100/90 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors relative z-10">
+                      <span>View Fee Ledger &amp; Tax Receipts</span>
+                      <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* ===================================================== */}
+                {/* 3. 2-COLUMN PRIORITY ACTION BENTO                     */}
+                {/* ===================================================== */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  
+                  {/* Left Column: Tonight's Homework & Practice Check (7 Cols) */}
+                  <div className="lg:col-span-7 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl p-6 shadow-xs hover:shadow-lg transition-all duration-300 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs font-bold border border-blue-200/70 dark:border-blue-800/70 flex items-center gap-1.5 shadow-xs">
+                            <BookOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            Tonight&apos;s Parent Verification Tasks
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-slate-400" />
+                            18 Oct 2026 &bull; Daily Homework
+                          </span>
+                        </div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+                          {activeKid.name.split(' ')[0]}&apos;s Homework &amp; Practice Check
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Inspect tonight&apos;s rough notebook practice and co-sign in 1 click.
+                        </p>
+                      </div>
+
+                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-xl border border-blue-200/70 dark:border-blue-800/70 self-start sm:self-auto shadow-xs">
+                        2 Tasks Due Tonight
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {todayHomework.map((hw) => {
+                        const isVerified = Boolean(hwVerifiedMap[hw.id]);
+                        return (
+                          <div
+                            key={hw.id}
+                            className={`rounded-2xl border p-4 transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 ${
+                              isVerified
+                                ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300/80 dark:border-emerald-800 shadow-xs'
+                                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-slate-50 dark:hover:bg-slate-800/70'
                             }`}
                           >
-                            <span>{sub.name}</span>
-                            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
-                              sub.active
-                                ? 'bg-blue-700 text-white'
-                                : sub.status === 'critical'
-                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                                : sub.status === 'inprogress'
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                            }`}>
-                              {sub.score}
-                            </span>
-                          </button>
-                        ))}
+                            <div className="space-y-1.5 max-w-md">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-blue-100/80 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase px-2.5 py-0.5 border border-blue-200/60 dark:border-blue-800/60">
+                                  {hw.subject}
+                                </span>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-medium">
+                                  Due {hw.due_time}
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+                                {hw.title}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                Teacher: <span className="text-slate-700 dark:text-slate-300 font-semibold">{hw.teacher_name}</span> &bull; Max Scale: {hw.max_marks} Marks
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => setSelectedHwModal(hw)}
+                                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer shadow-xs"
+                              >
+                                View Guidelines
+                              </button>
+
+                              <button
+                                onClick={() => handleVerifyHomework(hw)}
+                                className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  isVerified
+                                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-600/20 active:scale-95'
+                                }`}
+                              >
+                                <Check className="h-3.5 w-3.5 stroke-[3]" />
+                                <span>{isVerified ? 'Co-Signed ✓' : 'Mark Verified'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Golden Remedial Focus Spotlight (5 Cols) */}
+                  <div className="lg:col-span-5 rounded-3xl border border-amber-300/80 dark:border-amber-800/80 bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-amber-100/60 dark:from-slate-900 dark:via-slate-900/95 dark:to-amber-950/40 p-6 shadow-xs hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden">
+                    {/* Ambient Gold Glow */}
+                    <div className="absolute top-0 right-0 w-44 h-44 bg-gradient-to-bl from-amber-400/15 via-orange-400/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+                    <div className="space-y-3.5 relative z-10">
+                      <div className="flex items-center justify-between">
+                        <span className="rounded-full bg-amber-500/20 text-amber-950 dark:text-amber-200 border border-amber-400/50 px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
+                          <Target className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                          Curriculum Focus Spotlight
+                        </span>
+                        <span className="text-xs font-black text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 px-2.5 py-0.5 rounded-full border border-rose-300/80 dark:border-rose-800/80">
+                          Critical Sprint
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                          {activeKid.id === 7 
+                            ? 'Phonics & Reading Magic: Blended Sounds Lag' 
+                            : 'Mathematics: Algebraic Fractions Lag'}
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 leading-relaxed font-medium">
+                          {activeKid.id === 7
+                            ? "Ms. Priya Nair diagnosed hesitation in blended consonants ('str', 'spl') and silent 'e' rules. Day 1 story reading is active."
+                            : "Mrs. Sunitha Rao diagnosed conceptual sign confusion in -(3x - 5). Day 3 simplification practice is active."}
+                        </p>
+                      </div>
+
+                      {/* Mini Progress Card */}
+                      <div className="space-y-2 p-3.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-amber-200 dark:border-amber-900/60 text-xs shadow-xs">
+                        <div className="flex items-center justify-between font-bold">
+                          <span className="text-slate-800 dark:text-slate-200">
+                            {activeKid.id === 7 ? 'Day 1 of 5-Day Plan' : 'Day 3 of 4-Day Plan'}
+                          </span>
+                          <span className="text-amber-700 dark:text-amber-300 font-mono font-black">
+                            {activeKid.id === 7 ? '20% Complete' : '75% Complete'}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200/80 dark:bg-slate-700 h-2 rounded-full overflow-hidden p-0.5">
+                          <div 
+                            className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500" 
+                            style={{ width: activeKid.id === 7 ? '20%' : '75%' }} 
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block pt-0.5 font-medium">
+                          Submitted Rough Sheet: <strong className="text-slate-700 dark:text-slate-300">
+                            {activeKid.id === 7 ? 'Ananya_Day1_Phonics_Practice.pdf' : 'Aarav_Day3_MultiTerm_RoughWork.pdf'}
+                          </strong> &bull; Ready for Guardian Sign-off
+                        </span>
                       </div>
                     </div>
 
-                    <FocusTableView
-                      table={focusTable}
-                      submission={submission}
-                      isParentView={true}
-                      currentRole="parent"
-                      studentInfo={{
-                        name: activeKid.name,
-                        rollNo: `Roll #${activeKid.rollNo}`,
-                        className: activeKid.className,
-                        parentName: 'Dr. & Mrs. Sharma',
-                        parentPhone: '+91 98480 22338'
-                      }}
-                      onToggleParentCheck={handleToggleParentFocusCheck}
-                    />
+                    <button
+                      onClick={() => setActiveNav('focus_table')}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-black shadow-lg shadow-amber-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 relative z-10 border border-amber-400/40"
+                    >
+                      <Target className="h-4 w-4" />
+                      <span>Open Full Golden Focus Table (All 7 Subjects)</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                )}
+
+                </div>
+
+                {/* ===================================================== */}
+                {/* 4. BALANCED 6-PORTAL DIRECT ACCESS BENTO GRID        */}
+                {/* ===================================================== */}
+                <div className="space-y-3.5 pt-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        Curated Parent Portals &amp; Direct Services
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        High-frequency parent workflows designed for 1-click oversight
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+                      6 Modules Available
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+                    
+                    {/* Portal 1: Exams & Report Cards */}
+                    <button
+                      onClick={() => setActiveNav('marks')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-xl hover:shadow-purple-500/10 dark:hover:shadow-purple-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500/15 via-indigo-500/10 to-transparent text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-purple-500/5 group-hover:scale-110 transition-transform">
+                            <Award className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            Term 1 Published
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors tracking-tight">
+                            Report Cards &amp; Upcoming Exams
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            View marks ledger, internal subject-wise AI observations &amp; Term 2 timetable.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                        <span>Launch Academic Memo</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-purple-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Portal 2: Curriculum Focus Table */}
+                    <button
+                      onClick={() => setActiveNav('focus_table')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 dark:hover:shadow-amber-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-amber-500/5 group-hover:scale-110 transition-transform">
+                            <Target className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            Golden Theme
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors tracking-tight">
+                            Shared Golden Focus Table
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            Subject filters, student rough work inspection &amp; 1-click guardian approval checkboxes.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                        <span>Inspect Rough Works</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Portal 3: PTM Conference */}
+                    <button
+                      onClick={() => setActiveNav('ptm_connect')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 dark:hover:shadow-blue-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500/15 via-indigo-500/10 to-transparent text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-blue-500/5 group-hover:scale-110 transition-transform">
+                            <Video className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            10-Min Slots
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors tracking-tight">
+                            Teacher Connect &amp; PTM Booking
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            Select Homeroom or Subject Specialist and book available video conference slots.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <span>Book 10-Min Slot</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Portal 4: Fees & Receipts */}
+                    <button
+                      onClick={() => setActiveNav('fees')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/10 dark:hover:shadow-emerald-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-emerald-500/5 group-hover:scale-110 transition-transform">
+                            <CreditCard className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            Official PDF Receipts
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors tracking-tight">
+                            Student Fee Ledger &amp; Receipts
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            Pay tuition installments via UPI/Card, view milestones, and download official tax receipts.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        <span>Pay &bull; Download Receipts</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Portal 5: Direct Teacher Chat */}
+                    <button
+                      onClick={() => setActiveNav('chat')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 dark:hover:shadow-indigo-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-blue-500/10 to-transparent text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-indigo-500/5 group-hover:scale-110 transition-transform">
+                            <MessageSquare className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            Direct Channel
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors tracking-tight">
+                            Chat with Class Teacher
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            1-on-1 direct channel with {activeKid.homeroomFaculty} for remedial feedback and queries.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        <span>Open Chat Window</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Portal 6: Apply Leave */}
+                    <button
+                      onClick={() => setActiveNav('leave')}
+                      className="relative overflow-hidden p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 dark:hover:shadow-blue-950/20 text-left transition-all duration-300 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between min-h-[190px]"
+                    >
+                      {/* Ambient Accent Orb */}
+                      <div className="absolute -top-8 -right-8 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500/15 via-cyan-500/10 to-transparent text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold shadow-xs ring-4 ring-blue-500/5 group-hover:scale-110 transition-transform">
+                            <FileText className="h-5 w-5" />
+                          </div>
+                          <span className="text-[10px] font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 rounded-full shadow-xs">
+                            Medical History
+                          </span>
+                        </div>
+                        <div className="my-3.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors tracking-tight">
+                            Apply Leave &amp; Medical Clearances
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 block line-clamp-2 mt-1 leading-relaxed font-medium">
+                            Submit absence notes to {activeKid.homeroomFaculty} and inspect approved past leaves history.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs font-bold text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <span>Submit Absence Note</span>
+                        <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-all duration-200">
+                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
               </div>
             )}
@@ -1365,81 +1443,51 @@ export default function ParentPage() {
             {/* VIEW 2: EXAMS & REPORT CARDS (MARKS)                  */}
             {/* ===================================================== */}
             {activeNav === 'marks' && (
-              <ParentMarksView />
+              <ParentMarksView
+                studentId={activeKidId}
+                studentName={activeKid.name}
+                className={activeKid.className}
+              />
             )}
 
-            {/* ===================================================== */}
             {/* ===================================================== */}
             {/* VIEW 3: SHARED FOCUS TABLE & DIAGNOSTIC EVIDENCE        */}
             {/* ===================================================== */}
             {activeNav === 'focus_table' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Shared Student Focus Table &amp; Diagnostic Evidence
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Collaborate directly with {activeKid.homeroomFaculty} on {activeKid.name}&apos;s weak concept intervention timetable
-                  </p>
-                </div>
-
-                {focusTable && (
-                  <FocusTableView
-                    table={focusTable}
-                    submission={submission}
-                    isParentView={true}
-                    currentRole="parent"
-                    studentInfo={{
-                      name: activeKid.name,
-                      rollNo: `Roll #${activeKid.rollNo}`,
-                      className: activeKid.className,
-                      parentName: 'Dr. & Mrs. Sharma',
-                      parentPhone: '+91 98480 22338'
-                    }}
-                    onToggleParentCheck={handleToggleParentFocusCheck}
-                  />
-                )}
-              </div>
+              <ParentGoldenFocusView studentId={activeKidId} studentName={activeKid.name} />
             )}
 
             {/* ===================================================== */}
             {/* VIEW 4: CHILD SIS PROFILE & OFFICIAL VAULT            */}
             {/* ===================================================== */}
             {activeNav === 'child_sis' && (
-              <ParentSisView />
+              <ParentSisView studentId={activeKidId} />
             )}
 
             {/* ===================================================== */}
-            {/* VIEW 5: TEACHER CONNECT & ONLINE PTM                  */}
+            {/* VIEW 5: DEDICATED 2-WAY CHAT WITH TEACHERS            */}
+            {/* ===================================================== */}
+            {activeNav === 'chat' && (
+              <ParentTeacherChatView
+                studentId={activeKidId}
+                studentName={activeKid.name}
+                className={activeKid.className}
+                homeroomFaculty={activeKid.homeroomFaculty}
+              />
+            )}
+
+            {/* ===================================================== */}
+            {/* VIEW 6: TEACHER CONNECT & ONLINE PTM                  */}
             {/* ===================================================== */}
             {activeNav === 'ptm_connect' && (
-              <ParentPtmView />
+              <ParentPtmView
+                studentId={activeKidId}
+                studentName={activeKid.name}
+                className={activeKid.className}
+                homeroomFaculty={activeKid.homeroomFaculty}
+              />
             )}
 
-            {/* ===================================================== */}
-            {/* VIEW 6: LIVE SCHOOL BUS GPS TRACKER                   */}
-            {/* ===================================================== */}
-            {activeNav === 'bus' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Live School Bus GPS Tracking (Route 4)
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Live telemetry tracking school bus KA-01-EB-4412 along assigned stops with real-time ETA
-                  </p>
-                </div>
-
-                {busRoute ? (
-                  <BusTracker
-                    bus={busRoute}
-                    onAdvanceStop={handleAdvanceBus}
-                  />
-                ) : (
-                  <div className="p-8 text-center text-slate-500">Connecting to GPS tracker...</div>
-                )}
-              </div>
-            )}
 
             {/* ===================================================== */}
             {/* VIEW 7: FEES & ONLINE PAYMENTS                        */}
@@ -1467,18 +1515,29 @@ export default function ParentPage() {
                         Student Fee Ledger &amp; Digital Receipts
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Aarav Sharma • Class 8B (Roll #14) • Academic Session 2026-2027
+                        {activeKid.name} • {activeKid.className} (Roll #{activeKid.rollNo}) • Academic Session 2026-2027 {activeKid.id === 7 && '• 15% Sibling Concession Active'}
                       </p>
                     </div>
 
-                    <button
-                      onClick={handleSendWhatsAppSummary}
-                      className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
-                      title="Send complete fee dues & payment status to registered WhatsApp"
-                    >
-                      <Share2 className="h-4 w-4" />
-                      <span>📱 Send Fee Status to WhatsApp</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+                      <button
+                        onClick={handleOpenTaxCert}
+                        className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                        title="Download official Income Tax Section 80C tuition certificate"
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span>Annual 80C Tax Certificate (FY 26-27)</span>
+                      </button>
+
+                      <button
+                        onClick={handleSendWhatsAppSummary}
+                        className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                        title="Send complete fee dues & payment status to registered WhatsApp"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        <span className="inline-flex items-center gap-1.5"><Icon3D name="memo" size={16} /><span>WhatsApp Status</span></span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Summary Metric Cards */}
@@ -1647,7 +1706,9 @@ export default function ParentPage() {
                           <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2">
                             <button
                               onClick={() => {
-                                alert(`Downloading Official School Tax Receipt PDF: ${m.receipt_no || `REC-2026-FEE-${m.id + 5821}`}\nAmount: ₹${m.amount.toLocaleString()}\nStudent: Aarav Sharma (Class 8-B)`);
+                                downloadOfficialDocumentFile(`${m.title} Official School Tax Receipt #${m.receipt_no || `REC-2026-FEE-${m.id + 5821}`}`, activeKid.name, `OIS-2026-${activeKid.rollNo}`);
+                                setFeeToast(`Official School Tax Receipt downloaded for ${m.title}`);
+                                setTimeout(() => setFeeToast(null), 4000);
                               }}
                               className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                             >
@@ -1783,6 +1844,81 @@ export default function ParentPage() {
                       />
                     </div>
 
+                    <div className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+                      <input
+                        type="checkbox"
+                        id="is-medical-leave-checkbox"
+                        checked={isMedicalLeave}
+                        onChange={(e) => setIsMedicalLeave(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label htmlFor="is-medical-leave-checkbox" className="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer select-none">
+                        Mandated Medical / Hospitalization Leave (Requires Doctor&apos;s Note)
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Doctor&apos;s Prescription / Medical Certificate (Required for Medical Leave)
+                      </label>
+                      <input
+                        type="file"
+                        id="parent-leave-doctor-note"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setLeaveDoctorNote(file);
+                            setLeaveDoctorNoteName(file.name);
+                            const kb = Math.round(file.size / 1024);
+                            setLeaveDoctorNoteSize(kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`);
+                          }
+                        }}
+                      />
+                      {leaveDoctorNoteName ? (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/20">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                {leaveDoctorNoteName}
+                              </p>
+                              <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                {leaveDoctorNoteSize} • Ready to submit with leave note
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <label
+                              htmlFor="parent-leave-doctor-note"
+                              className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer transition-all"
+                            >
+                              Change
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLeaveDoctorNote(null);
+                                setLeaveDoctorNoteName('');
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="parent-leave-doctor-note"
+                          className="flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 hover:bg-slate-100/60 dark:bg-slate-800/40 dark:hover:bg-slate-800/60 cursor-pointer transition-all text-xs font-medium text-slate-600 dark:text-slate-400"
+                        >
+                          <Upload className="h-4 w-4 text-blue-500" />
+                          <span>Attach Doctor&apos;s Note or Hospital Slip (PDF / Image)</span>
+                        </label>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
                       className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
@@ -1791,6 +1927,93 @@ export default function ParentPage() {
                       <span>Submit Leave Application for {activeKid.name.split(' ')[0]}</span>
                     </button>
                   </form>
+                </div>
+
+                {/* Approved Past Leaves & Medical Clearances History */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Approved Past Leaves &amp; Medical Clearances History
+                      </h3>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full">
+                      Official Absence Record
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase font-black tracking-wider text-slate-500 dark:text-slate-400">
+                            <th className="py-3 px-4">Leave Dates</th>
+                            <th className="py-3 px-4">Reason &amp; Medical Category</th>
+                            <th className="py-3 px-4">Approving Authority</th>
+                            <th className="py-3 px-4">Document / Clearance</th>
+                            <th className="py-3 px-4 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                          {leaveHistory.map((lr) => (
+                            <tr key={lr.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                              <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                                {lr.from_date} – {lr.to_date}
+                                {lr.is_medical && (
+                                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 block mt-0.5">
+                                    [Medical Leave]
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                                {lr.reason}
+                              </td>
+                              <td className="py-3 px-4 text-slate-700 dark:text-slate-200 font-medium">
+                                <div className="space-y-0.5">
+                                  <span>{activeKid.homeroomFaculty}</span>
+                                  <span className="text-[10px] text-slate-400 block">Stage: {lr.approval_stage || (lr.status === 'Approved' ? 'Attendance Adjusted' : 'Under Review')}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 font-mono text-blue-600 dark:text-blue-400 text-[11px]">
+                                {lr.attachment_name ? `${lr.attachment_name} ✓` : 'Standard Parent Note'}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                                  lr.status === 'Approved'
+                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                                    : lr.status === 'Rejected'
+                                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
+                                    : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                                }`}>
+                                  {lr.status === 'Approved' ? 'Approved ✓' : lr.status === 'Rejected' ? 'Rejected ✗' : 'Pending Review'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                              02 Sep 2026 – 03 Sep 2026 <span className="text-[10px] font-normal text-slate-400 block">2 Days</span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                              Family Medical Emergency &amp; Travel
+                            </td>
+                            <td className="py-3 px-4 text-slate-700 dark:text-slate-200 font-medium">
+                              Vice Principal Academic Office
+                            </td>
+                            <td className="py-3 px-4 text-slate-400 text-[11px]">
+                              Parent Written Verification Note
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                                Approved ✓
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1924,6 +2147,130 @@ export default function ParentPage() {
           <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 text-white px-5 py-3.5 shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
             <span className="text-xs font-bold">{parentToast}</span>
+          </div>
+        )}
+
+
+        {/* ======================================================== */}
+        {/* SECTION 80C ANNUAL TUITION FEE CERTIFICATE MODAL        */}
+        {/* ======================================================== */}
+        {showTaxCertModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+            <div className="relative w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      Official Tuition Fee Certificate
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Income Tax Exemption under Section 80C • FY 2026-2027
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTaxCertModal(false)}
+                  className="p-1 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {loadingTaxCert ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  Generating certified Section 80C tax certificate...
+                </div>
+              ) : taxCertData ? (
+                <div className="space-y-4">
+                  {/* Certificate Document Border Box */}
+                  <div className="p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 text-xs space-y-4 relative">
+                    <div className="text-center space-y-1 pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+                        {taxCertData.school_info.name}
+                      </span>
+                      <p className="text-[10px] text-slate-500">{taxCertData.school_info.address}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        CBSE Affiliation No: {taxCertData.school_info.cbse_affiliation_no} | PAN: {taxCertData.school_info.pan}
+                      </p>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px] font-bold">
+                      <span className="text-slate-500">Certificate No: <code className="text-slate-900 dark:text-white">{taxCertData.certificate_no}</code></span>
+                      <span className="text-slate-500">Date: {taxCertData.issue_date}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Student Name</span>
+                        <strong className="text-slate-900 dark:text-white">{taxCertData.student_info.student_name}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Class &amp; Section</span>
+                        <strong className="text-slate-900 dark:text-white">{taxCertData.student_info.class_name}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Parent / Guardian</span>
+                        <strong className="text-slate-900 dark:text-white">{taxCertData.student_info.guardian_name}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Admission / Roll No</span>
+                        <strong className="text-slate-900 dark:text-white">{taxCertData.student_info.admission_no}</strong>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 italic pt-2">
+                      &quot;{taxCertData.certification_text}&quot;
+                    </p>
+
+                    <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+                      <span className="font-bold text-emerald-900 dark:text-emerald-200 text-xs">
+                        Total Eligible Tuition Fee Paid (FY 2026-27):
+                      </span>
+                      <span className="font-black text-emerald-700 dark:text-emerald-300 text-base">
+                        ₹{taxCertData.eligible_tuition_fee.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-end pt-4 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-400">
+                      <div>
+                        <span>Tamper-evident verification hash:</span>
+                        <span className="block font-mono text-[9px] text-slate-500">SHA256: 4b91f0...39a8e2</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-slate-700 dark:text-slate-200 block">Finance Officer / Registrar</span>
+                        <span>Authorized Digital Seal ✓</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTaxCertModal(false)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        downloadOfficialDocumentFile(`Section 80C Tuition Fee Certificate - ${taxCertData.student_info.student_name}`, taxCertData.student_info.student_name, taxCertData.certificate_no);
+                        setShowTaxCertModal(false);
+                        triggerToast(`✓ Official Section 80C Tax Certificate downloaded successfully.`);
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Certified PDF Memo</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 

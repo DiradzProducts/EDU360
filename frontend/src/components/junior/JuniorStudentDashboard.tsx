@@ -1,4 +1,5 @@
 'use client';
+import { Footer } from '@/components/footer';
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -1075,6 +1076,8 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         />
       )}
 
+      {/* Brand Footer */}
+      <Footer className="pb-8" />
     </div>
   );
 }

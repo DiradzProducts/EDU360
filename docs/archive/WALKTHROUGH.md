@@ -1,154 +1,125 @@
 # EDU360: Full Application Walkthrough & Feature Tour
 
-> **Application**: EDU360 — K–12 Outcomes & Intelligence Platform  
+> **Application**: EDU360 — Action & Intelligence K–12 Outcomes Platform  
 > **Frontend URL**: `http://localhost:3000`  
-> **Backend URL**: `http://localhost:8000`  
-> **Last Verified**: 2026-10-18
+> **Backend URL**: `http://localhost:8000` (Swagger: `http://localhost:8000/docs`)  
+> **Last Updated**: November 2026
 
 ---
 
 ## 🧭 Navigation & Role Switcher
 
-At the top of every page in the application, a persistent role switcher pill allows instant 1-click preview of all persona perspectives:
-* 🏛️ **Admin** (`/admin`)
-* 👩‍🏫 **Teacher** (`/teacher`)
-* 🎒 **Student** (`/student`)
-* 🎈 **Junior Student** (`/junior`)
-* 👨‍👩‍👧 **Parent** (`/parent`)
+At the top of the application landing page (`/`), an interactive role switcher allows 1-click preview of all persona perspectives:
+
+| Role | Route | Key Responsibilities |
+| :--- | :--- | :--- |
+| 🏛️ **Admin** | `/admin` | Priority Triage radar, admissions CRM, exit clearances, event command |
+| 🎓 **Academic Coordinator** | `/academic_coordinator` | Syllabus delivery audit, faculty SLA relief, timetable substitutions |
+| 📝 **Exam Coordinator** | `/exam_coordinator` | Question paper vault, hall tickets, marks moderation, report card release |
+| 👩‍🏫 **Teacher** | `/teacher` | Auto-attendance, SpeedGrader canvas, Focus Table, Evaluation Studio |
+| 🎒 **Student (Secondary)** | `/student` | Live virtual classes, homework uploads, achievement portfolio, vault |
+| 🎈 **Junior Student (K–5)** | `/junior` | Adventure quests, Phonics audio studio, Magic Book, star rewards |
+| 👨‍👩‍👧 **Parent** | `/parent` | Sibling switcher, fee receipts, leave requests, 1-on-1 PTM, multi-subject chat |
+| 💳 **Accounts Manager** | `/accounts_manager` | Fee collections, installment defaulter outflow triage, payroll approvals |
+| 👥 **HR Head** | `/hr_head` | Staff directory, biometric logs, leave permissions, faculty grievances |
+| 📦 **Inventory Manager** | `/inventory_manager` | Laboratory equipment, IT assets, stock reorder thresholds |
 
 ---
 
 ## 🏛️ 1. Administrator Command Center (`/admin`)
 
-Designed for school principals and administrative heads to manage school operations without spreadsheet chaos.
+Designed for school principals and administrative deans to steer operations with early-warning intelligence rather than passive registers.
 
 ### Core Modules:
 1. **Priority Triage Command Center**:
-   * Visual traffic-light cards (🔴 Critical, 🟠 Warning, 🟢 Healthy) for daily triage:
-     * Unexcused Absenteeism spikes
-     * Pending Fee Dues & defaulters
-     * Severe Academic drop flags (students $<50\%$)
-2. **Admissions Enquiry CRM**:
-   * Pipeline tracking: `New Inquiries` &rarr; `Campus Visit Scheduled` &rarr; `Document Verified` &rarr; `Enrolled`.
-   * AI Chatbot enquiry transcripts preview.
-   * **1-Click Convert to SIS**: Instantly provisions student enrollment ID and auto-generates parent portal credentials.
-3. **Dual-Signature Exit & Transfer Certificate (TC) Archive**:
-   * Multi-department digital clearance (Accounts, Library, Sports Lab, Principal).
-   * Generates tamper-proof QR-verified Transfer Certificate PDFs with archival history.
+   * Traffic-light early-warning radar (🔴 Critical, 🟠 Warning, 🟢 Healthy).
+   * **Chronic Absenteeism Telemetry**: Auto-flags 3+ day absences. Excludes students with approved parent leaves on file so administrators only triage genuine unexcused absences.
+   * **Fee Default Outflow & Academic Drop Radar**: Direct 1-click triage actions (`Assign Class Teacher to Call Parents`, `Deploy Remedial Table`).
+2. **Admissions CRM & SIS Enrollment**:
+   * Pipeline: `New Inquiries` $\to$ `Campus Visit Scheduled` $\to$ `Document Verified` $\to$ `Enrolled`.
+   * **1-Click Convert to SIS**: Provisions student enrollment ID, assigns roll number, and auto-generates parent portal credentials.
+3. **Dual-Signature Exit & Transfer Certificate (TC)**:
+   * Multi-department digital clearance workflow (Accounts, Library, Sports, Principal).
+   * Generates QR-verified Transfer Certificate PDFs with complete archival records.
 4. **Event & Vendor Command Center**:
-   * Cross-department task delegation for annual sports days, science exhibitions, and annual days.
-   * **Staff-to-Student Volunteer Hierarchy**: Assigns teacher conveners and student marshals with trackable task completion meters.
-5. **Strict Document Control**:
-   * Admin-only upload, verification, and revocation lock for official birth certificates, vaccination records, and CBSE registration cards.
+   * Cross-department task delegation for sports meets, annual days, and exhibitions.
+   * **Staff-to-Student Volunteer Hierarchy**: Assigns teacher conveners and student marshals with real-time completion tracking.
 
 ---
 
-## 👩‍🏫 2. Comprehensive Teacher Portal (`/teacher`)
+## 🎓 2. Academic Coordinator Portal (`/academic_coordinator`)
 
-Designed for subject faculty and homeroom mentors with zero repetitive data entry.
+Bridges administrative governance and classroom pedagogical execution.
 
-### Core Tabs:
-1. **Teacher Dashboard & Schedule**:
-   * Live period timetable with active period countdown timer (e.g. `Period 3: Class 8-B Math • 24m remaining`).
-   * Quick action cards for marking attendance, homework speed grading, and parent communications.
-2. **Faculty Duties Center**:
-   * 4 segmented duty streams:
-     * `Event Tasks`: Committee responsibilities.
-     * `Exam Invigilation`: Room assignments, hall tickets verify, duty reporting time.
-     * `Paper Correction Queue`: Batch papers assigned, target dates, and live counter (`+` / `-` papers graded).
-     * `Campus Substitution`: Zero-period and emergency cover periods.
-3. **10-Minute Auto-Attendance Engine**:
-   * Simulates online or hybrid classroom check-ins.
-   * Rule: $T \le 10\text{ min} \implies$ **Present**, $T > 10\text{ min} \implies$ **Late**, Non-joiners $\implies$ **Absent**.
-   * Teacher manual override with audit log.
-4. **In-Browser Homework SpeedGrader Canvas**:
-   * In-browser PDF/image canvas viewer.
-   * Annotation toolbar: Red correction pen, green tick stamps, warning circles, text box remarks.
-   * Marks scoring widget (`Marks obtained / Max marks`) and instant notify student & parent toggle.
-5. **Mathematics Focus Table & 1-Week Remedial Intelligence** *(Latest Milestone)*:
-   * Subject badge: `Subject: Mathematics`.
-   * **Section Switcher Tabs**: `Class 8-B (Homeroom)`, `Class 8-A`, `Class 9-A`, `Class 9-B`, `All Sections`.
-   * **Section Benchmark Banner**: Total students, Mastered ($>70\%$, exempt), Improvement Batch ($\le 70\%$, active plan), and Section average.
-   * **Clean Remedial Cards**:
-     * Highlights exam score ($\le 70\%$) and target goal ($>70\%$).
-     * AI Exam Paper Scan diagnosis: Root misconception, flagged questions, and prescription.
-     * 1-Week remedial progress bar (`Day 3 of 7`).
-     * Solution upload status & guardian co-tracking badge.
-     * **`Open 1-Week Plan →`** link to the dedicated remedial page.
-     * **`⚡ Quick Verify All Validated`** batch button.
-6. **Parent Connection Hub & Sliding PTM Scheduler**:
-   * Dual-mode notes: Homeroom pastoral care vs Subject-specific notes.
-   * 1-Click medical and personal leave approvals.
-   * 1-on-1 PTM slot bookings with Google Meet / Zoom link generation.
-   * Live simulated parent chat messenger.
+* **Curriculum Syllabus Delivery**: Audits real-time syllabus pacing checkoffs submitted by teachers (`/api/teacher/curriculum/log-unit`). Dispatches 48-hour remedial tasks for lagging chapters.
+* **Human-in-the-Loop SLA Governance**: Replaces rigid penalty systems with Coordinator review: `[Grant Extension]`, `[Migrate Task to Peer Faculty]`, or `[Escalate to Principal]`.
+* **Timetable Substitution Engine**: One-click substitute teacher assignment automatically injects `SUBSTITUTION_COVER` badges into the substitute faculty's daily schedule in `/teacher`.
+* **Institutional PTM Governance**: Monitors faculty slot publishing readiness and broadcasts reminders to defaulting teachers.
 
 ---
 
-## 🎯 3. Dedicated 1-Week Remedial Plan Page (`/teacher/focus/[id]`)
+## 📝 3. Exam Coordinator Portal (`/exam_coordinator`)
 
-A focused, distraction-free environment opened when a teacher clicks a student in the Focus Table.
+Secures examination integrity and unifies assessment publishing.
 
-* **Context Bar**: Direct breadcrumb back to `Mathematics Focus Table (Class 8-B)`, with quick student roll number, parent phone, and exam score badge.
-* **3-Section Tabs**:
-  1. **Tab 1: 1-Week (7-Day) Targeted Action Plan**:
-     * Visual cards for Day 1 through Day 7.
-     * Previous day work is locked against accidental regression to "Upcoming".
-     * Explicit buttons on past days: `Mark Completed ✓` / `Mark Pending ⏳`, and `Inspect`.
-     * Current day card features `Inspect & Verify Work →` CTA.
-  2. **Tab 2: Rough Notebook Solution Review**:
-     * **Day Switcher**: Jump to inspect Day 1, Day 2, Day 3, etc.
-     * **Assigned Practice Questions & Evaluation Rubric**: Displays the exact mathematical problem and what intermediate steps/signs the teacher must verify.
-     * **Student Solution Steps**: Step-by-step working transcript and downloadable scanned PDF preview.
-     * **Teacher Verification Box**: Custom feedback textarea with `Return for Re-work` and `Approve & Mark Day Completed ✓`.
-  3. **Tab 3: Guardian Co-Tracking & Progress Updates**:
-     * Registered parent card.
-     * 1-Click **Send WhatsApp Update** (alerts parent to inspect student's rough notebook practice tonight).
-     * Direct buttons to **Schedule 1-on-1 PTM**, **Open Chat**, and **Print 1-Week Summary**.
+* **Digital Secrecy Paper Vault**: Receives question papers drafted by teachers, applies syllabus compliance review, and seals them into the fireproof digital exam bank.
+* **Hall Ticket Issuance**: Publishes examination timetables and generates printable admit cards for students without fee blockades.
+* **Marks Moderation Ledger**: Reviews submitted gradebooks from subject teachers, applies moderation adjustments if necessary, and cryptographically locks marks.
+* **Batch Report Card Generation**: Once all subject teachers submit their sealed marks, the coordinator generates consolidated report cards enriched with Gemini AI qualitative narratives.
 
 ---
 
-## 🎒 4. Secondary Student Portal (`/student`)
+## 👩‍🏫 4. Comprehensive Teacher Portal (`/teacher`)
 
-Built to give middle and high school students clear ownership over their academic trajectory.
+Empowers subject teachers and homeroom mentors with automated tools and zero clerical overhead.
 
-* **Live Classes & Timetable**: 1-click join links for live sessions and access to recorded lectures sorted by subject and chapter.
-* **Homework & Assignments Vault**: Upload homework PDFs and view teacher annotated canvas sheets with red ink remarks and rubric scores.
-* **Side-by-Side Student Portfolio**:
-  * Left: Inter-school competitions, sports tournaments, and club participations.
-  * Right: Verified medals, certificates, and achievements signed off by faculty.
-* **Digital School Vault**: Download official term report cards, bonafide certificates, and fee receipts.
-
----
-
-## 🎈 5. Junior Student Portal (`/junior`)
-
-Designed specifically for elementary K–5 students in an online schooling environment with vibrant, playful aesthetics, gamified engagement, and zero adult clutter (no confusing fees or administrative bureaucracy).
-
-* **🏠 Explorer Dashboard**: Warm welcome card, today's schedule at a glance, and 1-click launch to the live classroom.
-* **🧭 Today's Adventures**: 3 daily micro-milestones (Maths, Phonics, Art) with celebration fanfare, sound chimes, and +50 Star rewards.
-* **📅 Class Timetable**: Clean visual weekly Mon–Fri schedule showing class periods, teacher avatars, and virtual meeting links.
-* **🎬 Class Recordings Archive**: Video replay library categorized by subject (Maths, English, Science, Art) with a video modal player, 10s skip controls, and +10 curiosity star claims.
-* **📖 Homework & Magic Book (Subject-Wise & Date-Wise)**:
-  * **Dual Filter Bar**: Filter by subject (🧮 Mathematics, 📖 Phonics & English, 🌱 Science & Nature, 🎨 Art & Craft) and by date timeline (`Due Today • Oct 24`, `Due Tomorrow • Oct 25`, `Next Week • Oct 27–28`, `Graded & Checked`).
-  * **Worksheet Submission Dropzone**: 1-click snapshot photo or PDF upload, `Download Template Worksheet PDF`, and +30 to +40 Star rewards.
-  * **Teacher Feedback & Stickers**: Displays teacher handwritten-style praise, star scores (e.g. `20/20 ⭐`), and verified annotated correction sheets.
-* **🏆 Exams & Assessment Hub (5-Day Timetable & Star Quizzes)**:
-  * **📅 Term 1 Examination Timetable**: Day-by-day examination schedule (Oct 28 to Nov 2) for Mathematics, English Storytelling, EVS, Hindi Phonics, and Art Practical with syllabus coverage, Zoom room link, and revision paper PDF downloads.
-  * **🚀 Practice Star Quizzes (Mock Tests)**: Voice-narrated interactive quizzes (`speechSynthesis`) with audio hints, instant bounce feedback, and +50 Star rewards.
-  * **📊 Term 1 Report Card & Grades**: Verified marks memo with overall distinction (88.5% Grade A1) and subject-wise faculty remarks.
-* **🎖️ Badges & Trophy Room**: Level 3 progression bar (Explorer Aarav advancing to Astronaut), 3D badges grid, Magic Power Booster mystery chests, and dual portfolio (school participations + uploaded certificates).
-* **🎉 Holidays Calendar**: Colorful festive school holiday calendar with live countdowns to vacations (Diwali, Winter Break, Holi) and zero stress.
-* **🛡️ Explorer SIS Profile**: Student digital school identity card with photo, roll number, blood group, and emergency contact details.
+### Core Features:
+1. **10-Minute Auto-Attendance Engine**:
+   * Classroom attendance check-in engine: $\le 10\text{ min} \implies$ **Present**, $> 10\text{ min} \implies$ **Late**, Non-joiners $\implies$ **Absent**.
+   * Integrates parent leave requests: Approved leaves automatically reflect as `Excused Leave`.
+2. **In-Browser Homework SpeedGrader**:
+   * Interactive annotation canvas: Red ink pen, tick stamps, warning circles, and text feedback directly on student homework submissions.
+3. **Remedial Focus Table (1-Week Sprint)**:
+   * **Subject & Section Scoped**: Teachers filter by sections they teach (`Class 8-B`, `Class 8-A`, etc.).
+   * **Threshold Invariant**: Students scoring $\le 70\%$ on term tests are enrolled in a 7-day remedial sprint; students scoring $> 70\%$ are exempt.
+   * **Rough Notebook Solution Review**: Teacher inspects step-by-step math working and approves daily remedial practice.
+4. **Descriptive Exam Evaluation Studio & Gradebook Lock**:
+   * Side-by-side paper evaluation studio with AI-assisted rubric scoring.
+   * **Gradebook Lock Mandate**: Once all papers are evaluated, teacher clicks `Submit Final Grades to Exam Cell (One-Time Lock)`. The gradebook enters an immutable, read-only state and transfers custody to the Exam Coordinator.
+5. **Direct Parent Chat**:
+   * 1-on-1 real-time messaging with parents using `BroadcastChannel` for instant zero-latency cross-tab synchronization.
 
 ---
 
-## 👨‍👩‍👧 6. Parent Co-Tracking Portal (`/parent`)
+## 🎒 5. Secondary Student Portal (`/student`)
 
-Designed for busy parents with an anti-spam, high-transparency communication philosophy and multi-child support.
+Gives middle and high school students (Classes 6–12) clarity and ownership over their learning goals.
 
-* **🧒 Multi-Child Context Switcher**: 1-tap header pill switcher to toggle seamlessly between siblings (e.g., Aarav in Class 8-B vs. Ananya in Class 3-A). Guarantees 100% isolated academic contexts, fee schedules, and absence leaves without mix-ups.
-* **Anti-Spam Moving Slider Carousel**: Replaces notification bombardment with a calm, categorized carousel for daily circulars and school events.
-* **Live School Bus GPS Tracking (Route 4)**: Real-time map simulation showing current bus location, estimated arrival time (ETA), and direct call button to bus driver/attendant.
-* **Student Focus Table Co-Tracking**: Parents see their child's 1-week focus plan and can sign off on daily rough notebook checks.
-* **Fee Milestones & Digital Receipts**: Shows quarterly tuition fee schedules with mock 1-click UPI/Card payment and instant downloadable PDF receipts.
-* **Leave Applications**: Submit medical or casual absence requests directly to the homeroom class teacher with receipt tracking.
+* **Live Classes & Lectures Archive**: One-click join for live video classes and access to chapter-wise recorded video lectures.
+* **Homework Submission Dropzone**: Upload daily homework PDFs and view teacher-annotated feedback sheets.
+* **Digital School Vault**: Secure repository for term report cards, bonafide certificates, and fee payment receipts.
+* **Student Achievements Portfolio**: Verified extracurricular certificates, science fair recognitions, and sports tournament medals.
+
+---
+
+## 🎈 6. Elementary Junior Portal (`/junior`)
+
+Designed specifically for K–5 elementary learners with vibrant, playful aesthetics and gamified progression.
+
+* **Identity Context**: Centered on **Ananya Sharma (Class 3-A, Roll #8)**.
+* **Today's Adventure Quests**: Daily micro-challenges (Maths, Phonics, Art) rewarding star points and celebratory sound fanfares.
+* **Magic Homework Book**: Date-wise and subject-wise homework dropzone with template worksheet downloads and teacher praise stickers.
+* **Practice Star Quizzes**: Voice-narrated interactive quizzes with audio prompts and instant celebratory animations.
+* **Safe & Distraction-Free**: Free from adult financial clutter, bus radar widgets, and server voice storage liabilities.
+
+---
+
+## 👨‍👩‍👧 7. Multi-Child Parent Portal (`/parent`)
+
+Designed for busy parents who need comprehensive oversight without alert fatigue.
+
+* **Multi-Child Sibling Switcher**: Header pill switcher toggles between siblings (e.g. Aarav in Class 8-B vs. Ananya in Class 3-A). Each child maintains strictly isolated academic records, fee ledgers, and PTM appointments.
+* **Multi-Subject Faculty Chat**: Direct 1-on-1 communication desk with all assigned subject teachers. Powered by `BroadcastChannel` for instant message delivery across open tabs.
+* **Leave Management**: Submit leave requests with reason and attachments. Once approved by the teacher, attendance status is updated in real time.
+* **Fee Milestones & Receipts**: Transparent term fee breakdown with UPI payment simulation and instant PDF receipts.
+* **Sliding PTM Booking**: Self-service 1-on-1 parent-teacher meeting scheduling with calendar sync.

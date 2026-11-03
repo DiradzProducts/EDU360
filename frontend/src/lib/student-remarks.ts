@@ -251,3 +251,18 @@ export function getRemarksForStudent(studentId: number): StudentRemark[] {
     }
   ];
 }
+
+export function addStudentRemark(remark: Omit<StudentRemark, 'id' | 'date' | 'timestamp'> & { date?: string; timestamp?: string }): StudentRemark {
+  const newRemark: StudentRemark = {
+    id: Date.now(),
+    date: remark.date || 'Today',
+    timestamp: remark.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    ...remark
+  };
+  initialStudentRemarks.unshift(newRemark);
+  return newRemark;
+}
+
+export function getAllRemarks(): StudentRemark[] {
+  return initialStudentRemarks;
+}

@@ -1,4 +1,5 @@
 'use client';
+import { Footer } from '@/components/footer';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
@@ -452,7 +453,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                 title="Add New Follow-Up Interaction"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>+ Add Follow-up</span>
+                <span>Add Follow-up</span>
               </button>
               <button
                 type="button"
@@ -688,7 +689,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    <span>{isSubmittingLog ? 'Saving...' : '+ Add Follow-up Log'}</span>
+                    <span>{isSubmittingLog ? 'Saving...' : 'Add Follow-up Log'}</span>
                   </button>
                 </div>
               </form>
@@ -1036,7 +1037,9 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
         </div>
       )}
 
-      {/* =========================================================================
+<Footer />
+
+            {/* =========================================================================
           MODAL: DROP LEAD REASON & ARCHIVE
           ========================================================================= */}
       {showDropModal && (

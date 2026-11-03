@@ -719,7 +719,7 @@ export function DailyQuests({
                 className="rounded-2xl border border-sky-300 dark:border-sky-800 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 py-2.5 px-3 text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <FileText className="h-3.5 w-3.5" />
-                <span>⚡ Use Demo Worksheet</span>
+                <span>Use Demo Worksheet</span>
               </button>
             </div>
 

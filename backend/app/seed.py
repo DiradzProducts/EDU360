@@ -65,7 +65,9 @@ async def seed_data():
             Student(id=5, user_id=None, name="Rohan Iyer", roll_no="09", class_name="Class 8", section="A", admission_no="EDU-2024-084", guardian_name="Mrs. Meenakshi Iyer", guardian_phone="+91 98333 22222", guardian_email="meenakshi.iyer@example.com", attendance_pct=88.2, bus_route_id=1, academic_average_pct=81.0, status="Active", grade_tier="secondary", age=14),
             Student(id=6, user_id=None, name="Ananya Gupta", roll_no="04", class_name="Class 9", section="A", admission_no="EDU-2024-085", guardian_name="Mr. Pradeep Gupta", guardian_phone="+91 98444 33333", guardian_email="pradeep.gupta@example.com", attendance_pct=94.5, bus_route_id=1, academic_average_pct=74.5, status="Active", grade_tier="secondary", age=15),
             Student(id=7, user_id=None, name="Aditya Roy", roll_no="12", class_name="Class 9", section="B", admission_no="EDU-2024-097", guardian_name="Mrs. Sangeeta Roy", guardian_phone="+91 98888 66666", guardian_email="sangeeta.roy@example.com", attendance_pct=78.5, bus_route_id=1, academic_average_pct=65.0, status="Active", grade_tier="secondary", age=15),
-            Student(id=8, user_id=5, name="Aarav Kumar", roll_no="08", class_name="Class 3-A", section="A", admission_no="EDU-2025-032", guardian_name="Mr. Rajesh Sharma", guardian_phone="+91 98111 00003", guardian_email="rajesh.sharma@example.com", attendance_pct=94.2, bus_route_id=1, academic_average_pct=88.5, status="Active", grade_tier="k5", age=8, avatar_character_url="https://api.dicebear.com/7.x/bottts/svg?seed=AaravJunior3D"),
+                        Student(id=8, user_id=5, name="Aarav Kumar", roll_no="08", class_name="Class 3-A", section="A", admission_no="EDU-2025-032", guardian_name="Mr. Rajesh Sharma", guardian_phone="+91 98111 00003", guardian_email="rajesh.sharma@example.com", attendance_pct=94.2, bus_route_id=1, academic_average_pct=88.5, status="Active", grade_tier="k5", age=8, avatar_character_url="https://api.dicebear.com/7.x/bottts/svg?seed=AaravJunior3D"),
+            Student(id=10, user_id=None, name="Rohan Verma", roll_no="08", class_name="Class 9", section="A", admission_no="EDU-2024-099", guardian_name="Mr. Manoj Verma", guardian_phone="+91 98450 11223", guardian_email="manoj.verma@example.com", attendance_pct=92.0, bus_route_id=1, academic_average_pct=72.0, status="Active", grade_tier="secondary", age=15),
+            Student(id=11, user_id=None, name="Priya Menon", roll_no="16", class_name="Class 9", section="A", admission_no="EDU-2024-105", guardian_name="Dr. Sundar Menon", guardian_phone="+91 98450 44556", guardian_email="sundar.menon@example.com", attendance_pct=95.0, bus_route_id=1, academic_average_pct=84.0, status="Active", grade_tier="secondary", age=15),
         ]
         db.add_all(students)
 
@@ -1235,6 +1237,34 @@ async def seed_data():
                 teacher_feedback="Sign reversal errors during inequality division by negative terms.",
                 graded_at=datetime.datetime.utcnow() - datetime.timedelta(days=1),
                 graded_by_teacher_id=2
+            ),
+            ExamSubmission(
+                id=8,
+                exam_id=3,
+                student_id=10, # Rohan Verma (Class 9-A) - Unevaluated
+                status="submitted",
+                paper_file_url="/samples/math_exam_sample.svg",
+                paper_file_name="Rohan_Verma_Term1_Paper.pdf",
+                submitted_at=datetime.datetime.utcnow() - datetime.timedelta(hours=3),
+                marks_obtained=None,
+                percentage=None,
+                teacher_feedback=None,
+                graded_at=None,
+                graded_by_teacher_id=None
+            ),
+            ExamSubmission(
+                id=9,
+                exam_id=3,
+                student_id=11, # Priya Menon (Class 9-A) - Unevaluated
+                status="submitted",
+                paper_file_url="/samples/math_exam_sample.svg",
+                paper_file_name="Priya_Menon_Term1_Paper.pdf",
+                submitted_at=datetime.datetime.utcnow() - datetime.timedelta(hours=1),
+                marks_obtained=None,
+                percentage=None,
+                teacher_feedback=None,
+                graded_at=None,
+                graded_by_teacher_id=None
             ),
         ]
         db.add_all(exam_submissions)

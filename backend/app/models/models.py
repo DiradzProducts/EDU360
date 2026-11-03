@@ -104,6 +104,13 @@ class AdminTask(Base):
     is_escalated = Column(Boolean, default=False)
     escalation_reason = Column(String(255), nullable=True)
     completion_proof_url = Column(String(255), nullable=True)
+    submission_notes = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    approved_by = Column(String(100), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    is_admin_override = Column(Boolean, default=False)
+    admin_override_reason = Column(String(255), nullable=True)
     relief_requested = Column(Boolean, default=False)
     relief_reason = Column(String(100), nullable=True)
     relief_justification = Column(Text, nullable=True)
@@ -298,6 +305,10 @@ class LeaveRequest(Base):
     reason = Column(Text, nullable=False)
     status = Column(String(20), default="Pending")  # Pending, Approved, Rejected
     teacher_notes = Column(Text, nullable=True)
+    is_medical = Column(Boolean, default=False)
+    attachment_url = Column(Text, nullable=True)
+    attachment_name = Column(String(255), nullable=True)
+    approval_stage = Column(String(50), default="Submitted")
     applied_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class FeeMilestone(Base):
@@ -537,6 +548,9 @@ class ExamSchedule(Base):
     hall_name = Column(String(100), nullable=False)
     capacity = Column(Integer, default=80)
     chief_invigilator_name = Column(String(100), nullable=True)
+    question_paper_id = Column(Integer, ForeignKey("question_papers.id"), nullable=True)
+    question_paper_title = Column(String(150), nullable=True)
+    status = Column(String(50), default="Scheduled")
     academic_clearance = Column(Boolean, default=False)
     academic_clearance_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -559,6 +573,10 @@ class ReportCard(Base):
     attendance_pct = Column(Float, default=90.0)
     ai_teacher_narrative = Column(Text, nullable=True)  # Gemini pedagogical growth feedback
     is_moderated = Column(Boolean, default=True)
+    parent_signed_at = Column(DateTime, nullable=True)
+    parent_signer_name = Column(String(100), nullable=True)
+    parent_signature_hash = Column(String(64), nullable=True)
+    parent_remarks = Column(Text, nullable=True)
     is_published = Column(Boolean, default=False, index=True)
     published_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -755,6 +773,25 @@ class StaffPayslip(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
+class StaffSalaryInquiry(Base):
+    """Teacher/Staff salary queries and grievance tickets routed to Accounts Coordinator."""
+    __tablename__ = "staff_salary_inquiries"
+    id = Column(Integer, primary_key=True, index=True)
+    teacher_id = Column(Integer, nullable=True, index=True)
+    teacher_name = Column(String(100), nullable=False, index=True)
+    department = Column(String(80), nullable=True, default="Academics")
+    month = Column(String(50), nullable=False, default="Oct 2026")
+    reason = Column(String(150), nullable=False)
+    message = Column(Text, nullable=False)
+    net_salary = Column(Float, nullable=True, default=0.0)
+    utr = Column(String(100), nullable=True)
+    status = Column(String(30), default="Pending", index=True)  # Pending | Under Review | Resolved | Rejected
+    resolution_notes = Column(Text, nullable=True)
+    resolved_by = Column(String(100), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 class PurchaseOrder(Base):
     """Institutional procurement purchase order linking store requisitions to vendor billing."""
     __tablename__ = "purchase_orders"
@@ -901,3 +938,28 @@ class CurriculumPacing(Base):
 
 
 
+
+
+# =========================================================================
+# PARENT - TEACHER DIRECT MESSAGING & COMMUNICATIONS
+# =========================================================================
+
+class ParentTeacherMessage(Base):
+    __tablename__ = "parent_teacher_messages"
+    __table_args__ = (
+        Index("ix_pt_msg_student_created", "student_id", "created_at"),
+        Index("ix_pt_msg_unread", "receiver_role", "is_read"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    student_name = Column(String(100), nullable=True)
+    sender_role = Column(String(20), nullable=False)  # 'PARENT' or 'TEACHER'
+    sender_name = Column(String(100), nullable=False)
+    receiver_role = Column(String(20), nullable=False)  # 'PARENT' or 'TEACHER'
+    receiver_name = Column(String(100), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    message_text = Column(Text, nullable=False)
+    attachment_name = Column(String(255), nullable=True)
+    attachment_url = Column(Text, nullable=True)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

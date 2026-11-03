@@ -207,7 +207,7 @@ export function CreativeCorner() {
           className="px-5 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-pink-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-xs sm:text-sm shadow-lg shadow-pink-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer shrink-0"
         >
           <Camera className="h-4 w-4" />
-          <span>+ Share My Creation</span>
+          <span>Share My Creation</span>
         </button>
       </div>
 

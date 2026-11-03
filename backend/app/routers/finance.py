@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
     FeeMilestone, Student, Notification, StaffMember,
-    PayrollBatch, StaffPayslip, PurchaseOrder, FleetExpenseRecord
+    PayrollBatch, StaffPayslip, StaffSalaryInquiry, PurchaseOrder, FleetExpenseRecord
 )
 from app.schemas.schemas import (
     FeeDefaulterResponse, FeeDefaulterCreate, FeeDefaulterUpdate,
@@ -18,7 +18,7 @@ from app.schemas.schemas import (
     PaymentTransactionResponse, PaymentTransactionCreate,
     FinanceDispatchLogResponse, FinanceDashboardStats,
     ApplyWaiverRequest, RecordFeePaymentRequest, BulkReminderRequest,
-    StaffPayslipResponse, PayrollBatchResponse, GeneratePayrollRequest,
+    StaffPayslipResponse, PayrollBatchResponse, GeneratePayrollRequest, StaffSalaryInquiryCreate, StaffSalaryInquiryResolve, StaffSalaryInquiryResponse,
     AuthorizePayrollRequest, DisbursePayrollRequest, PurchaseOrderCreate,
     PurchaseOrderResponse, VerifyGRNRequest, FleetExpenseCreate,
     FleetExpenseResponse, SettleFleetExpenseRequest
@@ -1121,6 +1121,111 @@ async def disburse_payroll_batch(
     await db.refresh(batch)
     return batch
 
+
+@router.post("/payroll/inquiries", response_model=StaffSalaryInquiryResponse)
+async def create_salary_inquiry(
+    req: StaffSalaryInquiryCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Teachers submit a formal salary query or grievance to the Accounts Coordinator."""
+    inquiry = StaffSalaryInquiry(
+        teacher_id=req.teacher_id or 2,
+        teacher_name=req.teacher_name,
+        department=req.department or "Academics",
+        month=req.month,
+        reason=req.reason,
+        message=req.message,
+        net_salary=req.net_salary or 0.0,
+        utr=req.utr,
+        status="Pending"
+    )
+    db.add(inquiry)
+    await db.flush()
+
+    # Trigger High-Priority in-app notification to Accounts Coordinator
+    notif_msg = (
+        f"Faculty Query #{inquiry.id} from {req.teacher_name} ({req.month}): {req.reason}. "
+        f"Note: '{req.message[:120]}'. Net Pay: ₹{req.net_salary or 0:,.2f}, UTR: {req.utr or 'N/A'}"
+    )
+    await create_system_notification(
+        db=db,
+        sender_id=req.teacher_id or 2,
+        sender_name=req.teacher_name,
+        sender_role="teacher",
+        recipient_role="accounts_coordinator",
+        title=f"Salary Query: {req.reason} ({req.teacher_name})",
+        message=notif_msg,
+        notification_type="SALARY_INQUIRY",
+        priority="HIGH",
+        action_url="/accounts_coordinator?tab=payroll"
+    )
+    await db.commit()
+    await db.refresh(inquiry)
+    return inquiry
+
+# Backwards compatibility alias for /payroll/inquiry
+@router.post("/payroll/inquiry")
+async def legacy_salary_inquiry(
+    req: StaffSalaryInquiryCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    return await create_salary_inquiry(req, db)
+
+@router.get("/payroll/inquiries", response_model=List[StaffSalaryInquiryResponse])
+async def list_salary_inquiries(
+    status: Optional[str] = Query(None),
+    month: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Enables Accounts Coordinator to list, filter and review all incoming teacher payroll queries."""
+    query = select(StaffSalaryInquiry)
+    if status and status != "ALL":
+        query = query.where(StaffSalaryInquiry.status == status)
+    if month and month != "ALL":
+        query = query.where(StaffSalaryInquiry.month == month)
+    query = query.order_by(StaffSalaryInquiry.created_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+@router.patch("/payroll/inquiries/{inquiry_id}/resolve", response_model=StaffSalaryInquiryResponse)
+async def resolve_salary_inquiry(
+    inquiry_id: int,
+    req: StaffSalaryInquiryResolve,
+    db: AsyncSession = Depends(get_db)
+):
+    """Accounts Coordinator resolves or rejects a teacher salary inquiry with an audit note."""
+    result = await db.execute(select(StaffSalaryInquiry).where(StaffSalaryInquiry.id == inquiry_id))
+    inquiry = result.scalars().first()
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Salary inquiry not found")
+
+    inquiry.status = req.status
+    inquiry.resolution_notes = req.resolution_notes
+    inquiry.resolved_by = req.resolved_by or "Accounts Coordinator"
+    inquiry.resolved_at = datetime.datetime.utcnow()
+
+    # Send confirmation notification back to Teacher
+    teacher_notif_msg = (
+        f"Your salary query ({inquiry.reason} - {inquiry.month}) has been marked as '{req.status}' by {inquiry.resolved_by}. "
+        f"Resolution: {req.resolution_notes}"
+    )
+    await create_system_notification(
+        db=db,
+        sender_id=11,  # Accounts Coordinator
+        sender_name=inquiry.resolved_by or "Accounts Coordinator",
+        sender_role="accounts_coordinator",
+        recipient_user_id=inquiry.teacher_id,
+        recipient_role="teacher",
+        title=f"Salary Query Update: {req.status}",
+        message=teacher_notif_msg,
+        notification_type="SALARY_RESOLVED",
+        priority="NORMAL",
+        action_url="/teacher?tab=my_salary"
+    )
+
+    await db.commit()
+    await db.refresh(inquiry)
+    return inquiry
 
 @router.get("/payroll/my-payslip", response_model=StaffPayslipResponse)
 async def get_my_payslip(

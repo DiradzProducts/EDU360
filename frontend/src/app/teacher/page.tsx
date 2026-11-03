@@ -1,4 +1,5 @@
 'use client';
+import { Icon3D } from '@/components/ui/icon-3d';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -107,6 +108,7 @@ import {
   INITIAL_FOCUS_ROSTER 
 } from '@/lib/focus-data';
 import { RoleGuard } from '@/components/role-guard';
+import { StudentRemark, getRemarksForStudent, addStudentRemark, getAllRemarks } from '@/lib/student-remarks';
 import { Footer } from '@/components/footer';
 import { useTheme } from '@/lib/theme-context';
 
@@ -190,6 +192,10 @@ export default function TeacherPage() {
   const [students, setStudents] = useState<TeacherStudentRosterItem[]>([]);
   const [myPermissions, setMyPermissions] = useState<TeacherPermissionRequest[]>([]);
   const [myPayslip, setMyPayslip] = useState<StaffPayslipItem | null>(null);
+  const [showSalaryInquiryModal, setShowSalaryInquiryModal] = useState<boolean>(false);
+  const [inquiryCategory, setInquiryCategory] = useState<string>('Discrepancy in Deductions (PF / TDS / PT)');
+  const [inquiryRemarks, setInquiryRemarks] = useState<string>('');
+  const [isSubmittingInquiry, setIsSubmittingInquiry] = useState<boolean>(false);
   const [parentContext, setParentContext] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -209,6 +215,11 @@ export default function TeacherPage() {
   const [ptmScopeFilter, setPtmScopeFilter] = useState<'ALL' | InteractionScope>('ALL');
   // Parental Hub PTM UI state
   const [ptmStatusFilter, setPtmStatusFilter] = useState<'ALL' | 'BOOKED' | 'AVAILABLE' | 'BREAK'>('ALL');
+  const [cancellingPtmSlot, setCancellingPtmSlot] = useState<PTMSlot | null>(null);
+  const [ptmCancelReason, setPtmCancelReason] = useState<string>('Faculty Emergency / Official Duty');
+  const [ptmCancelCustomNote, setPtmCancelCustomNote] = useState<string>('');
+  const [ptmReopenAsFree, setPtmReopenAsFree] = useState<boolean>(true);
+  const [ptmUndoBackup, setPtmUndoBackup] = useState<{ slotId: string; previousState: any } | null>(null);
   const [homeworkList, setHomeworkList] = useState<HomeworkRosterItem[]>([
     {
       id: 1,
@@ -493,6 +504,7 @@ export default function TeacherPage() {
     remedial_students: any[];
   } | null>(null);
   const [editingExamSubmission, setEditingExamSubmission] = useState<ExamSubmissionItem | null>(null);
+  const [studioReadOnly, setStudioReadOnly] = useState<boolean>(false);
   const [editExamMarks, setEditExamMarks] = useState<number>(50);
   const [editExamFeedback, setEditExamFeedback] = useState<string>('');
   const [editExamWeakConcept, setEditExamWeakConcept] = useState<string>('');
@@ -741,8 +753,10 @@ export default function TeacherPage() {
     }
   };
 
-  const handleOpenEvaluationStudio = (sub: ExamSubmissionItem) => {
+  const handleOpenEvaluationStudio = (sub: ExamSubmissionItem, readOnly: boolean = false) => {
     setEditingExamSubmission(sub);
+    const isAlreadyGraded = (sub.marks_obtained !== null && sub.marks_obtained !== undefined) || sub.status === 'verified' || sub.status === 'graded';
+    setStudioReadOnly(readOnly || isAlreadyGraded);
     const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : 45;
     setInitialAiScore(total);
     
@@ -826,9 +840,17 @@ export default function TeacherPage() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [newPermType, setNewPermType] = useState('Shift Adjustment / Late Arrival');
   const [newPermShift, setNewPermShift] = useState('Morning Shift (08:30 AM - 12:30 PM)');
-  const [newPermDate, setNewPermDate] = useState('Today, 11:30 AM - 01:00 PM');
-  const [newPermPeriods, setNewPermPeriods] = useState('Period 2 (Class 8-B Math) & Period 4 (Class 9-A Math)');
-  const [newPermSubstitute, setNewPermSubstitute] = useState('Mrs. Neha Roy (TGT Science)');
+  const [permDate, setPermDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [permStartTime, setPermStartTime] = useState('11:30');
+  const [permEndTime, setPermEndTime] = useState('13:00');
+  const [selectedAffectedPeriods, setSelectedAffectedPeriods] = useState<string[]>([
+    'Period 2: Grade 8-B (Mathematics Live Studio, 09:20 - 10:05 AM)',
+    'Period 4: Grade 7-C (General Science Proxy, 11:15 AM - 12:00 PM)'
+  ]);
+  const [newPermSubstitute, setNewPermSubstitute] = useState('Mrs. Neha Roy (TGT Science & English)');
   const [newPermReason, setNewPermReason] = useState('');
 
   const [showPTMModal, setShowPTMModal] = useState(false);
@@ -844,6 +866,10 @@ export default function TeacherPage() {
   const [reliefReason, setReliefReason] = useState<'Medical Emergency' | 'Academic Workload Surge'>('Academic Workload Surge');
   const [reliefJustification, setReliefJustification] = useState<string>('');
   const [reliefSuggestedPeer, setReliefSuggestedPeer] = useState<string>('Mrs. Neha Roy');
+  // Task Submission & Proof State
+  const [submitWorkTask, setSubmitWorkTask] = useState<AdminTask | null>(null);
+  const [taskSubmissionNotes, setTaskSubmissionNotes] = useState<string>('');
+  const [taskProofUrl, setTaskProofUrl] = useState<string>('');
   const [logUnitCurriculum, setLogUnitCurriculum] = useState<CurriculumPacingItem | null>(null);
   const [logUnitNotes, setLogUnitNotes] = useState<string>('');
 
@@ -852,12 +878,27 @@ export default function TeacherPage() {
   const [sisActiveTab, setSisActiveTab] = useState<'profile' | 'academics' | 'attendance' | 'transport' | 'vault'>('profile');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
+  // --- My Classes (360 Cockpit) State ---
+  const [selectedClassFilter, setSelectedClassFilter] = useState<'ALL' | 'Class 8-B' | 'Class 9-A' | 'Class 9-B'>('Class 8-B');
+  const [rosterQuickFilter, setRosterQuickFilter] = useState<'ALL' | 'AT_RISK_ATTENDANCE' | 'FOCUS_TABLE_ACTIVE' | 'HAS_REMARKS' | 'ON_LEAVE'>('ALL');
+  const [rosterViewMode, setRosterViewMode] = useState<'table' | 'cards'>('table');
+  const [showAddRemarkModal, setShowAddRemarkModal] = useState<boolean>(false);
+  const [remarkTargetStudent, setRemarkTargetStudent] = useState<TeacherStudentRosterItem | null>(null);
+  const [newRemarkCategory, setNewRemarkCategory] = useState<StudentRemark['category']>('Academic Excellence');
+  const [newRemarkPriority, setNewRemarkPriority] = useState<StudentRemark['priority']>('Routine');
+  const [newRemarkAuthorRole, setNewRemarkAuthorRole] = useState<StudentRemark['author_role']>('Class Teacher');
+  const [newRemarkText, setNewRemarkText] = useState<string>('');
+  const [showAllRemarksStudent, setShowAllRemarksStudent] = useState<TeacherStudentRosterItem | null>(null);
+  const [remarksRevision, setRemarksRevision] = useState<number>(0);
+
   // Dedicated Parent Chat State (PRD Requirement: Chat with parent of any student)
   const [selectedChatStudentId, setSelectedChatStudentId] = useState<number>(1);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatRosterFilter, setChatRosterFilter] = useState<'ALL' | 'FOCUS' | '8B'>('ALL');
   const [chatInput, setChatInput] = useState('');
-  const [conversations, setConversations] = useState<Record<number, Array<{ id: number; sender: 'parent' | 'teacher'; text: string; time: string }>>>({
+  const [chatAttachment, setChatAttachment] = useState<{ name: string; size: string; type: string; url?: string } | null>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const [conversations, setConversations] = useState<Record<number, Array<{ id: number; sender: 'parent' | 'teacher'; text: string; time: string; attachment?: { name: string; size: string; type: string } }>>>({
     1: [
       {
         id: 1,
@@ -1012,12 +1053,51 @@ export default function TeacherPage() {
   // Subject Parents Section Filter (Homeroom 8-B vs Subject Students 7-A, 8-B, 9-C)
   const [subjectSectionFilter, setSubjectSectionFilter] = useState<'ALL' | '7-A' | '8-B' | '9-C'>('ALL');
 
+  // Listen for global command palette navigation events
+  useEffect(() => {
+    const handleSwitchTab = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    window.addEventListener('edu360:switch-tab', handleSwitchTab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setActiveTab(tabParam as TeacherTab);
+      }
+    }
+    return () => window.removeEventListener('edu360:switch-tab', handleSwitchTab);
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setScheduleActivePeriodSeconds(prev => (prev > 0 ? prev - 1 : 2700));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Synchronize teacher chat with shared parent-teacher API/cache in real-time
+  useEffect(() => {
+    if (activeTab === 'parent_chat') {
+      api.getParentChatMessages(selectedChatStudentId).then((allMsgs) => {
+        if (allMsgs && allMsgs.length > 0) {
+          const mapped = allMsgs.map((m) => ({
+            id: m.id,
+            sender: m.sender_role === 'TEACHER' ? ('teacher' as const) : ('parent' as const),
+            text: m.message_text,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            attachment: m.attachment_name ? { name: m.attachment_name, size: '250 KB', type: 'application/pdf' } : undefined
+          }));
+          setConversations((prev) => ({
+            ...prev,
+            [selectedChatStudentId]: mapped
+          }));
+        }
+      }).catch(console.error);
+    }
+  }, [activeTab, selectedChatStudentId]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -1044,7 +1124,8 @@ export default function TeacherPage() {
           ptmSlotsRes,
           acadTasksRes,
           currPacingRes,
-          payslipRes
+          payslipRes,
+          subsRes
         ] = await Promise.all([
           api.getAttendanceRoster(1),
           api.getSubmission(1),
@@ -1060,9 +1141,10 @@ export default function TeacherPage() {
           api.getParentTeacherNotes(),
           api.getPTMEventConfig(),
           api.getPTMSlots(),
-          api.getAdminTasks('academic'),
+          api.getAdminTasks(),
           api.getCurriculumPacing(),
-          api.getMyPayslip(2)
+          api.getMyPayslip(2),
+          api.getSubstitutions()
         ]);
 
         setAttendance(attRes);
@@ -1079,9 +1161,55 @@ export default function TeacherPage() {
         setParentNotes(pNotesRes);
         setPtmConfig(ptmCfgRes);
         setPtmSlots(ptmSlotsRes);
-        setAcademicTasks(acadTasksRes);
+        const myAssignedTasks = (acadTasksRes || []).filter((t: any) => 
+          !t.assigned_to || 
+          t.assigned_to === 'Mrs. Ananya Verma' || 
+          t.assigned_to_role === 'teacher' || 
+          (t.assigned_to && t.assigned_to.toLowerCase().includes('verma'))
+        );
+        setAcademicTasks(myAssignedTasks);
         setCurriculumItems(currPacingRes);
         setMyPayslip(payslipRes);
+
+        // Check if any emergency substitution was assigned to this faculty by Academic Coordinator
+        const myAssignedSubs = (subsRes || []).filter((s: any) => 
+          s.status === 'Assigned' && 
+          (s.substitute_teacher_id === 1 || s.substitute_teacher_id === 2 || 
+           (s.substitute_teacher_name && (s.substitute_teacher_name.includes('Ananya') || s.substitute_teacher_name.includes('Verma'))))
+        );
+        if (myAssignedSubs.length > 0) {
+          const subPersItems = myAssignedSubs.map((s: any, idx: number) => ({
+            id: `sub-pers-${s.id || idx}`,
+            period_number: s.period_number || 4,
+            start_time: s.time_slot ? s.time_slot.split('-')[0].trim() : '11:15 AM',
+            end_time: s.time_slot ? s.time_slot.split('-')[1].trim() : '12:00 PM',
+            day_of_week: 'Monday' as const,
+            activity_type: 'SUBSTITUTION_COVER' as const,
+            class_grade: s.class_name ? s.class_name.split('-')[0].trim() : 'Class 8',
+            section: s.class_name && s.class_name.includes('-') ? s.class_name.split('-')[1].trim() : 'A',
+            subject_name: s.subject || 'Emergency Coverage',
+            room_number: 'Room 204',
+            is_current_active_period: false,
+            notes: `Covering for ${s.absent_teacher_name || 'colleague'}: ${s.absent_reason || 'Academic period coverage'}`
+          }));
+          setPersonalSchedule(prev => [...subPersItems, ...prev]);
+
+          const subDutyTasks = myAssignedSubs.map((s: any, idx: number) => ({
+            id: `sub-duty-${s.id || idx}`,
+            teacher_id: '1',
+            assigned_by: 'Academic Coordinator',
+            category: 'CAMPUS_SUBSTITUTION' as const,
+            title: `Campus Emergency Substitution: ${s.class_name}`,
+            sub_category: s.absent_teacher_name || 'Faculty Colleague',
+            event_or_exam_name: 'Academic Faculty Substitution Roster',
+            scheduled_date: 'Today',
+            time_window: s.time_slot || '11:15 AM - 12:00 PM',
+            location_or_venue: 'Room 204',
+            status: 'IN_PROGRESS' as const,
+            priority: 'CRITICAL' as const
+          }));
+          setFacultyDuties(prev => [...subDutyTasks, ...prev]);
+        }
       } catch (err) {
         console.error("Error loading teacher portal", err);
       } finally {
@@ -1199,22 +1327,70 @@ export default function TeacherPage() {
     triggerToast("Conference slot availability updated.");
   };
 
-  const handleReleasePTMSlot = (slotId: string) => {
-    setPtmSlots(prev => prev.map(s => s.id === slotId ? {
-      ...s,
-      status: 'AVAILABLE',
-      booked_student_id: undefined,
-      booked_student_name: undefined,
-      booked_class: undefined,
-      booked_parent_name: undefined,
-      is_sibling_combo: false,
-      sibling_student_name: undefined,
-      focus_table_agenda: []
-    } : s));
-    triggerToast("PTM Slot has been made available again.");
+  const handleOpenCancelPtmModal = (slot: PTMSlot) => {
+    setCancellingPtmSlot(slot);
+    setPtmCancelReason('Faculty Emergency / Official Duty');
+    setPtmCancelCustomNote('');
+    setPtmReopenAsFree(true);
   };
 
-  const handleBookPTMSlotDirect = async (slotId: string, studentId: number, studentName: string, isSibling: boolean) => {
+  const handleConfirmCancelPtmSlot = async () => {
+    if (!cancellingPtmSlot) return;
+    const slotId = cancellingPtmSlot.id;
+    const fullReason = ptmCancelCustomNote 
+      ? `${ptmCancelReason}: ${ptmCancelCustomNote}` 
+      : ptmCancelReason;
+
+    try {
+      const res = await api.cancelPTMSlot(slotId, {
+        cancelled_by: 'TEACHER',
+        cancellation_reason: fullReason,
+        reopen_as_free: ptmReopenAsFree,
+        notify_parent: true
+      });
+
+      if (res && res.previous_state) {
+        setPtmUndoBackup({ slotId, previousState: res.previous_state });
+      }
+
+      setPtmSlots(prev => prev.map(s => s.id === slotId ? (res?.slot || {
+        ...s,
+        status: ptmReopenAsFree ? 'AVAILABLE' : 'BREAK',
+        booked_student_id: undefined,
+        booked_student_name: undefined,
+        booked_parent_name: undefined,
+        focus_table_agenda: [],
+        meeting_url: undefined
+      }) : s));
+
+      setCancellingPtmSlot(null);
+      triggerToast(
+        ptmReopenAsFree 
+          ? "PTM slot cancelled & reopened as Free for parents." 
+          : "PTM slot cancelled & blocked as Faculty Break."
+      );
+    } catch (err) {
+      console.error(err);
+      triggerToast("Failed to cancel PTM slot.");
+    }
+  };
+
+  const handleUndoPtmCancellation = async () => {
+    if (!ptmUndoBackup) return;
+    try {
+      const res = await api.restorePTMSlot(ptmUndoBackup.slotId, ptmUndoBackup.previousState);
+      if (res && res.slot) {
+        setPtmSlots(prev => prev.map(s => s.id === ptmUndoBackup.slotId ? res.slot : s));
+        setPtmUndoBackup(null);
+        triggerToast("✓ Restored previous PTM booking successfully!");
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast("Failed to restore PTM slot.");
+    }
+  };
+
+  const handleBookPTMSlotDirect = async (slotId: string, studentId: number, studentName: string, isSibling: boolean = false) => {
     const booked = await api.bookPTMSlot({
       slot_id: slotId,
       booked_student_id: studentId,
@@ -1223,13 +1399,11 @@ export default function TeacherPage() {
       booked_parent_id: "par-01",
       booked_parent_name: "Mr. Rajesh Sharma",
       interaction_scope: "HOMEROOM_CLASS",
-      is_sibling_combo: isSibling,
-      sibling_student_id: isSibling ? 5 : undefined,
-      sibling_student_name: isSibling ? "Kavya Sharma (5-A)" : undefined,
+      is_sibling_combo: false,
       focus_table_agenda: ["Algebraic Word Problems", "Continuous Remedial Plan"]
     });
     setPtmSlots(prev => prev.map(s => s.id === slotId ? booked : s));
-    triggerToast(`Slot ${booked.start_time} confirmed for ${studentName}! Focus Table agenda linked.`);
+    triggerToast(`Atomic 10-min slot ${booked.start_time} confirmed for ${studentName}! Focus Table agenda linked.`);
   };
 
   // Handlers
@@ -1250,20 +1424,109 @@ export default function TeacherPage() {
 
   const handleReviewLeave = async (id: number, status: 'Approved' | 'Rejected') => {
     await api.reviewLeaveRequest(id, status, `Reviewed and ${status.toLowerCase()} by Class Teacher Mrs. Ananya Verma`);
-    const updated = await api.getLeaveRequests();
-    setLeaveRequests(updated);
-    triggerToast(`Student leave request #${id} marked as ${status}`);
+    const [updatedLeaves, updatedStudents, updatedAttendance] = await Promise.all([
+      api.getLeaveRequests(),
+      api.getTeacherStudents(),
+      api.getAttendanceRoster(1)
+    ]);
+    if (updatedLeaves) setLeaveRequests(updatedLeaves);
+    if (updatedStudents) setStudents(updatedStudents);
+    if (updatedAttendance) setAttendance(updatedAttendance);
+    triggerToast(
+      status === 'Approved'
+        ? `✓ Leave request #${id} Approved! Student attendance updated to 'Excused Leave' in SIS roster.`
+        : `Student leave request #${id} marked as Rejected.`
+    );
+  };
+
+  const handleShiftPresetChange = (preset: string) => {
+    setNewPermShift(preset);
+    if (preset.includes('Morning Shift')) {
+      setPermStartTime('08:30');
+      setPermEndTime('12:30');
+    } else if (preset.includes('Afternoon Shift')) {
+      setPermStartTime('12:30');
+      setPermEndTime('16:30');
+    } else if (preset.includes('Period 1-2')) {
+      setPermStartTime('08:30');
+      setPermEndTime('10:15');
+    } else if (preset.includes('Period 4-5')) {
+      setPermStartTime('11:15');
+      setPermEndTime('13:00');
+    } else if (preset.includes('Full Day')) {
+      setPermStartTime('08:30');
+      setPermEndTime('16:30');
+    }
+  };
+
+  const availableTeacherClasses = React.useMemo(() => {
+    if (personalSchedule && personalSchedule.length > 0) {
+      const filtered = personalSchedule.filter(p => p.activity_type !== 'FREE_PREP_PERIOD');
+      if (filtered.length > 0) {
+        return filtered.map(p => {
+          const cls = p.class_grade ? `${p.class_grade}${p.section ? '-' + p.section : ''}` : 'Class';
+          const subj = p.subject_name || 'Class Session';
+          return `Period ${p.period_number}: ${cls} (${subj}, ${p.start_time} - ${p.end_time})`;
+        });
+      }
+    }
+    return [
+      'Period 1: Grade 8-B (Mathematics, 08:30 - 09:15 AM)',
+      'Period 2: Grade 8-B (Mathematics Live Studio, 09:20 - 10:05 AM)',
+      'Period 4: Grade 7-C (General Science Proxy, 11:15 AM - 12:00 PM)',
+      'Period 5: Grade 9-A (Coordinate Geometry Lab, 12:45 - 01:30 PM)',
+      'Period 6: Grade 10-All (Board Mock Invigilation, 01:35 - 02:20 PM)',
+      'Period 7: Grade 10-C (Calculus Foundations, 02:25 - 03:10 PM)'
+    ];
+  }, [personalSchedule]);
+
+  const togglePeriodSelection = (periodStr: string) => {
+    setSelectedAffectedPeriods(prev =>
+      prev.includes(periodStr) ? prev.filter(p => p !== periodStr) : [...prev, periodStr]
+    );
   };
 
   const handleApplyPermission = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPermReason.trim()) return;
 
+    let formattedDate = permDate;
+    try {
+      const parts = permDate.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        formattedDate = d.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+    } catch {
+      formattedDate = permDate;
+    }
+
+    const formatTime12h = (t: string) => {
+      if (!t) return '';
+      const [hStr, mStr] = t.split(':');
+      let h = parseInt(hStr, 10);
+      const m = mStr || '00';
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    };
+
+    const formattedTimeWindow = `${formatTime12h(permStartTime)} - ${formatTime12h(permEndTime)}`;
+    const effectiveWindow = `${formattedDate}, ${formattedTimeWindow}`;
+    const periodsString = selectedAffectedPeriods.length > 0 
+      ? selectedAffectedPeriods.join(' & ') 
+      : 'No teaching periods affected (Free / Prep Period)';
+
     await api.applyTeacherPermission({
       type: newPermType,
-      date: newPermDate,
+      date: effectiveWindow,
       shift: newPermShift,
-      affected_periods: newPermPeriods,
+      affected_periods: periodsString,
       suggested_substitute: newPermSubstitute,
       reason: newPermReason
     });
@@ -1319,9 +1582,30 @@ export default function TeacherPage() {
 
   const handleUpdateTeacherTaskStatus = async (taskId: number, newStatus: string) => {
     await api.updateAdminTask(taskId, { status: newStatus });
-    const updated = await api.getAdminTasks('academic');
-    setAcademicTasks(updated);
+    const updated = await api.getAdminTasks();
+    const myUpdated = updated.filter((t: any) => !t.assigned_to || t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher' || (t.assigned_to && t.assigned_to.toLowerCase().includes('verma')));
+    setAcademicTasks(myUpdated);
     triggerToast(`Academic task updated to ${newStatus}`);
+  };
+
+  const handleSubmitTaskWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submitWorkTask) return;
+    if (!taskSubmissionNotes.trim()) {
+      triggerToast('Please provide notes describing the work completed.');
+      return;
+    }
+    await api.submitTaskWork(submitWorkTask.id, {
+      submission_notes: taskSubmissionNotes.trim(),
+      completion_proof_url: taskProofUrl.trim() || '/samples/Verified_Dossier_Report.pdf'
+    });
+    const updated = await api.getAdminTasks();
+    const myUpdated = updated.filter((t: any) => !t.assigned_to || t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher' || (t.assigned_to && t.assigned_to.toLowerCase().includes('verma')));
+    setAcademicTasks(myUpdated);
+    setSubmitWorkTask(null);
+    setTaskSubmissionNotes('');
+    setTaskProofUrl('');
+    triggerToast(`Task "${submitWorkTask.title}" submitted for Principal verification!`);
   };
 
   const handleSchedulePTM = (e: React.FormEvent) => {
@@ -1331,13 +1615,14 @@ export default function TeacherPage() {
   };
 
   const handleSendMessage = () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() && !chatAttachment) return;
     const currentChat = conversations[selectedChatStudentId] || [];
     const newMsg = {
       id: currentChat.length + 1,
       sender: 'teacher' as const,
-      text: chatInput.trim(),
-      time: 'Just now'
+      text: chatInput.trim() || (chatAttachment ? `Shared attachment: ${chatAttachment.name}` : ''),
+      time: 'Just now',
+      attachment: chatAttachment ? { ...chatAttachment } : undefined
     };
     const updatedChat = [...currentChat, newMsg];
     setConversations(prev => ({
@@ -1346,9 +1631,21 @@ export default function TeacherPage() {
     }));
     setChatMessages(updatedChat);
     const targetStudent = students.find(s => s.id === selectedChatStudentId);
-    triggerToast(`Message sent to ${targetStudent?.guardian_name || 'parent'}`);
+    triggerToast(chatAttachment ? `Message with attachment "${chatAttachment.name}" sent to ${targetStudent?.guardian_name || 'parent'}` : `Message sent to ${targetStudent?.guardian_name || 'parent'}`);
     const messageText = chatInput.trim();
+    api.sendParentChatMessage({
+      student_id: selectedChatStudentId,
+      sender_role: 'TEACHER',
+      sender_name: 'Mrs. Ananya Verma',
+      receiver_role: 'PARENT',
+      receiver_name: targetStudent?.guardian_name || 'Rajesh Sharma',
+      message_text: messageText,
+      attachment_name: chatAttachment?.name,
+      attachment_url: chatAttachment?.url
+    }).catch(console.error);
     setChatInput('');
+    setChatAttachment(null);
+    if (chatFileInputRef.current) chatFileInputRef.current.value = '';
 
     // Responsive parent reply simulation
     const activeId = selectedChatStudentId;
@@ -1999,10 +2296,10 @@ export default function TeacherPage() {
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Users className={`h-4 w-4 shrink-0 ${activeTab === 'roster' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  {!sidebarCollapsed && <span className="truncate">My Students (8B &amp; 9A)</span>}
+                  {!sidebarCollapsed && <span className="truncate">My Classes (360 Cockpit)</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className="text-[10px] font-bold text-slate-400 shrink-0">{students.length}</span>
+                  <span className="rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.2 text-[9px] font-bold shrink-0">8B &bull; 9A</span>
                 )}
               </button>
             </div>
@@ -2140,7 +2437,7 @@ export default function TeacherPage() {
                   {!sidebarCollapsed && <span className="truncate">My Payslips</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Bursar</span>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Accounts</span>
                 )}
               </button>
             </div>
@@ -2182,6 +2479,38 @@ export default function TeacherPage() {
           </button>
           <span className="text-xs font-bold text-slate-500">Teacher Desk</span>
         </div>
+
+        {/* REAL-TIME PENDING LEAVE APPLICATION NOTIFICATION BANNER */}
+        {pendingLeaves > 0 && activeTab !== 'leave_approvals' && (
+          <div className="rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-800 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                <CalendarCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                    Parent Leave Application Alert
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
+                    {pendingLeaves} Action Required
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                  Parents submitted leave requests awaiting class teacher review. Approving will automatically sync attendance to &lsquo;Excused Leave&rsquo;.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('leave_approvals')}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+            >
+              <span>Review Leave Queue ({pendingLeaves})</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* ===================================================== */}
         {/* TAB 0: TEACHER DASHBOARD (EXECUTIVE OVERVIEW & PULSE) */}
@@ -2631,7 +2960,7 @@ export default function TeacherPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white flex items-center gap-1">
-                            🎥 Virtual Exam Invigilation
+                            <span className="inline-flex items-center gap-1.5"><Icon3D name="video" size={18} /><span>Virtual Exam Invigilation</span></span>
                           </span>
                           <span className="text-[10px] font-bold text-slate-500">
                             • 14 Oct 2026 (09:00 AM – 12:00 PM)
@@ -2789,22 +3118,51 @@ export default function TeacherPage() {
                                 <span>Author &amp; Upload Blueprint Draft &rarr;</span>
                               </button>
                             )}
-                            <div className="flex items-center gap-2">
-                              {task.status !== 'In Progress' && (
+                            {task.rejection_reason && task.status !== 'Completed' && (
+                              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+                                <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-300">
+                                  <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                                  <span>Principal Requested Revision:</span>
+                                </div>
+                                <p className="text-[11px] text-rose-700 dark:text-rose-300 italic">
+                                  &ldquo;{task.rejection_reason}&rdquo;
+                                </p>
+                              </div>
+                            )}
+
+                            {task.status === 'Pending Review' ? (
+                              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                  <span>Submitted for Principal Verification</span>
+                                </div>
+                                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                  Awaiting administrator sign-off. {task.submission_notes ? `Notes: "${task.submission_notes}"` : ''}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                {task.status !== 'In Progress' && (
+                                  <button
+                                    onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
+                                    className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                                  >
+                                    Mark In Progress
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
-                                  className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                                  onClick={() => {
+                                    setSubmitWorkTask(task);
+                                    setTaskSubmissionNotes('');
+                                    setTaskProofUrl('');
+                                  }}
+                                  className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                                 >
-                                  Mark In Progress
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  <span>Submit Work &amp; Proof</span>
                                 </button>
-                              )}
-                              <button
-                                onClick={() => handleUpdateTeacherTaskStatus(task.id, 'Completed')}
-                                className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                              >
-                                Resolve &amp; Submit ✓
-                              </button>
-                            </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3811,7 +4169,7 @@ export default function TeacherPage() {
                     title="Batch verify all clean pending remedial solution uploads"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    <span>⚡ Quick Verify All Validated ({focusStats.needsVerification})</span>
+                    <span>Quick Verify All Validated ({focusStats.needsVerification})</span>
                   </button>
                 )}
               </div>
@@ -4377,7 +4735,7 @@ export default function TeacherPage() {
                           title="Run Gemini Vision AI to grade descriptive answer sheets against answer key"
                         >
                           <Sparkles className={`h-3.5 w-3.5 ${isAiEvaluatingPapers ? 'animate-spin' : ''}`} />
-                          <span>{isAiEvaluatingPapers ? 'AI Evaluating Papers...' : '⚡ Evaluate Papers with AI'}</span>
+                          <span>{isAiEvaluatingPapers ? 'AI Evaluating Papers...' : 'Evaluate Papers with AI'}</span>
                         </button>
                         <button
                           type="button"
@@ -4506,17 +4864,28 @@ export default function TeacherPage() {
                                     </button>
                                   </td>
                                   <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">
-                                    {sub.marks_obtained !== null ? `${sub.marks_obtained} / ${activeExam.total_marks}` : '--'}
+                                    {sub.marks_obtained !== null && sub.marks_obtained !== undefined ? `${sub.marks_obtained} / ${activeExam.total_marks}` : '--'}
                                   </td>
                                   <td className="py-3.5 px-4">
-                                    <span className={`font-black text-xs ${
-                                      isRemedial ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-                                    }`}>
-                                      {sub.percentage !== null ? `${sub.percentage}%` : '--'}
-                                    </span>
+                                    {sub.percentage !== null && sub.percentage !== undefined ? (
+                                      <span className={`font-black text-xs ${
+                                        isRemedial ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                                      }`}>
+                                        {sub.percentage}%
+                                      </span>
+                                    ) : (
+                                      <span className="font-semibold text-xs text-slate-400">
+                                        --
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="py-3.5 px-4">
-                                    {isRemedial ? (
+                                    {sub.percentage === null || sub.percentage === undefined ? (
+                                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+                                        <Clock className="h-3 w-3 shrink-0" />
+                                        <span>Pending Evaluation</span>
+                                      </span>
+                                    ) : isRemedial ? (
                                       <div>
                                         <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
                                           <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -4536,27 +4905,45 @@ export default function TeacherPage() {
                                     )}
                                   </td>
                                   <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 dark:text-slate-400 italic text-[11px]">
-                                    {sub.teacher_feedback || 'Needs bracket multiplication review.'}
+                                    {sub.teacher_feedback || 'Awaiting teacher evaluation / marks verification.'}
                                   </td>
                                   <td className="py-3.5 px-4 text-right">
                                     <div className="flex items-center justify-end gap-1.5">
                                       {sub.marks_obtained === null || sub.marks_obtained === undefined ? (
-                                        <button
-                                          onClick={() => handleRunAiSingleEvaluation(sub.id)}
-                                          disabled={evaluatingSubmissionId === sub.id}
-                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-60"
-                                        >
-                                          <Sparkles className={`h-3 w-3 ${evaluatingSubmissionId === sub.id ? 'animate-spin' : ''}`} />
-                                          <span>{evaluatingSubmissionId === sub.id ? 'Evaluating...' : '⚡ AI Evaluate'}</span>
-                                        </button>
-                                      ) : null}
-                                      <button
-                                        onClick={() => handleOpenEvaluationStudio(sub)}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
-                                      >
-                                        <FileEdit className="h-3.5 w-3.5" />
-                                        <span>Review &amp; Verify Paper</span>
-                                      </button>
+                                        <>
+                                          <button
+                                            onClick={() => handleRunAiSingleEvaluation(sub.id)}
+                                            disabled={evaluatingSubmissionId === sub.id}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                                          >
+                                            <Sparkles className={`h-3 w-3 ${evaluatingSubmissionId === sub.id ? 'animate-spin' : ''}`} />
+                                            <span>{evaluatingSubmissionId === sub.id ? 'Evaluating...' : 'AI Evaluate'}</span>
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenEvaluationStudio(sub, false)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+                                          >
+                                            <FileEdit className="h-3.5 w-3.5" />
+                                            <span>Review &amp; Verify Paper</span>
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <div className="flex items-center justify-end gap-2">
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold shadow-2xs">
+                                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                            <span>Marks Sealed ({sub.marks_obtained}/{activeExam.total_marks})</span>
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEvaluationStudio(sub, true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                                            title="Assessment is locked against future modifications"
+                                          >
+                                            <Lock className="h-3.5 w-3.5 text-slate-500" />
+                                            <span>View Paper (Locked)</span>
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -4570,32 +4957,44 @@ export default function TeacherPage() {
                       <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="space-y-0.5 max-w-xl">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                            {activeExam.is_published 
-                              ? `✓ Officially Published on ${activeExam.published_at ? new Date(activeExam.published_at).toLocaleDateString() : 'Active Term'}`
-                              : 'Pending Teacher Final Approval & Gradebook Publication'
+                            {activeExam.is_locked || activeExam.is_published 
+                              ? `✓ Officially Sealed & Submitted to Exam Cell on ${activeExam.published_at ? new Date(activeExam.published_at).toLocaleDateString() : 'Active Term'}`
+                              : 'Pending Teacher Final Approval & Gradebook Submission'
                             }
                           </span>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            Publishing triggers the automated <strong>MarksPublishedEvent</strong> pipeline. All students scoring &le; {activeExam.remedial_threshold_pct}% are immediately enrolled in the 1-Week Remedial Focus Table.
+                            {activeExam.is_locked || activeExam.is_published
+                              ? 'This gradebook is sealed and locked. All marks have been forwarded to the Exam Coordinator for consolidated Report Card compilation. Direct modifications are restricted.'
+                              : `Submitting final marks triggers the MarksPublishedEvent pipeline, auto-enrolls students scoring ≤ ${activeExam.remedial_threshold_pct}% in the Remedial Focus Table, and seals the gradebook.`
+                            }
                           </p>
                         </div>
 
                         <div className="flex items-center gap-3 shrink-0">
-                          <button
-                            disabled={isPublishingExam}
-                            onClick={() => handlePublishExam(activeExam.id)}
-                            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 text-xs font-bold shadow-md shadow-indigo-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-                          >
-                            <Award className="h-4 w-4" />
-                            <span>
-                              {isPublishingExam 
-                                ? 'Executing MarksPublishedEvent...' 
-                                : activeExam.is_published 
-                                ? 'Re-Publish & Sync Focus Table' 
-                                : 'Publish Results & Auto-Enroll (<70%)'
-                              }
-                            </span>
-                          </button>
+                          {activeExam.is_locked || activeExam.is_published ? (
+                            <button
+                              disabled={true}
+                              className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 text-white px-5 py-2.5 text-xs font-bold shadow-xs cursor-not-allowed opacity-90"
+                              title="Gradebook is sealed and submitted to Exam Coordinator"
+                            >
+                              <Lock className="h-4 w-4" />
+                              <span>✓ Final Marks Submitted &amp; Sealed</span>
+                            </button>
+                          ) : (
+                            <button
+                              disabled={isPublishingExam}
+                              onClick={() => handlePublishExam(activeExam.id)}
+                              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 text-xs font-bold shadow-md shadow-indigo-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                              <Award className="h-4 w-4" />
+                              <span>
+                                {isPublishingExam 
+                                  ? 'Submitting & Sealing...' 
+                                  : 'Submit Final Grades to Exam Cell (One-Time Lock)'
+                                }
+                              </span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -4661,6 +5060,18 @@ export default function TeacherPage() {
                       </div>
                     </div>
 
+                    {/* Locked Banner if in read-only mode */}
+                    {studioReadOnly && (
+                      <div className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-900 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
+                        <div className="flex items-center gap-2 font-bold">
+                          <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                          <span>Assessment Sealed &amp; Immutable: Marks cannot be modified after verification under institutional examination policy.</span>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-1 rounded-md">
+                          Audit Verified
+                        </span>
+                      </div>
+                    )}
                     {/* Studio Body: Side by Side (Left: Paper Viewer 65%, Right: Rubric & Marks 35%) */}
                     <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
                       {/* LEFT PANEL: Student Descriptive Paper Viewer (cols 7) */}
@@ -4729,7 +5140,7 @@ export default function TeacherPage() {
 
                             {/* Interactive Guidance Banner */}
                             <div className="rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2.5 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-center justify-between font-sans">
-                              <span>💡 <strong>Interactive Problem Marks:</strong> You can edit marks in the corner of each problem below. Right-side Total Score &amp; Threshold will update automatically!</span>
+                              <span><span className="inline-flex items-center gap-1.5"><Icon3D name="bulb" size={16} /><span><strong>Interactive Problem Marks:</strong></span></span> You can edit marks in the corner of each problem below. Right-side Total Score &amp; Threshold will update automatically!</span>
                             </div>
 
                             {/* Question 1: Solved Correctly */}
@@ -4940,6 +5351,7 @@ export default function TeacherPage() {
                                 type="number"
                                 min="0"
                                 max="80"
+                                disabled={studioReadOnly}
                                 value={editExamTheoryMarks}
                                 onChange={(e) => setEditExamTheoryMarks(Number(e.target.value))}
                                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
@@ -4952,6 +5364,7 @@ export default function TeacherPage() {
                                 type="number"
                                 min="0"
                                 max="20"
+                                disabled={studioReadOnly}
                                 value={editExamInternalMarks}
                                 onChange={(e) => setEditExamInternalMarks(Number(e.target.value))}
                                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
@@ -5016,32 +5429,50 @@ export default function TeacherPage() {
 
                         {/* Studio Footer Action Buttons */}
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setEditingExamSubmission(null)}
-                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
+                          {studioReadOnly ? (
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs text-slate-500 font-semibold flex items-center gap-1.5">
+                                <Lock className="h-3.5 w-3.5 text-slate-400" />
+                                <span>Official Examination Paper Record — Verified &amp; Signed Off</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingExamSubmission(null)}
+                                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs shadow-xs cursor-pointer"
+                              >
+                                Close Graded Paper
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setEditingExamSubmission(null)}
+                                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
 
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSaveExamMarks(false)}
-                              className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95"
-                            >
-                              Save Evaluation
-                            </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveExamMarks(false)}
+                                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95"
+                                >
+                                  Save Evaluation
+                                </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleSaveExamMarks(true)}
-                              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
-                            >
-                              <span>✓ Approve &amp; Next Student</span>
-                              <ArrowRight className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveExamMarks(true)}
+                                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                                >
+                                  <span>Approve &amp; Next Student</span>
+                                  <ArrowRight className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -5277,7 +5708,7 @@ export default function TeacherPage() {
                                       ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300'
                                       : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
                                   }`}>
-                                    {qp.status === 'sent_to_exam_cell' ? '🔒 Sealed in Exam Vault' :
+                                    {qp.status === 'sent_to_exam_cell' ? '<span className="inline-flex items-center gap-1.5"><Icon3D name="lock" size={16} /><span>Sealed in Exam Vault</span></span>' :
                                      qp.status === 'approved' ? '✓ Academic Approved' :
                                      qp.status === 'under_review' ? '⏳ Under Review by Dean' :
                                      qp.status === 'revision_requested' ? '⚠️ Revision Requested' :
@@ -5946,7 +6377,7 @@ export default function TeacherPage() {
                         className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        <span>✓ Log Completed Unit (+1 Unit)</span>
+                        <span>Log Completed Unit (+1 Unit)</span>
                       </button>
                     </div>
                   ))}
@@ -5954,130 +6385,1038 @@ export default function TeacherPage() {
             </div>
           )}
 
-          {activeTab === 'roster' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-teal-100 text-teal-800 px-2.5 py-0.5 text-xs font-bold border border-teal-200">
-                      Class Roster
-                    </span>
-                    <span className="text-xs text-slate-500">Class 8-B • Assigned Mentor</span>
+          {activeTab === 'roster' && (() => {
+            // Compute Class Cohort Students
+            const currentCohortStudents = students.filter(s => {
+              if (selectedClassFilter === 'ALL') return true;
+              const filterNormalized = selectedClassFilter.replace('Class ', '').trim();
+              return s.class_name.includes(filterNormalized) || s.class_name === selectedClassFilter;
+            });
+
+            const filteredRosterStudents = currentCohortStudents.filter(s => {
+              const matchesSearch = s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                                    s.roll_no.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                    (s.focus_concept && s.focus_concept.toLowerCase().includes(studentSearchQuery.toLowerCase()));
+              if (!matchesSearch) return false;
+              if (rosterQuickFilter === 'AT_RISK_ATTENDANCE') return s.attendance_pct < 85;
+              if (rosterQuickFilter === 'FOCUS_TABLE_ACTIVE') return s.has_focus_table;
+              if (rosterQuickFilter === 'ON_LEAVE') {
+                return Boolean(s.is_on_leave || s.is_leave_pending || s.today_attendance_status === 'Excused Leave' || s.today_attendance_status === 'Leave Pending');
+              }
+              if (rosterQuickFilter === 'HAS_REMARKS') {
+                const rems = getRemarksForStudent(s.id);
+                return rems.length > 0;
+              }
+              return true;
+            });
+
+            // Vitals computations for selected class
+            const cohortCount = currentCohortStudents.length;
+            const cohortAvgAtt = cohortCount > 0 
+              ? (currentCohortStudents.reduce((acc, st) => acc + (st.attendance_pct || 90), 0) / cohortCount).toFixed(1)
+              : '92.4';
+            const cohortAtRiskCount = currentCohortStudents.filter(st => st.attendance_pct < 85).length;
+            const cohortFocusCount = currentCohortStudents.filter(st => st.has_focus_table).length;
+            const cohortRemarksCount = currentCohortStudents.reduce((acc, st) => acc + getRemarksForStudent(st.id).length, 0);
+            const cohortOnLeaveCount = currentCohortStudents.filter(st => st.is_on_leave || st.is_leave_pending || st.today_attendance_status === 'Excused Leave' || st.today_attendance_status === 'Leave Pending').length;
+
+            return (
+              <div className="space-y-6">
+                {/* 1. TOP HEADER & CLASS/SUBJECT SELECTOR */}
+                <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs font-black uppercase tracking-wider border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5" />
+                          <span>My Classes &bull; 360 Classroom Cockpit</span>
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Active Term: <strong>CBSE Term 1 (2026-27)</strong>
+                        </span>
+                      </div>
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1.5 flex items-center gap-2">
+                        <span>Classroom Roster &amp; Student Intervention Matrix</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl mt-0.5">
+                        Track cohort attendance pulse, missed classes, active Remedial Focus Tables, and cross-faculty observation journals in one unified cockpit.
+                      </p>
+                    </div>
+
+                    {/* Class Selector Pills */}
+                    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassFilter('Class 8-B')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          selectedClassFilter === 'Class 8-B'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Class 8-B (Homeroom &amp; Math)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassFilter('Class 9-A')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          selectedClassFilter === 'Class 9-A'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Class 9-A (Math)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassFilter('Class 9-B')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          selectedClassFilter === 'Class 9-B'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Class 9-B (Math)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          selectedClassFilter === 'ALL'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        All Students
+                      </button>
+                    </div>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Assigned Student Directory &amp; 360° Profiles
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Click any student to inspect full academic trendlines, attendance percentages, and parent contact information.
-                  </p>
-                </div>
 
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={studentSearchQuery}
-                    onChange={(e) => setStudentSearchQuery(e.target.value)}
-                    placeholder="Search student or roll no..."
-                    className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 w-56"
-                  />
-                </div>
-              </div>
+                  {/* 2. CLASS VITALS KPI CARDS */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Class Strength</span>
+                        <span className="text-xl font-black text-slate-900 dark:text-white">{cohortCount}</span>
+                        <span className="text-[10px] text-slate-500 block">Active enrolled roster</span>
+                      </div>
+                      <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                        <Users className="h-4.5 w-4.5" />
+                      </div>
+                    </div>
 
-              {/* Roster Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {students
-                  .filter(s => s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) || s.roll_no.includes(studentSearchQuery))
-                  .map((st) => (
-                    <div 
-                      key={st.id} 
-                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md transition-all space-y-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-900 flex items-center justify-center text-teal-700 dark:text-teal-300 font-bold shrink-0">
-                            {st.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                          </div>
-                          <div>
-                            <Link href={`/teacher/students/${st.id}`} className="text-xs font-bold text-slate-900 dark:text-white hover:text-teal-600 transition-colors">{st.name}</Link>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                              Roll #{st.roll_no} • {st.class_name}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Attendance Pulse</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xl font-black ${
+                            Number(cohortAvgAtt) >= 90 ? 'text-emerald-600' : Number(cohortAvgAtt) >= 80 ? 'text-amber-600' : 'text-rose-600'
+                          }`}>
+                            {cohortAvgAtt}%
+                          </span>
+                          {cohortAtRiskCount > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                              {cohortAtRiskCount} Alert
                             </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 block">
+                          {cohortAtRiskCount === 0 ? 'Optimal campus presence' : `${cohortAtRiskCount} student <85% threshold`}
+                        </span>
+                      </div>
+                      <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <Clock className="h-4.5 w-4.5" />
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Focus Table Pipeline</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xl font-black text-amber-600 dark:text-amber-400">{cohortFocusCount}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                            Active
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('focus_table')}
+                          className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline block cursor-pointer"
+                        >
+                          View Remedial Board &rarr;
+                        </button>
+                      </div>
+                      <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                        <AlertTriangle className="h-4.5 w-4.5" />
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Cross-Faculty Remarks</span>
+                        <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{cohortRemarksCount}</span>
+                        <span className="text-[10px] text-slate-500 block">Multi-teacher sync ledger</span>
+                      </div>
+                      <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <MessageSquare className="h-4.5 w-4.5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. SEARCH, FILTERS & VIEW MODE CONTROLS */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs">
+                  <div className="flex items-center gap-2 flex-wrap flex-1">
+                    {/* Search */}
+                    <div className="relative min-w-[220px]">
+                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        placeholder="Search student, roll #, or weak concept..."
+                        className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                      />
+                    </div>
+
+                    {/* Filter Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setRosterQuickFilter('ALL')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          rosterQuickFilter === 'ALL'
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        All ({currentCohortStudents.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRosterQuickFilter('AT_RISK_ATTENDANCE')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          rosterQuickFilter === 'AT_RISK_ATTENDANCE'
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                        }`}
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>Attendance Risk &lt;85% ({cohortAtRiskCount})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRosterQuickFilter('FOCUS_TABLE_ACTIVE')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          rosterQuickFilter === 'FOCUS_TABLE_ACTIVE'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+                        }`}
+                      >
+                        <Clock className="h-3 w-3" />
+                        <span>Focus Sprint Active ({cohortFocusCount})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRosterQuickFilter('ON_LEAVE')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          rosterQuickFilter === 'ON_LEAVE'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/60 hover:bg-purple-100'
+                        }`}
+                      >
+                        <CalendarCheck className="h-3 w-3" />
+                        <span>On Leave / Pending ({cohortOnLeaveCount})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRosterQuickFilter('HAS_REMARKS')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          rosterQuickFilter === 'HAS_REMARKS'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
+                        }`}
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        <span>Has Remarks</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right side: View Switcher & Add Remark */}
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => setRosterViewMode('table')}
+                        title="Comprehensive Table View (PowerSchool / Toddle style)"
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          rosterViewMode === 'table'
+                            ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <List className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRosterViewMode('cards')}
+                        title="Visual Student Cards Grid"
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          rosterViewMode === 'cards'
+                            ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemarkTargetStudent(null);
+                        setNewRemarkText('');
+                        setShowAddRemarkModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Log Faculty Observation</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. MAIN DATA VIEW: TABLE (TODDLE / POWERSCHOOL EWS STYLE) */}
+                {rosterViewMode === 'table' ? (
+                  <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                            <th className="py-3.5 px-4">Roll</th>
+                            <th className="py-3.5 px-4">Student &amp; Family</th>
+                            <th className="py-3.5 px-4">Attendance Pulse &amp; Absences</th>
+                            <th className="py-3.5 px-4">Remedial Focus Table Status</th>
+                            <th className="py-3.5 px-4">Cross-Faculty Collaborative Feed</th>
+                            <th className="py-3.5 px-4 text-right">Intervention Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                          {filteredRosterStudents.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-xs text-slate-400">
+                                No students found matching the selected filters.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredRosterStudents.map((st) => {
+                              const studentRemarks = getRemarksForStudent(st.id);
+                              const latestRemark = studentRemarks.length > 0 ? studentRemarks[0] : null;
+                              const isAttRisk = st.attendance_pct < 85;
+                              const missedCount = st.missed_classes_count !== undefined 
+                                ? st.missed_classes_count 
+                                : Math.max(0, Math.round((100 - st.attendance_pct) * 0.3));
+
+                              return (
+                                <tr key={st.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                                  {/* Roll */}
+                                  <td className="py-3.5 px-4 font-mono font-black text-slate-600 dark:text-slate-400">
+                                    #{st.roll_no}
+                                  </td>
+
+                                  {/* Student & Guardian */}
+                                  <td className="py-3.5 px-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0 text-xs">
+                                        {st.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <Link 
+                                            href={`/teacher/students/${st.id}`}
+                                            className="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                          >
+                                            {st.name}
+                                          </Link>
+                                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                            {st.class_name}
+                                          </span>
+                                          {st.is_on_leave && (
+                                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.2 rounded border border-purple-200 dark:border-purple-800">
+                                              <CalendarCheck className="h-2.5 w-2.5" />
+                                              Excused Leave
+                                            </span>
+                                          )}
+                                          {st.is_leave_pending && !st.is_on_leave && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setActiveTab('leave_approvals')}
+                                              className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.2 rounded border border-amber-300 dark:border-amber-800 animate-pulse hover:underline cursor-pointer"
+                                            >
+                                              <Clock className="h-2.5 w-2.5" />
+                                              Leave Pending &rarr;
+                                            </button>
+                                          )}
+                                        </div>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                          <Users className="h-3 w-3 text-slate-400" />
+                                          <span>{st.guardian_name} &bull; {st.guardian_phone}</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Attendance Pulse & Missed Classes */}
+                                  <td className="py-3.5 px-4 min-w-[190px]">
+                                    <div className="space-y-1">
+                                      <div className="flex items-center justify-between">
+                                        <span className={`font-black text-xs ${
+                                          st.is_on_leave ? 'text-purple-600' : st.attendance_pct >= 90 ? 'text-emerald-600' : isAttRisk ? 'text-rose-600' : 'text-amber-600'
+                                        }`}>
+                                          {st.attendance_pct}%
+                                        </span>
+                                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                                          {st.is_on_leave ? 'Excused Absence' : `${missedCount} Missed Classes`}
+                                        </span>
+                                      </div>
+
+                                      {/* Progress Bar */}
+                                      <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                        <div 
+                                          className={`h-full rounded-full ${
+                                            st.is_on_leave ? 'bg-purple-500' : st.attendance_pct >= 90 ? 'bg-emerald-500' : isAttRisk ? 'bg-rose-500' : 'bg-amber-500'
+                                          }`} 
+                                          style={{ width: `${Math.min(100, st.attendance_pct)}%` }}
+                                        />
+                                      </div>
+
+                                      {st.is_on_leave ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-200 dark:border-purple-900/60">
+                                          <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                          <span>Absent - Approved Leave ({st.leave_from_date || 'Today'})</span>
+                                        </span>
+                                      ) : st.is_leave_pending ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveTab('leave_approvals')}
+                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-300 hover:underline cursor-pointer text-left"
+                                        >
+                                          <Clock className="h-3 w-3 shrink-0" />
+                                          <span>Leave Pending Review &rarr;</span>
+                                        </button>
+                                      ) : isAttRisk ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-900/60">
+                                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                                          <span>Chronic Absence Alert (&lt;85%)</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400">
+                                          Last active: {st.last_active}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Focus Table Status */}
+                                  <td className="py-3.5 px-4 min-w-[210px]">
+                                    {st.has_focus_table ? (
+                                      <div className="space-y-1">
+                                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+                                          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                                          <span>Focus Sprint Active</span>
+                                        </span>
+                                        <span 
+                                          className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 block truncate max-w-[210px]"
+                                          title={st.focus_concept || "Quadratic Equations: Factorization & Signs"}
+                                        >
+                                          Lag: {st.focus_concept || "Quadratic Equations: Factorization"}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveTab('focus_table')}
+                                          className="text-[10px] font-bold text-amber-600 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                                        >
+                                          <span>Open Focus Plan</span>
+                                          <ArrowRight className="h-2.5 w-2.5" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                        <span>Mastery Demonstrated (&gt;75%)</span>
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Collaborative Faculty Feed */}
+                                  <td className="py-3.5 px-4 max-w-[260px]">
+                                    {latestRemark ? (
+                                      <div className="space-y-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowAllRemarksStudent(st)}
+                                          className="text-left group cursor-pointer block"
+                                          title="Click to inspect complete collaborative observation log"
+                                        >
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                              {latestRemark.author_role}: {latestRemark.author_name}
+                                            </span>
+                                            <span className="text-[9px] text-slate-400">{latestRemark.date}</span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-600 dark:text-slate-300 italic truncate max-w-[250px] mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                            &ldquo;{latestRemark.remark_text}&rdquo;
+                                          </p>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowAllRemarksStudent(st)}
+                                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <MessageSquare className="h-2.5 w-2.5" />
+                                          <span>View All ({studentRemarks.length}) Remarks &rarr;</span>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-400 italic">
+                                        No observations logged yet.
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Action Buttons */}
+                                  <td className="py-3.5 px-4 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRemarkTargetStudent(st);
+                                          setNewRemarkText('');
+                                          setShowAddRemarkModal(true);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800"
+                                        title="Add a new pedagogical or behavioral observation"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                        <span>Add Remark</span>
+                                      </button>
+
+                                      <Link
+                                        href={`/teacher/students/${st.id}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                                        title="Open 360 Student Dossier"
+                                      >
+                                        <Eye className="h-3 w-3 text-slate-400" />
+                                        <span>SIS 360</span>
+                                      </Link>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedChatStudentId(st.id);
+                                          setActiveTab('parent_chat');
+                                          triggerToast(`Opened direct chat with ${st.guardian_name} (${st.name}'s parent)`);
+                                        }}
+                                        className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white p-1.5 transition-all shadow-2xs cursor-pointer"
+                                        title={`Direct Parent Chat: ${st.guardian_name}`}
+                                      >
+                                        <MessageSquare className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  /* 5. ALTERNATE DATA VIEW: VISUAL CARDS GRID */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredRosterStudents.map((st) => {
+                      const studentRemarks = getRemarksForStudent(st.id);
+                      const latestRemark = studentRemarks.length > 0 ? studentRemarks[0] : null;
+                      const isAttRisk = st.attendance_pct < 85;
+                      const missedCount = st.missed_classes_count !== undefined 
+                        ? st.missed_classes_count 
+                        : Math.max(0, Math.round((100 - st.attendance_pct) * 0.3));
+
+                      return (
+                        <div 
+                          key={st.id} 
+                          className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-all space-y-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-700 dark:text-blue-300 font-black text-sm shrink-0">
+                                {st.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                              </div>
+                              <div>
+                                <Link 
+                                  href={`/teacher/students/${st.id}`} 
+                                  className="text-sm font-bold text-slate-900 dark:text-white hover:text-blue-600 transition-colors"
+                                >
+                                  {st.name}
+                                </Link>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] font-mono text-slate-500 font-bold">
+                                    Roll #{st.roll_no}
+                                  </span>
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                    {st.class_name}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {st.is_on_leave && (
+                                <span className="rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800 px-2 py-0.5 text-[9px] font-bold">
+                                  Excused Leave
+                                </span>
+                              )}
+                              {st.is_leave_pending && !st.is_on_leave && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('leave_approvals')}
+                                  className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold hover:underline cursor-pointer"
+                                >
+                                  Leave Pending
+                                </button>
+                              )}
+                              {st.has_focus_table && (
+                                <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold">
+                                  Focus Active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Attendance & Academic Vitals Bar */}
+                          <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 text-center">
+                            <div>
+                              <span className="text-[9px] uppercase font-bold text-slate-400 block">Attendance Pulse</span>
+                              <div className="flex items-center justify-center gap-1 mt-0.5">
+                                <span className={`text-xs font-black ${
+                                  st.attendance_pct >= 90 ? 'text-emerald-600' : isAttRisk ? 'text-rose-600' : 'text-amber-600'
+                                }`}>
+                                  {st.attendance_pct}%
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  ({missedCount} Missed)
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[9px] uppercase font-bold text-slate-400 block">Academic Avg</span>
+                              <span className="text-xs font-black text-slate-900 dark:text-white mt-0.5 block">
+                                {st.academic_average_pct}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Focus Table Concept Tag if enrolled */}
+                          {st.has_focus_table && (
+                            <div className="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs">
+                              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                <span>Remedial Focus Sprint</span>
+                              </span>
+                              <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold block mt-0.5 truncate">
+                                {st.focus_concept || "Quadratic Equations: Factorization"}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Collaborative Remark Snippet */}
+                          <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1">
+                            <div className="flex items-center justify-between text-[10px] font-bold">
+                              <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                <MessageSquare className="h-3 w-3 text-blue-600" />
+                                <span>Latest Faculty Observation</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setShowAllRemarksStudent(st)}
+                                className="text-blue-600 hover:underline cursor-pointer"
+                              >
+                                View All ({studentRemarks.length})
+                              </button>
+                            </div>
+                            {latestRemark ? (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 italic line-clamp-2">
+                                &ldquo;{latestRemark.remark_text}&rdquo;
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400 italic">No remarks recorded yet.</p>
+                            )}
+                          </div>
+
+                          {/* Guardian Contact & Card Actions */}
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] text-slate-400 truncate max-w-[150px]">
+                              Parent: {st.guardian_name}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRemarkTargetStudent(st);
+                                  setNewRemarkText('');
+                                  setShowAddRemarkModal(true);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-[10px] border border-blue-200 dark:border-blue-800 hover:bg-blue-100 cursor-pointer"
+                              >
+                                + Remark
+                              </button>
+                              <Link
+                                href={`/teacher/students/${st.id}`}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold text-[10px] text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                              >
+                                SIS 360
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedChatStudentId(st.id);
+                                  setActiveTab('parent_chat');
+                                  triggerToast(`Opening direct chat with ${st.guardian_name}`);
+                                }}
+                                className="p-1 rounded-lg bg-indigo-600 text-white cursor-pointer hover:bg-indigo-700"
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-                        {st.has_focus_table && (
-                          <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold">
-                            Focus Active
-                          </span>
+                {/* 6. MODAL: ADD FACULTY REMARK */}
+                {showAddRemarkModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+                            <FileEdit className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                              Log Multi-Faculty Pedagogical Observation
+                            </h3>
+                            <p className="text-[11px] text-slate-500">
+                              Synced to Student 360 Dossier and Class Roster Matrix
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddRemarkModal(false)}
+                          className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Target Student Selector */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Target Student
+                        </label>
+                        {remarkTargetStudent ? (
+                          <div className="p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-blue-900 dark:text-blue-200">
+                                {remarkTargetStudent.name}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300">
+                                Roll #{remarkTargetStudent.roll_no} &bull; {remarkTargetStudent.class_name}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setRemarkTargetStudent(null)}
+                              className="text-[10px] text-blue-600 hover:underline cursor-pointer font-bold"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            onChange={(e) => {
+                              const found = students.find(s => s.id === Number(e.target.value));
+                              if (found) setRemarkTargetStudent(found);
+                            }}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+                          >
+                            <option value="">-- Choose Student from Active Class --</option>
+                            {currentCohortStudents.map(st => (
+                              <option key={st.id} value={st.id}>
+                                {st.name} (Roll #{st.roll_no} &bull; {st.class_name})
+                              </option>
+                            ))}
+                          </select>
                         )}
                       </div>
 
-                      {/* Performance Mini Stats */}
-                      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 text-center">
-                        <div>
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Attendance</span>
-                          <span className="text-xs font-black text-slate-900 dark:text-white">{st.attendance_pct}%</span>
+                      {/* Category & Role */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Observation Category
+                          </label>
+                          <select
+                            value={newRemarkCategory}
+                            onChange={(e) => setNewRemarkCategory(e.target.value as any)}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+                          >
+                            <option value="Academic Excellence">Academic Excellence</option>
+                            <option value="Behavioral &amp; Conduct">Behavioral &amp; Conduct</option>
+                            <option value="Remedial / Focus Area">Remedial / Focus Area</option>
+                            <option value="Special Commendation">Special Commendation</option>
+                            <option value="Sports &amp; Leadership">Sports &amp; Leadership</option>
+                          </select>
                         </div>
-                        <div>
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Academic Avg</span>
-                          <span className="text-xs font-black text-slate-900 dark:text-white">{st.academic_average_pct}%</span>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Author Faculty Role
+                          </label>
+                          <select
+                            value={newRemarkAuthorRole}
+                            onChange={(e) => setNewRemarkAuthorRole(e.target.value as any)}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+                          >
+                            <option value="Class Teacher">Class Teacher (Mrs. Ananya Verma)</option>
+                            <option value="Subject Faculty">Subject Faculty (Mathematics)</option>
+                            <option value="School Counselor">School Counselor</option>
+                          </select>
                         </div>
                       </div>
 
-                      <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                        <span>Parent: {st.guardian_name} ({st.guardian_phone})</span>
+                      {/* Priority */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Attention Priority
+                        </label>
+                        <div className="flex items-center gap-2">
+                          {(['Routine', 'High Attention', 'Commendation'] as const).map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setNewRemarkPriority(p)}
+                              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                newRemarkPriority === p
+                                  ? p === 'High Attention'
+                                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                    : p === 'Commendation'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                    : 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* Latest Faculty Remark Chip */}
-                      <Link 
-                        href={`/teacher/students/${st.id}?tab=remarks`}
-                        className="block p-2 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 hover:border-amber-300 transition-all text-xs group"
-                        title="Click to view all faculty remarks & observations"
-                      >
-                        <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 dark:text-amber-300 mb-0.5">
-                          <span className="flex items-center gap-1">
-                            <MessageSquare className="h-2.5 w-2.5" />
-                            Faculty Observation
-                          </span>
-                          <span className="text-amber-600 dark:text-amber-400 group-hover:underline">View All →</span>
+                      {/* Remark Text & Quick Tag Suggestions */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Observation Notes
+                          </label>
+                          <span className="text-[10px] text-slate-400">{newRemarkText.length} characters</span>
                         </div>
-                        <p className="text-[11px] text-slate-700 dark:text-slate-300 italic line-clamp-1">
-                          {st.id === 1 ? '“Exceptional analytical curiosity; diligent with quadratic roots.”' :
-                           st.id === 2 ? '“Stellar academic achiever; debate and analytical proofs are exemplary.”' :
-                           st.id === 3 ? '“Sharp computational agility and active classroom participation.”' :
-                           st.id === 4 ? '“Expressive and creative in literature essays; regular revision recommended.”' :
-                           st.id === 5 ? '“Enrolled in 4-day Focus Table remedial; receptive to faculty feedback.”' :
-                           '“Exceptional all-rounder with strong academic dedication.”'}
-                        </p>
-                      </Link>
+                        <textarea
+                          rows={3}
+                          value={newRemarkText}
+                          onChange={(e) => setNewRemarkText(e.target.value)}
+                          placeholder="Record specific pedagogical remarks, behavioral feedback, or academic focus points..."
+                          className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {/* Quick Tag suggestions */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold">Quick Tags:</span>
+                          {[
+                            '#NegativeSignErrors',
+                            '#HighParticipation',
+                            '#HomeworkPending',
+                            '#PunctualAttendance',
+                            '#PeerCollaboration'
+                          ].map(tag => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setNewRemarkText(prev => prev ? `${prev} ${tag}` : tag)}
+                              className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <Link
-                          href={`/teacher/students/${st.id}`}
-                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800 py-1.5 text-xs font-bold transition-all text-center cursor-pointer shadow-2xs"
-                        >
-                          <ShieldCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                          <span>View 360° Student SIS</span>
-                        </Link>
+                      {/* Modal Footer */}
+                      <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
                         <button
-                          onClick={() => {
-                            setSelectedChatStudentId(st.id);
-                            setActiveTab('parent_chat');
-                            triggerToast(`Opening direct chat with ${st.guardian_name} (${st.name}'s parent)`);
-                          }}
-                          className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white p-2 transition-all cursor-pointer shadow-xs"
-                          title={`Chat with Parent: ${st.guardian_name}`}
+                          type="button"
+                          onClick={() => setShowAddRemarkModal(false)}
+                          className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
                         >
-                          <MessageSquare className="h-4 w-4" />
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!remarkTargetStudent) {
+                              triggerToast('Please select a target student first!');
+                              return;
+                            }
+                            if (!newRemarkText.trim()) {
+                              triggerToast('Please enter an observation remark!');
+                              return;
+                            }
+
+                            addStudentRemark({
+                              student_id: remarkTargetStudent.id,
+                              student_name: remarkTargetStudent.name,
+                              author_name: newRemarkAuthorRole === 'Class Teacher' ? 'Mrs. Ananya Verma' : 'Dr. K. Raman',
+                              author_role: newRemarkAuthorRole,
+                              category: newRemarkCategory,
+                              remark_text: newRemarkText.trim(),
+                              priority: newRemarkPriority,
+                              acknowledged_by_parent: false
+                            });
+
+                            setRemarksRevision(prev => prev + 1);
+                            setShowAddRemarkModal(false);
+                            setNewRemarkText('');
+                            triggerToast(`Logged observation for ${remarkTargetStudent.name}! Synced across all faculty.`);
+                          }}
+                          className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                        >
+                          Commit &amp; Sync Observation
                         </button>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                {/* 7. MODAL / DRAWER: ALL REMARKS TIMELINE FOR A STUDENT */}
+                {showAllRemarksStudent && (() => {
+                  const allStudentRemarks = getRemarksForStudent(showAllRemarksStudent.id);
+
+                  return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+                      <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black">
+                              {showAllRemarksStudent.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                                Collaborative Faculty Observation Timeline
+                              </h3>
+                              <span className="text-xs text-slate-500">
+                                {showAllRemarksStudent.name} (Roll #{showAllRemarksStudent.roll_no} &bull; {showAllRemarksStudent.class_name})
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllRemarksStudent(null)}
+                            className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        {/* Timeline List */}
+                        <div className="space-y-3">
+                          {allStudentRemarks.length === 0 ? (
+                            <div className="text-center py-8 text-xs text-slate-400">
+                              No remarks logged for this student yet.
+                            </div>
+                          ) : (
+                            allStudentRemarks.map((rem, idx) => (
+                              <div
+                                key={rem.id || idx}
+                                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-2"
+                              >
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                      {rem.author_name}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {rem.author_role}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                      {rem.category}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    {rem.priority === 'High Attention' && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                                        High Attention
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {rem.date} {rem.timestamp && `&bull; ${rem.timestamp}`}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <p className="text-xs text-slate-700 dark:text-slate-300 italic">
+                                  &ldquo;{rem.remark_text}&rdquo;
+                                </p>
+
+                                {rem.acknowledged_by_parent && (
+                                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 pt-1">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    <span>Acknowledged by Parent: {rem.parent_ack_by || 'Guardian'} {rem.parent_ack_date ? `(${rem.parent_ack_date})` : ''}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Timeline Footer Action */}
+                        <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+                          <span className="text-xs text-slate-400">
+                            Total {allStudentRemarks.length} cross-faculty entries
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRemarkTargetStudent(showAllRemarksStudent);
+                              setShowAllRemarksStudent(null);
+                              setShowAddRemarkModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>Add New Observation for {showAllRemarksStudent.name}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ===================================================== */}
           {/* TAB 5: DUAL-MODE PARENTAL CONNECTION & SLIDING PTM    */}
@@ -6468,11 +7807,12 @@ export default function TeacherPage() {
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => handleReleasePTMSlot(slot.id)}
-                                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
-                                          title="Release Slot (Mark as Free)"
+                                          onClick={() => handleOpenCancelPtmModal(slot)}
+                                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                                          title="Cancel or Reschedule this PTM Conference"
                                         >
-                                          <X className="h-3.5 w-3.5" />
+                                          <X className="h-3 w-3 text-rose-600 dark:text-rose-400" />
+                                          <span className="hidden sm:inline">Cancel Slot</span>
                                         </button>
                                       </div>
                                     </td>
@@ -6798,6 +8138,32 @@ export default function TeacherPage() {
                                   <p className="text-xs leading-relaxed font-normal">
                                     {msg.text}
                                   </p>
+                                  {(msg as any).attachment && (
+                                    <div className={`mt-2 flex items-center gap-2 p-2 rounded-xl text-xs font-medium border ${
+                                      isTeacher 
+                                        ? 'bg-indigo-700/60 border-indigo-500/50 text-white' 
+                                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                                    }`}>
+                                      <div className={`p-1.5 rounded-lg shrink-0 ${isTeacher ? 'bg-indigo-800 text-indigo-200' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600'}`}>
+                                        <FileText className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="font-bold truncate block text-[11px]">{(msg as any).attachment.name}</span>
+                                        <span className={`text-[10px] block ${isTeacher ? 'text-indigo-200' : 'text-slate-400'}`}>{(msg as any).attachment.size}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          triggerToast(`Downloading ${(msg as any).attachment.name}...`);
+                                        }}
+                                        className={`p-1.5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0`}
+                                        title="Download / View Attachment"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
@@ -6817,7 +8183,29 @@ export default function TeacherPage() {
                       </div>
 
                       {/* Message Composer */}
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                        {/* Selected Attachment Preview Chip */}
+                        {chatAttachment && (
+                          <div className="flex items-center justify-between gap-2 p-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in slide-in-from-bottom-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                              <span className="font-bold truncate text-[11px]">{chatAttachment.name}</span>
+                              <span className="text-[10px] text-indigo-500 dark:text-indigo-400 shrink-0">({chatAttachment.size})</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setChatAttachment(null);
+                                if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+                              }}
+                              className="p-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-500 hover:text-indigo-700 cursor-pointer shrink-0"
+                              title="Remove attachment"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+
                         <form
                           onSubmit={(e) => {
                             e.preventDefault();
@@ -6825,11 +8213,37 @@ export default function TeacherPage() {
                           }}
                           className="flex items-center gap-2"
                         >
+                          {/* Hidden File Input */}
+                          <input
+                            type="file"
+                            ref={chatFileInputRef}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const sizeStr = file.size > 1024 * 1024 
+                                  ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+                                  : `${Math.round(file.size / 1024)} KB`;
+                                setChatAttachment({
+                                  name: file.name,
+                                  size: sizeStr,
+                                  type: file.type || 'document'
+                                });
+                                triggerToast(`Attached: ${file.name} (${sizeStr})`);
+                              }
+                            }}
+                            accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+                            className="hidden"
+                          />
+
                           <button
                             type="button"
-                            onClick={() => triggerToast("File attachment protocol ready: PDF/Images up to 10MB")}
-                            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Attach File / Remedial Sheet"
+                            onClick={() => chatFileInputRef.current?.click()}
+                            className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
+                              chatAttachment 
+                                ? 'bg-indigo-50 border-indigo-400 text-indigo-600 dark:bg-indigo-950/60 dark:border-indigo-600 dark:text-indigo-300' 
+                                : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                            title="Attach File / Remedial Sheet (PDF, Image, Docs)"
                           >
                             <Paperclip className="h-4 w-4" />
                           </button>
@@ -6838,20 +8252,20 @@ export default function TeacherPage() {
                             type="text"
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
-                            placeholder={`Type a secure message to ${activeStudent?.guardian_name}...`}
+                            placeholder={chatAttachment ? `Add a message with ${chatAttachment.name} (optional)...` : `Type a secure message to ${activeStudent?.guardian_name}...`}
                             className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
 
                           <button
                             type="submit"
-                            disabled={!chatInput.trim()}
+                            disabled={!chatInput.trim() && !chatAttachment}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
                           >
                             <span>Send</span>
                             <Send className="h-3.5 w-3.5" />
                           </button>
                         </form>
-                        <span className="text-[10px] text-slate-400 block mt-1.5">
+                        <span className="text-[10px] text-slate-400 block mt-1">
                           🔒 Messages are encrypted &amp; logged as verifiable communication records in accordance with institutional policy.
                         </span>
                       </div>
@@ -6975,10 +8389,11 @@ export default function TeacherPage() {
                 <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
                   {[
                     { id: 'ALL', label: 'All Duties', icon: '📋' },
-                    { id: 'EXAM_INVIGILATION', label: '📝 Exam Invigilation', icon: '📝' },
-                    { id: 'CAMPUS_SUBSTITUTION', label: '🔄 Substitution Cover', icon: '🔄' },
-                    { id: 'EVENT_COMMITTEE', label: '🎪 Events & Committees', icon: '🎪' },
-                    { id: 'WEEKLY_ROUTINE', label: '🔄 Weekly Routines', icon: '🔄' }
+                    { id: 'ADMIN_MANDATES', label: '⚡ Admin Delegations', icon: '⚡' },
+                    { id: 'EXAM_INVIGILATION', label: 'Exam Invigilation', icon: '📝' },
+                    { id: 'CAMPUS_SUBSTITUTION', label: 'Substitution Cover', icon: '🔄' },
+                    { id: 'EVENT_COMMITTEE', label: 'Events & Committees', icon: '🎪' },
+                    { id: 'WEEKLY_ROUTINE', label: 'Weekly Routines', icon: '🔄' }
                   ].map((cat) => (
                     <button
                       key={cat.id}
@@ -6994,6 +8409,165 @@ export default function TeacherPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Section 0: Admin Institutional Delegations & Mandates */}
+              {(dutyCategoryFilter === 'ALL' || (dutyCategoryFilter as string) === 'ADMIN_MANDATES') && academicTasks.length > 0 && (
+                <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20 p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-950 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+                        <Icon3D name="rocket" className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>Institutional Delegations &amp; Administrative Mandates</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                            {academicTasks.length} Assigned
+                          </span>
+                        </h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Direct operational tasks assigned by Principal &amp; Academic Leadership requiring compliance sign-off.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {academicTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-4 shadow-2xs space-y-3 transition-all hover:border-indigo-300 dark:hover:border-indigo-700"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-md px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {task.domain?.toUpperCase() || 'ACADEMIC'} MANDATE
+                            </span>
+                            <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              task.priority === 'Critical'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {task.priority?.toUpperCase()} PRIORITY
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              • Due: {task.due_date}
+                            </span>
+                          </div>
+
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            task.status === 'Completed'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : task.status === 'Pending Review'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : task.status === 'In Progress'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {task.status}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                            {task.title}
+                          </h4>
+                          {task.description && (
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+                              {task.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Clock className="h-3.5 w-3.5 text-blue-500" />
+                            <span>SLA Window: {task.sla_hours || 24} Hours</span>
+                          </span>
+
+                          {task.status !== 'Completed' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReliefSelectedTask(task);
+                                setShowReliefModal(true);
+                              }}
+                              className="text-amber-600 dark:text-amber-400 text-[11px] font-bold hover:underline cursor-pointer"
+                            >
+                              Request Relief / Migration
+                            </button>
+                          )}
+                        </div>
+
+                        {task.rejection_reason && task.status !== 'Completed' && (
+                          <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+                            <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-300">
+                              <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                              <span>Principal Requested Revision:</span>
+                            </div>
+                            <p className="text-[11px] text-rose-700 dark:text-rose-300 italic">
+                              &ldquo;{task.rejection_reason}&rdquo;
+                            </p>
+                          </div>
+                        )}
+
+                        {task.status === 'Pending Review' ? (
+                          <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <Clock className="h-3.5 w-3.5 text-amber-600" />
+                              <span>Submitted for Principal Verification</span>
+                            </div>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                              Awaiting administrator sign-off. {task.submission_notes ? `Notes: "${task.submission_notes}"` : ''}
+                            </p>
+                          </div>
+                        ) : task.status === 'Completed' ? (
+                          <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between font-bold">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              <span>Verified &amp; Closed</span>
+                            </span>
+                            {task.completion_proof_url && (
+                              <a
+                                href={task.completion_proof_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-blue-600 hover:underline"
+                              >
+                                View Proof ↗
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 pt-1">
+                            {task.status !== 'In Progress' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
+                                className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Mark In Progress
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSubmitWorkTask(task);
+                                setTaskSubmissionNotes('');
+                                setTaskProofUrl('');
+                              }}
+                              className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Submit Work &amp; Proof</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Master-Detail Split Workspace with Academic Day Schedule */}
               {(() => {
@@ -7543,7 +9117,7 @@ export default function TeacherPage() {
                   className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>+ Apply Permission / Shift Request</span>
+                  <span>Apply Permission / Shift Request</span>
                 </button>
               </div>
 
@@ -7661,13 +9235,12 @@ export default function TeacherPage() {
                     Print Statement
                   </button>
                   <button
-                    onClick={() => {
-                      triggerToast("Salary inquiry routed directly to Accounts Coordinator desk.");
-                    }}
+                    onClick={() => setShowSalaryInquiryModal(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs cursor-pointer"
+                    title="Send a discrepancy or salary query to Accounts Coordinator"
                   >
                     <Mail className="h-3.5 w-3.5" />
-                    Contact Bursar
+                    Contact Accounts Coordinator
                   </button>
                 </div>
               </div>
@@ -7861,7 +9434,7 @@ export default function TeacherPage() {
                 {/* Statutory Certification Footer */}
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span>
-                    ✓ Authenticated by Accounts Coordinator (Bursar) · Generated automatically via EDU360 Payroll Engine.
+                    ✓ Authenticated by Accounts Coordinator · Generated automatically via EDU360 Payroll Engine.
                   </span>
                   <span className="font-mono text-slate-400">
                     Document ID: PAY-202610-002 · Digitally Signed
@@ -8128,20 +9701,30 @@ export default function TeacherPage() {
       {/* ===================================================== */}
       {showPermissionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+          <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Apply Faculty Permission / Shift Adjustment
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Apply Faculty Permission / Shift Adjustment
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Official Staff On-Duty &amp; Leave Request Form</p>
+                </div>
               </div>
-              <button onClick={() => setShowPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button 
+                type="button"
+                onClick={() => setShowPermissionModal(false)} 
+                className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <form onSubmit={handleApplyPermission} className="space-y-4">
+              {/* Category */}
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Permission Nature / Request Category *
@@ -8160,71 +9743,192 @@ export default function TeacherPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Dynamic Shift & Custom Slots */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                    Shift / Time Window *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Shift Slot / Preset Window
+                    </label>
+                    <span className="text-[10px] text-slate-400">Select preset or customize below</span>
+                  </div>
                   <select
                     value={newPermShift}
-                    onChange={(e) => setNewPermShift(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => handleShiftPresetChange(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                   >
                     <option value="Morning Shift (08:30 AM - 12:30 PM)">Morning Shift (08:30 AM - 12:30 PM)</option>
                     <option value="Afternoon Shift (12:30 PM - 04:30 PM)">Afternoon Shift (12:30 PM - 04:30 PM)</option>
                     <option value="Period 1-2 (08:30 AM - 10:15 AM)">Period 1-2 (08:30 AM - 10:15 AM)</option>
                     <option value="Period 4-5 (11:15 AM - 01:00 PM)">Period 4-5 (11:15 AM - 01:00 PM)</option>
                     <option value="Full Day (08:30 AM - 04:30 PM)">Full Day (08:30 AM - 04:30 PM)</option>
+                    <option value="Custom Time Slot">Custom Time Slot (Flexible / Non-Standard)</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                    Effective Date *
-                  </label>
-                  <input
-                    type="text"
-                    value={newPermDate}
-                    onChange={(e) => setNewPermDate(e.target.value)}
-                    placeholder="e.g. Today / 26 Oct 2026"
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                {/* Date & Time Picker Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                      Effective Date *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={permDate}
+                        onChange={(e) => setPermDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                      Start Time *
+                    </label>
+                    <input
+                      type="time"
+                      value={permStartTime}
+                      onChange={(e) => {
+                        setPermStartTime(e.target.value);
+                        setNewPermShift('Custom Time Slot');
+                      }}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                      End Time *
+                    </label>
+                    <input
+                      type="time"
+                      value={permEndTime}
+                      onChange={(e) => {
+                        setPermEndTime(e.target.value);
+                        setNewPermShift('Custom Time Slot');
+                      }}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Selected Window: <strong>{permDate}</strong> ({permStartTime} &ndash; {permEndTime})
+                  </span>
                 </div>
               </div>
 
+              {/* Affected Class & Subject Periods - Multi-select */}
               <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Affected Class &amp; Subject Periods
-                </label>
-                <input
-                  type="text"
-                  value={newPermPeriods}
-                  onChange={(e) => setNewPermPeriods(e.target.value)}
-                  placeholder="e.g. Period 2 (Class 8-B Math) &amp; Period 4 (Class 9-A Math)"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Affected Class &amp; Subject Periods *
+                  </label>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAffectedPeriods([...availableTeacherClasses])}
+                      className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer font-medium"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAffectedPeriods([])}
+                      className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
+                  {availableTeacherClasses.map((periodItem) => {
+                    const isSelected = selectedAffectedPeriods.includes(periodItem);
+                    return (
+                      <div
+                        key={periodItem}
+                        onClick={() => togglePeriodSelection(periodItem)}
+                        className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer border transition-all ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 font-medium shadow-xs'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}} // handled by parent onClick
+                            className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 pointer-events-none"
+                          />
+                          <span>{periodItem}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 shrink-0">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>
+                    {selectedAffectedPeriods.length === 0
+                      ? 'No class periods selected (Free period / On-duty only)'
+                      : `${selectedAffectedPeriods.length} teaching ${
+                          selectedAffectedPeriods.length === 1 ? 'period' : 'periods'
+                        } marked for substitution cover`}
+                  </span>
+                  {selectedAffectedPeriods.length === 0 && (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium text-[10px]">
+                      No proxy required
+                    </span>
+                  )}
+                </div>
               </div>
 
+              {/* Recommended Substitute / Proxy Teacher Dropdown */}
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Recommended Substitute / Proxy Teacher
+                  Recommended Substitute / Proxy Teacher *
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newPermSubstitute}
                   onChange={(e) => setNewPermSubstitute(e.target.value)}
-                  placeholder="e.g. Mrs. Neha Roy (TGT Science) - Free in Period 2"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                >
+                  <option value="Mrs. Neha Roy (TGT Science & English)">Mrs. Neha Roy (TGT Science &amp; English) &mdash; Free in Period 2, 4</option>
+                  <option value="Dr. Suresh Babu (PGT Physics & Science)">Dr. Suresh Babu (PGT Physics &amp; Science) &mdash; Free in Period 1, 5</option>
+                  <option value="Mr. Arvind Saxena (TGT Social Sciences)">Mr. Arvind Saxena (TGT Social Sciences) &mdash; Free in Period 3, 6</option>
+                  <option value="Dr. K. Raman (Senior Faculty / Physics & Math)">Dr. K. Raman (Senior Faculty / Physics &amp; Math) &mdash; Free in Period 2, 7</option>
+                  <option value="Mrs. Sunitha Rao (TGT Social Studies)">Mrs. Sunitha Rao (TGT Social Studies) &mdash; Free in Period 4, 5</option>
+                  <option value="Mrs. Rekha Sharma (TGT Hindi & Sanskrit)">Mrs. Rekha Sharma (TGT Hindi &amp; Sanskrit) &mdash; Free in Period 1, 3</option>
+                  <option value="Mrs. Shalini Nair (Computer Science / IT)">Mrs. Shalini Nair (Computer Science / IT) &mdash; Free in Period 2, 6</option>
+                  <option value="Mr. Arvind Swamy (Department of Mathematics)">Mr. Arvind Swamy (Department of Mathematics) &mdash; Free in Period 4, 7</option>
+                  <option value="Not Assigned (Auto-assign by Academic Coordinator)">Not Assigned &mdash; Auto-assign by Academic Coordinator</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Designated peer will receive instant in-app timetable substitution alerts once approved.
+                </p>
               </div>
 
+              {/* Justification */}
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Detailed Justification (for Management Audit) *
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={newPermReason}
                   onChange={(e) => setNewPermReason(e.target.value)}
                   placeholder="State specific reason for leave, medical emergency, or shift adjustment..."
@@ -8253,7 +9957,6 @@ export default function TeacherPage() {
         </div>
       )}
 
-      {/* ===================================================== */}
       {/* MODAL 2: SCHEDULE 1-ON-1 ONLINE PTM                   */}
       {/* ===================================================== */}
       {showPTMModal && (
@@ -8314,7 +10017,7 @@ export default function TeacherPage() {
               </div>
 
               <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-[11px] text-blue-900 dark:text-blue-200">
-                💡 Automatically generates an encrypted video link and sends an SMS/Push invite to the parent's mobile app.
+                <span className="inline-flex items-center gap-1.5"><Icon3D name="bulb" size={16} /><span>Automatically generates an encrypted video link</span></span> and sends an SMS/Push invite to the parent's mobile app.
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -8339,6 +10042,94 @@ export default function TeacherPage() {
 
       {/* ===================================================== */}
       {/* MODAL 3: REQUEST ACADEMIC TASK RELIEF / MIGRATION      */}
+      {/* Task Completion & Proof Submission Modal */}
+      {submitWorkTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Submit Work &amp; Evidence for Approval
+                </h3>
+              </div>
+              <button onClick={() => setSubmitWorkTask(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitTaskWork} className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="font-bold text-slate-900 dark:text-white">{submitWorkTask.title}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Due: {submitWorkTask.due_date} • Priority: {submitWorkTask.priority}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Completion Notes / Work Description *:
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={taskSubmissionNotes}
+                  onChange={(e) => setTaskSubmissionNotes(e.target.value)}
+                  placeholder="Describe the steps taken and outcome (e.g. Conducted 45 min remedial session, 28/30 attended, question paper verified)..."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Upload Evidence / Supporting Document (PDF / Scan):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={taskProofUrl}
+                    onChange={(e) => setTaskProofUrl(e.target.value)}
+                    placeholder="e.g. /samples/Remedial_Batch_Attendance.pdf"
+                    className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-slate-900 dark:text-white"
+                  />
+                  <label className="px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold cursor-pointer hover:bg-blue-100">
+                    Browse
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setTaskProofUrl(`/uploads/${file.name}`);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Supports PDF, PNG, JPG, or verified cloud file link.</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSubmitWorkTask(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Submit for Approval
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===================================================== */}
       {showReliefModal && reliefSelectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
@@ -8598,6 +10389,310 @@ export default function TeacherPage() {
                 Close Snapshot
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ── SALARY DISCREPANCY & ACCOUNTS INQUIRY MODAL ── */}
+      {showSalaryInquiryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Contact Accounts Coordinator
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Official Salary &amp; Payroll Query Dispatch Desk
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSalaryInquiryModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Quick Context Summary */}
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 grid grid-cols-3 gap-2 text-center text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-semibold uppercase">Pay Cycle</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{'Oct 2026'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block font-semibold uppercase">Net Take-Home</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block font-semibold uppercase">UTR Reference</span>
+                <span className="font-mono text-[10.5px] text-slate-600 dark:text-slate-300 font-bold truncate block">
+                  {myPayslip?.payment_utr || 'CMS-HDFC-20261028-0912'}
+                </span>
+              </div>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!inquiryRemarks.trim()) {
+                  triggerToast("Please provide specific details about your salary query.");
+                  return;
+                }
+                setIsSubmittingInquiry(true);
+                try {
+                  const res = await api.submitSalaryInquiry({
+                    teacher_name: myPayslip?.staff_name || "Mrs. Ananya Verma",
+                    month: "Oct 2026",
+                    reason: inquiryCategory,
+                    message: inquiryRemarks.trim(),
+                    net_salary: myPayslip?.net_salary || 54260,
+                    utr: myPayslip?.payment_utr || "CMS-HDFC-20261028-0912"
+                  });
+                  setShowSalaryInquiryModal(false);
+                  setInquiryRemarks("");
+                  triggerToast(res?.message || "Salary inquiry dispatched directly to Accounts Coordinator desk!");
+                } catch (err) {
+                  triggerToast("Failed to submit inquiry. Please try again.");
+                } finally {
+                  setIsSubmittingInquiry(false);
+                }
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Reason for Inquiry *
+                </label>
+                <select
+                  value={inquiryCategory}
+                  onChange={(e) => setInquiryCategory(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
+                >
+                  <option value="Discrepancy in Deductions (PF / TDS / PT)">
+                    Discrepancy in Deductions (PF / TDS / PT)
+                  </option>
+                  <option value="Incorrect Loss of Pay (LOP) Days">
+                    Incorrect Loss of Pay (LOP) Days / Leave adjustment
+                  </option>
+                  <option value="Salary Not Credited / Bank UTR Trace">
+                    Salary Not Credited / Bank Account Wire Failure
+                  </option>
+                  <option value="Form 16 / Tax Exemption Proof Submission">
+                    Form 16 / Tax Exemption (HRA / 80C) Declaration
+                  </option>
+                  <option value="Special Allowance or Increment Missing">
+                    Special Allowance or Annual Increment Missing
+                  </option>
+                  <option value="Other Payroll Query">
+                    Other Payroll or Account Question
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Query Details &amp; Justification *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Explain the discrepancy (e.g. Approved medical leave was counted as LOP; or PF deduction differs from declaration)..."
+                  value={inquiryRemarks}
+                  onChange={(e) => setInquiryRemarks(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] text-slate-400">
+                  Routes directly to Accounts Coordinator queue with high priority
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSalaryInquiryModal(false)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingInquiry}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    <span>{isSubmittingInquiry ? 'Sending...' : 'Submit to Accounts'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PTM CONFERENCE CANCELLATION & RESCHEDULE MODAL */}
+      {cancellingPtmSlot && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Cancel Booked PTM Conference
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Release reservation and automatically notify parent with reason
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setCancellingPtmSlot(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Conference Details Card */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 dark:text-white">
+                  Student: {cancellingPtmSlot.booked_student_name || 'Aarav Sharma (8-B)'}
+                </span>
+                <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-md">
+                  {cancellingPtmSlot.start_time} – {cancellingPtmSlot.end_time}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Guardian: {cancellingPtmSlot.booked_parent_name || 'Mr. Rajesh Sharma'} · Homeroom / Subject PTM
+              </div>
+            </div>
+
+            {/* Reason Selection */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Reason for Cancellation (Required for Parent Record)
+              </label>
+              <select
+                value={ptmCancelReason}
+                onChange={e => setPtmCancelReason(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white font-medium"
+              >
+                <option value="Faculty Emergency / Official Duty">Official School Duty / Emergency Cover</option>
+                <option value="Parent-Requested Reschedule">Parent-Requested Reschedule / Mutual Agreement</option>
+                <option value="Medical Leave / Unforeseen Absence">Medical Leave / Faculty Unforeseen Absence</option>
+                <option value="Curriculum / Exam Moderation Priority">Curriculum / Exam Moderation Duty</option>
+                <option value="Other Administrative Conflict">Other Administrative Conflict</option>
+              </select>
+            </div>
+
+            {/* Custom Notes */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Additional Remarks for Parent (Included in Notification)
+              </label>
+              <input
+                type="text"
+                value={ptmCancelCustomNote}
+                onChange={e => setPtmCancelCustomNote(e.target.value)}
+                placeholder="e.g. Apologies, called for emergency CBSE inspection duty. Please re-book."
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {/* Slot Fate Choice */}
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px] uppercase tracking-wider">
+                Slot Availability After Cancellation:
+              </span>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="reopenChoice"
+                    checked={ptmReopenAsFree}
+                    onChange={() => setPtmReopenAsFree(true)}
+                    className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white block">Reopen as Free Slot (Available)</span>
+                    <span className="text-[11px] text-slate-500">Other parents can immediately view and self-book this 10-minute window.</span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="reopenChoice"
+                    checked={!ptmReopenAsFree}
+                    onChange={() => setPtmReopenAsFree(false)}
+                    className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white block">Block as Faculty Break / Duty</span>
+                    <span className="text-[11px] text-slate-500">Locks this time slot completely so no other parent can reserve it.</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancellingPtmSlot(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+              >
+                Keep Conference
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelPtmSlot}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Confirm Cancellation &amp; Release
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10-SECOND UNDO SNACKBAR FOR PTM CANCELLATION */}
+      {ptmUndoBackup && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white p-4 shadow-2xl border border-slate-700 flex items-center gap-4 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <div className="text-xs">
+              <span className="font-bold block">PTM Conference Cancelled</span>
+              <span className="text-[11px] text-slate-400">Made a mistake? You can restore the booking.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleUndoPtmCancellation}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer transition-all"
+            >
+              Undo Cancellation
+            </button>
+            <button
+              onClick={() => setPtmUndoBackup(null)}
+              className="p-1 text-slate-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}

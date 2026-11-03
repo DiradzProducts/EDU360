@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, AttendanceRecord, Student, Homework, HomeworkSubmission,
-    FocusTable, LeaveRequest
+    FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint
 )
 from app.schemas.schemas import (
     LiveClassResponse, AttendanceRecordResponse, AttendanceJoinSimulate, AttendanceOverride,
@@ -16,7 +16,9 @@ from app.schemas.schemas import (
     TeacherPersonalScheduleResponse, FacultyDutyTaskResponse, 
     UpdateDutyPaperCountRequest, ToggleDutyChecklistRequest,
     ParentTeacherNoteCreate, ParentTeacherNoteResponse,
-    PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest
+    PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest,
+    PTMSlotCancelRequest, PTMSlotRestoreRequest,
+    ParentTeacherChatMessageCreate, ParentTeacherChatMessageResponse
 )
 from app.services.ai_analytics import evaluate_attendance_rule
 from app.routers.notifications import create_system_notification
@@ -225,6 +227,86 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
     lr.status = req.status
     if req.teacher_notes:
         lr.teacher_notes = req.teacher_notes
+    
+    today_iso = datetime.date.today().isoformat()
+
+    if req.status == "Approved":
+        lr.approval_stage = "Attendance Adjusted"
+
+        # 1. Update or create AttendanceRecord for class_id=1 (and today's class)
+        att_res = await db.execute(
+            select(AttendanceRecord).where(
+                AttendanceRecord.student_id == lr.student_id,
+                AttendanceRecord.class_id == 1
+            )
+        )
+        att_rec = att_res.scalars().first()
+        if att_rec:
+            att_rec.status = "Leave"
+            att_rec.teacher_override = True
+            att_rec.join_timestamp = "Excused Leave (Approved)"
+            att_rec.minutes_late = 0.0
+        else:
+            att_rec = AttendanceRecord(
+                class_id=1,
+                student_id=lr.student_id,
+                student_name=lr.student_name,
+                date=today_iso,
+                status="Leave",
+                teacher_override=True,
+                join_timestamp="Excused Leave (Approved)",
+                minutes_late=0.0
+            )
+            db.add(att_rec)
+
+        # 2. Dispatch persistent notification to Parent
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name="Mrs. Ananya Verma",
+                sender_role="TEACHER",
+                title=f"Leave Approved: {lr.student_name}",
+                message=f"Class Teacher Mrs. Ananya Verma approved the leave application for {lr.student_name} ({lr.from_date} to {lr.to_date}). Attendance adjusted to 'Excused Leave' in school records.",
+                notification_type="LEAVE_APPROVAL",
+                priority="NORMAL",
+                recipient_role="PARENT",
+                action_url="/parent?nav=leave",
+                metadata_dict={"student_id": lr.student_id, "status": "Approved", "leave_id": lr.id}
+            )
+        except Exception as e:
+            print(f"Warning: could not dispatch parent leave approval notification: {e}")
+
+    elif req.status == "Rejected":
+        lr.approval_stage = "Rejected by Teacher"
+
+        att_res = await db.execute(
+            select(AttendanceRecord).where(
+                AttendanceRecord.student_id == lr.student_id,
+                AttendanceRecord.class_id == 1
+            )
+        )
+        att_rec = att_res.scalars().first()
+        if att_rec and att_rec.status == "Leave":
+            att_rec.status = "Absent"
+            att_rec.teacher_override = True
+            att_rec.join_timestamp = None
+
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name="Mrs. Ananya Verma",
+                sender_role="TEACHER",
+                title=f"Leave Request Rejected: {lr.student_name}",
+                message=f"Class Teacher Mrs. Ananya Verma did not approve the leave application for {lr.student_name}. Note: {req.teacher_notes or 'Please consult class teacher directly.'}",
+                notification_type="LEAVE_REJECTION",
+                priority="HIGH",
+                recipient_role="PARENT",
+                action_url="/parent?nav=leave",
+                metadata_dict={"student_id": lr.student_id, "status": "Rejected", "leave_id": lr.id}
+            )
+        except Exception as e:
+            print(f"Warning: could not dispatch parent leave rejection notification: {e}")
+
     await db.commit()
     await db.refresh(lr)
     return lr
@@ -254,24 +336,89 @@ async def get_parent_chat_context(student_id: int, db: AsyncSession = Depends(ge
 # --- 5. Student Roster (Class 8B & 9A) ---
 @router.get("/students")
 async def list_teacher_students(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Student))
+    result = await db.execute(select(Student).order_by(Student.roll_no))
     students = result.scalars().all()
-    return [
-        {
+    
+    # Map remedial sprints for focus table indicators
+    focus_res = await db.execute(select(RemedialSprint))
+    sprints = focus_res.scalars().all()
+    sprint_map = {s.student_id: s for s in sprints}
+
+    # Query Leave Requests to sync leave status
+    leaves_res = await db.execute(
+        select(LeaveRequest).where(LeaveRequest.status.in_(["Approved", "Pending"])).order_by(LeaveRequest.applied_at.desc())
+    )
+    all_leaves = leaves_res.scalars().all()
+    leave_map = {}
+    for lr in all_leaves:
+        if lr.student_id not in leave_map:
+            leave_map[lr.student_id] = lr
+
+    # Query Attendance Records for Class 1 (or current active live class)
+    att_res = await db.execute(select(AttendanceRecord).where(AttendanceRecord.class_id == 1))
+    att_map = {a.student_id: a for a in att_res.scalars().all()}
+
+    output = []
+    for s in students:
+        lr = leave_map.get(s.id)
+        att = att_map.get(s.id)
+
+        is_on_leave = (lr is not None and lr.status == "Approved") or (att is not None and att.status == "Leave")
+        is_leave_pending = (lr is not None and lr.status == "Pending")
+
+        if is_on_leave:
+            leave_status_str = "Approved Leave"
+            today_att_status = "Excused Leave"
+            att_flag = "EXCUSED_LEAVE"
+            last_active_str = "On Approved Leave (Excused)"
+        elif is_leave_pending:
+            leave_status_str = "Pending Approval"
+            today_att_status = "Leave Pending"
+            att_flag = "PENDING_LEAVE"
+            last_active_str = "Leave Pending Review"
+        elif att and att.status == "Absent":
+            leave_status_str = "None"
+            today_att_status = "Absent"
+            att_flag = "ABSENT"
+            last_active_str = "Absent Today"
+        elif att and att.status == "Late":
+            leave_status_str = "None"
+            today_att_status = "Late"
+            att_flag = "LATE"
+            last_active_str = f"Late Join ({att.join_timestamp or 'Flagged'})"
+        else:
+            leave_status_str = "None"
+            today_att_status = "Present"
+            att_flag = "PRESENT"
+            last_active_str = "Today, 10:15 AM"
+
+        output.append({
             "id": s.id,
             "name": s.name,
             "roll_no": s.roll_no,
             "class_name": f"{s.class_name}-{s.section}",
+            "raw_class": s.class_name,
+            "section": s.section,
             "attendance_pct": s.attendance_pct,
+            "missed_classes_count": max(0, int(round((100 - (s.attendance_pct or 90.0)) * 0.3))),
             "academic_average_pct": s.academic_average_pct,
             "guardian_name": s.guardian_name,
             "guardian_phone": s.guardian_phone,
-            "has_focus_table": s.id == 1,
+            "has_focus_table": s.id in sprint_map or s.id in [1, 2, 4, 10],
+            "focus_concept": sprint_map[s.id].weak_concept if s.id in sprint_map else ("Quadratic Factorization & Negative Signs" if s.id == 1 else ("Polynomial Division & Remainder Theorem" if s.id == 10 else None)),
             "homework_status": "Submitted" if s.id != 3 else "Pending",
-            "last_active": "Today, 10:15 AM"
-        }
-        for s in students
-    ]
+            "last_active": last_active_str,
+            "is_on_leave": is_on_leave,
+            "is_leave_pending": is_leave_pending,
+            "leave_status": leave_status_str,
+            "leave_reason": lr.reason if lr else None,
+            "is_medical_leave": lr.is_medical if lr else False,
+            "leave_from_date": lr.from_date if lr else None,
+            "leave_to_date": lr.to_date if lr else None,
+            "today_attendance_status": today_att_status,
+            "attendance_flag": att_flag
+        })
+    return output
 
 # --- 6. Weekly Class Timetable & Schedule ---
 _teacher_schedule = [
@@ -386,7 +533,7 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
             permission_type=new_perm["type"],
             from_date=new_perm["date"],
             to_date=new_perm["date"],
-            affected_periods="Period 3 (Class 8-B)",
+            affected_periods=new_perm.get("affected_periods", "General Periods"),
             reason=new_perm["reason"],
             status="Pending"
         )
@@ -1106,6 +1253,78 @@ async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_
             return slot
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
+@router.post("/ptm/slots/{slot_id}/cancel")
+async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Cancel a booked PTM conference slot.
+    Saves snapshot for undo.
+    Optionally re-opens slot as AVAILABLE for other parents or blocks as BREAK.
+    Notifies parent with the reason.
+    """
+    for slot in _ptm_slots:
+        if slot["id"] == slot_id:
+            prev_snapshot = dict(slot)
+            slot["cancellation_reason"] = req.cancellation_reason
+            slot["cancelled_by"] = req.cancelled_by
+            slot["cancelled_at"] = datetime.datetime.utcnow().isoformat()
+
+            student_name = slot.get("booked_student_name") or "Student"
+            slot_time = f"{slot.get('start_time')} - {slot.get('end_time')}"
+
+            if req.reopen_as_free:
+                slot["status"] = "AVAILABLE"
+                slot["booked_student_id"] = None
+                slot["booked_student_name"] = None
+                slot["booked_class"] = None
+                slot["booked_parent_id"] = None
+                slot["booked_parent_name"] = None
+                slot["meeting_url"] = None
+                slot["focus_table_agenda"] = []
+                slot["is_sibling_combo"] = False
+                slot["sibling_student_id"] = None
+                slot["sibling_student_name"] = None
+            else:
+                slot["status"] = "BREAK"
+
+            if req.notify_parent and db is not None:
+                try:
+                    await create_system_notification(
+                        user_id=1,
+                        title=f"PTM Conference Update: {slot_time}",
+                        message=f"Your PTM conference for {student_name} was cancelled by {req.cancelled_by.lower()}. Reason: {req.cancellation_reason}. You may re-book an available slot.",
+                        category="ptm",
+                        db=db
+                    )
+                except Exception:
+                    pass
+
+            return {
+                "success": True,
+                "message": f"PTM Slot {slot_id} cancelled successfully.",
+                "slot": slot,
+                "previous_state": prev_snapshot
+            }
+    raise HTTPException(status_code=404, detail="PTM slot not found")
+
+@router.post("/ptm/slots/{slot_id}/restore")
+async def restore_ptm_slot(slot_id: str, req: PTMSlotRestoreRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Restores a cancelled PTM slot to its previous booked state (Undo action).
+    """
+    for idx, slot in enumerate(_ptm_slots):
+        if slot["id"] == slot_id:
+            restored = dict(req.previous_state)
+            restored["cancellation_reason"] = None
+            restored["cancelled_by"] = None
+            restored["cancelled_at"] = None
+            _ptm_slots[idx] = restored
+            return {
+                "success": True,
+                "message": f"PTM Slot {slot_id} booking restored.",
+                "slot": restored
+            }
+    raise HTTPException(status_code=404, detail="PTM slot not found")
+
 # --- 14. Teacher Curriculum Delivery & Timetable Proxy Sync ---
 def inject_substitution_period(period_num: int, class_name: str, subject: str, absent_teacher: str, time_slot: str):
     for p in _personal_schedule:
@@ -1164,3 +1383,72 @@ async def teacher_log_curriculum_unit(req: dict):
     raise HTTPException(status_code=404, detail="Course not found in curriculum tracker")
 
 
+
+
+# =========================================================================
+# TEACHER - PARENT DIRECT CHAT ENDPOINTS (SHARED PERSISTENCE)
+# =========================================================================
+
+@router.get("/chat/{student_id}", response_model=list[ParentTeacherChatMessageResponse])
+async def get_teacher_chat_history(student_id: int, db: AsyncSession = Depends(get_db)):
+    target_ids = [1, 6] if student_id in [1, 6] else [student_id]
+    result = await db.execute(
+        select(ParentTeacherMessage)
+        .where(ParentTeacherMessage.student_id.in_(target_ids))
+        .order_by(ParentTeacherMessage.created_at.asc())
+    )
+    return result.scalars().all()
+
+@router.post("/chat/send", response_model=ParentTeacherChatMessageResponse)
+async def send_teacher_chat_message(req: ParentTeacherChatMessageCreate, db: AsyncSession = Depends(get_db)):
+    st_res = await db.execute(select(Student).where(Student.id == req.student_id))
+    st = st_res.scalars().first()
+    student_name = st.name if st else "Student"
+
+    msg = ParentTeacherMessage(
+        student_id=req.student_id,
+        student_name=student_name,
+        sender_role="TEACHER",
+        sender_name=req.sender_name or "Mrs. Ananya Verma",
+        receiver_role="PARENT",
+        receiver_name=req.receiver_name or "Parent",
+        message_text=req.message_text,
+        attachment_name=req.attachment_name,
+        attachment_url=req.attachment_url,
+        is_read=False,
+        created_at=datetime.datetime.utcnow()
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_role="PARENT",
+            sender_name=req.sender_name or "Mrs. Ananya Verma",
+            sender_role="TEACHER",
+            title=f"New Message from {req.sender_name or 'Teacher'}",
+            message=f"Regarding {student_name}: {req.message_text[:80]}...",
+            notification_type="TEACHER_CHAT",
+            priority="NORMAL",
+            action_url="/parent?nav=chat"
+        )
+    except Exception:
+        pass
+
+    return msg
+
+@router.post("/chat/mark-read/{student_id}")
+async def mark_teacher_chat_read(student_id: int, db: AsyncSession = Depends(get_db)):
+    await db.execute(
+        update(ParentTeacherMessage)
+        .where(
+            ParentTeacherMessage.student_id == student_id,
+            ParentTeacherMessage.receiver_role == "TEACHER",
+            ParentTeacherMessage.is_read == False
+        )
+        .values(is_read=True)
+    )
+    await db.commit()
+    return {"success": True, "message": "Messages marked as read by teacher"}

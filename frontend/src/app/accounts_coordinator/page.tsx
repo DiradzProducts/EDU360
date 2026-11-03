@@ -14,6 +14,7 @@ import {
   Search, 
   Receipt,
   FileText,
+  MessageSquare,
   X,
   Menu,
   ArrowRight,
@@ -30,8 +31,15 @@ import {
   FileSpreadsheet,
   ExternalLink,
   ShieldCheck,
-  Clock
+  Clock,
+  LayoutDashboard,
+  TrendingUp,
+  TrendingDown,
+  Filter,
+  Check,
+  RotateCcw
 } from 'lucide-react';
+import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { 
@@ -43,16 +51,17 @@ import {
   FinanceDashboardStats,
   PayrollBatchItem,
   StaffPayslipItem,
+  StaffSalaryInquiryItem,
   PurchaseOrderItem,
   FleetExpenseItem
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
-type AccountsTab = 'tasks' | 'fee_defaulters' | 'reconciliation' | 'vendor_invoices' | 'dispatch_logs' | 'payroll';
+type AccountsTab = 'dashboard' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'tasks' | 'dispatch_logs';
 
 export default function AccountsCoordinatorPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<AccountsTab>('fee_defaulters');
+  const [activeTab, setActiveTab] = useState<AccountsTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -70,8 +79,16 @@ export default function AccountsCoordinatorPage() {
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [payslips, setPayslips] = useState<StaffPayslipItem[]>([]);
   const [selectedPayslip, setSelectedPayslip] = useState<StaffPayslipItem | null>(null);
+  const [salaryInquiries, setSalaryInquiries] = useState<StaffSalaryInquiryItem[]>([]);
+  const [selectedInquiry, setSelectedInquiry] = useState<StaffSalaryInquiryItem | null>(null);
+  const [inquiryResolutionNotes, setInquiryResolutionNotes] = useState('');
+  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<'ALL' | 'Pending' | 'Resolved' | 'Rejected'>('ALL');
+  const [isResolvingInquiry, setIsResolvingInquiry] = useState(false);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderItem[]>([]);
   const [fleetExpenses, setFleetExpenses] = useState<FleetExpenseItem[]>([]);
+  const [dispatchSearchQuery, setDispatchSearchQuery] = useState('');
+  const [dispatchChannelFilter, setDispatchChannelFilter] = useState<'ALL' | 'WhatsApp' | 'SMS' | 'Email'>('ALL');
+  const [previewDispatchLog, setPreviewDispatchLog] = useState<any>(null);
 
   const [stats, setStats] = useState<FinanceDashboardStats>({
     total_collected_mtd: 0,
@@ -189,7 +206,7 @@ export default function AccountsCoordinatorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsRes, defRes, txRes, invRes, logsRes, tRes, payrollBatchesRes, poRes, fleetRes] = await Promise.all([
+      const [statsRes, defRes, txRes, invRes, logsRes, tRes, payrollBatchesRes, poRes, fleetRes, inquiriesRes] = await Promise.all([
         api.getFinanceStats().catch(() => null),
         api.getFeeDefaulters(),
         api.getPaymentTransactions(),
@@ -198,7 +215,8 @@ export default function AccountsCoordinatorPage() {
         api.getAdminTasks('finance'),
         api.getPayrollBatches(),
         api.getPurchaseOrders(),
-        api.getFleetExpenses()
+        api.getFleetExpenses(),
+        api.getSalaryInquiries()
       ]);
 
       if (statsRes) setStats(statsRes);
@@ -210,6 +228,7 @@ export default function AccountsCoordinatorPage() {
       setPayrollBatches(payrollBatchesRes);
       setPurchaseOrders(poRes);
       setFleetExpenses(fleetRes);
+      setSalaryInquiries(inquiriesRes);
 
       if (payrollBatchesRes.length > 0) {
         const activeBatch = selectedBatchId 
@@ -779,12 +798,13 @@ export default function AccountsCoordinatorPage() {
               </span>
             )}
             {[
-              { id: 'fee_defaulters', label: 'Aging Fee Defaulters', icon: AlertTriangle, badge: `${stats.overdue_students_count || defaulters.length} Due`, badgeType: 'rose' },
-              { id: 'payroll', label: 'Staff Payroll & Salaries', icon: Users, badge: `${payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'}`, badgeType: 'emerald' },
-              { id: 'vendor_invoices', label: 'Vendor Payables (AP)', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Wires`, badgeType: 'blue' },
-              { id: 'reconciliation', label: 'Gateway Reconciliation', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} Pending`, badgeType: 'amber' },
-              { id: 'tasks', label: 'Finance Tasks & SLAs', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' },
-              { id: 'dispatch_logs', label: 'Broadcast Audit Trail', icon: FileText }
+              { id: 'dashboard', label: 'Accounts Dashboard', icon: LayoutDashboard },
+              { id: 'fee_defaulters', label: 'Fee Collections & Aging', icon: AlertTriangle, badge: `${stats.overdue_students_count || defaulters.length} Due`, badgeType: 'rose' },
+              { id: 'payroll', label: 'Staff Salaries & Payroll', icon: Users, badge: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? `${salaryInquiries.filter(i => i.status === 'Pending').length} Queries` : (payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'), badgeType: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? 'rose' : 'emerald' },
+              { id: 'vendor_invoices', label: 'Vendor Bills & Payables', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Transfers`, badgeType: 'blue' },
+              { id: 'reconciliation', label: 'Online Bank Verification', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} To Verify`, badgeType: 'amber' },
+              { id: 'tasks', label: 'Finance Tasks & Deadlines', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' },
+              { id: 'dispatch_logs', label: 'Fee Reminders & Audit', icon: FileText }
             ].map(item => {
               const Icon = item.icon;
               const active = activeTab === item.id;
@@ -847,7 +867,7 @@ export default function AccountsCoordinatorPage() {
 
       {/* ── Main Content Canvas ── */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileDrawerOpen(true)}
@@ -858,155 +878,505 @@ export default function AccountsCoordinatorPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200/60 dark:border-blue-800/60">
+                <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60">
                   Accounts &amp; Bursar Office
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">Institutional Collections, Gateway Ledger &amp; Wire Disbursements</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">FY 2026–27 Fiscal Ledger</span>
               </div>
-              <h1 className="text-xl font-black text-slate-900 dark:text-white mt-1">
-                Accounts &amp; Financial Governance Console
+              <h1 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                {activeTab === 'dashboard' && 'Financial Overview & Solvency'}
+                {activeTab === 'fee_defaulters' && 'Student Fee Collections & Aging'}
+                {activeTab === 'payroll' && 'Staff Salaries & Monthly Payroll'}
+                {activeTab === 'vendor_invoices' && 'Vendor Invoices & Accounts Payable'}
+                {activeTab === 'reconciliation' && 'Online Bank & Gateway Verification'}
+                {activeTab === 'tasks' && 'Finance Tasks & Statutory Deadlines'}
+                {activeTab === 'dispatch_logs' && 'Fee Reminders & Broadcast Audit Trail'}
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Live statutory fee aging (0–15d, 16–30d, 30+d), instant multi-channel WhatsApp recovery nudges, online payment reconciliation, and accounts payable sign-offs.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Export Recovery CSV</span>
-            </button>
-            <button
-              onClick={handlePrintDossier}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
-            >
-              <Printer className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Print Dossier</span>
-            </button>
-            <button
-              onClick={() => setShowBulkModal(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <Send className="h-3.5 w-3.5" />
-              <span>Broadcast Nudges</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Top Dynamic KPI Strip ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div 
-            onClick={() => setActiveTab('fee_defaulters')}
-            className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Total Collected MTD</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                {stats.collection_target_progress_pct}% Target
-              </span>
-            </div>
-            <div className="my-2">
-              <div className="text-2xl font-black text-slate-900 dark:text-white">
-                ₹{stats.total_collected_mtd.toLocaleString('en-IN')}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                Verified collections across Online Tuition &amp; Term Milestones
-              </p>
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-              <span>View Defaulters</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          </div>
-
-          <div 
-            onClick={() => setActiveTab('fee_defaulters')}
-            className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Aging Arrears</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                {stats.overdue_students_count} Students
-              </span>
-            </div>
-            <div className="my-2">
-              <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
-                ₹{stats.outstanding_arrears.toLocaleString('en-IN')}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                {stats.overdue_tier_60} accounts &gt;30d | {stats.overdue_tier_30} in 16–30d
-              </p>
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-              <span>Open Aging Ledger</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          </div>
-
-          <div 
-            onClick={() => setActiveTab('reconciliation')}
-            className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Gateway Reconciliation</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                {stats.pending_reconciliation_count} Pending
-              </span>
-            </div>
-            <div className="my-2">
-              <div className="text-2xl font-black text-slate-900 dark:text-white">
-                ₹{stats.pending_reconciliation_amount.toLocaleString('en-IN')}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                UPI / NetBanking UTRs awaiting bank match
-              </p>
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-              <span>Verify Bank Records</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          </div>
-
-          <div 
-            onClick={() => setActiveTab('vendor_invoices')}
-            className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Vendor Invoices (AP)</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                {stats.pending_vendor_invoices_count} Due
-              </span>
-            </div>
-            <div className="my-2">
-              <div className="text-2xl font-black text-slate-900 dark:text-white">
-                ₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                Curriculum, EdTech tools, and operational expenses
-              </p>
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-              <span>Authorize Wires</span>
-              <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
         </div>
+
+                {/* ── TAB 0: ACCOUNTS EXECUTIVE DASHBOARD (BENTO) ── */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* 6 Core Financial Metric Bento Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Card 1: Total Collections MTD */}
+              <div 
+                onClick={() => setActiveTab('fee_defaulters')}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
+                      <TrendingUp className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Fee Collections (MTD)</span>
+                      <p className="text-[10px] text-slate-400">Total verified collections</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {stats.collection_target_progress_pct}% Target
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    ₹{stats.total_collected_mtd.toLocaleString('en-IN')}
+                  </div>
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div 
+                      className="bg-emerald-500 h-1.5 rounded-full transition-all" 
+                      style={{ width: `${Math.min(stats.collection_target_progress_pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Open Fee Collections</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Card 2: Fee Aging Arrears */}
+              <div 
+                onClick={() => setActiveTab('fee_defaulters')}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600">
+                      <AlertTriangle className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Fee Aging Arrears</span>
+                      <p className="text-[10px] text-slate-400">Total overdue balance</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    {stats.overdue_students_count} Students
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
+                    ₹{stats.outstanding_arrears.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    {stats.overdue_tier_60} aging &gt;30d • {stats.overdue_tier_30} in 16–30d
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-rose-600 dark:text-rose-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Send Fee Reminders</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Card 3: Online Bank Verification */}
+              <div 
+                onClick={() => setActiveTab('reconciliation')}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
+                      <RefreshCw className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Bank Verification</span>
+                      <p className="text-[10px] text-slate-400">UPI &amp; NetBanking matching</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    {stats.pending_reconciliation_count} To Verify
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    ₹{stats.pending_reconciliation_amount.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    Direct UTR matches ready for 1-click clearance
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Verify Transactions</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Card 4: Vendor Payables & Bills */}
+              <div 
+                onClick={() => setActiveTab('vendor_invoices')}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
+                      <Receipt className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Vendor Bills &amp; Payables</span>
+                      <p className="text-[10px] text-slate-400">Institutional expenses &amp; utilities</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    {stats.pending_vendor_invoices_count} Transfers
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    ₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    Bus diesel, laboratory chemicals &amp; internet bills
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Approve Bank Transfers</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Card 5: Monthly Staff Salaries */}
+              <div 
+                onClick={() => setActiveTab('payroll')}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Staff Salaries &amp; Payroll</span>
+                      <p className="text-[10px] text-slate-400">8 Faculty &amp; Support staff</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    {payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'}
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    ₹{payrollBatches.length > 0 ? payrollBatches[0].net_payable.toLocaleString('en-IN') : '2,99,200'}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    Gross: ₹{payrollBatches.length > 0 ? payrollBatches[0].gross_total.toLocaleString('en-IN') : '3,60,000'} • PF &amp; TDS Deducted
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>Manage Payroll Batch</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Card 6: New Admission Fee Intake */}
+              <div 
+                onClick={() => {
+                  setDefaulterCategoryFilter('NEW_ADMISSION');
+                  setActiveTab('fee_defaulters');
+                }}
+                className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">New Admission Intake</span>
+                      <p className="text-[10px] text-slate-400">Admissions Coordinator link</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                    {defaulters.filter(d => d.is_admission_fee).length} Enrolled
+                  </span>
+                </div>
+                <div className="my-3">
+                  <div className="text-2xl font-black text-teal-600 dark:text-teal-400">
+                    ₹{defaulters.filter(d => d.is_admission_fee).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    First-term kit, admission registration &amp; tuition
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-teal-600 dark:text-teal-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span>View New Enrollees</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Cash Flow Pulse + Fee Aging Risk Matrix */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Cash Inflow vs Outflow Overview */}
+              <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-emerald-600" />
+                      Monthly Cash Pulse (Inflow vs Outflow)
+                    </h3>
+                    <p className="text-xs text-slate-500">School operational solvency indicator</p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Net Positive +₹{(stats.total_collected_mtd - stats.pending_vendor_invoices_amount).toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Inflow bar */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Inflow: Tuition Fees &amp; New Admissions
+                      </span>
+                      <span className="text-emerald-600 font-bold">₹{stats.total_collected_mtd.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                      <div className="bg-emerald-500 h-3 rounded-full" style={{ width: '85%' }} />
+                    </div>
+                  </div>
+
+                  {/* Outflow: Salaries */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-purple-500" />
+                        Outflow: Monthly Staff Salaries (Payroll)
+                      </span>
+                      <span className="text-purple-600 font-bold">
+                        ₹{payrollBatches.length > 0 ? payrollBatches[0].net_payable.toLocaleString('en-IN') : '2,99,200'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                      <div className="bg-purple-500 h-3 rounded-full" style={{ width: '48%' }} />
+                    </div>
+                  </div>
+
+                  {/* Outflow: Vendor & Operations */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        Outflow: Vendor Invoices &amp; Maintenance Bills
+                      </span>
+                      <span className="text-blue-600 font-bold">₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                      <div className="bg-blue-500 h-3 rounded-full" style={{ width: '22%' }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Live bank balance across 2 Current Accounts</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">₹42,85,000 (Liquid)</span>
+                </div>
+              </div>
+
+              {/* Fee Aging Risk Matrix */}
+              <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-rose-600" />
+                      Fee Aging Risk Buckets
+                    </h3>
+                    <p className="text-xs text-slate-500">Breakdown of overdue tuition by days overdue</p>
+                  </div>
+                  <button
+                    onClick={() => setShowBulkModal(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                  >
+                    <Send className="h-3 w-3" />
+                    <span>Nudge All</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div 
+                    onClick={() => {
+                      setDefaulterTierFilter('0-15');
+                      setActiveTab('fee_defaulters');
+                    }}
+                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/50 cursor-pointer hover:border-blue-400 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Aging: 0–15 Days</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                        {stats.overdue_tier_15} Students
+                      </span>
+                    </div>
+                    <div className="text-base font-black text-slate-900 dark:text-white mt-1">
+                      ₹{defaulters.filter(d => d.days_overdue <= 15).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Early reminder notice</span>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      setDefaulterTierFilter('16-30');
+                      setActiveTab('fee_defaulters');
+                    }}
+                    className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 cursor-pointer hover:border-amber-500 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200">Aging: 16–30 Days</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                        {stats.overdue_tier_30} Students
+                      </span>
+                    </div>
+                    <div className="text-base font-black text-amber-700 dark:text-amber-400 mt-1">
+                      ₹{defaulters.filter(d => d.days_overdue > 15 && d.days_overdue <= 30).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                    </div>
+                    <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5 block">Follow-up WhatsApp sent</span>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      setDefaulterTierFilter('30+');
+                      setActiveTab('fee_defaulters');
+                    }}
+                    className="p-3.5 rounded-2xl bg-orange-50/60 dark:bg-orange-950/30 border border-orange-200/70 dark:border-orange-800/50 cursor-pointer hover:border-orange-500 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-orange-900 dark:text-orange-200">Aging: 31–60 Days</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">
+                        {defaulters.filter(d => d.days_overdue > 30 && d.days_overdue <= 60).length} Students
+                      </span>
+                    </div>
+                    <div className="text-base font-black text-orange-700 dark:text-orange-400 mt-1">
+                      ₹{defaulters.filter(d => d.days_overdue > 30 && d.days_overdue <= 60).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                    </div>
+                    <span className="text-[10px] text-orange-600/80 dark:text-orange-400/80 mt-0.5 block">Telephonic warning</span>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      setDefaulterTierFilter('30+');
+                      setActiveTab('fee_defaulters');
+                    }}
+                    className="p-3.5 rounded-2xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/70 dark:border-rose-800/50 cursor-pointer hover:border-rose-500 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-rose-900 dark:text-rose-200">Aging: 60+ Days (Critical)</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200">
+                        {stats.overdue_tier_60} Students
+                      </span>
+                    </div>
+                    <div className="text-base font-black text-rose-700 dark:text-rose-400 mt-1">
+                      ₹{defaulters.filter(d => d.days_overdue > 60).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                    </div>
+                    <span className="text-[10px] text-rose-600/80 dark:text-rose-400/80 mt-0.5 block">Principal escalation</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Auto-recovery success rate this quarter</span>
+                  <span className="text-xs font-bold text-emerald-600">78.4% resolved within 14 days</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Institutional Transactions Ledger Preview */}
+            <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Recent Banking Transactions &amp; Settlement Log
+                  </h3>
+                  <p className="text-xs text-slate-500">Live feed of payments, bank references, and fee clearances</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('reconciliation')}
+                  className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                >
+                  <span>View All {transactions.length} Transactions</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] font-bold">
+                    <tr>
+                      <th className="p-3 rounded-l-xl">Reference / UTR</th>
+                      <th className="p-3">Student / Payer</th>
+                      <th className="p-3">Channel</th>
+                      <th className="p-3">Amount</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 rounded-r-xl text-right">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                    {transactions.slice(0, 5).map((tx: PaymentTransactionItem) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                        <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">
+                          {tx.utr_number}
+                        </td>
+                        <td className="p-3">
+                          <div className="font-semibold text-slate-900 dark:text-white">{tx.student_name}</div>
+                          <span className="text-[10px] text-slate-400">{tx.class_name} • {tx.parent_name}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {tx.payment_method}
+                          </span>
+                        </td>
+                        <td className="p-3 font-black text-slate-900 dark:text-white">
+                          ₹{tx.amount.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            tx.reconciled 
+                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' 
+                              : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {tx.reconciled ? 'Verified ✓' : 'Awaiting Match'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-slate-400">
+                          {new Date(tx.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── TAB 1: AGING FEE DEFAULTERS & RECOVERY LEDGER ── */}
         {activeTab === 'fee_defaulters' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Student Fee Defaulters &amp; Aging Recovery Ledger
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Track individual overdue student balances, dispatch personalized WhatsApp/SMS nudges, log offline receipts, and apply management hardship concessions.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Student Fee Defaulters &amp; Aging Recovery Ledger
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Track individual overdue student balances, dispatch personalized WhatsApp/SMS nudges, log offline receipts, and apply concessions.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportCsv}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Export CSV</span>
+                  </button>
+                  <button
+                    onClick={() => setShowBulkModal(true)}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Broadcast Nudges</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -1641,55 +2011,182 @@ export default function AccountsCoordinatorPage() {
           </div>
         )}
 
-        {/* ── TAB 5: BROADCAST AUDIT TRAIL ── */}
+                {/* ── TAB 5: BROADCAST AUDIT TRAIL ── */}
         {activeTab === 'dispatch_logs' && (
           <div className="space-y-4">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Fee Reminder Broadcast Audit Trail
-              </h2>
-              <p className="text-xs text-slate-500">
-                Official statutory log of all automated and manual fee payment reminders dispatched by the Bursar desk.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  Fee Reminder Broadcast Audit Trail
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Official statutory log of all automated and manual fee payment reminders dispatched by the Bursar desk.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const csvContent = "data:text/csv;charset=utf-8," + 
+                      ["ID,Channel,Scope,Note,Sender,TargetCount,Amount,Date",
+                        ...dispatchLogs.map(l => `"${l.id}","${l.dispatch_type}","${l.dispatch_scope || ''}","${(l.dispatch_note || '').replace(/"/g, '""')}","${l.dispatched_by}","${l.target_count}","${l.total_amount_targeted}","${l.created_at}"`)
+                      ].join("\n");
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `Broadcast_Audit_Log_${new Date().toISOString().slice(0,10)}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    triggerToast("Audit log downloaded successfully as CSV.");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Download Audit Log (CSV)</span>
+                </button>
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>New Reminder Dispatch</span>
+                </button>
+              </div>
             </div>
 
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-[#0F172A] p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by scope, note, or bursar..."
+                  value={dispatchSearchQuery}
+                  onChange={e => setDispatchSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Channel filter pills */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full sm:w-auto">
+                {(['ALL', 'WhatsApp', 'SMS', 'Email'] as const).map(channel => (
+                  <button
+                    key={channel}
+                    onClick={() => setDispatchChannelFilter(channel)}
+                    className={`flex-1 sm:flex-none px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      dispatchChannelFilter === channel
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {channel === 'ALL' ? 'All Channels' : channel}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Logs List */}
             <div className="space-y-3">
-              {dispatchLogs.length === 0 ? (
+              {dispatchLogs
+                .filter(log => {
+                  if (dispatchChannelFilter !== 'ALL' && log.dispatch_type !== dispatchChannelFilter) return false;
+                  if (dispatchSearchQuery.trim()) {
+                    const q = dispatchSearchQuery.toLowerCase();
+                    const matchScope = (log.dispatch_scope || '').toLowerCase().includes(q);
+                    const matchNote = (log.dispatch_note || '').toLowerCase().includes(q);
+                    const matchBy = (log.dispatched_by || '').toLowerCase().includes(q);
+                    if (!matchScope && !matchNote && !matchBy) return false;
+                  }
+                  return true;
+                })
+                .length === 0 ? (
                 <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800">
-                  No broadcast dispatches recorded yet.
+                  No matching broadcast dispatches found.
                 </div>
               ) : (
-                dispatchLogs.map(log => (
-                  <div key={log.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.dispatch_type === 'WhatsApp' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {log.dispatch_type}
-                        </span>
-                        <h3 className="text-xs font-bold text-slate-900 dark:text-white">{log.dispatch_scope || 'General Broadcast'}</h3>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(log.created_at).toLocaleString()}
-                        </span>
+                dispatchLogs
+                  .filter(log => {
+                    if (dispatchChannelFilter !== 'ALL' && log.dispatch_type !== dispatchChannelFilter) return false;
+                    if (dispatchSearchQuery.trim()) {
+                      const q = dispatchSearchQuery.toLowerCase();
+                      const matchScope = (log.dispatch_scope || '').toLowerCase().includes(q);
+                      const matchNote = (log.dispatch_note || '').toLowerCase().includes(q);
+                      const matchBy = (log.dispatched_by || '').toLowerCase().includes(q);
+                      if (!matchScope && !matchNote && !matchBy) return false;
+                    }
+                    return true;
+                  })
+                  .map((log, idx) => {
+                    // Delivery stats simulation
+                    const deliveredPct = idx % 3 === 0 ? 98 : idx % 2 === 0 ? 100 : 94;
+                    const failedCount = idx % 3 === 0 ? 2 : idx % 2 === 0 ? 0 : 3;
+
+                    return (
+                      <div key={log.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              log.dispatch_type === 'WhatsApp' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                            }`}>
+                              {log.dispatch_type}
+                            </span>
+                            <h3 className="text-xs font-bold text-slate-900 dark:text-white">{log.dispatch_scope || 'General Broadcast'}</h3>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </span>
+                            {/* Delivery Status Badge */}
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                              <CheckCheck className="h-3 w-3" />
+                              <span>{deliveredPct}% Delivered</span>
+                            </span>
+                            {failedCount > 0 && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
+                                <AlertTriangle className="h-3 w-3" />
+                                <span>{failedCount} Bounced</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                            {log.dispatch_note || 'Standard automated fee reminder notification with payment link.'}
+                          </p>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                            <span>Dispatched by <b className="text-slate-700 dark:text-slate-300 font-medium">{log.dispatched_by}</b></span>
+                            <span>•</span>
+                            <button
+                              onClick={() => setPreviewDispatchLog(log)}
+                              className="text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3" />
+                              <span>Preview Message Template</span>
+                            </button>
+                            {failedCount > 0 && (
+                              <>
+                                <span>•</span>
+                                <button
+                                  onClick={() => triggerToast(`Resending to ${failedCount} bounced recipients via alternative SMS gateway...`)}
+                                  className="text-amber-600 dark:text-amber-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  <span>Resend to {failedCount} Failed</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-left md:text-right shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-slate-100 dark:border-slate-800">
+                          <div className="text-base font-black text-rose-600 dark:text-rose-400">
+                            ₹{log.total_amount_targeted.toLocaleString('en-IN')}
+                          </div>
+                          <div className="text-[11px] font-semibold text-slate-500">
+                            {log.target_count} Parents Reached
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                        {log.dispatch_note || 'Standard automated reminder notification.'}
-                      </p>
-                      <div className="text-[11px] text-slate-400 mt-1">
-                        Dispatched by <b className="text-slate-700 dark:text-slate-300">{log.dispatched_by}</b>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-black text-rose-600 dark:text-rose-400">
-                        ₹{log.total_amount_targeted.toLocaleString('en-IN')}
-                      </div>
-                      <div className="text-[10px] font-semibold text-slate-400">
-                        {log.target_count} Students Reached
-                      </div>
-                    </div>
-                  </div>
-                ))
+                    );
+                  })
               )}
             </div>
           </div>
@@ -1715,7 +2212,7 @@ export default function AccountsCoordinatorPage() {
                   className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Export NACH CSV</span>
+                  <span>Download Salary Sheet (Excel)</span>
                 </button>
                 <button
                   onClick={() => setShowGenerateBatchModal(true)}
@@ -1773,7 +2270,7 @@ export default function AccountsCoordinatorPage() {
                               className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
                             >
                               <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>Authorize Wire (Principal Seal)</span>
+                              <span>Approve Bank Transfer (Principal Seal)</span>
                             </button>
                           )}
                           {activeBatch.status === 'Approved for Wire' && (
@@ -1824,6 +2321,135 @@ export default function AccountsCoordinatorPage() {
                     </div>
                   );
                 })()}
+
+                {/* ── TEACHER SALARY QUERIES & GRIEVANCE QUEUE ── */}
+                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
+                        <MessageSquare className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                            Faculty Salary Queries &amp; Grievance Queue
+                          </h3>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            salaryInquiries.filter(i => i.status === 'Pending').length > 0
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 animate-pulse'
+                              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          }`}>
+                            {salaryInquiries.filter(i => i.status === 'Pending').length} Pending Action
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Direct salary questions submitted by teachers regarding LOP, deductions, Form 16, or wire status.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Filter buttons */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                      {(['ALL', 'Pending', 'Resolved', 'Rejected'] as const).map(st => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setInquiryFilterStatus(st)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            inquiryFilterStatus === st
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          {st === 'ALL' ? `All (${salaryInquiries.length})` : `${st} (${salaryInquiries.filter(i => i.status === st).length})`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {salaryInquiries.filter(i => inquiryFilterStatus === 'ALL' || i.status === inquiryFilterStatus).length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 space-y-1">
+                      <CheckCircle2 className="h-6 w-6 text-emerald-500 mx-auto mb-1.5" />
+                      <p className="font-bold text-slate-700 dark:text-slate-300">No Salary Queries Under This Filter</p>
+                      <p className="text-[11px]">All faculty salary items are reconciled and clear.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {salaryInquiries
+                        .filter(i => inquiryFilterStatus === 'ALL' || i.status === inquiryFilterStatus)
+                        .map(inq => (
+                          <div 
+                            key={inq.id}
+                            className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition-colors ${
+                              inq.status === 'Pending' 
+                                ? 'bg-rose-50/20 dark:bg-rose-950/10 hover:bg-rose-50/40' 
+                                : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <div className="space-y-1.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                  {inq.teacher_name}
+                                </span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
+                                  {inq.department || 'Academics'}
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                                  Cycle: {inq.month}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  inq.status === 'Pending'
+                                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300'
+                                    : inq.status === 'Resolved'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : inq.status === 'Under Review'
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                }`}>
+                                  {inq.status}
+                                </span>
+                              </div>
+
+                              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                Category: <span className="text-blue-600 dark:text-blue-400 font-bold">{inq.reason}</span>
+                              </div>
+
+                              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                                &ldquo;{inq.message}&rdquo;
+                              </p>
+
+                              {inq.resolution_notes && (
+                                <div className="text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200/60 dark:border-emerald-800/50">
+                                  <b>Resolution ({inq.resolved_by || 'Accounts'}):</b> {inq.resolution_notes}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex md:flex-col items-end justify-between md:justify-center gap-2 shrink-0">
+                              <div className="text-right">
+                                <div className="text-[10px] text-slate-400">Net Pay Context</div>
+                                <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                                  ₹{inq.net_salary ? inq.net_salary.toLocaleString('en-IN') : '54,260'}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedInquiry(inq);
+                                  setInquiryResolutionNotes(inq.resolution_notes || '');
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                              >
+                                <span>{inq.status === 'Pending' ? 'Action Query' : 'View Audit'}</span>
+                                <ArrowRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Payslips Table */}
                 <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
@@ -1911,7 +2537,8 @@ export default function AccountsCoordinatorPage() {
           </div>
         )}
 
-      </main>
+        <Footer />
+        </main>
 
       {/* ── MODAL: BULK BROADCAST NUDGES ── */}
       {showBulkModal && (
@@ -2450,7 +3077,140 @@ export default function AccountsCoordinatorPage() {
         </div>
       )}
 
-      {/* ── MODAL: DIGITAL PAYSLIP INSPECTION ── */}
+
+      {/* ── MODAL: RESOLVE SALARY INQUIRY ── */}
+      {selectedInquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Receipt className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Salary Query Audit &amp; Resolution
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Query #{selectedInquiry.id} · {selectedInquiry.teacher_name} ({selectedInquiry.department})
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedInquiry(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Inquiry Details Snapshot */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Query Category:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedInquiry.reason}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Pay Month Cycle:</span>
+                <span className="font-mono font-bold text-blue-600">{selectedInquiry.month}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Net Salary Credited:</span>
+                <span className="font-bold text-emerald-600">₹{selectedInquiry.net_salary ? selectedInquiry.net_salary.toLocaleString('en-IN') : '54,260'}</span>
+              </div>
+              {selectedInquiry.utr && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Bank UTR Reference:</span>
+                  <span className="font-mono text-[10.5px] font-bold text-slate-700 dark:text-slate-300">{selectedInquiry.utr}</span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 italic">
+                &ldquo;{selectedInquiry.message}&rdquo;
+              </div>
+            </div>
+
+            {/* Resolution Form */}
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Resolution Notes / Action Taken *
+                </label>
+                <textarea
+                  rows={3}
+                  value={inquiryResolutionNotes}
+                  onChange={(e) => setInquiryResolutionNotes(e.target.value)}
+                  placeholder="e.g. LOP adjustment approved; ₹1,200 will be refunded in the Nov payroll batch. Bank wire trace confirmed with HDFC."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedInquiry(null)}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isResolvingInquiry || !inquiryResolutionNotes.trim()}
+                    onClick={async () => {
+                      if (!selectedInquiry) return;
+                      setIsResolvingInquiry(true);
+                      try {
+                        const updated = await api.resolveSalaryInquiry(selectedInquiry.id, {
+                          status: 'Rejected',
+                          resolution_notes: inquiryResolutionNotes.trim(),
+                          resolved_by: 'Mr. Arvind Krishnan (Accounts Coordinator)'
+                        });
+                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Rejected', resolution_notes: inquiryResolutionNotes.trim() }) : i));
+                        setSelectedInquiry(null);
+                        triggerToast(`Query #${selectedInquiry.id} marked as Rejected.`);
+                      } finally {
+                        setIsResolvingInquiry(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer disabled:opacity-50"
+                  >
+                    Reject Query
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isResolvingInquiry || !inquiryResolutionNotes.trim()}
+                    onClick={async () => {
+                      if (!selectedInquiry) return;
+                      setIsResolvingInquiry(true);
+                      try {
+                        const updated = await api.resolveSalaryInquiry(selectedInquiry.id, {
+                          status: 'Resolved',
+                          resolution_notes: inquiryResolutionNotes.trim(),
+                          resolved_by: 'Mr. Arvind Krishnan (Accounts Coordinator)'
+                        });
+                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Resolved', resolution_notes: inquiryResolutionNotes.trim() }) : i));
+                        setSelectedInquiry(null);
+                        triggerToast(`Query #${selectedInquiry.id} successfully Resolved and notification dispatched to teacher!`);
+                      } finally {
+                        setIsResolvingInquiry(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>{isResolvingInquiry ? 'Resolving...' : 'Confirm Resolution'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* ── MODAL: DIGITAL PAYSLIP INSPECTION ── */}
       {selectedPayslip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
@@ -2739,6 +3499,61 @@ export default function AccountsCoordinatorPage() {
       )}
 
       {/* ── MODAL: SETTLE FLEET WIRE ── */}
+
+      {/* ── Message Template Preview Modal ── */}
+      {previewDispatchLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  previewDispatchLog.dispatch_type === 'WhatsApp' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {previewDispatchLog.dispatch_type} Template
+                </span>
+                <span className="text-xs text-slate-500 font-medium">{previewDispatchLog.dispatch_scope}</span>
+              </div>
+              <button
+                onClick={() => setPreviewDispatchLog(null)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-700 font-sans text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+              {`Dear Parent,
+
+This is an official fee payment reminder from the Bursar Desk at EDU360 Campus.
+
+Our records indicate an outstanding balance of ₹${previewDispatchLog.total_amount_targeted.toLocaleString('en-IN')} for the current term.
+
+Kindly clear the dues via our secure fee portal to ensure uninterrupted access to examination dockets and report cards:
+
+🔗 https://pay.edu360.campus/fee-recovery
+
+For fee reconciliation queries, contact: accounts@edu360.org
+
+Regards,
+${previewDispatchLog.dispatched_by}
+Accounts & Finance Office`}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-400">
+                Dispatched on {new Date(previewDispatchLog.created_at).toLocaleDateString('en-IN', { dateStyle: 'full' })}
+              </span>
+              <button
+                onClick={() => setPreviewDispatchLog(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {settleFleetModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">

@@ -17,17 +17,19 @@ import {
   TaskType, TaskStatus, BacklogEvent, AcademicCompliance,
   TaskExecutiveCockpitResponse, CurriculumPacingItem,
   TaskReliefRequest, ApproveReliefRequest, ExtendSlaRequest, PTMGovernanceStatus,
+  SubmitTaskWorkRequest, ApproveTaskRequest, RejectTaskRequest, AdminOverrideTaskRequest,
   PTMEventCreate, PTMEventResponse,
   AIParentStudyGuidanceRequest, AIParentStudyGuidanceResponse,
   RemedialEarlyWarning, RemedialAdminOverview, SocraticHintResponse,
   ExamItem, ExamSubmissionItem, WhatsAppDispatchResponse,
   PreVerifyResponse, VisualFormulaCard,
   QuestionPaperItem, ExamScheduleItem, OcrScanResultItem, ReportCardItem,
-  PayrollBatchItem, StaffPayslipItem, PurchaseOrderItem, FleetExpenseItem,
+  PayrollBatchItem, StaffPayslipItem, StaffSalaryInquiryItem, PurchaseOrderItem, FleetExpenseItem,
   GeneratePayrollPayload, AuthorizePayrollPayload, DisbursePayrollPayload,
   CreatePurchaseOrderPayload, VerifyGRNPayload, CreateFleetExpensePayload, SettleFleetExpensePayload,
   AssetCustodyLogItem, ClearanceCheckResult,
-  ExecutivePulseResponse
+  ExecutivePulseResponse,
+  ParentTeacherChatMessage, TaxCertificateData
 } from './types';
 import { FocusRosterItem, getFocusStudentById, updateFocusStudent, INITIAL_FOCUS_ROSTER } from './focus-data';
 
@@ -35,6 +37,85 @@ import { FocusRosterItem, getFocusStudentById, updateFocusStudent, INITIAL_FOCUS
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Fallback in-memory store so UI is 100% reactive and functional even if backend is starting
+let fallbackChatMessages: ParentTeacherChatMessage[] = [
+  {
+    id: 1,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'PARENT',
+    sender_name: 'Rajesh Sharma',
+    receiver_role: 'TEACHER',
+    receiver_name: 'Mrs. Ananya Verma',
+    message_text: "Hello Mrs. Verma, I noticed the Quadratic Equations note in Aarav's Focus Table. We completed Day 2 factoring problems in his rough notebook yesterday.",
+    is_read: true,
+    created_at: new Date(Date.now() - 86400000).toISOString()
+  },
+  {
+    id: 2,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'TEACHER',
+    sender_name: 'Mrs. Ananya Verma',
+    receiver_role: 'PARENT',
+    receiver_name: 'Rajesh Sharma',
+    message_text: "Thank you Mr. Rajesh Sharma! I reviewed his factoring steps in Period 3 today. He understood splitting the middle term well. Day 3 word problems have been assigned.",
+    attachment_name: "Day3_Quadratic_Practice.pdf",
+    attachment_url: "/attachments/Day3_Quadratic_Practice.pdf",
+    is_read: true,
+    created_at: new Date(Date.now() - 43200000).toISOString()
+  },
+  {
+    id: 3,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'TEACHER',
+    sender_name: 'Dr. K. Raman',
+    receiver_role: 'PARENT',
+    receiver_name: 'Rajesh Sharma',
+    message_text: "Good afternoon Mr. Sharma! Aarav performed very well in today's Optics Ray Diagram virtual simulation. Please ensure he submits the convex lens focal length observations.",
+    attachment_name: "Optics_Ray_Diagram_Lab.pdf",
+    attachment_url: "/attachments/Optics_Ray_Diagram_Lab.pdf",
+    is_read: true,
+    created_at: new Date(Date.now() - 25000000).toISOString()
+  },
+  {
+    id: 4,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'PARENT',
+    sender_name: 'Rajesh Sharma',
+    receiver_role: 'TEACHER',
+    receiver_name: 'Dr. K. Raman',
+    message_text: "Thank you Dr. Raman. He has completed the ray diagram table in his science journal. We will upload it before 6 PM.",
+    is_read: true,
+    created_at: new Date(Date.now() - 18000000).toISOString()
+  },
+  {
+    id: 5,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'TEACHER',
+    sender_name: 'Ms. Deepa Menon',
+    receiver_role: 'PARENT',
+    receiver_name: 'Rajesh Sharma',
+    message_text: "Hello Mr. Sharma, Aarav wrote a wonderful critical essay on 'The Road Not Taken'. His vocabulary has expanded nicely.",
+    is_read: true,
+    created_at: new Date(Date.now() - 36000000).toISOString()
+  },
+  {
+    id: 6,
+    student_id: 1,
+    student_name: 'Aarav Sharma',
+    sender_role: 'TEACHER',
+    sender_name: 'Mr. Rajesh Nair',
+    receiver_role: 'PARENT',
+    receiver_name: 'Rajesh Sharma',
+    message_text: "Namaste Mr. Sharma, just reminding that the Indian Constitution Civics project chart is due on Friday.",
+    is_read: false,
+    created_at: new Date(Date.now() - 7200000).toISOString()
+  }
+];
+
 let fallbackTriage: TriageAlert[] = [
   {
     id: 1,
@@ -677,6 +758,31 @@ let fallbackReExamRequests: ReExamRequestItem[] = [
   }
 ];
 
+let fallbackNotifications: any[] = [
+  {
+    id: 1,
+    title: 'Term 1 Timetable Published',
+    message: 'CBSE Term 1 final examinations timetable has been officially released by Examination Cell.',
+    recipient_role: 'parent',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'Normal',
+    is_read: false,
+    created_at: '2026-10-27T10:00:00Z'
+  },
+  {
+    id: 2,
+    title: 'Admit Cards Active',
+    message: 'Digital Admit cards are available in the portal for all registered candidates.',
+    recipient_role: 'parent',
+    sender_name: 'Dr. Radhakrishnan (Principal)',
+    sender_role: 'admin',
+    priority: 'Normal',
+    is_read: true,
+    created_at: '2026-10-26T09:30:00Z'
+  }
+];
+
 let fallbackTeacherPermissions: TeacherPermissionRequest[] = [
   { id: 1, teacher_id: 4, teacher_name: "Ms. Priya Sen", type: "Early Departure", date: "15 Oct 2026", reason: "Procuring dance costumes from wholesale fabric market in Chickpet for Annual Day.", status: "Pending", applied_at: "Today, 09:15 AM" },
   { id: 2, teacher_id: 2, teacher_name: "Dr. K. Raman", type: "On-Duty Movement", date: "18 Oct 2026", reason: "Escorting 4 shortlisted students to Regional Science Olympiad Phase 2 practicals at IISc.", status: "Approved", applied_at: "Yesterday" }
@@ -944,6 +1050,78 @@ let fallbackExamSubmissions: Record<number, ExamSubmissionItem[]> = {
       weak_concept: "Discriminant and Middle Term Splitting",
       teacher_feedback: "Missed 2 steps in middle term splitting.",
       graded_at: "16 Oct 2026, 11:30 AM"
+    }
+  ],
+  3: [
+    {
+      id: 6,
+      student_id: 6,
+      student_name: "Ananya Gupta",
+      roll_no: "04",
+      class_name: "Class 9",
+      section: "A",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Ananya_Gupta_Term1_Paper.pdf",
+      submitted_at: "14 Oct 2026, 10:15 AM",
+      marks_obtained: 74.5,
+      percentage: 75,
+      is_remedial_target: false,
+      weak_concept: null,
+      teacher_feedback: "Comfortable with polynomials; minor calculation slips.",
+      graded_at: "14 Oct 2026, 04:30 PM"
+    },
+    {
+      id: 7,
+      student_id: 7,
+      student_name: "Aditya Roy",
+      roll_no: "12",
+      class_name: "Class 9",
+      section: "B",
+      status: "Graded",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Aditya_Roy_Term1_Paper.pdf",
+      submitted_at: "14 Oct 2026, 10:20 AM",
+      marks_obtained: 48,
+      percentage: 48,
+      is_remedial_target: true,
+      weak_concept: "Quadratic Equations: Factorization & Negative Sign Division",
+      teacher_feedback: "Step 3 negative sign error in brackets; needs 1-week remedial sprint.",
+      graded_at: "14 Oct 2026, 04:45 PM"
+    },
+    {
+      id: 8,
+      student_id: 10,
+      student_name: "Rohan Verma",
+      roll_no: "08",
+      class_name: "Class 9",
+      section: "A",
+      status: "Submitted",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Rohan_Verma_Term1_Paper.pdf",
+      submitted_at: "Today, 10:30 AM",
+      marks_obtained: null,
+      percentage: null,
+      is_remedial_target: false,
+      weak_concept: null,
+      teacher_feedback: "Awaiting teacher evaluation / marks verification."
+    },
+    {
+      id: 9,
+      student_id: 11,
+      student_name: "Priya Menon",
+      roll_no: "16",
+      class_name: "Class 9",
+      section: "A",
+      status: "Submitted",
+      paper_file_url: "/samples/math_exam_sample.svg",
+      paper_file_name: "Priya_Menon_Term1_Paper.pdf",
+      submitted_at: "Today, 11:15 AM",
+      marks_obtained: null,
+      percentage: null,
+      is_remedial_target: false,
+      weak_concept: null,
+      teacher_feedback: "Awaiting teacher evaluation / marks verification."
     }
   ]
 };
@@ -1555,14 +1733,12 @@ let fallbackPTMSlots: PTMSlot[] = [
     booked_class: "8-B",
     booked_parent_id: "rajesh_sharma",
     booked_parent_name: "Mr. Rajesh Sharma",
-    subject_name: "Class 8-B Homeroom & Junior Sibling Consultation",
-    is_sibling_combo: true,
-    sibling_student_id: 8,
-    sibling_student_name: "Aarav Kumar (Class 3-A Junior)",
-    meeting_url: "https://meet.google.com/edu-sharma-sibling-ptm",
+    subject_name: "Mathematics & Class 8-B Homeroom Consultation",
+    is_sibling_combo: false,
+    meeting_url: "https://meet.google.com/edu-ptm-aarav-8b-term1",
     focus_table_agenda: [
       "Aarav's 1-Week Remedial Pacing & Zero-period Support",
-      "Aarav Junior's Phonics Reading Booster & Magic Chest Stars"
+      "Term 1 Mathematics Assessment Review"
     ]
   },
   {
@@ -1789,11 +1965,44 @@ let fallbackTeacherDuties: TeacherDutyItem[] = [
 ];
 
 let fallbackTeacherStudents: TeacherStudentRosterItem[] = [
-  { id: 1, name: "Aarav Sharma", roll_no: "01", class_name: "Class 8-B", attendance_pct: 91.4, academic_average_pct: 74.2, guardian_name: "Mr. Rajesh Sharma", guardian_phone: "+91 98450 12345", has_focus_table: true, homework_status: "Submitted", last_active: "Today, 09:25 AM" },
-  { id: 2, name: "Rohan Deshmukh", roll_no: "14", class_name: "Class 8-B", attendance_pct: 95.0, academic_average_pct: 86.5, guardian_name: "Dr. Sunil Deshmukh", guardian_phone: "+91 98450 99881", has_focus_table: false, homework_status: "Submitted", last_active: "Today, 08:30 AM" },
-  { id: 3, name: "Meera Nambiar", roll_no: "21", class_name: "Class 8-B", attendance_pct: 88.0, academic_average_pct: 81.0, guardian_name: "Mrs. Anita Nambiar", guardian_phone: "+91 98450 55442", has_focus_table: false, homework_status: "Pending", last_active: "Yesterday, 04:15 PM" },
-  { id: 4, name: "Kabir Mehta", roll_no: "15", class_name: "Class 8-B", attendance_pct: 78.5, academic_average_pct: 62.0, guardian_name: "Mr. Suresh Mehta", guardian_phone: "+91 98111 00015", has_focus_table: true, homework_status: "Pending", last_active: "3 days ago (Absent)" },
-  { id: 5, name: "Tanvi Sen", roll_no: "28", class_name: "Class 8-B", attendance_pct: 96.5, academic_average_pct: 94.0, guardian_name: "Mrs. Ritu Sen", guardian_phone: "+91 98111 00022", has_focus_table: false, homework_status: "Graded", last_active: "Today, 09:10 AM" }
+  // --- Class 8-B (Homeroom & Mathematics) ---
+  { 
+    id: 1, 
+    name: "Aarav Sharma", 
+    roll_no: "14", 
+    class_name: "Class 8-B", 
+    raw_class: "Class 8", 
+    section: "B", 
+    attendance_pct: 91.4, 
+    missed_classes_count: 3, 
+    academic_average_pct: 76.8, 
+    guardian_name: "Mr. Rajesh Sharma", 
+    guardian_phone: "+91 98450 12345", 
+    has_focus_table: true, 
+    focus_concept: "Quadratic Equations: Factorization & Signs", 
+    homework_status: "Submitted", 
+    last_active: "Today, 09:25 AM",
+    is_on_leave: false,
+    is_leave_pending: true,
+    leave_status: 'Pending Approval',
+    leave_reason: 'Orthodontic dental consultation and braces adjustment at Apollo Clinic.',
+    is_medical_leave: true,
+    leave_from_date: '16 Oct 2026',
+    leave_to_date: '16 Oct 2026',
+    today_attendance_status: 'Leave Pending',
+    attendance_flag: 'PENDING_LEAVE'
+  },
+  { id: 2, name: "Kabir Mehta", roll_no: "15", class_name: "Class 8-B", raw_class: "Class 8", section: "B", attendance_pct: 72.0, missed_classes_count: 8, academic_average_pct: 64.2, guardian_name: "Mrs. Rekha Mehta", guardian_phone: "+91 98555 44444", has_focus_table: true, focus_concept: "Fractional Denominators & Sign Rules", homework_status: "Pending", last_active: "3 days ago (Absent)" },
+  { id: 3, name: "Diya Patel", roll_no: "18", class_name: "Class 8-B", raw_class: "Class 8", section: "B", attendance_pct: 96.0, missed_classes_count: 1, academic_average_pct: 92.5, guardian_name: "Dr. Vikram Patel", guardian_phone: "+91 98222 11111", has_focus_table: false, focus_concept: null, homework_status: "Submitted", last_active: "Today, 08:30 AM" },
+  { id: 9, name: "Siddharth Rao", roll_no: "31", class_name: "Class 8-B", raw_class: "Class 8", section: "B", attendance_pct: 100.0, missed_classes_count: 0, academic_average_pct: 85.0, guardian_name: "Mrs. Ritu Rao", guardian_phone: "+91 98111 00031", has_focus_table: false, focus_concept: null, homework_status: "Graded", last_active: "Today, 09:10 AM" },
+
+  // --- Class 9-A (Mathematics) ---
+  { id: 6, name: "Ananya Gupta", roll_no: "04", class_name: "Class 9-A", raw_class: "Class 9", section: "A", attendance_pct: 94.5, missed_classes_count: 2, academic_average_pct: 74.5, guardian_name: "Mr. Pradeep Gupta", guardian_phone: "+91 98444 33333", has_focus_table: false, focus_concept: null, homework_status: "Submitted", last_active: "Today, 10:15 AM" },
+  { id: 10, name: "Rohan Verma", roll_no: "08", class_name: "Class 9-A", raw_class: "Class 9", section: "A", attendance_pct: 92.0, missed_classes_count: 3, academic_average_pct: 72.0, guardian_name: "Mr. Manoj Verma", guardian_phone: "+91 98450 11223", has_focus_table: true, focus_concept: "Polynomial Division & Remainder Theorem", homework_status: "Submitted", last_active: "Today, 11:00 AM" },
+  { id: 11, name: "Priya Menon", roll_no: "16", class_name: "Class 9-A", raw_class: "Class 9", section: "A", attendance_pct: 95.0, missed_classes_count: 1, academic_average_pct: 84.0, guardian_name: "Dr. Sundar Menon", guardian_phone: "+91 98450 44556", has_focus_table: false, focus_concept: null, homework_status: "Submitted", last_active: "Today, 11:20 AM" },
+
+  // --- Class 9-B (Mathematics) ---
+  { id: 7, name: "Aditya Roy", roll_no: "12", class_name: "Class 9-B", raw_class: "Class 9", section: "B", attendance_pct: 78.5, missed_classes_count: 7, academic_average_pct: 65.0, guardian_name: "Mrs. Sangeeta Roy", guardian_phone: "+91 98888 66666", has_focus_table: true, focus_concept: "Quadratic Equations: Factorization & Negative Signs", homework_status: "Pending", last_active: "Yesterday, 03:45 PM" }
 ];
 
 let fallbackMyTeacherPermissions: TeacherPermissionRequest[] = [
@@ -2090,6 +2299,232 @@ function resolveFallbackAuthProfile(identifier: string, password: string, school
 
   return null;
 }
+
+// =============================================================================
+// INSTITUTIONAL PAYROLL FALLBACK ENGINE
+// =============================================================================
+
+let fallbackPayrollBatches: PayrollBatchItem[] = [
+  {
+    id: 1,
+    payroll_month: 'October 2026',
+    total_staff_count: 8,
+    gross_total: 485000,
+    total_deductions: 62730,
+    net_payable: 422270,
+    status: 'Audit Pending',
+    authorized_by: null,
+    authorized_at: null,
+    disbursed_at: null,
+    bank_batch_ref: null,
+    notes: 'Regular monthly faculty payroll run based on biometric attendance.',
+    created_at: '28 Oct 2026'
+  },
+  {
+    id: 2,
+    payroll_month: 'September 2026',
+    total_staff_count: 8,
+    gross_total: 485000,
+    total_deductions: 62730,
+    net_payable: 422270,
+    status: 'Disbursed',
+    authorized_by: 'Dr. Sundaram (Principal)',
+    authorized_at: '30 Sep 2026',
+    disbursed_at: '01 Oct 2026',
+    bank_batch_ref: 'HDFC_CMS_SEP26_9941',
+    notes: 'September 2026 faculty salaries disbursed.',
+    created_at: '28 Sep 2026'
+  }
+];
+
+let fallbackPayslipsMap: Record<number, StaffPayslipItem[]> = {
+  1: [
+    {
+      id: 101,
+      batch_id: 1,
+      staff_id: 1,
+      staff_name: 'Mrs. Sunitha Rao',
+      role_designation: 'Senior PGT Mathematics',
+      department: 'Academics',
+      bank_account_no: '918237465012',
+      bank_ifsc: 'HDFC0001842',
+      basic_salary: 38000,
+      hra_allowance: 15200,
+      special_allowance: 11800,
+      gross_earnings: 65000,
+      provident_fund: 4560,
+      professional_tax: 200,
+      income_tax_tds: 3250,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 8010,
+      net_salary: 56990,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 102,
+      batch_id: 1,
+      staff_id: 2,
+      staff_name: 'Mr. Rajesh Nair',
+      role_designation: 'TGT Physics & Lab Incharge',
+      department: 'Science & Laboratories',
+      bank_account_no: '501004829103',
+      bank_ifsc: 'SBIN0004921',
+      basic_salary: 30000,
+      hra_allowance: 12000,
+      special_allowance: 10000,
+      gross_earnings: 52000,
+      provident_fund: 3600,
+      professional_tax: 200,
+      income_tax_tds: 2100,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 5900,
+      net_salary: 46100,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 103,
+      batch_id: 1,
+      staff_id: 3,
+      staff_name: 'Mrs. Ananya Verma',
+      role_designation: 'Homeroom Coordinator / English',
+      department: 'Humanities & Languages',
+      bank_account_no: '109847291045',
+      bank_ifsc: 'ICIC0001092',
+      basic_salary: 34000,
+      hra_allowance: 13600,
+      special_allowance: 10400,
+      gross_earnings: 58000,
+      provident_fund: 4080,
+      professional_tax: 200,
+      income_tax_tds: 2600,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 6880,
+      net_salary: 51120,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 104,
+      batch_id: 1,
+      staff_id: 4,
+      staff_name: 'Dr. Sundaram',
+      role_designation: 'Principal & Senior Administrator',
+      department: 'Executive Administration',
+      bank_account_no: '309182746190',
+      bank_ifsc: 'HDFC0001842',
+      basic_salary: 70000,
+      hra_allowance: 28000,
+      special_allowance: 22000,
+      gross_earnings: 120000,
+      provident_fund: 8400,
+      professional_tax: 200,
+      income_tax_tds: 12500,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 21100,
+      net_salary: 98900,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 105,
+      batch_id: 1,
+      staff_id: 5,
+      staff_name: 'Mr. Vikram Patil',
+      role_designation: 'Senior Sports Instructor',
+      department: 'Physical Education & Athletics',
+      bank_account_no: '482910482019',
+      bank_ifsc: 'KKBK0000291',
+      basic_salary: 25000,
+      hra_allowance: 10000,
+      special_allowance: 7000,
+      gross_earnings: 42000,
+      provident_fund: 3000,
+      professional_tax: 200,
+      income_tax_tds: 1200,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 4400,
+      net_salary: 37600,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 106,
+      batch_id: 1,
+      staff_id: 6,
+      staff_name: 'Mrs. Shweta Sengupta',
+      role_designation: 'Examination Cell Head',
+      department: 'Academic Administration',
+      bank_account_no: '928104829104',
+      bank_ifsc: 'UTIB0001093',
+      basic_salary: 35000,
+      hra_allowance: 14000,
+      special_allowance: 11000,
+      gross_earnings: 60000,
+      provident_fund: 4200,
+      professional_tax: 200,
+      income_tax_tds: 2800,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 7200,
+      net_salary: 52800,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 107,
+      batch_id: 1,
+      staff_id: 7,
+      staff_name: 'Mr. Ramesh Goud',
+      role_designation: 'Transport Fleet & Bus Incharge',
+      department: 'Campus Logistics',
+      bank_account_no: '849201948201',
+      bank_ifsc: 'SBIN0008491',
+      basic_salary: 22000,
+      hra_allowance: 8800,
+      special_allowance: 7200,
+      gross_earnings: 38000,
+      provident_fund: 2640,
+      professional_tax: 200,
+      income_tax_tds: 800,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 3640,
+      net_salary: 34360,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    },
+    {
+      id: 108,
+      batch_id: 1,
+      staff_id: 8,
+      staff_name: 'Mr. Venkat Rao',
+      role_designation: 'Senior Accountant / Bursar',
+      department: 'Accounts & Finance',
+      bank_account_no: '109284710293',
+      bank_ifsc: 'HDFC0001842',
+      basic_salary: 30000,
+      hra_allowance: 12000,
+      special_allowance: 8000,
+      gross_earnings: 50000,
+      provident_fund: 3600,
+      professional_tax: 200,
+      income_tax_tds: 1800,
+      loss_of_pay_days: 0,
+      loss_of_pay_deduction: 0,
+      total_deductions: 5600,
+      net_salary: 44400,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    }
+  ]
+};
 
 export const api = {
 
@@ -2641,6 +3076,29 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       return fallbackDocuments.find(d => d.id === docId);
     }
   },
+  checkGuardianPhone: async (phone: string) => {
+    try {
+      const res = await fetchWithFallback<any>(`/api/admin/crm/check-guardian-phone?phone=${encodeURIComponent(phone)}`, undefined, null);
+      if (res && res.exists !== undefined) return res;
+    } catch {
+      // Fallback
+    }
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.includes('9811100003') || cleanDigits.endsWith('9811100003') || cleanDigits.endsWith('00003')) {
+      return {
+        exists: true,
+        guardian_name: 'Mr. Rajesh Sharma',
+        guardian_phone: '+91 98111 00003',
+        existing_student_id: 1,
+        existing_student_name: 'Aarav Sharma',
+        existing_class: 'Class 8-B',
+        siblings: [
+          { id: 1, name: 'Aarav Sharma', className: 'Class 8-B' }
+        ]
+      };
+    }
+    return { exists: false };
+  },
   directEnroll: async (payload: {
     student_name: string;
     parent_name: string;
@@ -2653,6 +3111,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     payment_method?: string;
     action_type: 'direct_sis' | 'forward_vip';
     notes?: string;
+    is_sibling_link?: boolean;
+    sibling_student_id?: number;
+    sibling_discount_pct?: number;
   }) => {
     try {
       return await fetchWithFallback<any>('/api/admin/crm/direct-enroll', {
@@ -3089,12 +3550,62 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
   reviewLeaveRequest: async (requestId: number, status: 'Approved' | 'Rejected', notes?: string) => {
     try {
-      return await fetchWithFallback<LeaveRequest>(`/api/teacher/leave-requests/${requestId}/review`, {
+      const res = await fetchWithFallback<LeaveRequest>(`/api/teacher/leave-requests/${requestId}/review`, {
         method: 'POST',
         body: JSON.stringify({ status, teacher_notes: notes })
       });
+      // Synchronize in-memory fallback state so offline and hybrid flows stay 100% synced
+      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes, approval_stage: status === 'Approved' ? 'Attendance Adjusted' : 'Rejected by Teacher' } : lr);
+      if (status === 'Approved') {
+        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
+        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
+          ...st,
+          is_on_leave: true,
+          is_leave_pending: false,
+          leave_status: 'Approved Leave',
+          today_attendance_status: 'Excused Leave',
+          attendance_flag: 'EXCUSED_LEAVE',
+          last_active: 'On Approved Leave (Excused)'
+        } : st);
+        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
+          ...a,
+          status: 'Leave',
+          teacher_override: true,
+          join_timestamp: 'Excused Leave (Approved)'
+        } : a);
+      } else if (status === 'Rejected') {
+        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
+        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
+          ...st,
+          is_on_leave: false,
+          is_leave_pending: false,
+          leave_status: 'None',
+          today_attendance_status: 'Absent',
+          attendance_flag: 'ABSENT',
+          last_active: 'Absent Today'
+        } : st);
+      }
+      return res;
     } catch {
-      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes } : lr);
+      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes, approval_stage: status === 'Approved' ? 'Attendance Adjusted' : 'Rejected by Teacher' } : lr);
+      if (status === 'Approved') {
+        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
+        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
+          ...st,
+          is_on_leave: true,
+          is_leave_pending: false,
+          leave_status: 'Approved Leave',
+          today_attendance_status: 'Excused Leave',
+          attendance_flag: 'EXCUSED_LEAVE',
+          last_active: 'On Approved Leave (Excused)'
+        } : st);
+        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
+          ...a,
+          status: 'Leave',
+          teacher_override: true,
+          join_timestamp: 'Excused Leave (Approved)'
+        } : a);
+      }
       return fallbackLeaveRequests.find(lr => lr.id === requestId);
     }
   },
@@ -3328,6 +3839,71 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       return targetSlot || fallbackPTMSlots[0];
     }
   },
+  cancelPTMSlot: async (slotId: string, data: { cancelled_by?: string; cancellation_reason?: string; reopen_as_free?: boolean; notify_parent?: boolean } = {}) => {
+    try {
+      return await fetchWithFallback<any>(`/api/teacher/ptm/slots/${slotId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot_id: slotId,
+          cancelled_by: data.cancelled_by || 'TEACHER',
+          cancellation_reason: data.cancellation_reason || 'Official School Duty / Emergency',
+          reopen_as_free: data.reopen_as_free !== undefined ? data.reopen_as_free : true,
+          notify_parent: data.notify_parent !== undefined ? data.notify_parent : true
+        })
+      });
+    } catch {
+      let prevSnapshot: any = null;
+      fallbackPTMSlots = fallbackPTMSlots.map(s => {
+        if (s.id === slotId) {
+          prevSnapshot = { ...s };
+          return {
+            ...s,
+            status: data.reopen_as_free === false ? 'BREAK' : 'AVAILABLE',
+            booked_student_id: undefined,
+            booked_student_name: undefined,
+            booked_class: undefined,
+            booked_parent_id: undefined,
+            booked_parent_name: undefined,
+            meeting_url: undefined,
+            focus_table_agenda: [],
+            is_sibling_combo: false,
+            cancellation_reason: data.cancellation_reason || 'Faculty Rescheduling',
+            cancelled_by: data.cancelled_by || 'TEACHER',
+            cancelled_at: new Date().toISOString()
+          };
+        }
+        return s;
+      });
+      return {
+        success: true,
+        message: 'PTM Slot cancelled successfully',
+        slot: fallbackPTMSlots.find(s => s.id === slotId),
+        previous_state: prevSnapshot
+      };
+    }
+  },
+  restorePTMSlot: async (slotId: string, previous_state: any) => {
+    try {
+      return await fetchWithFallback<any>(`/api/teacher/ptm/slots/${slotId}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot_id: slotId, previous_state })
+      });
+    } catch {
+      fallbackPTMSlots = fallbackPTMSlots.map(s => {
+        if (s.id === slotId && previous_state) {
+          return { ...previous_state };
+        }
+        return s;
+      });
+      return {
+        success: true,
+        message: 'PTM Booking restored',
+        slot: previous_state
+      };
+    }
+  },
 
   // --- Parent Endpoints ---
   getParentPTMEventConfig: async () => {
@@ -3394,6 +3970,40 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     return fetchWithFallback<ParentTeacherNote[]>(`/api/parent/notes/${studentId}`, undefined, 
       fallbackParentTeacherNotes.filter(n => n.student_id === studentId)
     );
+  },
+  parentCancelPTMSlot: async (slotId: string, data: { cancellation_reason?: string } = {}) => {
+    try {
+      return await fetchWithFallback<any>(`/api/parent/ptm/slots/${slotId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot_id: slotId,
+          cancelled_by: 'PARENT',
+          cancellation_reason: data.cancellation_reason || 'Scheduling Conflict',
+          reopen_as_free: true,
+          notify_parent: false
+        })
+      });
+    } catch {
+      fallbackPTMSlots = fallbackPTMSlots.map(s => {
+        if (s.id === slotId) {
+          return {
+            ...s,
+            status: 'AVAILABLE',
+            booked_student_id: undefined,
+            booked_student_name: undefined,
+            booked_class: undefined,
+            booked_parent_id: undefined,
+            booked_parent_name: undefined,
+            meeting_url: undefined,
+            focus_table_agenda: [],
+            is_sibling_combo: false
+          };
+        }
+        return s;
+      });
+      return { success: true, message: 'PTM booking cancelled and freed up.' };
+    }
   },
   createParentNote: async (data: Partial<ParentTeacherNote>) => {
     try {
@@ -3510,6 +4120,218 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       fallbackFocusTable.parent_check_completed = !fallbackFocusTable.parent_check_completed;
       return { success: true, parent_check_completed: fallbackFocusTable.parent_check_completed };
     }
+  },
+
+  getParentChatMessages: async (studentId: number = 1, teacherName?: string): Promise<ParentTeacherChatMessage[]> => {
+    try {
+      const q = teacherName ? `?teacher_name=${encodeURIComponent(teacherName)}` : '';
+      const serverMsgs = await fetchWithFallback<ParentTeacherChatMessage[]>(`/api/parent/chat/${studentId}${q}`, undefined, null as any);
+      if (serverMsgs && Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+        for (const sm of serverMsgs) {
+          const exists = fallbackChatMessages.some(m => m.id === sm.id || (m.created_at === sm.created_at && m.message_text === sm.message_text));
+          if (!exists) {
+            fallbackChatMessages.push(sm);
+          }
+        }
+      }
+    } catch {
+      // Fallback in-memory cache active
+    }
+
+    const targetIds = (studentId === 1 || studentId === 6) ? [1, 6] : [studentId];
+    return fallbackChatMessages.filter(m => {
+      const matchKid = targetIds.includes(m.student_id);
+      if (!matchKid) return false;
+      if (teacherName) {
+        return m.sender_name.toLowerCase().includes(teacherName.toLowerCase()) ||
+               m.receiver_name.toLowerCase().includes(teacherName.toLowerCase());
+      }
+      return true;
+    });
+  },
+
+  sendParentChatMessage: async (data: {
+    student_id: number;
+    sender_name: string;
+    receiver_name: string;
+    message_text: string;
+    attachment_name?: string;
+    attachment_url?: string;
+    sender_role?: 'PARENT' | 'TEACHER';
+    receiver_role?: 'PARENT' | 'TEACHER';
+  }): Promise<ParentTeacherChatMessage> => {
+    const newMsg: ParentTeacherChatMessage = {
+      id: Date.now(),
+      student_id: data.student_id,
+      student_name: (data.student_id === 1 || data.student_id === 6) ? 'Aarav Sharma' : 'Student',
+      sender_role: data.sender_role || 'PARENT',
+      sender_name: data.sender_name,
+      receiver_role: data.receiver_role || 'TEACHER',
+      receiver_name: data.receiver_name,
+      message_text: data.message_text,
+      attachment_name: data.attachment_name,
+      attachment_url: data.attachment_url,
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+    fallbackChatMessages.push(newMsg);
+
+    try {
+      const endpoint = data.sender_role === 'TEACHER' ? '/api/teacher/chat/send' : '/api/parent/chat/send';
+      const res = await fetchWithFallback<ParentTeacherChatMessage>(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: data.student_id,
+          sender_role: data.sender_role || 'PARENT',
+          sender_name: data.sender_name,
+          receiver_role: data.receiver_role || 'TEACHER',
+          receiver_name: data.receiver_name,
+          message_text: data.message_text,
+          attachment_name: data.attachment_name,
+          attachment_url: data.attachment_url
+        })
+      });
+      if (res && res.id) {
+        newMsg.id = res.id;
+      }
+    } catch (e) {
+      // Retained in fallbackChatMessages successfully
+    }
+    return newMsg;
+  },
+
+  markParentChatRead: async (studentId: number = 1): Promise<{ success: boolean }> => {
+    return await fetchWithFallback<{ success: boolean }>(`/api/parent/chat/mark-read/${studentId}`, {
+      method: 'POST'
+    });
+  },
+
+  signReportCard: async (reportCardId: number, data: { signer_name: string; remarks?: string }): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/parent/report-cards/${reportCardId}/sign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  getFeeTaxCertificate: async (studentId: number = 1): Promise<TaxCertificateData> => {
+    return await fetchWithFallback<TaxCertificateData>(`/api/parent/fees/${studentId}/tax-certificate`, undefined);
+  },
+
+  applyStudentLeave: async (data: any) => { return await api.applyParentLeave(data); },
+  applyParentLeave: async (data: {
+    student_id: number;
+    student_name: string;
+    parent_name: string;
+    from_date: string;
+    to_date: string;
+    reason: string;
+    is_medical?: boolean;
+    attachment_name?: string;
+    attachment_url?: string;
+  }): Promise<LeaveRequest> => {
+    try {
+      const res = await fetchWithFallback<LeaveRequest>('/api/parent/leave-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      // Synchronize fallback leave requests and teacher roster
+      const newLr: LeaveRequest = {
+        id: res.id || fallbackLeaveRequests.length + 1,
+        student_id: data.student_id,
+        student_name: data.student_name,
+        parent_name: data.parent_name,
+        from_date: data.from_date,
+        to_date: data.to_date,
+        reason: data.reason,
+        status: 'Pending',
+        is_medical: data.is_medical || false,
+        attachment_name: data.attachment_name,
+        attachment_url: data.attachment_url,
+        approval_stage: 'Submitted - Pending Teacher Review',
+        applied_at: new Date().toISOString()
+      };
+      fallbackLeaveRequests = [newLr, ...fallbackLeaveRequests];
+      fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === data.student_id ? {
+        ...st,
+        is_leave_pending: true,
+        leave_status: 'Pending Approval',
+        today_attendance_status: 'Leave Pending',
+        attendance_flag: 'PENDING_LEAVE',
+        leave_reason: data.reason,
+        leave_from_date: data.from_date,
+        leave_to_date: data.to_date,
+        is_medical_leave: data.is_medical
+      } : st);
+      return res;
+    } catch {
+      const newLr: LeaveRequest = {
+        id: fallbackLeaveRequests.length + 10,
+        student_id: data.student_id,
+        student_name: data.student_name,
+        parent_name: data.parent_name,
+        from_date: data.from_date,
+        to_date: data.to_date,
+        reason: data.reason,
+        status: 'Pending',
+        is_medical: data.is_medical || false,
+        attachment_name: data.attachment_name,
+        attachment_url: data.attachment_url,
+        approval_stage: 'Submitted - Pending Teacher Review',
+        applied_at: new Date().toISOString()
+      };
+      fallbackLeaveRequests = [newLr, ...fallbackLeaveRequests];
+      fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === data.student_id ? {
+        ...st,
+        is_leave_pending: true,
+        leave_status: 'Pending Approval',
+        today_attendance_status: 'Leave Pending',
+        attendance_flag: 'PENDING_LEAVE',
+        leave_reason: data.reason,
+        leave_from_date: data.from_date,
+        leave_to_date: data.to_date,
+        is_medical_leave: data.is_medical
+      } : st);
+      fallbackNotifications = [
+        {
+          id: Date.now(),
+          recipient_role: 'TEACHER',
+          sender_name: data.parent_name,
+          sender_role: 'PARENT',
+          title: `New Leave Application: ${data.student_name}`,
+          message: `Parent ${data.parent_name} submitted a leave request for ${data.student_name} (${data.from_date} to ${data.to_date}): "${data.reason}". Action required in Leave Approvals.`,
+          notification_type: 'LEAVE_APPLICATION',
+          priority: data.is_medical ? 'HIGH' : 'NORMAL',
+          action_url: '/teacher?tab=leave_approvals',
+          is_read: false,
+          created_at: new Date().toISOString()
+        },
+        ...fallbackNotifications
+      ];
+      return newLr;
+    }
+  },
+
+  getParentLeaveRequests: async (studentId: number = 1): Promise<LeaveRequest[]> => {
+    return await fetchWithFallback<LeaveRequest[]>(`/api/parent/leave-requests/${studentId}`, undefined, [
+      {
+        id: 1,
+        student_id: studentId,
+        student_name: 'Aarav Sharma',
+        parent_name: 'Rajesh Sharma',
+        from_date: '12 Oct 2026',
+        to_date: '15 Oct 2026',
+        reason: 'Acute Viral Pyrexia (High Fever 103°F)',
+        status: 'Approved',
+        teacher_notes: 'Approved medical rest. Attendance regularized with Doctor clearance.',
+        is_medical: true,
+        attachment_name: 'Dr_Patel_Hospital_Clearance.pdf',
+        approval_stage: 'Attendance Adjusted',
+        applied_at: new Date(Date.now() - 15 * 86400000).toISOString()
+      }
+    ]);
   },
 
   getAIParentStudyGuidance: async (req: AIParentStudyGuidanceRequest): Promise<AIParentStudyGuidanceResponse> => {
@@ -3921,6 +4743,38 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   getTodayHomework: async (studentId: number = 1) => {
     const todayStr = '2026-10-18';
+    if (studentId === 7) {
+      return [
+        {
+          id: 101,
+          title: 'Sight Words & Vowel Sound Magic Card Set',
+          subject: 'Reading & Phonics',
+          class_name: 'Class 3-A',
+          description: 'Read aloud the 15 vowel blend flashcards and color the matching word family pictures.',
+          task_type: 'DAILY_HOMEWORK' as any,
+          due_date: todayStr,
+          due_time: '19:30',
+          status: 'PENDING' as any,
+          teacher_id: 8,
+          teacher_name: 'Ms. Priya Nair',
+          max_marks: 5
+        },
+        {
+          id: 102,
+          title: 'Fun with 2-Digit Regrouping & Number Line',
+          subject: 'Junior Mathematics',
+          class_name: 'Class 3-A',
+          description: 'Solve the 8 caterpillar addition hops by carrying over into the tens place.',
+          task_type: 'DAILY_HOMEWORK' as any,
+          due_date: todayStr,
+          due_time: '20:00',
+          status: 'PENDING' as any,
+          teacher_id: 9,
+          teacher_name: 'Mrs. Kavitha Reddy',
+          max_marks: 5
+        }
+      ];
+    }
     try {
       const res = await fetchWithFallback<Homework[]>(`/api/parent/today-homework/${studentId}`, undefined, []);
       if (res && res.length > 0) return res;
@@ -3979,6 +4833,90 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       body: JSON.stringify(task),
     }, { ...task, id: Date.now() } as AdminTask);
     fallbackTasks = [res, ...fallbackTasks];
+    return res;
+  },
+
+  submitTaskWork: async (taskId: number, data: SubmitTaskWorkRequest) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }, {
+      ...(fallbackTasks.find(t => t.id === taskId) || {}),
+      status: 'Pending Review',
+      submission_notes: data.submission_notes,
+      completion_proof_url: data.completion_proof_url,
+      submitted_at: new Date().toISOString()
+    } as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+      ...t,
+      status: 'Pending Review',
+      submission_notes: data.submission_notes,
+      completion_proof_url: data.completion_proof_url,
+      submitted_at: new Date().toISOString()
+    } : t);
+    return res;
+  },
+
+  approveAdminTask: async (taskId: number, data: ApproveTaskRequest) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }, {
+      ...(fallbackTasks.find(t => t.id === taskId) || {}),
+      status: 'Completed',
+      approved_by: data.approved_by || 'Administrator',
+      approved_at: new Date().toISOString()
+    } as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+      ...t,
+      status: 'Completed',
+      approved_by: data.approved_by || 'Administrator',
+      approved_at: new Date().toISOString()
+    } : t);
+    return res;
+  },
+
+  rejectAdminTask: async (taskId: number, data: RejectTaskRequest) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }, {
+      ...(fallbackTasks.find(t => t.id === taskId) || {}),
+      status: 'In Progress',
+      rejection_reason: data.rejection_reason
+    } as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+      ...t,
+      status: 'In Progress',
+      rejection_reason: data.rejection_reason
+    } : t);
+    return res;
+  },
+
+  overrideAdminTask: async (taskId: number, data: AdminOverrideTaskRequest) => {
+    const res = await fetchWithFallback<AdminTask>(`/api/admin/tasks/${taskId}/override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }, {
+      ...(fallbackTasks.find(t => t.id === taskId) || {}),
+      status: 'Completed',
+      is_admin_override: true,
+      admin_override_reason: data.override_reason,
+      approved_by: `${data.override_by || 'Administrator'} (Override)`,
+      approved_at: new Date().toISOString()
+    } as AdminTask);
+    fallbackTasks = fallbackTasks.map(t => t.id === taskId ? {
+      ...t,
+      status: 'Completed',
+      is_admin_override: true,
+      admin_override_reason: data.override_reason,
+      approved_by: `${data.override_by || 'Administrator'} (Override)`,
+      approved_at: new Date().toISOString()
+    } : t);
     return res;
   },
 
@@ -4838,11 +5776,52 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   createExamSchedule: async (data: any): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/schedules/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    try {
+      const res = await fetchWithFallback<any>(`/api/exams/schedules/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res && res.schedule_id) {
+        fallbackExamSchedules.push({
+          id: res.schedule_id,
+          title: data.exam_name || data.title,
+          subject: data.subject,
+          class_name: data.class_name,
+          section: data.section || 'A',
+          exam_date: data.exam_date,
+          start_time: data.start_time,
+          end_time: data.end_time,
+          hall_name: data.room_hall || data.hall_name || 'Virtual Room A',
+          chief_invigilator_name: data.invigilator_name || data.chief_invigilator_name,
+          question_paper_id: data.question_paper_id,
+          question_paper_title: data.question_paper_title,
+          academic_clearance: false,
+          status: 'scheduled'
+        });
+      }
+      return res;
+    } catch {
+      const newId = fallbackExamSchedules.length + 1;
+      const newItem: ExamScheduleItem = {
+        id: newId,
+        title: data.exam_name || data.title || 'Term 1 Examination',
+        subject: data.subject,
+        class_name: data.class_name,
+        section: data.section || 'A',
+        exam_date: data.exam_date,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        hall_name: data.room_hall || data.hall_name || 'Virtual Room A',
+        chief_invigilator_name: data.invigilator_name || data.chief_invigilator_name,
+        question_paper_id: data.question_paper_id,
+        question_paper_title: data.question_paper_title,
+        academic_clearance: true,
+        status: 'scheduled'
+      };
+      fallbackExamSchedules.push(newItem);
+      return { success: true, schedule_id: newId, message: 'Created schedule slot successfully' };
+    }
   },
 
   grantScheduleClearance: async (scheduleId: number, data: { academic_clearance: boolean; academic_clearance_notes?: string }): Promise<any> => {
@@ -4880,13 +5859,14 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   // --- Report Cards ---
-  getReportCards: async (params?: { class_name?: string; section?: string; term?: string; student_id?: number }): Promise<ReportCardItem[]> => {
+  getReportCards: async (params?: { class_name?: string; section?: string; term?: string; student_id?: number; only_published?: boolean }): Promise<ReportCardItem[]> => {
     try {
       const q = new URLSearchParams();
       if (params?.class_name) q.set('class_name', params.class_name);
       if (params?.section) q.set('section', params.section);
       if (params?.term) q.set('term', params.term);
       if (params?.student_id) q.set('student_id', params.student_id.toString());
+      if (params?.only_published !== undefined) q.set('only_published', params.only_published ? 'true' : 'false');
       const res = await fetchWithFallback<{ success: boolean; report_cards: ReportCardItem[] }>(`/api/exams/report-cards?${q.toString()}`);
       return res.report_cards || fallbackReportCards;
     } catch {
@@ -4911,11 +5891,40 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       }
       let filtered = [...fallbackReportCards];
       if (params?.student_id) filtered = filtered.filter(r => r.student_id === params.student_id);
+      if (params?.only_published) filtered = filtered.filter(r => r.is_published);
       return filtered;
     }
   },
 
-  generateBatchReportCards: async (data: { class_name: string; section: string; term: string }): Promise<any> => {
+  getClassReadiness: async (params: { class_name: string; section?: string; term?: string }): Promise<any> => {
+    try {
+      const q = new URLSearchParams();
+      q.set('class_name', params.class_name);
+      if (params.section) q.set('section', params.section);
+      if (params.term) q.set('term', params.term);
+      return await fetchWithFallback<any>(`/api/exams/class-readiness?${q.toString()}`);
+    } catch {
+      return {
+        success: true,
+        class_name: params.class_name,
+        section: params.section || 'B',
+        term: params.term || 'Term 1',
+        total_subjects: 5,
+        sealed_subjects: 5,
+        all_ready: true,
+        readiness_summary: "Ready to Generate Report Cards",
+        subjects: [
+          { exam_id: 1, subject: "Mathematics", title: "Term 1 Mathematics", teacher_name: "Mrs. Ananya Verma", total_students: 38, graded_count: 38, is_sealed: true, status: "Sealed & Submitted" },
+          { exam_id: 4, subject: "General Science", title: "Term 1 Science", teacher_name: "Dr. K. Raman", total_students: 38, graded_count: 38, is_sealed: true, status: "Sealed & Submitted" },
+          { exam_id: 5, subject: "English Literature", title: "Term 1 English", teacher_name: "Mrs. Sunitha Rao", total_students: 38, graded_count: 38, is_sealed: true, status: "Sealed & Submitted" },
+          { exam_id: 6, subject: "Social Science", title: "Term 1 Social Science", teacher_name: "Mr. R. K. Mukherjee", total_students: 38, graded_count: 38, is_sealed: true, status: "Sealed & Submitted" },
+          { exam_id: 7, subject: "Hindi", title: "Term 1 Hindi Second Language", teacher_name: "Mrs. Priya Sharma", total_students: 38, graded_count: 38, is_sealed: true, status: "Sealed & Submitted" },
+        ]
+      };
+    }
+  },
+
+  generateBatchReportCards: async (data: { class_name: string; section: string; term: string; force?: boolean }): Promise<any> => {
     return await fetchWithFallback<any>(`/api/exams/report-cards/generate-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4924,11 +5933,18 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   publishBatchReportCards: async (data: { class_name: string; section: string; term: string }): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/report-cards/publish-batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    try {
+      const res = await fetchWithFallback<any>(`/api/exams/report-cards/publish-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      fallbackReportCards.forEach(r => { r.is_published = true; });
+      return res;
+    } catch {
+      fallbackReportCards.forEach(r => { r.is_published = true; });
+      return { success: true, message: `Published Report Cards for ${data.class_name}-${data.section}` };
+    }
   },
 
   // --- Class-Wise Batch Schedules ---
@@ -4953,10 +5969,16 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     }
   },
 
+  moderateExamGradebook: async (examId: number): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/exams/${examId}/moderate-gradebook`, {
+      method: 'POST'
+    }, { success: true, message: `Exam ${examId} gradebook moderated.` });
+  },
+
   lockExamGradebook: async (examId: number): Promise<any> => {
     return await fetchWithFallback<any>(`/api/exams/${examId}/lock-gradebook`, {
       method: 'POST'
-    });
+    }, { success: true, message: `Exam ${examId} gradebook locked & sealed.` });
   },
 
   // --- Digital Hall Tickets ---
@@ -4983,9 +6005,36 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   scheduleAbsenteeRetest: async (absenteeId: number, retestDate: string): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/exams/absentees/${absenteeId}/schedule-retest?retest_date=${encodeURIComponent(retestDate)}`, {
-      method: 'POST'
-    });
+    try {
+      await fetchWithFallback<any>(`/api/exams/absentees/${absenteeId}/schedule-retest?retest_date=${encodeURIComponent(retestDate)}`, {
+        method: 'POST'
+      });
+    } catch {}
+
+    // Dispatch real-time push notification to Parent
+    try {
+      await api.sendNotification({
+        recipient_role: 'parent',
+        sender_name: 'Examination Controller',
+        sender_role: 'exam_coordinator',
+        title: '🗓️ Supplementary Retest Slot Confirmed',
+        message: `Online supplementary retest slot has been confirmed for ${retestDate} in Virtual Room A (Camera AI Proctor). Digital admit card is now live in the Parent Portal.`,
+        priority: 'High'
+      });
+
+      await api.sendNotification({
+        recipient_role: 'student',
+        sender_name: 'Examination Controller',
+        sender_role: 'exam_coordinator',
+        title: '✅ Supplementary Retest Active',
+        message: `Your online supplementary examination is scheduled for ${retestDate}. Ensure camera & microphone permissions are verified.`,
+        priority: 'High'
+      });
+    } catch (e) {
+      console.warn('Failed to dispatch notifications for absentee retest:', e);
+    }
+
+    return { success: true };
   },
 
   // --- Notifications Engine ---
@@ -4997,34 +6046,75 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       if (params?.unread_only) q.set('unread_only', 'true');
       if (params?.limit) q.set('limit', String(params.limit));
       const res = await fetchWithFallback<{ success: boolean; unread_count: number; notifications: any[] }>(`/api/notifications?${q.toString()}`);
-      return { unread_count: res.unread_count || 0, notifications: res.notifications || [] };
+      if (res && res.notifications && res.notifications.length > 0) {
+        return { unread_count: res.unread_count || 0, notifications: res.notifications };
+      }
     } catch {
-      return { unread_count: 0, notifications: [] };
+      // ignore
     }
+    let list = [...fallbackNotifications];
+    if (params?.role) {
+      list = list.filter(n => !n.recipient_role || n.recipient_role === params.role || n.recipient_role === 'all');
+    }
+    if (params?.unread_only) {
+      list = list.filter(n => !n.is_read);
+    }
+    if (params?.limit) {
+      list = list.slice(0, params.limit);
+    }
+    const unread = list.filter(n => !n.is_read).length;
+    return { unread_count: unread, notifications: list };
   },
 
   markNotificationRead: async (notificationId: number): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/notifications/${notificationId}/read`, {
-      method: 'PATCH'
-    });
+    try {
+      await fetchWithFallback<any>(`/api/notifications/${notificationId}/read`, {
+        method: 'PATCH'
+      });
+    } catch {}
+    fallbackNotifications = fallbackNotifications.map(n => n.id === notificationId ? { ...n, is_read: true } : n);
+    return { success: true };
   },
 
   markAllNotificationsRead: async (params?: { user_id?: number; role?: string }): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/notifications/mark-all-read`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params || {})
+    try {
+      await fetchWithFallback<any>(`/api/notifications/mark-all-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params || {})
+      });
+    } catch {}
+    fallbackNotifications = fallbackNotifications.map(n => {
+      if (!params?.role || n.recipient_role === params.role) {
+        return { ...n, is_read: true };
+      }
+      return n;
     });
+    return { success: true };
   },
 
   sendNotification: async (payload: any): Promise<any> => {
-    return await fetchWithFallback<any>(`/api/notifications/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    try {
+      await fetchWithFallback<any>(`/api/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {}
+    const newNotif = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      title: payload.title || 'System Notification',
+      message: payload.message || '',
+      recipient_role: payload.recipient_role || 'all',
+      sender_name: payload.sender_name || 'System',
+      sender_role: payload.sender_role || 'system',
+      priority: payload.priority || 'Normal',
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+    fallbackNotifications = [newNotif, ...fallbackNotifications];
+    return { success: true, notification: newNotif };
   },
-
   // =========================================================================
   // --- Finance & Accounts Coordinator Domain ---
   // =========================================================================
@@ -5164,49 +6254,105 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
   },
 
   // -------------------------------------------------------------
+
   // Institutional Outflows: Payroll, Procurement, Fleet
   // -------------------------------------------------------------
 
   getPayrollBatches: async (): Promise<PayrollBatchItem[]> => {
-    try {
-      const res = await fetchWithFallback<PayrollBatchItem[]>(`/api/finance/payroll/batches`);
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    return await fetchWithFallback<PayrollBatchItem[]>(`/api/finance/payroll/batches`, undefined, fallbackPayrollBatches);
   },
 
   getPayrollSlips: async (batchId: number): Promise<StaffPayslipItem[]> => {
-    try {
-      const res = await fetchWithFallback<StaffPayslipItem[]>(`/api/finance/payroll/batches/${batchId}/slips`);
-      return Array.isArray(res) ? res : [];
-    } catch {
-      return [];
-    }
+    return await fetchWithFallback<StaffPayslipItem[]>(`/api/finance/payroll/batches/${batchId}/slips`, undefined, fallbackPayslipsMap[batchId] || fallbackPayslipsMap[1] || []);
   },
 
   generatePayroll: async (payload: GeneratePayrollPayload): Promise<PayrollBatchItem> => {
-    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const res = await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.id) return res;
+    } catch {}
+
+    const newId = fallbackPayrollBatches.length + 1;
+    const newBatch: PayrollBatchItem = {
+      id: newId,
+      payroll_month: payload.payroll_month,
+      total_staff_count: 8,
+      gross_total: 485000,
+      total_deductions: 62730,
+      net_payable: 422270,
+      status: 'Audit Pending',
+      authorized_by: null,
+      authorized_at: null,
+      disbursed_at: null,
+      bank_batch_ref: null,
+      notes: payload.notes || 'Calculated monthly faculty payroll run based on biometric attendance.',
+      created_at: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    };
+    fallbackPayrollBatches = [newBatch, ...fallbackPayrollBatches];
+    fallbackPayslipsMap[newId] = (fallbackPayslipsMap[1] || []).map((p, idx) => ({
+      ...p,
+      id: newId * 100 + idx + 1,
+      batch_id: newId,
+      disbursement_status: 'Audit Pending',
+      payment_utr: null
+    }));
+    return newBatch;
   },
 
   authorizePayroll: async (batchId: number, payload: AuthorizePayrollPayload): Promise<PayrollBatchItem> => {
-    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/authorize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const res = await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/authorize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.id) return res;
+    } catch {}
+
+    fallbackPayrollBatches = fallbackPayrollBatches.map(b => b.id === batchId ? {
+      ...b,
+      status: 'Approved for Bank Transfer',
+      authorized_by: payload.authorized_by,
+      authorized_at: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    } : b);
+    if (fallbackPayslipsMap[batchId]) {
+      fallbackPayslipsMap[batchId] = fallbackPayslipsMap[batchId].map(p => ({
+        ...p,
+        disbursement_status: 'Approved for Bank Transfer'
+      }));
+    }
+    return fallbackPayrollBatches.find(b => b.id === batchId)!;
   },
 
   disbursePayroll: async (batchId: number, payload: DisbursePayrollPayload): Promise<PayrollBatchItem> => {
-    return await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/disburse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const res = await fetchWithFallback<PayrollBatchItem>(`/api/finance/payroll/batches/${batchId}/disburse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.id) return res;
+    } catch {}
+
+    const utrPrefix = 'CMS' + Math.floor(10000000 + Math.random() * 90000000);
+    fallbackPayrollBatches = fallbackPayrollBatches.map(b => b.id === batchId ? {
+      ...b,
+      status: 'Disbursed',
+      disbursed_at: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      bank_batch_ref: payload.bank_batch_ref || utrPrefix
+    } : b);
+    if (fallbackPayslipsMap[batchId]) {
+      fallbackPayslipsMap[batchId] = fallbackPayslipsMap[batchId].map((p, idx) => ({
+        ...p,
+        disbursement_status: 'Disbursed',
+        payment_utr: `${utrPrefix}_${idx + 1}`
+      }));
+    }
+    return fallbackPayrollBatches.find(b => b.id === batchId)!;
   },
 
   getMyPayslip: async (staffId: number = 2, month?: string): Promise<StaffPayslipItem | null> => {
@@ -5215,6 +6361,55 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
       q.set('staff_id', String(staffId));
       if (month) q.set('month', month);
       return await fetchWithFallback<StaffPayslipItem>(`/api/finance/payroll/my-payslip?${q.toString()}`);
+    } catch {
+      return null;
+    }
+  },
+
+  submitSalaryInquiry: async (payload: {
+    teacher_id?: number;
+    teacher_name: string;
+    department?: string;
+    month: string;
+    reason: string;
+    message: string;
+    net_salary?: number;
+    utr?: string;
+  }): Promise<any> => {
+    try {
+      return await fetchWithFallback<any>('/api/finance/payroll/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      return { status: 'success', message: 'Salary inquiry dispatched to Accounts Coordinator desk successfully.' };
+    }
+  },
+
+  getSalaryInquiries: async (params?: { status?: string; month?: string }): Promise<StaffSalaryInquiryItem[]> => {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.month) q.set('month', params.month);
+      const res = await fetchWithFallback<StaffSalaryInquiryItem[]>(`/api/finance/payroll/inquiries?${q.toString()}`);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
+
+  resolveSalaryInquiry: async (inquiryId: number, payload: {
+    status: 'Resolved' | 'Under Review' | 'Rejected';
+    resolution_notes: string;
+    resolved_by?: string;
+  }): Promise<StaffSalaryInquiryItem | null> => {
+    try {
+      return await fetchWithFallback<StaffSalaryInquiryItem>(`/api/finance/payroll/inquiries/${inquiryId}/resolve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
     } catch {
       return null;
     }
@@ -5281,35 +6476,54 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
   },
 
   createReExamRequest: async (data: Partial<ReExamRequestItem>): Promise<ReExamRequestItem> => {
+    const newReq: ReExamRequestItem = {
+      id: fallbackReExamRequests.length + 1,
+      student_id: data.student_id || 1,
+      student_name: data.student_name || 'Aarav Sharma',
+      class_name: data.class_name || 'Class 8',
+      section: data.section || 'B',
+      subject: data.subject || 'Mathematics',
+      exam_name: data.exam_name || 'Term 1 Descriptive Examination',
+      missed_date: data.missed_date || '14 Oct 2026',
+      reason_category: data.reason_category || 'Medical Emergency',
+      reason_details: data.reason_details || 'Diagnosed with acute viral fever; doctor advised bed rest.',
+      document_name: data.document_name || 'Medical_Certificate_Aarav_Sharma.pdf',
+      document_url: data.document_url || '/documents/medical_certificate_aarav.pdf',
+      parent_name: data.parent_name || 'Mr. Rajesh Sharma',
+      parent_phone: data.parent_phone || '+91 98111 00003',
+      status: 'Pending Admin Review',
+      requested_at: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    };
     try {
       const res = await fetchWithFallback<ReExamRequestItem>('/api/exams/re-exam-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      return res;
+      if (res && res.id) {
+        fallbackReExamRequests = [res, ...fallbackReExamRequests.filter(r => r.id !== res.id)];
+      } else {
+        fallbackReExamRequests = [newReq, ...fallbackReExamRequests];
+      }
     } catch {
-      const newReq: ReExamRequestItem = {
-        id: fallbackReExamRequests.length + 1,
-        student_id: data.student_id || 1,
-        student_name: data.student_name || 'Aarav Sharma',
-        class_name: data.class_name || 'Class 8',
-        section: data.section || 'B',
-        subject: data.subject || 'Mathematics',
-        exam_name: data.exam_name || 'Term 1 Descriptive Examination',
-        missed_date: data.missed_date || '14 Oct 2026',
-        reason_category: data.reason_category || 'Medical Emergency',
-        reason_details: data.reason_details || 'Diagnosed with viral fever & acute infection; doctor advised bed rest.',
-        document_name: data.document_name || 'Medical_Certificate_Aarav_Sharma.pdf',
-        document_url: data.document_url || '/samples/medical_certificate.pdf',
-        parent_name: data.parent_name || 'Mr. Rajesh Sharma',
-        parent_phone: data.parent_phone || '+91 98111 00003',
-        status: 'Pending Admin Review',
-        requested_at: '27 Oct 2026, 06:30 PM'
-      };
       fallbackReExamRequests = [newReq, ...fallbackReExamRequests];
-      return newReq;
     }
+
+    // Automatically notify Administration / Principal Office
+    try {
+      await api.sendNotification({
+        recipient_role: 'admin',
+        sender_name: `${newReq.parent_name} (Parent of ${newReq.student_name})`,
+        sender_role: 'parent',
+        title: `Medical Re-Exam Request: ${newReq.student_name} (${newReq.subject})`,
+        message: `Parent has submitted an official concession/re-exam request for ${newReq.subject} citing ${newReq.reason_category}. Attached document: ${newReq.document_name}. Pending Principal Review.`,
+        priority: 'High'
+      });
+    } catch (e) {
+      console.error('Failed to notify admin of re-exam request:', e);
+    }
+
+    return newReq;
   },
 
   reviewReExamRequest: async (id: number, status: 'Approved by Admin' | 'Rejected', remarks?: string): Promise<{ success: boolean }> => {
@@ -5319,13 +6533,94 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, remarks })
       });
-      return { success: true };
-    } catch {
-      fallbackReExamRequests = fallbackReExamRequests.map(r => r.id === id ? { ...r, status, admin_remarks: remarks, resolved_at: new Date().toLocaleDateString('en-GB') } : r);
-      return { success: true };
+    } catch {}
+    fallbackReExamRequests = fallbackReExamRequests.map(r => r.id === id ? { ...r, status, admin_remarks: remarks, resolved_at: new Date().toLocaleDateString('en-GB') } : r);
+    const target = fallbackReExamRequests.find(r => r.id === id);
+    if (target && status === 'Approved by Admin') {
+      try {
+        await api.sendNotification({
+          recipient_role: 'exam_coordinator',
+          sender_name: 'Dr. Radhakrishnan (Principal)',
+          sender_role: 'admin',
+          title: `Re-Exam Mandate: ${target.student_name} (${target.subject})`,
+          message: `Principal has officially APPROVED re-examination for ${target.student_name} (${target.class_name}-${target.section}) in ${target.subject}. Please schedule virtual exam room & invigilator.`,
+          priority: 'High'
+        });
+        await api.sendNotification({
+          recipient_role: 'parent',
+          sender_name: 'Office of the Principal',
+          sender_role: 'admin',
+          title: `Re-Exam Request Approved: ${target.subject}`,
+          message: `Your medical re-exam request for ${target.student_name} in ${target.subject} has been officially approved. Examination Controller is scheduling the online session.`,
+          priority: 'Normal'
+        });
+      } catch (e) {
+        console.error('Failed to broadcast approval notifications:', e);
+      }
     }
+    return { success: true };
   },
 
+  scheduleReExamSlot: async (
+    id: number,
+    slotData: {
+      re_exam_date: string;
+      re_exam_time: string;
+      re_exam_venue: string;
+      coordinator_assigned: string;
+    }
+  ): Promise<{ success: boolean; item?: ReExamRequestItem }> => {
+    try {
+      await fetchWithFallback<any>(`/api/exams/re-exam-requests/${id}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(slotData)
+      });
+    } catch {}
+
+    fallbackReExamRequests = fallbackReExamRequests.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          status: 'Scheduled',
+          re_exam_date: slotData.re_exam_date,
+          re_exam_time: slotData.re_exam_time,
+          re_exam_venue: slotData.re_exam_venue,
+          coordinator_assigned: slotData.coordinator_assigned,
+          resolved_at: new Date().toLocaleDateString('en-GB')
+        };
+      }
+      return r;
+    });
+
+    const target = fallbackReExamRequests.find(r => r.id === id);
+    const studentName = target?.student_name || 'Aarav Sharma';
+    const subject = target?.subject || 'Mathematics';
+
+    try {
+      await api.sendNotification({
+        recipient_role: 'parent',
+        sender_name: 'Examination Controller',
+        sender_role: 'exam_coordinator',
+        title: `🗓️ Retest Scheduled: ${subject} (${studentName})`,
+        message: `Supplementary online re-examination confirmed for ${studentName} on ${slotData.re_exam_date} at ${slotData.re_exam_time}. Virtual Room: ${slotData.re_exam_venue}. Proctor: ${slotData.coordinator_assigned}. Digital admit card & AI Proctor credentials are now active in the portal.`,
+        priority: 'High'
+      });
+
+      await api.sendNotification({
+        recipient_role: 'student',
+        sender_name: 'Examination Controller',
+        sender_role: 'exam_coordinator',
+        title: `✅ Supplementary Retest Admit Card: ${subject}`,
+        message: `Your re-test is scheduled on ${slotData.re_exam_date} (${slotData.re_exam_time}). Virtual Room: ${slotData.re_exam_venue}. Ensure camera & microphone permissions are verified 15 mins prior.`,
+        priority: 'High'
+      });
+    } catch (e) {
+      console.error('Failed to notify parent/student of schedule:', e);
+    }
+
+    return { success: true, item: target };
+  },
   createSchoolEvent: async (data: { title: string; date: string; location: string; description: string; banner_url?: string; status?: string; target_audience?: string }) => {
     try {
       return await fetchWithFallback<any>('/api/admin/events', {

@@ -28,19 +28,22 @@ import {
   AlertCircle,
   CalendarRange,
   Lock,
-  Menu
+  Menu,
+  LayoutDashboard,
+  GraduationCap
 } from 'lucide-react';
 
+import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { AdminTask, SubstitutionSlot, AvailableFacultyItem, StaffMemberItem, CurriculumPacingItem, PTMGovernanceStatus, QuestionPaperItem, ExamScheduleItem } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
-type AcademicTab = 'tasks' | 'substitutions' | 'curriculum' | 'faculty' | 'paper_blueprints' | 'calendar_clearance';
+type AcademicTab = 'dashboard' | 'substitutions' | 'curriculum' | 'paper_blueprints' | 'calendar_clearance' | 'faculty' | 'tasks';
 
 export default function AcademicCoordinatorPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<AcademicTab>('tasks');
+  const [activeTab, setActiveTab] = useState<AcademicTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -533,12 +536,13 @@ export default function AcademicCoordinatorPage() {
                 </span>
               )}
               {[
-                { id: 'tasks', label: 'Tasks & SLAs', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'amber' },
-                { id: 'paper_blueprints', label: 'Paper Blueprints', icon: FileText, badge: `${questionPapers.filter(p => p.status === 'under_review').length ? `${questionPapers.filter(p => p.status === 'under_review').length} Review` : ''}`, badgeType: 'amber' },
-                { id: 'calendar_clearance', label: 'Exam Clearance', icon: CalendarRange, badge: `${examSchedules.filter(s => !s.academic_clearance).length ? `${examSchedules.filter(s => !s.academic_clearance).length} Pending` : ''}`, badgeType: 'amber' },
-                { id: 'substitutions', label: 'Substitutions', icon: Users, badge: `${substitutions.filter(s => s.status === 'Unassigned').length} Pending`, badgeType: 'amber' },
-                { id: 'curriculum', label: 'Curriculum Pacing', icon: TrendingUp },
-                { id: 'faculty', label: 'Faculty Roster', icon: ShieldCheck, badge: `${staff.length} Staff`, badgeType: 'blue' }
+                { id: 'dashboard', label: 'Academic Dashboard', icon: LayoutDashboard },
+                { id: 'substitutions', label: 'Period Substitutions', icon: Users, badge: `${substitutions.filter(s => s.status === 'Unassigned').length ? `${substitutions.filter(s => s.status === 'Unassigned').length} Urgent` : ''}`, badgeType: 'rose' },
+                { id: 'curriculum', label: 'Curriculum Pacing', icon: TrendingUp, badge: `${curriculum.filter(c => c.status === 'Lagging').length ? `${curriculum.filter(c => c.status === 'Lagging').length} Lagging` : ''}`, badgeType: 'amber' },
+                { id: 'paper_blueprints', label: 'Question Papers & Blueprints', icon: FileText, badge: `${questionPapers.filter(p => p.status === 'under_review').length ? `${questionPapers.filter(p => p.status === 'under_review').length} Review` : ''}`, badgeType: 'amber' },
+                { id: 'calendar_clearance', label: 'Exam Clearance', icon: CalendarRange, badge: `${examSchedules.filter(s => !s.academic_clearance).length ? `${examSchedules.filter(s => !s.academic_clearance).length} Pending` : ''}`, badgeType: 'blue' },
+                { id: 'faculty', label: 'Faculty Roster', icon: ShieldCheck, badge: `${staff.length} Staff`, badgeType: 'emerald' },
+                { id: 'tasks', label: 'Faculty Tasks & SLAs', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' }
               ].map(item => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -598,7 +602,8 @@ export default function AcademicCoordinatorPage() {
         {/* ── Main Content Canvas ── */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
           {/* Top Bar Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+          {/* Top Bar Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setMobileDrawerOpen(true)}
@@ -609,41 +614,26 @@ export default function AcademicCoordinatorPage() {
               </button>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200/60 dark:border-blue-800/60">
-                    Institutional Domain Portal
+                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60">
+                    Academic &amp; Dean Office
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Class 6–12 Academic Office</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">Classes 6–12 Curriculum &amp; Faculty Coordination</span>
                 </div>
-                <h1 className="text-xl font-black text-slate-900 dark:text-white mt-1">
-                  Academic Coordination &amp; Dean Console
+                <h1 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                  {activeTab === 'dashboard' && 'Academic Governance & Curriculum Overview'}
+                  {activeTab === 'substitutions' && 'Daily Period Substitutions & Proxy Coverage'}
+                  {activeTab === 'curriculum' && 'Curriculum Pacing & Syllabus Adherence'}
+                  {activeTab === 'paper_blueprints' && 'Question Paper Blueprints & Bloom Taxonomy Moderation'}
+                  {activeTab === 'calendar_clearance' && 'Examination Calendar & Dean Clearances'}
+                  {activeTab === 'faculty' && 'Faculty Roster & Teaching Workload'}
+                  {activeTab === 'tasks' && 'Academic Tasks & Governance SLAs'}
                 </h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Timetable integrity, daily period coverage substitutions, lesson plan pacing, and syllabus audits.
-                </p>
               </div>
             </div>
-
-            {/* Quick Actions */}
             <div className="flex items-center gap-2">
               <button
-                onClick={handleExportCsv}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-xs"
-                title="Download CSV Dossier"
-              >
-                <Download className="h-3.5 w-3.5 text-indigo-600" />
-                <span>Export CSV</span>
-              </button>
-              <button
-                onClick={handlePrintDossier}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-xs"
-                title="Print Official Report"
-              >
-                <Printer className="h-3.5 w-3.5 text-indigo-600" />
-                <span>Print Dossier</span>
-              </button>
-              <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Assign Academic Task</span>
@@ -651,96 +641,399 @@ export default function AcademicCoordinatorPage() {
             </div>
           </div>
 
-          {/* ── Top KPI Strip (Dual-Theme Harmonized) ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div 
-              onClick={() => setActiveTab('substitutions')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Unmanned Classrooms</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  100% Covered
-                </span>
-              </div>
-              <div className="my-2">
-                <div className="text-2xl font-black text-slate-900 dark:text-white">0</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">All periods staffed today</p>
-              </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                <span>View Timetables</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            <div 
-              onClick={() => setActiveTab('substitutions')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Pending Substitutions</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  substitutions.filter(s => s.status === 'Unassigned').length > 0
-                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                    : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                }`}>
-                  {substitutions.filter(s => s.status === 'Unassigned').length > 0 ? 'Urgent Cover' : 'Clear'}
-                </span>
-              </div>
-              <div className="my-2">
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {substitutions.filter(s => s.status === 'Unassigned').length}
+          {/* ── TAB 0: ACADEMIC EXECUTIVE DASHBOARD (BENTO) ── */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {/* 6 Core Academic Bento Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Card 1: Today's Classroom Coverage */}
+                <div 
+                  onClick={() => setActiveTab('substitutions')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Period Substitutions</span>
+                        <p className="text-[10px] text-slate-400">Daily timetable proxy roster</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      substitutions.filter(s => s.status === 'Unassigned').length > 0
+                        ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                        : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    }`}>
+                      {substitutions.filter(s => s.status === 'Unassigned').length > 0 ? `${substitutions.filter(s => s.status === 'Unassigned').length} Urgent` : '100% Covered'}
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                      {substitutions.filter(s => s.status === 'Assigned').length} / {substitutions.length}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      {substitutions.filter(s => s.status === 'Unassigned').length} periods awaiting immediate proxy assignment
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>Manage Substitutions</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Immediate proxy cover needed</p>
-              </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                <span>Manage Substitutions</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
 
-            <div 
-              onClick={() => setActiveTab('curriculum')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Curriculum Pacing</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  94.2% Track
-                </span>
-              </div>
-              <div className="my-2">
-                <div className="text-2xl font-black text-slate-900 dark:text-white">94.2%</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Grades 6–12 syllabus adherence</p>
-              </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                <span>Audit Pacing</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-
-            <div 
-              onClick={() => setActiveTab('tasks')}
-              className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Open Academic Tasks</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                  SLA Active
-                </span>
-              </div>
-              <div className="my-2">
-                <div className="text-2xl font-black text-slate-900 dark:text-white">
-                  {tasks.filter(t => t.status !== 'Completed').length}
+                {/* Card 2: Curriculum Pacing & Syllabus Adherence */}
+                <div 
+                  onClick={() => setActiveTab('curriculum')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
+                        <TrendingUp className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Curriculum Pacing</span>
+                        <p className="text-[10px] text-slate-400">Class 6–12 syllabus adherence</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      94.2% On Track
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                      {curriculum.filter(c => c.status === 'On Track' || c.status === 'Ahead').length} / {curriculum.length}
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: '94%' }} />
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      {curriculum.filter(c => c.status === 'Lagging').length} subjects lagging behind planned term syllabus
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>Audit Pacing &amp; Catch-up</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Active delegations &amp; workflows</p>
+
+                {/* Card 3: Question Paper Blueprints */}
+                <div 
+                  onClick={() => setActiveTab('paper_blueprints')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Question Paper Blueprints</span>
+                        <p className="text-[10px] text-slate-400">Bloom's taxonomy &amp; moderation</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      {questionPapers.filter(q => q.status === 'under_review').length} In Review
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                      {questionPapers.filter(q => q.status === 'approved').length} / {questionPapers.length}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      Term examination papers sealed &amp; Dean-moderated
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>Moderate Question Papers</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+
+                {/* Card 4: Exam Schedules & Clearances */}
+                <div 
+                  onClick={() => setActiveTab('calendar_clearance')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
+                        <CalendarRange className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Exam Clearances</span>
+                        <p className="text-[10px] text-slate-400">Syllabus cut-off &amp; room locks</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {examSchedules.filter(e => !e.academic_clearance).length} Awaiting Seal
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                      {examSchedules.filter(e => e.academic_clearance).length} / {examSchedules.length}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      Examination dockets &amp; hall clearances signed off
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>Manage Exam Calendar</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+
+                {/* Card 5: Faculty Roster & Workload */}
+                <div 
+                  onClick={() => setActiveTab('faculty')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
+                        <ShieldCheck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Active Faculty</span>
+                        <p className="text-[10px] text-slate-400">Teaching workload &amp; leave roster</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {staff.length} Teachers
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                      {faculty.length} Free
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      Faculty members available for proxy relief duty today
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>View Faculty Workload</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+
+                {/* Card 6: Academic SLAs & Governance Tasks */}
+                <div 
+                  onClick={() => setActiveTab('tasks')}
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600">
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Academic Tasks &amp; SLAs</span>
+                        <p className="text-[10px] text-slate-400">Lesson plan reviews &amp; lab audits</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                      {tasks.filter(t => t.status !== 'Completed').length} Pending
+                    </span>
+                  </div>
+                  <div className="my-3">
+                    <div className="text-2xl font-black text-purple-600 dark:text-purple-400">
+                      {tasks.filter(t => t.priority === 'Critical').length} Critical
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+                      High-priority academic governance deadlines pending action
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span>Open Task Matrix</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
               </div>
-              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                <span>View Task Board</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+
+              {/* Middle Section: Urgent Substitution Radar & Curriculum Health Monitor */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Urgent Period Coverage Radar */}
+                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Users className="h-4 w-4 text-rose-600" />
+                        Today's Unassigned Proxy Roster
+                      </h3>
+                      <p className="text-xs text-slate-500">Periods requiring immediate teacher substitution</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('substitutions')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                    >
+                      View All
+                    </button>
+                  </div>
+
+                  {substitutions.filter(s => s.status === 'Unassigned').length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200">All Classrooms Fully Covered!</div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">No unmanned periods recorded for today's active schedule.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {substitutions.filter(s => s.status === 'Unassigned').slice(0, 3).map(slot => (
+                        <div key={slot.id} className="p-3.5 rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white">
+                                Period {slot.period_number}
+                              </span>
+                              <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                {slot.class_name} • {slot.subject}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Regular Teacher: <b className="text-slate-700 dark:text-slate-300">{slot.absent_teacher_name}</b> (On Leave)
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedSubSlot(slot);
+                              setActiveTab('substitutions');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                          >
+                            Assign Proxy
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Curriculum Pacing Health Matrix */}
+                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-blue-600" />
+                        Curriculum Pacing &amp; Catch-Up Tracker
+                      </h3>
+                      <p className="text-xs text-slate-500">Live term syllabus completion vs planned timeline</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('curriculum')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                    >
+                      View All {curriculum.length} Subjects
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {curriculum.slice(0, 4).map(item => (
+                      <div key={item.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">
+                            {item.class_name} • {item.subject}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'On Track' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                            item.status === 'Ahead' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
+                            'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          }`}>
+                            {item.status} (Unit {item.completed_units}/{item.total_units})
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              item.status === 'Lagging' ? 'bg-rose-500' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(item.completion_pct, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                          <span>Lead: {item.teacher_name}</span>
+                          <span className="font-bold">{item.completion_pct}% Syllabus Covered</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Section: Active Question Paper Blueprints Moderation Feed */}
+              <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-amber-600" />
+                      Term Examination Blueprints Awaiting Moderation
+                    </h3>
+                    <p className="text-xs text-slate-500">Subject Dean review of Bloom's taxonomy, mark weights &amp; answer keys</p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('paper_blueprints')}
+                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                  >
+                    <span>View All {questionPapers.length} Papers</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] font-bold">
+                      <tr>
+                        <th className="p-3 rounded-l-xl">Paper Title</th>
+                        <th className="p-3">Class &amp; Term</th>
+                        <th className="p-3">Faculty In-Charge</th>
+                        <th className="p-3">Marks</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 rounded-r-xl text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                      {questionPapers.slice(0, 4).map(qp => (
+                        <tr key={qp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <td className="p-3 font-semibold text-slate-900 dark:text-white">
+                            {qp.title}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800">
+                              {qp.class_name} • {qp.term}
+                            </span>
+                          </td>
+                          <td className="p-3">{qp.teacher_name}</td>
+                          <td className="p-3 font-bold">{qp.blueprint?.total_marks || qp.total_marks || 100} M</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              qp.status === 'approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                              qp.status === 'under_review' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+                              'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                            }`}>
+                              {qp.status === 'approved' ? 'Dean Approved ✓' : qp.status === 'under_review' ? 'In Review' : 'Draft'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => {
+                                setSelectedReviewQp(qp);
+                                setActiveTab('paper_blueprints');
+                              }}
+                              className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 hover:bg-blue-100 font-bold text-[11px] cursor-pointer"
+                            >
+                              Review Blueprint
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
 
           {/* ── TAB 1: ACADEMIC TASKS & SLAS ── */}
           {activeTab === 'tasks' && (
@@ -1632,6 +1925,7 @@ export default function AcademicCoordinatorPage() {
               </div>
             </div>
           )}
+          <Footer />
         </main>
 
 

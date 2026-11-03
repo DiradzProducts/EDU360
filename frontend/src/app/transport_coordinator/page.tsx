@@ -24,6 +24,7 @@ import {
   ArrowRight,
   CreditCard
 } from 'lucide-react';
+import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { AdminTask, FleetExpenseItem } from '@/lib/types';
@@ -752,6 +753,7 @@ export default function TransportCoordinatorPage() {
               </div>
             </div>
           )}
+          <Footer />
         </main>
 
       {/* ── CREATE TASK MODAL ── */}

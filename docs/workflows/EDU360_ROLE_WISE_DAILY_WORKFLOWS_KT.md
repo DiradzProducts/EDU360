@@ -1,6 +1,6 @@
 # 🎓 EDU360 — Role-Wise Daily Activities & Operational Workflows
 ### The Master 8-Role Daily Lifecycle, Inter-Role Connections & Action Runbook
-**Document Version:** 2.0 (Role-Wise Operational Blueprint)  
+**Document Version:** 2.1 (Role-Wise Operational Blueprint — Fully Synchronized)  
 **Target Audience:** Engineering Leads, Product Managers, Trainers, Operations & School Stakeholders  
 **Scope:** 100% Pure Online Virtual Schooling (The 8 Canonical Roles)  
 
@@ -14,7 +14,7 @@
 5. [Role 4: Accounts Coordinator (`/accounts_coordinator`)](#5-role-4-accounts-coordinator-accounts_coordinator)
 6. [Role 5: Admissions Coordinator (`/admissions_coordinator`)](#6-role-5-admissions-coordinator-admissions_coordinator)
 7. [Role 6: Teacher Portal (`/teacher`)](#7-role-6-teacher-portal-teacher)
-8. [Role 7: Student Portals (Secondary & Junior K–5)](#8-role-7-student-portals-secondary--junior-k5)
+8. [Role 7: Student Portals (Secondary `/student` & Junior K–5 `/junior`)](#8-role-7-student-portals-secondary-student--junior-k5-junior)
 9. [Role 8: Parent Portal (`/parent`)](#9-role-8-parent-portal-parent)
 10. [Master Cross-Role Handshake Summary Table](#10-master-cross-role-handshake-summary-table)
 
@@ -57,7 +57,7 @@ If a role operates in a silo without continuous handshakes, the school fails: at
         ▼                                ▼                                ▼
 [08:30 AM Morning]              [01:00 PM Mid-Day]               [04:30 PM Closing]
 Review Priority Triage          Task Escalation Reviews          CBSE Statutory Audit Export
-- Red: 3+ Absences Streak       - SLA breaches from Coord        Dual-Signature Exit Archive
+- Red: Unexcused Absences       - SLA breaches from Coord        Dual-Signature Exit Archive
 - Red: >= 15% Score Drops       - Direct intervention orders     Annual Promotion Rollovers
 - Orange: 30d Fee Arrears
 ```
@@ -65,16 +65,17 @@ Review Priority Triage          Task Escalation Reviews          CBSE Statutory 
 ### 🌅 A. Morning Routine (08:30 AM – 10:00 AM)
 1. **Priority Triage Cockpit Scan (`/admin` Top Cards)**:
    - Evaluates the **Red / Orange / Green** automated intelligence cards.
-   - **RED Flag Check**: Identifies any student with $\ge 3$ consecutive unexcused online class absences (e.g., *Rahul Sharma, Class 8-B*).
-   - **RED Flag Check**: Identifies any class section with $\ge 15\%$ sudden grade drops in recent test submissions.
-   - **ORANGE Flag Check**: Reviews total institutional fee arrears crossing 30+ days overdue.
-   - **Action**: Clicks `[Initiate Care Case]` on critical red flags to assign a priority welfare check to the class teacher.
+   - **RED Flag Check (Attendance Radar)**: Identifies any student with $\ge 3$ consecutive unexcused online class absences.
+   - **Excused Leave Auto-Filter Invariant**: Students with teacher-approved parent leaves on file (`LeaveRequest.status == "Approved"`) are **automatically excluded** from the unexcused absence count. Triage shows: *"Attendance Radar: Filtered unexcused absences ({count} student(s) on approved medical/parent leaves excluded from disciplinary triage escalation)"*.
+   - **RED Flag Check (Academics)**: Identifies any class section with $\ge 15\%$ sudden grade drops in recent test submissions.
+   - **ORANGE Flag Check (Finance)**: Reviews total institutional fee arrears crossing 30+ days overdue.
+   - **Action**: Clicks `[Initiate Care Case]` or `[Assign Class Teacher to Call Parents]` on critical red flags.
 
 ### ☀️ B. Core Day Operations (10:00 AM – 03:30 PM)
 1. **Executive Task Escalation Governance**:
    - Opens the **Admin Tasks Cockpit**.
    - Filters by `status = escalated_to_principal`.
-   - When an Academic Coordinator or Exam Controller cannot resolve an SLA breach (e.g., unmoderated question papers or prolonged departmental delay), Principal reviews the formal documented rationale and takes executive action.
+   - When an Academic Coordinator or Exam Controller cannot resolve an SLA breach, Principal reviews the formal documented rationale and takes executive action.
 2. **Admissions CRM & Enrollment Monitoring**:
    - Monitors the virtual admissions funnel (`New Lead` $\to$ `Follow-Up` $\to$ `Entrance Cleared` $\to$ `Converted to SIS`).
    - Ensures admissions conversion targets are met without operational bottlenecks.
@@ -82,8 +83,7 @@ Review Priority Triage          Task Escalation Reviews          CBSE Statutory 
 ### 🌆 C. Evening / Closing Activities (03:30 PM – 05:30 PM)
 1. **Dual-Signature Student Exit & Transfer Certificate (TC) Sealing**:
    - When a student applies for school transfer, Principal verifies that Accounts clearance (zero balance) and Academic clearance (grades recorded) are marked.
-   - Reviews the parent's digital OTP acceptance timestamp.
-   - Reviews the high-resolution scanned copy of the physically signed handover slip.
+   - Reviews the parent's digital OTP acceptance timestamp and scanned handover slip.
    - Applies the **Permanent Digital Principal Seal**, locking the Transfer Certificate in the SIS Vault with zero legal dispute risk.
 2. **CBSE Statutory Compliance Audit Export**:
    - Clicks `[Export Statutory Audit Logs]`, generating a cryptographically checksummed CSV stream recording every administrative override, login, grade alteration, and fee concession.
@@ -99,87 +99,72 @@ Review Priority Triage          Task Escalation Reviews          CBSE Statutory 
                │         ACADEMIC COORDINATOR DAILY WORKFLOW           │
                └──────────────────────────┬────────────────────────────┘
                                           │
-        ┌─────────────────────────────────┼─────────────────────────────────┐
-        ▼                                 ▼                                 ▼
-[08:00 AM Morning Cover]         [11:00 AM Pacing Surveillance]    [03:30 PM Faculty Relief]
-Check Teacher Leave Requests     Curriculum Units vs Calendar Weeks Review SLA Relief Requests
-Run AI Timetable Governor        Detect > 15% Syllabus Lags        Grant +12h to +72h Extensions
-1-Click Assign Substitution      Issue Department Advisories       Rebalance Tasks to Peers
+        ┌─────────────────────────────────┼────────────────────────────────┐
+        ▼                                 ▼                                ▼
+[08:00 AM Morning Cover]          [11:00 AM Pacing Surveillance]   [03:00 PM Workload Relief]
+Absence Alerts from Faculty       Live Syllabus Pacing Meter       Review Teacher Relief Requests
+Match Available Peer Teachers     Flag Lagging Units (<80%)        Grant SLA Extensions (+24h/+48h)
+1-Click Assign Substitution       Deploy 48h Remedial Task         Rebalance Faculty Tasks
 ```
 
-### 🌅 A. Morning Routine (08:00 AM – 09:00 AM)
-1. **Morning Teacher Absence Triage**:
-   - Opens the **Timetable & Substitution Command Center**.
-   - Identifies any morning emergency sick leave requests submitted by faculty.
-2. **Dynamic Substitution Cover Allocation**:
-   - Triggers the **AI Timetable Governor**.
-   - System isolates the absent teacher's periods for the day (e.g., *Class 8-B Math at 09:30 AM*).
-   - Scans master timetable matrix for available teachers who:
-     - Are free during Period 2.
-     - Hold matching or compatible subject competence (e.g., Physics/Math).
-     - Have the lowest daily period load.
-   - Clicks `[Assign Cover]`. System automatically badges `SUBSTITUTION_COVER` into the substitute teacher's schedule and updates the student class room link!
+### 🌅 A. Morning Routine: Substitution Cover (08:00 AM – 09:00 AM)
+1. **Unplanned Faculty Absence Response**:
+   - If a teacher reports an emergency absence, system flags unassigned periods in Red.
+   - Coordinator clicks `[Find Available Faculty]`. The algorithm checks free faculty slots matching subject competency.
+   - Clicks `[Assign Substitution]`. The replacement teacher immediately receives a `SUBSTITUTION_COVER` period injected into their daily personal schedule in `/teacher`.
 
-### ☀️ B. Core Day Operations (10:00 AM – 02:30 PM)
-1. **Curriculum Pacing Surveillance**:
-   - Reviews real-time syllabus delivery progress bars across all grades and subjects.
-   - Formula: $\text{Syllabus Lag} = \text{Target Units for Week } W - \text{Logged Completed Units}$.
-   - If any subject falls $> 15\%$ behind the term syllabus schedule, coordinator issues an internal curriculum recovery advisory to the department head.
-2. **Remedial Focus Table Audit**:
-   - Inspects active 1-Week Remedial Focus Tables (e.g. Mathematics, Class 8-B).
-   - Verifies that teachers are reviewing student rough notebooks within the 24-hour turnaround window.
+### ☀️ B. Core Day: Syllabus Pacing Surveillance (11:00 AM – 01:00 PM)
+1. **Curriculum Delivery Monitoring**:
+   - Pacing checkoffs are self-serviced directly by assigned teachers in the Teacher Portal (`/teacher`) via `POST /api/teacher/curriculum/log-unit`.
+   - Coordinator maintains real-time oversight over syllabus completion percentage across all grades.
+   - If a teacher falls $\ge 2$ weeks behind term pacing, coordinator dispatches an automated **48-Hour Remedial Pacing Task**.
 
-### 🌆 C. Afternoon Routine: Faculty Workload Relief (03:00 PM – 05:00 PM)
-1. **Human-in-the-Loop Task Relief Cockpit**:
-   - Opens pending task relief queue (`status = relief_requested`).
-   - When a teacher clicks `[Request Task Relief]` due to illness or heavy grading volume, the SLA clock is paused immediately.
-   - Coordinator selects one of three compassionate governance actions:
-     - **Grant Extension**: Adds $+12\text{h}$, $+24\text{h}$, $+48\text{h}$, or $+72\text{h}$ to the deadline.
-     - **Migrate Task**: Reassigns the task to an available peer teacher with zero penalty on the original teacher.
-     - **Escalate to Principal**: Used only if institutional compliance is at risk.
+### 🌆 C. Afternoon: Human-in-the-Loop SLA Workload Relief (03:00 PM – 05:00 PM)
+1. **Teacher Workload Relief & Rebalancing**:
+   - Teachers under heavy exam evaluation or medical stress click `[Request Task Relief / Migration]` on any assigned task.
+   - Coordinator reviews the request and chooses:
+     - `[Grant Extension]` (+12h, +24h, +48h, +72h)
+     - `[Migrate Task]` to peer faculty with zero penalty on original teacher
+     - `[Escalate to Principal]` with formal documentation.
 
 ---
 
 ## 4. Role 3: Exam Coordinator (`/exam_coordinator`)
 
-> **Primary Mission:** Examination blueprints, exam scheduling, accounts-gated hall tickets, and answer script moderation distribution.
+> **Primary Mission:** Question paper secrecy vault, hall ticket issuance, marks moderation, and consolidated report card release.
 
 ```
                  ┌───────────────────────────────────────────────┐
-                 │         EXAM COORDINATOR WORKFLOW             │
+                 │          EXAM COORDINATOR WORKFLOW            │
                  └───────────────────────┬───────────────────────┘
                                          │
         ┌────────────────────────────────┼────────────────────────────────┐
         ▼                                ▼                                ▼
-[Pre-Exam Phase]                 [Exam Execution Phase]           [Post-Exam Moderation]
-Blueprint Schema Construction    Accounts-Gated Hall Tickets      Multimodal AI Paper Pre-Scan
-Freeze Blueprint (72h prior)     Virtual Proctoring Room Roster   Route Papers to Teachers (48h)
-Lock Question Papers in SIS      Monitor Live Camera Connectivity Exam Concluded Trigger -> Tasks
+[Pre-Exam Phase]                 [Exam Execution Phase]           [Post-Exam Moderation & Release]
+Question Paper Secrecy Vault     Issue Timetable & Hall Tickets   Review Sealed Teacher Gradebooks
+Syllabus Compliance Review       Virtual Proctoring Roster        Cryptographic Ledger Signature
+Lock Papers in Digital Vault     Live Webcam Attendance Check     Generate Batch Report Cards + AI
 ```
 
-### 🌅 A. Pre-Exam Blueprint & Scheduling
-1. **Question Paper Blueprint Construction**:
-   - Establishes exam timetables, question formats, and cognitive domain weightages (Recall $30\%$, Application $50\%$, Analysis $20\%$).
-2. **72-Hour Blueprint Freeze**:
-   - Exactly 72 hours before exam commencement, executes **Blueprint Schema Freeze**.
-   - No questions or marks distributions can be altered without Super Admin cryptographic override.
+### 🌅 A. Pre-Exam Blueprint & Secrecy Vault
+1. **Question Paper Custody & Sealing**:
+   - Teachers draft question papers and submit them digitally to the Exam Cell.
+   - Exam Coordinator reviews question blueprint, weightage, and syllabus alignment.
+   - Clicks `[Seal & Digital Lock Exam Paper in Secrecy Vault]`, assigning a cryptographic barcode hash (e.g. `SEC-2026-MTH-9844-SEALED`).
 
-### ☀️ B. Financial Gating & Hall Ticket Issuance
-1. **Accounts-Gated Hall Ticket Policy**:
-   - System queries Accounts Coordinator ledger in real time.
-   - Students with unpaid fees or unapproved financial status have hall ticket downloads locked.
-   - When Accounts Coordinator grants a waiver or student pays online, hall ticket unlocks instantaneously.
-2. **Virtual Invigilation Room Roster**:
-   - Assigns faculty proctors to virtual examination video rooms.
-   - Monitors student video feed integrity and automated webcam presence.
+### ☀️ B. Hall Ticket Issuance & Timetables
+1. **Board-Mandated Hall Ticket Release**:
+   - Exam timetables and digital admit cards are published for students across classes.
+   - In accordance with CBSE regulations, hall tickets are released without fee blockades.
 
-### 🌆 C. Post-Exam Script Distribution & Moderation
-1. **Multimodal AI Paper Pre-Scan (Gemini Vision)**:
-   - Scanned student answer sheets are ingested into the examination repository.
-   - AI pre-scans student handwritten solutions against the blueprint answer key, flagging calculation jumps, missing formulas, and sign errors.
-2. **Moderation Roster & Grading Deadlines**:
-   - Distributes answer papers to designated subject teachers with strict **48-Hour SLAs**.
-   - Triggers the automated event: `exam_concluded`, creating administrative verification tasks.
+### 🌆 C. Marks Moderation Handshake & Report Card Release
+1. **Subject Submission Readiness Matrix**:
+   - Coordinator monitors whether every subject faculty has submitted and sealed their gradebooks (`is_locked = true`).
+2. **Cryptographic Moderation Ledger**:
+   - Clicks `[Moderate & Sign Ledger]`. Signs the gradebook and applies a digital seal.
+3. **Consolidated Report Cards with Gemini AI Narratives**:
+   - Once all subject teachers have sealed their grades, coordinator clicks `[Generate Batch Report Cards]`.
+   - The system synthesizes subject scores, attendance percentages, and Gemini AI pedagogical narratives into official downloadable term report cards.
 
 ---
 
@@ -201,32 +186,17 @@ Arrears Aging Ledger             Counter Payment Reconciliation   Process Conver
 - 30+ Days Critical Overdue      Instant PDF Receipt Generation   (Unlocks Hall Ticket Without Debt Wipe)
 ```
 
-### 🌅 A. Morning Routine: Ledger & Aging Audit (09:00 AM – 10:30 AM)
+### 🌅 A. Morning Ledger & Aging Audit (09:00 AM – 10:30 AM)
 1. **Real-Time Arrears Aging Audit**:
    - Opens the **Financial Ledgers Cockpit**.
-   - Audits unpaid student fee balances sorted into dynamic aging buckets:
-     - **0–15 Days Overdue**: Gentle automated app reminder queued.
-     - **16–30 Days Overdue**: Follow-up notification to parent portal.
-     - **30+ Days Critical Overdue**: Flagged in Orange on Principal's priority triage dashboard.
+   - Audits unpaid student fee balances sorted into dynamic aging buckets (0–15d, 16–30d, 30+d critical).
 
-### ☀️ B. Core Day Operations (10:30 AM – 03:00 PM)
-1. **Counter Payment Collection & Manual Reconciliation**:
-   - Parents paying offline (NEFT, RTGS, Demand Draft, Cash, POS Card) are logged at the counter.
-   - Coordinator inputs transaction details, bank name, and mints an immutable bank reference UTR (e.g. `UPI/1729837192/ADMISSION`).
-   - Generates a tamper-evident, digitally sealed PDF fee receipt with verification QR code.
-2. **Management Hardship Fee Waivers & Concessions**:
-   - For families facing verified financial distress, coordinator enters an authorized fee waiver (e.g., ₹5,000 concession).
-   - System records mandatory audit metadata: `waiver_amount`, `waiver_reason`, and `waiver_approved_by` without deleting original invoice audit history.
-
-### 🌆 C. Admissions Integration & Institutional Exam Clearance (03:00 PM – 05:00 PM)
-1. **Admissions Intake Invoicing Sync**:
-   - When Admissions Coordinator converts an enquiry to SIS, the admission fee bill (e.g., ₹25,000) arrives in the Accounts ledger:
-     - If paid: Transaction is marked reconciled.
-     - If unpaid: Creates a `FeeDefaulter` record with `is_admission_fee = True`.
-2. **Institutional Exam Clearance Override**:
-   - When a student is blocked from downloading an examination hall ticket due to overdue fees, but management agrees to let them write the exam:
-   - Accounts Coordinator toggles **`exam_clearance = True`**.
-   - **Result**: Student's hall ticket unlocks immediately, while the unpaid debt remains legally active in the accounts ledger!
+### ☀️ B. Collections & Hardship Waivers (10:30 AM – 03:00 PM)
+1. **Counter Payment Reconciliation**:
+   - Logs offline bank transfers (NEFT/RTGS) and counter payments with immutable bank reference UTRs.
+   - Generates digitally sealed PDF receipts with verification QR codes.
+2. **Management Hardship Fee Waivers**:
+   - Records authorized fee concessions with mandatory audit metadata (`waiver_amount`, `waiver_reason`, `waiver_approved_by`).
 
 ---
 
@@ -248,37 +218,20 @@ Score Lead Temperature           Log Notes & Set Next Touches     1-Click [Conve
 Statutory Drop Protection        Administer Entrance Evaluations  Auto-Inject Invoice to Accounts
 ```
 
-### 🌅 A. Morning Intake & Pipeline Review (09:00 AM – 10:30 AM)
-1. **Enquiry Pipeline Triage**:
-   - Opens the **Admissions CRM Pipeline**.
-   - Reviews inbound candidate leads across stages: `New Lead` $\to$ `Follow-Up Scheduled` $\to$ `Virtual Tour Booked` $\to$ `Entrance Cleared` $\to$ `Converted to SIS`.
-   - Scores lead temperature:
-     - **Hot**: Immediate enrolment interest; entrance test requested.
-     - **Warm**: Evaluating curriculum and fee structure; callback scheduled.
-     - **Cold**: Unresponsive; automated reminder sent.
+### 🌅 A. Lead Management & Telephonic Outreach
+1. **CRM Pipeline Triage**: Categorizes prospective leads by interest temperature (`Hot`, `Warm`, `Cold`).
+2. **Sibling Detection Rule**: When a prospective parent registers with a mobile number already on file, the system detects existing guardian records, prompting: *"Existing Family on File: Register as Sibling?"*, linking the new student under the existing parent account while provisioning a separate student SIS record.
 
-### ☀️ B. Core Day Telephonic Outreach (10:30 AM – 03:00 PM)
-1. **Call Logging & Next-Touch Scheduling**:
-   - Conducts admissions calls with prospective parents.
-   - Logs call notes directly in candidate dossier.
-   - Sets exact date and time for next follow-up touchpoint.
-2. **Statutory Drop Protection**:
-   - Inactive leads can only be marked `dropped` by selecting a mandatory statutory reason code (`fees_high`, `curriculum_fit`, `distance`). Dropped leads can be restored at any time.
-
-### 🌆 C. The 1-Click Atomic SIS Conversion (03:00 PM – 05:00 PM)
+### ☀️ B. The 1-Click Atomic SIS Conversion
 1. **Candidate Enrolment Handshake**:
-   - When candidate clears virtual entrance evaluation:
-   - Coordinator clicks **`[Convert to SIS]`**, selects Class & Section, enters Admission Fee (e.g. ₹25,000), and uploads candidate intake documents.
-2. **The 3-Way Atomic Database Action**:
-   - **Student Profile**: Creates permanent `Student` record with unique Admission Number (`EDU-2026-XXX`) and active portal access.
-   - **Document Vault**: Promotes candidate birth certificate, marks card, and transfer certificate to `OfficialDocument` in SIS Vault ("Pending Verification").
-   - **Accounts Invoice**: Posts admission fee bill directly into Accounts Coordinator's ledger!
+   - Upon clearing the entrance evaluation, coordinator clicks `[Convert to SIS]`.
+   - **Atomic 3-Way Action**: Mints unique Student Roll Number $\to$ Promotes admission documents to SIS Vault $\to$ Posts tuition fee invoice into Accounts ledger.
 
 ---
 
-## 7. Role 6: Teacher Portal (`/teacher` & `/teacher/focus/[id]`)
+## 7. Role 6: Teacher Portal (`/teacher`)
 
-> **Primary Mission:** Live online class instruction, 10-minute auto-attendance, in-browser SpeedGrader evaluation, 1-Week Remedial Focus Table management, and syllabus logging.
+> **Primary Mission:** Live online class instruction, 10-minute auto-attendance, SpeedGrader canvas marking, 1-Week Remedial Focus Table, Gradebook Lock, and instant parent communication.
 
 ```
                  ┌───────────────────────────────────────────────┐
@@ -287,43 +240,38 @@ Statutory Drop Protection        Administer Entrance Evaluations  Auto-Inject In
                                          │
         ┌────────────────────────────────┼────────────────────────────────┐
         ▼                                ▼                                ▼
-[Morning Live Instruction]       [Afternoon In-Browser Grading]   [Evening Remedial Sprint]
+[Morning Live Instruction]       [Afternoon In-Browser Grading]   [Evening Remedial & Handshake]
 Launch Live Video Class (T=0)    Open SpeedGrader Canvas          Class 8-B Math Focus Table
-10-Min Auto-Attendance Webhook   Digital Red Pen & Stamps         Inspect Student Rough Notebooks
-Present / Late / Absent Tags     Zero File Downloads              Approve Daily Micro-Drills
-1-Click Late Acknowledgment      Marks Locked into SIS            1-Click Syllabus Unit Logging
+10-Min Auto-Attendance Webhook   Digital Red Pen & Stamps         Inspect Rough Notebooks
+Present / Late / Excused Tags    OCR / Paper Studio Marking       One-Time Gradebook Lock
+Review Parent Leave Requests     Marks Sealed & Immutable         Forward to Exam Coordinator
 ```
 
-### 🌅 A. Morning Live Classes & Auto-Attendance (09:00 AM – 01:00 PM)
-1. **Class Launch & Webhook Attendance**:
-   - Teacher starts scheduled live video class at $T = 0$.
-   - Students click `[Join Live Session]`. The FastAPI webhook captures join timestamp $\Delta T$:
-     - $\Delta T \le 10$ mins: Automatically marked **PRESENT**.
-     - $10 < \Delta T \le 25$ mins: Flagged as **LATE** (Teacher acknowledges with 1 click).
-     - $\Delta T > 25$ mins or no join: Automatically marked **ABSENT**.
-   - Teacher wastes zero minutes on manual roll call!
+### 🌅 A. Morning Live Classes & Attendance
+1. **10-Minute Auto-Attendance Engine**:
+   - Captures student join time $\Delta T$: $\le 10$m **Present**, $10-25$m **Late**, $>25$m **Absent**.
+2. **Parent Leave Request Review Handshake**:
+   - In the **Parent Leaves Tab**, teacher reviews medical/casual absence applications.
+   - When teacher clicks `[Approve]`, the student's status updates to `Excused Leave` across attendance rosters, and the Admin Priority Triage unexcused absence radar is dynamically adjusted.
 
-### ☀️ B. Afternoon SpeedGrader Evaluation (01:30 PM – 03:30 PM)
+### ☀️ B. Afternoon SpeedGrader Canvas & Descriptive Paper Evaluation
 1. **In-Browser SpeedGrader Canvas**:
-   - Teacher clicks on pending homework worksheet or exam submission.
-   - Canvas loads student handwritten script inside the browser (zero downloading/saving files).
-   - Selects **Digital Red Pen** (stroke weights 2px, 4px, 8px), checkmarks ($\checkmark$), crosses ($\times$), and rubric marks deduction tags ($-2$ for missing formula step).
-   - Clicks `[Finalize Grade]`. Marks immediately sync to SIS gradebook.
+   - Digital red pen, stamps, warning circles, and text feedback on student homework sheets without downloading local files.
+2. **Descriptive Exam Paper Studio & Gradebook Lock**:
+   - Evaluates descriptive answers with AI assistance and rubric criteria.
+   - **One-Time Gradebook Lock Mandate**:
+     - When all papers are evaluated, teacher clicks `Submit Final Grades to Exam Cell (One-Time Lock)`.
+     - The exam status updates to `is_locked = true`.
+     - Inputs become strictly read-only (`Marks Sealed & Locked`), preventing post-submission alterations and forwarding custody to the Exam Coordinator.
 
-### 🌆 C. The 1-Week Remedial Focus Table (03:30 PM – 05:00 PM)
-1. **Focus Table Management**:
-   - Scoped strictly to teacher's subject (**Mathematics** - Mrs. Ananya Verma) and section (**Class 8-B**).
-   - Students with exam score $\le 70\%$ are enrolled in the 7-day sprint. Students $> 70\%$ are Exempt.
-2. **Rough Notebook Inspection Modal**:
-   - Teacher clicks Day 2 on a student's row.
-   - Modal displays:
-     - **Assigned Question** (e.g. *Solve for $x$: $3x + 5 = 20$*)
-     - **Teacher Rubric Checkpoint** (*Step 1: Subtract 5 from both sides*)
-     - **Photo of Student's Physical Rough Notebook**
-   - Teacher inspects steps and clicks `[Approve ✓]`.
-3. **Workload Relief & Syllabus Logging**:
-   - Logs completed curriculum units with 1 click.
-   - If overloaded with tasks, clicks `[Request Task Relief]` to pause SLA timer without penalty.
+### 🌆 C. Remedial Focus Table & Multi-Subject Parent Chat
+1. **1-Week Remedial Focus Sprint**:
+   - Scoped to teacher's subject (**Mathematics** — Mrs. Ananya Verma) and section (**Class 8-B**).
+   - Students scoring $\le 70\%$ are enrolled in 7-day action plans; students $> 70\%$ are exempt.
+   - Inspects student physical rough notebook photos and approves daily practice.
+2. **Instant Cross-Tab 1-on-1 Parent Chat**:
+   - Teacher responds to parent queries in `/teacher`.
+   - Powered by `BroadcastChannel('edu360_chat_channel')`: Message pushes instantly with **0ms latency** to the parent's open browser tab without polling delay.
 
 ---
 
@@ -338,40 +286,29 @@ Present / Late / Absent Tags     Zero File Downloads              Approve Daily 
                                          │
         ┌────────────────────────────────┼────────────────────────────────┐
         ▼                                ▼                                ▼
-[Morning Live Sessions]          [Afternoon Homework & AI Tutor]  [Evening Remedial Drills]
-1-Click Live Video Join          Submit Homework Before 5:00 PM   Solve Daily Focus Target
-Virtual Presence Radar           AI Socratic Doubt Solver         Write in Physical Rough Book
-(Junior K-5: Adventure Map)      View Red-Pen Graded Worksheets   Upload Photo for Teacher Check
+[Secondary (/student)]           [Junior K–5 (/junior)]           [Evening Remedial Drills]
+1-Click Live Video Join          Adventure Quests & Magic Book    Solve Daily Focus Target
+Homework Submission Dropzone     Phonics In-Browser Audio         Write in Physical Rough Book
+Student Vault & Certs            Star Badges & Quizzes            Upload Photo for Teacher Check
 ```
 
-### 🌅 A. Morning Live Learning (09:00 AM – 01:00 PM)
-1. **Secondary Student Portal (`/student`)**:
-   - Views daily class timetable. Clicks `[Join Live Class]` in 1 click.
-   - Monitors Virtual Presence Radar (audio/video connectivity test).
-2. **Junior K–5 Student Portal (`/junior`)**:
-   - Gamified touch-first interface.
-   - Daily timetable rendered as an **Illustrated Adventure Map**.
-   - Completes interactive daily learning quests.
+### 🎒 A. Secondary Student Portal (`/student` — Classes 6–12)
+1. **Live Sessions & Recordings Archive**: 1-click join links for scheduled live video classes and searchable video recordings.
+2. **Homework Submission**: Uploads worksheet PDFs before the 05:00 PM cutoff.
+3. **Physical Rough Book Practice**: Students on the Focus Table solve daily math micro-drills in their physical rough notebooks, snapping photos for teacher approval.
 
-### ☀️ B. Afternoon Homework & Socratic Tutor (02:00 PM – 05:00 PM)
-1. **Homework Submission Dropzone**:
-   - Uploads homework worksheets before strict daily cutoff (05:00 PM).
-2. **AI Socratic Doubt Tutor**:
-   - When stuck on a math problem, asks the built-in AI Tutor.
-   - The Socratic tutor **never** gives direct answers; it gives step-by-step hints and leading questions to build deep understanding.
-
-### 🌆 C. Remedial Focus Sprint Execution (05:00 PM – 07:00 PM)
-1. **Physical Rough Book Practice**:
-   - If enrolled in Focus Table, student views today's micro-target problem.
-   - Solves problem by hand in their **physical rough notebook**.
-   - Snaps photo using phone/tablet and uploads to portal.
-   - Waits for teacher inspection and nightly parent sign-off.
+### 🎈 B. Junior Elementary Portal (`/junior` — K–5)
+1. **Dedicated Identity Context**: Bound 1:1 to **Ananya Sharma (Class 3-A, Roll #8, Student ID: 7)**.
+2. **Strict 1:1 Student Boundary**: Sibling account switching is removed from student login; children stay in their own age-appropriate dashboard.
+3. **Pure Virtual Learning Environment**: Free from obsolete physical bus radar widgets and administrative clutter.
+4. **Interactive In-Browser Phonics Studio**: Voice feedback and phonetic audio activities execute smoothly in-browser without recording or storing minor voice audio on servers (fully compliant with DPDP Act 2023 & COPPA).
+5. **Magic Homework Book & Star Quizzes**: Playful daily quests with sound fanfares, star badge rewards, and printable worksheets.
 
 ---
 
 ## 9. Role 8: Parent Portal (`/parent`)
 
-> **Primary Mission:** High-signal attendance awareness, 10-minute nightly rough-book co-tracking, anti-spam notices, and instant fee settlement.
+> **Primary Mission:** Isolated multi-child oversight, high-signal attendance awareness, nightly rough-book sign-off, multi-subject teacher chat, and fee payments.
 
 ```
                  ┌───────────────────────────────────────────────┐
@@ -380,32 +317,30 @@ Virtual Presence Radar           AI Socratic Doubt Solver         Write in Physi
                                          │
         ┌────────────────────────────────┼────────────────────────────────┐
         ▼                                ▼                                ▼
-[Morning Class Awareness]        [Daytime Instant Fee Checkout]   [07:30 PM Nightly Co-Tracking]
-Anti-Spam Moving Slider Carousel 2-Second Simulated Bank Checkout Inspect Child's Rough Notebook
-Check Live Virtual Class Radar   Download PDF Receipt with QR     Review Daily Math Micro-Target
-Verify Child Joined on Time      Zero Intrusive Spam NotificationsTap [Nightly Sign-Off] in App
+[Multi-Child Sibling Switcher]   [Daytime Teacher Dialogue]       [07:30 PM Nightly Co-Tracking]
+Toggle: Aarav (8-B) / Ananya (3-A)Multi-Subject 1-on-1 Chat Desk  Inspect Child's Rough Notebook
+Isolated Timetables & Fees       Real-Time Cross-Tab Sync (0ms)   Review Daily Math Micro-Target
+Separate PTM Appointments        Submit Medical Leave Requests    Tap [Nightly Sign-Off] in App
 ```
 
-### 🌅 A. Morning Glance & Anti-Spam Slider (08:30 AM – 09:30 AM)
-1. **Anti-Spam Announcement Slider**:
-   - Routine circulars, cafeteria menus, and holiday notices glide smoothly across a top banner carousel.
-   - Notification tray is kept completely clean, reserved **only** for critical academic alerts.
-2. **Live Virtual Class Radar**:
-   - Checks radar card to verify child has connected to morning live video class.
+### 🌅 A. Multi-Child Sibling Management & Context Switcher
+1. **100% Isolated Child Contexts**:
+   - Header pill switcher toggles between siblings: **Aarav Sharma (Class 8-B)** and **Ananya Sharma (Class 3-A)**.
+   - **Isolation Invariant**: Switching children completely swaps the active academic timetable, teacher roster, homework submissions, and fee accounts.
+   - **Isolated PTM Slots**: Eliminates confusing "shared 10-minute sibling extensions". Each child has their own dedicated conference appointments with their respective grade faculty.
 
-### ☀️ B. Daytime Instant Fee Settlement (Anytime)
-1. **Instant Checkout & PDF Receipt**:
-   - Parent reviews upcoming or overdue fee installments.
-   - Clicks `[Pay Fees Now]`. Simulated 2-second bank authorization completes payment.
-   - Instantly downloads official PDF receipt with verification QR code and line-item breakdown.
+### ☀️ B. Multi-Subject Faculty Chat & Leave Submissions
+1. **Multi-Subject 1-on-1 Faculty Chat**:
+   - Parents select any subject faculty (Mathematics, Science, English, etc.) or Homeroom teacher from the directory.
+   - Powered by `BroadcastChannel('edu360_chat_channel')`: Parent messages and teacher replies push in real time across open tabs with **zero polling lag**.
+2. **Digital Leave Applications**:
+   - Parents submit medical or casual leave requests with attached doctor notes.
+   - Tracks approval stage (`Submitted` $\to$ `Reviewed by Teacher` $\to$ `Attendance Adjusted`).
 
-### 🌙 C. The 10-Minute Nightly Co-Tracking (07:00 PM – 08:30 PM)
-1. **Rough Notebook Physical Verification**:
-   - At 07:00 PM, Parent App receives a high-signal notification: *"Tonight's 10-Minute Remedial Check is Ready"*.
-   - Parent opens **10-Minute Nightly Co-Tracking Hub**.
-   - Shows child's daily math target and teacher's approval status.
-   - Parent physically opens child's physical rough notebook, checks that the problem was written out on paper, and taps **`[Sign-Off Rough Book]`**.
-   - **Result**: Day $N$ is sealed, unlocking Day $N+1$ for tomorrow!
+### 🌙 C. The 10-Minute Nightly Co-Tracking
+1. **Rough Notebook Physical Sign-Off**:
+   - Parent physically inspects the child's handwritten math solution in their physical rough book.
+   - Taps **`[Sign-Off Rough Book]`** to seal Day $N$ and advance the student to Day $N+1$.
 
 ---
 
@@ -415,16 +350,20 @@ The table below summarizes the exact inputs, outputs, and trigger paths connecti
 
 | Triggering Role | Action Executed | Receiving Role | Automated System Reaction |
 | :--- | :--- | :--- | :--- |
+| **Parent** | Submits Leave Request | **Teacher Portal** | Alerts teacher in Leave Review queue with medical notes & dates. |
+| **Teacher** | Approves Leave Request | **SIS Attendance & Admin Triage** | Updates attendance to `Excused Leave` and filters student from Admin Chronic Absenteeism alert. |
+| **Teacher** | Clicks `[Submit Final Grades (Lock)]` | **Exam Coordinator** | Seals gradebook (`is_locked = true`), disables further teacher edits, and enables report card release. |
+| **Exam Coord** | Generates Batch Report Cards | **Parent & Student Vault** | Compiles verified subject scores and Gemini AI qualitative remarks into official report cards. |
+| **Teacher / Parent** | Sends Chat Message | **Cross-Tab Real-Time Sync** | `BroadcastChannel` pushes message with 0ms delay across open parent and teacher tabs. |
+| **Parent Switcher** | Toggles Child (Aarav $\leftrightarrow$ Ananya) | **Parent Portal View** | Completely swaps academic context, teacher directory, fee milestones, and PTM slots with zero cross-leakage. |
+| **Admissions** | Enquires with Existing Parent Phone | **Admissions CRM** | Auto-detects existing family on file; prompts to register as sibling under same guardian account. |
 | **Admissions** | Clicks `[Convert to SIS]` | **Student & Accounts** | Mints Roll No, vaults intake documents, and creates fee invoice in Accounts ledger. |
 | **Student** | Clicks `[Join Live Class]` | **Teacher & SIS** | Webhook records timestamp: $\le 10$m Present, $10-25$m Late, $>25$m Absent. |
-| **Attendance Engine**| 3 Consecutive Absences | **Super Admin & Parent**| Triggers CRITICAL RED alert on Admin dashboard + priority WhatsApp notice to parent. |
-| **Teacher** | Grades Exam $\le 70\%$ | **Focus Table & Student**| Auto-enrolls student in 1-Week Remedial Focus Sprint (Class 8-B Math). |
-| **Student** | Uploads Rough Note Photo | **Teacher Portal** | Previews student solution alongside assigned question & rubric checkpoint. |
-| **Parent** | Taps `[Sign-Off Rough Book]`| **Student & Focus Table**| Verifies Day $N$ rough practice, advancing student to Day $N+1$. |
+| **Teacher** | Grades Exam $\le 70\%$ | **Focus Table & Student** | Auto-enrolls student in 1-Week Remedial Focus Sprint (Class 8-B Math). |
+| **Parent** | Taps `[Sign-Off Rough Book]` | **Student & Focus Table** | Verifies Day $N$ rough practice, advancing student to Day $N+1$. |
 | **Clock Engine** | 05:00 PM Cutoff Passes | **Teacher & Parent** | Sweeps unsubmitted homework, transitions to `BACKLOG`, mints `#EVD-BKLOG-X`. |
 | **Teacher** | Submits Sick Leave | **Academic Coord** | AI Timetable Governor matches free peer faculty; 1-click assigns `SUBSTITUTION_COVER`. |
-| **Teacher** | Clicks `[Request Task Relief]`| **Academic Coord** | Pauses SLA timer; Coordinator grants $+12$h to $+72$h extension or migrates task. |
-| **Accounts** | Toggles `[Exam Clearance]` | **Exam Coordinator** | Unlocks student exam hall ticket download without deleting unpaid fee balance. |
+| **Teacher** | Clicks `[Request Task Relief]` | **Academic Coord** | Pauses SLA timer; Coordinator grants $+12$h to $+72$h extension or migrates task. |
 | **Super Admin** | Applies Digital Seal | **Parent & SIS Vault** | Seals Transfer Certificate with Parent OTP + Scanned Hardcopy (Zero Legal Dispute). |
 
 ---

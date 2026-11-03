@@ -453,14 +453,14 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
               onClick={() => handleBookDemo('student', 'admission')}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-600/25"
             >
-              <span>🎓 Apply for Admission</span>
+              <span>Apply for Admission</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleBookDemo('admin', 'demo')}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/25"
             >
-              <span>📅 Book School Demo</span>
+              <span>Book School Demo</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <Link

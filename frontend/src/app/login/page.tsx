@@ -1,4 +1,5 @@
 'use client';
+import { Footer } from '@/components/footer';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -228,6 +229,7 @@ export default function LoginPage() {
         <p className="text-center text-[11px] text-slate-400 dark:text-slate-600 mt-6">
           Encrypted Institutional Node • EDU360 Unified Outcomes
         </p>
+        <Footer className="mt-4 border-t-0 py-2" />
       </div>
     </div>
   );

@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, 
+  Users,
+  FileText, 
   CheckCircle2, 
   Sparkles, 
   Plus, 
@@ -33,8 +34,10 @@ import {
   Eye,
   ShieldCheck,
   Upload,
-  ExternalLink
+  ExternalLink,
+  FileSpreadsheet
 } from 'lucide-react';
+import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { AdmissionEnquiry } from '@/lib/types';
@@ -55,6 +58,23 @@ export default function AdmissionsCoordinatorPage() {
   const [enquiries, setEnquiries] = useState<AdmissionEnquiry[]>([]);
   const [crmFilter, setCrmFilter] = useState<CrmFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // ── Bulk Import Modal State ──
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [bulkCsvText, setBulkCsvText] = useState('');
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkPreviewRows, setBulkPreviewRows] = useState<Array<{
+    student_name: string;
+    target_grade: string;
+    parent_name: string;
+    phone: string;
+    source: string;
+    lead_temperature: 'hot' | 'warm' | 'cold';
+    notes: string;
+    next_followup_date: string;
+    isValid: boolean;
+    errorMsg?: string;
+  }>>([]);
 
   // Modals
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -218,6 +238,133 @@ export default function AdmissionsCoordinatorPage() {
     setEnquiries(updated);
     const label = docKey === 'doc_report_card' ? 'Report Card' : docKey === 'doc_birth_cert' ? 'Birth Certificate' : 'Transfer Certificate';
     triggerToast(`${label} ${updatedVal ? 'collected ✓' : 'marked pending'}`);
+  };
+
+  // ── Parse Bulk CSV Text ──
+  const handleParseCsvInput = (text: string) => {
+    setBulkCsvText(text);
+    if (!text.trim()) {
+      setBulkPreviewRows([]);
+      return;
+    }
+
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length === 0) {
+      setBulkPreviewRows([]);
+      return;
+    }
+
+    // Check if line 0 is a header row
+    const firstLineLower = lines[0].toLowerCase();
+    const hasHeader = firstLineLower.includes('name') || firstLineLower.includes('student') || firstLineLower.includes('phone') || firstLineLower.includes('grade');
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+
+    const parsed = dataLines.map((line, idx) => {
+      // Split by comma or tab, taking quotes into account
+      const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(p => p.trim().replace(/^["]|["]$/g, ''));
+      
+      const student_name = parts[0] || '';
+      const target_grade = parts[1] || 'Grade 8';
+      const parent_name = parts[2] || 'Parent / Guardian';
+      const rawPhone = parts[3] || '';
+      const source = parts[4] || 'Website';
+      const tempRaw = (parts[5] || 'warm').toLowerCase();
+      const lead_temperature: 'hot' | 'warm' | 'cold' = 
+        tempRaw.includes('hot') ? 'hot' : tempRaw.includes('cold') ? 'cold' : 'warm';
+      const notes = parts[6] || 'Bulk imported inquiry';
+      const next_followup_date = parts[7] || todayStr;
+
+      // Validate
+      const isValid = student_name.trim().length >= 2 && rawPhone.trim().length >= 7;
+      let errorMsg = '';
+      if (student_name.trim().length < 2) errorMsg = 'Student name required';
+      else if (rawPhone.trim().length < 7) errorMsg = 'Valid phone number required';
+
+      return {
+        student_name: student_name.trim(),
+        target_grade: target_grade.trim(),
+        parent_name: parent_name.trim(),
+        phone: rawPhone.trim(),
+        source: source.trim(),
+        lead_temperature,
+        notes: notes.trim(),
+        next_followup_date: next_followup_date.trim(),
+        isValid,
+        errorMsg
+      };
+    });
+
+    setBulkPreviewRows(parsed);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        handleParseCsvInput(content);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDownloadSampleCsv = () => {
+    const sample = `student_name,target_grade,parent_name,phone,source,lead_temperature,notes,next_followup_date
+Aarav Sharma,Grade 8,Dr. Rajeev Sharma,+91 98490 22114,Website,hot,Inquired for CBSE Class 8 Science,2026-10-30
+Meera Patel,Grade 6,Suresh Patel,+91 98220 11223,Walk-in,warm,Relocating from Pune in November,2026-11-02
+Kavya Reddy,Grade 9,Venkatesh Reddy,+91 97010 33445,Referral,hot,Interested in IIT Foundation stream,2026-10-29
+Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested fee structure brochure,2026-11-05`;
+
+    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'admission_enquiries_bulk_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    triggerToast('Sample CSV template downloaded!');
+  };
+
+  const handleExecuteBulkImport = async () => {
+    const validRows = bulkPreviewRows.filter(r => r.isValid);
+    if (validRows.length === 0) {
+      triggerToast('No valid inquiries to import. Please check format.');
+      return;
+    }
+
+    setBulkImporting(true);
+    let count = 0;
+    for (const row of validRows) {
+      try {
+        await api.createEnquiry({
+          student_name: row.student_name,
+          parent_name: row.parent_name,
+          email: `${row.student_name.toLowerCase().replace(/\s+/g, '.')}@inquiry.local`,
+          phone: row.phone,
+          target_grade: row.target_grade,
+          lead_temperature: row.lead_temperature,
+          source: row.source,
+          notes: row.notes,
+          next_followup_date: row.next_followup_date
+        });
+        count++;
+      } catch (err) {
+        console.error('Error importing lead:', row, err);
+      }
+    }
+
+    const updated = await api.getEnquiries();
+    setEnquiries(updated);
+    setBulkImporting(false);
+    setShowBulkImportModal(false);
+    setBulkCsvText('');
+    setBulkPreviewRows([]);
+    triggerToast(`✓ Successfully imported ${count} new student inquiries into the Admissions Pipeline!`);
   };
 
   // 4. Register New Enquiry
@@ -436,7 +583,7 @@ export default function AdmissionsCoordinatorPage() {
         />
       )}
 
-      {/* ── Left Sidebar ── */}
+      {/* ── Left Sidebar (Vertical Calling Menu) ── */}
       <aside className={`
         fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
         h-screen md:h-[calc(100vh-4rem)] md:self-start
@@ -501,6 +648,7 @@ export default function AdmissionsCoordinatorPage() {
               </span>
             )}
             {[
+              { id: 'all', label: 'All Inquiries', icon: Users, badge: `${enquiries.length}`, badgeType: 'slate' },
               { id: 'due_today', label: "Today's Calling Queue", icon: BellRing, badge: dueTodayCount > 0 ? `${dueTodayCount} Due` : 'Clear', badgeType: dueTodayCount > 0 ? 'amber' : 'emerald' },
               { id: 'hot', label: "Hot Leads 🔥", icon: Flame, badge: `${hotCount}`, badgeType: 'rose' },
               { id: 'active', label: 'All Active Leads', icon: Users, badge: `${activeCount}`, badgeType: 'blue' },
@@ -571,9 +719,10 @@ export default function AdmissionsCoordinatorPage() {
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
+
             <button
               onClick={() => setMobileDrawerOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer"
               title="Open Sidebar"
             >
               <Menu className="h-5 w-5" />
@@ -591,25 +740,41 @@ export default function AdmissionsCoordinatorPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5 text-sky-600" />
-              <span>Export Pipeline</span>
-            </button>
-            <button
-              onClick={() => {
-                setRegPhoneError(null);
-                setShowRegisterModal(true);
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Register New Enquiry</span>
-            </button>
-          </div>
+          {/* Action Buttons: ONLY visible in All Inquiries / Active Pipeline view as requested */}
+          {(crmFilter === 'all' || crmFilter === 'active') && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleExportCsv}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 text-sky-600" />
+                <span>Export Pipeline</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setBulkCsvText('');
+                  setBulkPreviewRows([]);
+                  setShowBulkImportModal(true);
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>Bulk Import (CSV/Excel)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setRegPhoneError(null);
+                  setShowRegisterModal(true);
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Register New Enquiry</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── PRIORITY BANNER: Today's Calling Queue ── */}
@@ -660,17 +825,25 @@ export default function AdmissionsCoordinatorPage() {
           </div>
         </div>
 
-        {/* ── Search Bar & Pipeline Total ── */}
+        {/* ── Search Bar & View Title ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
             <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <span>Admissions Calling Pipeline</span>
+            <span>
+              {crmFilter === 'due_today' ? "Today's Calling Queue"
+                : crmFilter === 'hot' ? "Hot Leads (High Intent)"
+                : crmFilter === 'active' ? "All Active Leads"
+                : crmFilter === 'followup' ? "Scheduled Follow-ups Pipeline"
+                : crmFilter === 'converted' ? "Enrolled Students (SIS)"
+                : crmFilter === 'dropped' ? "Dropped / Archived Inquiries"
+                : "All Inquiries"}
+            </span>
             <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 text-[11px] font-mono">
               {filteredEnquiries.length} Inquiries
             </span>
           </div>
 
-          {/* Search */}
+          {/* Search Box */}
           <div className="relative min-w-[260px] sm:min-w-[320px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
@@ -681,47 +854,6 @@ export default function AdmissionsCoordinatorPage() {
               className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
-        </div>
-
-        {/* ── Horizontal Filter Tabs Bar ── */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {[
-            { id: 'all', label: 'All Inquiries', count: enquiries.length, icon: Users, badgeType: 'slate' },
-            { id: 'due_today', label: "Today's Calls", count: dueTodayCount, icon: BellRing, badgeType: 'amber' },
-            { id: 'hot', label: 'Hot Leads', count: hotCount, icon: Flame, badgeType: 'rose' },
-            { id: 'active', label: 'Active Pipeline', count: activeCount, icon: Users, badgeType: 'blue' },
-            { id: 'followup', label: 'Follow-ups', count: followupCount, icon: Calendar, badgeType: 'blue' },
-            { id: 'converted', label: 'Enrolled (SIS)', count: convertedCount, icon: UserCheck, badgeType: 'emerald' },
-            { id: 'dropped', label: 'Dropped', count: droppedCount, icon: UserX, badgeType: 'slate' }
-          ].map(tab => {
-            const active = crmFilter === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setCrmFilter(tab.id as CrmFilter)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all cursor-pointer ${
-                  active
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Icon className={`h-3.5 w-3.5 ${active ? 'text-white' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                  active 
-                    ? 'bg-blue-500/50 text-white' 
-                    : tab.badgeType === 'rose' && tab.count > 0
-                    ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300'
-                    : tab.badgeType === 'amber' && tab.count > 0
-                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
         </div>
 
         {/* ── Enquiry Cards Grid ── */}
@@ -887,7 +1019,7 @@ export default function AdmissionsCoordinatorPage() {
                           title="Add New Follow-Up Call & Outcome"
                         >
                           <PhoneCall className="h-3.5 w-3.5" />
-                          <span>+ Add Follow-up</span>
+                          <span>Add Follow-up</span>
                         </button>
                         <button
                           type="button"
@@ -939,7 +1071,8 @@ export default function AdmissionsCoordinatorPage() {
             })}
           </div>
         )}
-      </main>
+        <Footer />
+        </main>
 
       {/* ── MODAL 1: LOG CALL OUTCOME (COMPLETE CALL) ── */}
       {callModalEnquiry && (
@@ -1063,6 +1196,242 @@ export default function AdmissionsCoordinatorPage() {
         </div>
       )}
 
+      {/* ── MODAL: Bulk Import Prospective Student Inquiries (CSV / Excel) ── */}
+      {showBulkImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shadow-xs">
+                  <FileSpreadsheet className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                    Bulk Import Student Inquiries (CSV / Excel)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Fast-track prospective student onboarding matching the standard enquiry intake form.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowBulkImportModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Step 1: Format Guidance & Example Table */}
+            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center">
+                    1
+                  </span>
+                  <span className="text-xs font-black text-emerald-950 dark:text-emerald-200">
+                    Required Column Format (Matching Standard Single Registration)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleCsv}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-xs font-bold shadow-xs hover:bg-emerald-50 dark:hover:bg-slate-700 transition-all cursor-pointer self-start sm:self-auto"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download Example CSV Template</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-emerald-900/80 dark:text-emerald-300/80 leading-relaxed">
+                Your CSV or Excel columns should follow this structure. You can download the pre-filled template above or copy-paste directly.
+              </p>
+
+              {/* Example Format Visual Table */}
+              <div className="overflow-x-auto rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-white/80 dark:bg-slate-900/80">
+                <table className="w-full text-left text-[11px] border-collapse font-sans">
+                  <thead>
+                    <tr className="bg-emerald-100/60 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold border-b border-emerald-200/60 dark:border-emerald-900/40">
+                      <th className="p-2">student_name *</th>
+                      <th className="p-2">target_grade *</th>
+                      <th className="p-2">parent_name *</th>
+                      <th className="p-2">phone *</th>
+                      <th className="p-2">source</th>
+                      <th className="p-2">lead_temperature</th>
+                      <th className="p-2">notes</th>
+                      <th className="p-2">next_followup_date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100/50 dark:divide-emerald-900/20 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
+                    <tr>
+                      <td className="p-2 font-bold font-sans">Aarav Sharma</td>
+                      <td className="p-2">Grade 8</td>
+                      <td className="p-2 font-sans">Dr. Rajeev Sharma</td>
+                      <td className="p-2">+91 98490 22114</td>
+                      <td className="p-2">Website</td>
+                      <td className="p-2 text-rose-600 font-bold">hot</td>
+                      <td className="p-2 font-sans truncate max-w-[120px]">CBSE Class 8 Inquiry</td>
+                      <td className="p-2">2026-10-30</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold font-sans">Meera Patel</td>
+                      <td className="p-2">Grade 6</td>
+                      <td className="p-2 font-sans">Suresh Patel</td>
+                      <td className="p-2">+91 98220 11223</td>
+                      <td className="p-2">Walk-in</td>
+                      <td className="p-2 text-amber-600 font-bold">warm</td>
+                      <td className="p-2 font-sans truncate max-w-[120px]">Relocating from Pune</td>
+                      <td className="p-2">2026-11-02</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Step 2: Upload or Paste CSV */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center">
+                    2
+                  </span>
+                  <label className="text-xs font-black text-slate-900 dark:text-white">
+                    Upload CSV File OR Paste Raw CSV Rows
+                  </label>
+                </div>
+
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Browse .CSV File</span>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,text/plain"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              <textarea
+                rows={5}
+                value={bulkCsvText}
+                onChange={e => handleParseCsvInput(e.target.value)}
+                placeholder="Paste CSV rows here (e.g. Aarav Sharma, Grade 8, Dr. Rajeev Sharma, 9849022114, Website, hot, CBSE admission, 2026-10-30)..."
+                className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 font-mono text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            {/* Step 3: Parsed Rows Preview & Validation */}
+            {bulkPreviewRows.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center">
+                      3
+                    </span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                      Parsed Leads Preview ({bulkPreviewRows.filter(r => r.isValid).length} Valid, {bulkPreviewRows.filter(r => !r.isValid).length} Invalid)
+                    </span>
+                  </div>
+
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    bulkPreviewRows.every(r => r.isValid)
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                  }`}>
+                    {bulkPreviewRows.filter(r => r.isValid).length} Ready for Pipeline
+                  </span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-bold sticky top-0">
+                      <tr>
+                        <th className="p-2.5">Status</th>
+                        <th className="p-2.5">Student</th>
+                        <th className="p-2.5">Grade</th>
+                        <th className="p-2.5">Parent</th>
+                        <th className="p-2.5">Phone</th>
+                        <th className="p-2.5">Priority</th>
+                        <th className="p-2.5">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                      {bulkPreviewRows.map((row, idx) => (
+                        <tr key={idx} className={row.isValid ? '' : 'bg-rose-50/50 dark:bg-rose-950/20'}>
+                          <td className="p-2.5">
+                            {row.isValid ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                <Check className="h-3 w-3" />
+                                Valid
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800" title={row.errorMsg}>
+                                <AlertCircle className="h-3 w-3" />
+                                {row.errorMsg || 'Invalid'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.student_name || '—'}</td>
+                          <td className="p-2.5 font-medium">{row.target_grade}</td>
+                          <td className="p-2.5">{row.parent_name}</td>
+                          <td className="p-2.5 font-mono text-[11px]">{row.phone}</td>
+                          <td className="p-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              row.lead_temperature === 'hot'
+                                ? 'bg-rose-100 text-rose-700'
+                                : row.lead_temperature === 'cold'
+                                ? 'bg-slate-100 text-slate-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {row.lead_temperature}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-slate-500 truncate max-w-[120px]">{row.notes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowBulkImportModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={bulkImporting || bulkPreviewRows.filter(r => r.isValid).length === 0}
+                onClick={handleExecuteBulkImport}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              >
+                {bulkImporting ? (
+                  <>
+                    <RotateCcw className="h-4 w-4 animate-spin" />
+                    <span>Importing into Pipeline...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="h-4 w-4" />
+                    <span>Import {bulkPreviewRows.filter(r => r.isValid).length} Inquiries into Pipeline</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* ── MODAL 2: REGISTER NEW ENQUIRY (WITH SOURCE & PRIORITY) ── */}
       {showRegisterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
@@ -1175,24 +1544,7 @@ export default function AdmissionsCoordinatorPage() {
                 </div>
               </div>
 
-              {/* Initial Docs Check */}
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Documents Already Submitted:</span>
-                <div className="flex items-center gap-4 text-slate-700 dark:text-slate-300 font-medium">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={regDocReportCard} onChange={e => setRegDocReportCard(e.target.checked)} className="rounded" />
-                    <span>Report Card</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={regDocBirthCert} onChange={e => setRegDocBirthCert(e.target.checked)} className="rounded" />
-                    <span>Birth/ID</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={regDocTransferCert} onChange={e => setRegDocTransferCert(e.target.checked)} className="rounded" />
-                    <span>TC</span>
-                  </label>
-                </div>
-              </div>
+
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1239,55 +1591,91 @@ export default function AdmissionsCoordinatorPage() {
       {/* ── MODAL 3: 1-CLICK SIS CONVERT ── */}
       {convertModalEnquiry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
-                  ✓
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                  🎓
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">1-Click SIS Enrollment</h3>
-                  <p className="text-[11px] text-slate-500">Promote enquiry to active Student Profile</p>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">1-Click SIS Enrollment &amp; Dossier</h3>
+                  <p className="text-[11px] text-slate-500">Verify documents and promote lead to active Student Profile</p>
                 </div>
               </div>
-              <button onClick={() => setConvertModalEnquiry(null)} className="cursor-pointer">
-                <X className="h-4 w-4 text-slate-400 hover:text-slate-600 dark:hover:text-white" />
+              <button onClick={() => setConvertModalEnquiry(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3.5 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Student Name:</span>
+                  <span className="text-slate-500 font-medium">Student Name:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.student_name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Grade / Class:</span>
+                  <span className="text-slate-500 font-medium">Grade / Target Class:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.target_grade}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Parent &amp; Phone:</span>
+                  <span className="text-slate-500 font-medium">Parent &amp; Phone:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.parent_name} ({convertModalEnquiry.phone})</span>
                 </div>
               </div>
 
-              {/* Document Readiness Summary */}
-              <div className={`p-2.5 rounded-xl border text-[11px] font-semibold ${
-                convertModalEnquiry.doc_report_card && convertModalEnquiry.doc_birth_cert
-                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-              }`}>
-                {convertModalEnquiry.doc_report_card && convertModalEnquiry.doc_birth_cert ? (
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    Essential Academic Documents Verified (Ready for Enrollment)
+              {/* Mandatory Document Verification & TC Upload Vault */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                    Document Verification &amp; TC Upload Vault
                   </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                    Note: Report Card or Birth Cert pending (Can enroll provisionally)
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                    3/4 Documents Ready
                   </span>
-                )}
+                </div>
+
+                <div className="space-y-2 text-[11px]">
+                  {/* Transfer Certificate (TC / SLC) */}
+                  <div className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="h-4 w-4 text-blue-600 shrink-0" />
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white block">Transfer Certificate (TC / SLC) *</span>
+                        <span className="text-[10px] text-slate-500">Official migration slip from previous recognized school</span>
+                      </div>
+                    </div>
+                    <label className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] cursor-pointer shadow-xs transition-all flex items-center gap-1">
+                      <Upload className="h-3 w-3" />
+                      <span>Attach TC</span>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            alert(`Transfer Certificate attached: ${e.target.files[0].name}`);
+                          }
+                        }} 
+                      />
+                    </label>
+                  </div>
+
+                  {/* Other Vital Documents */}
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Birth Certificate</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Marks Card</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Aadhaar Card</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1338,28 +1726,49 @@ export default function AdmissionsCoordinatorPage() {
                   </div>
                 </div>
 
-                {convertFeeStatus === 'Paid' ? (
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Payment Method</label>
-                    <select
-                      value={convertPaymentMethod}
-                      onChange={e => setConvertPaymentMethod(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
-                    >
-                      <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
-                      <option value="Bank POS Card">Bank POS Debit/Credit Card</option>
-                      <option value="Cash Counter">Cash Counter Settlement</option>
-                      <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
-                    </select>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                      ✓ Instant receipt will be issued &amp; forwarded to Accounts Coordinator for bank reconciliation.
-                    </p>
+                {/* Dynamic Payment Method: Disabled when Pending, Enabled/Popped when Paid */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                      Payment Method
+                    </label>
+                    {convertFeeStatus === 'Pending' ? (
+                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">
+                        Disabled (Pending Status)
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
+                        Active Immediate Receipt
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
-                    ⏳ Unpaid invoice of ₹{convertAdmissionFee.toLocaleString()} will immediately pop into the Accounts Coordinator recovery queue.
-                  </p>
-                )}
+                  <select
+                    disabled={convertFeeStatus === 'Pending'}
+                    value={convertPaymentMethod}
+                    onChange={e => setConvertPaymentMethod(e.target.value)}
+                    className={`w-full rounded-xl border p-2 text-xs font-bold transition-all ${
+                      convertFeeStatus === 'Pending'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-400 cursor-not-allowed opacity-50'
+                        : 'border-emerald-500/60 dark:border-emerald-500/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white ring-2 ring-emerald-500/20 animate-in fade-in zoom-in-95'
+                    }`}
+                  >
+                    <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
+                    <option value="Bank POS Card">Bank POS Debit/Credit Card</option>
+                    <option value="Cash Counter">Cash Counter Settlement</option>
+                    <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
+                  </select>
+                  {convertFeeStatus === 'Pending' ? (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      Mode of payment is locked because collection status is set to Pending. Accounts team will collect later.
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-1">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      Instant receipt will be issued &amp; forwarded to Accounts Coordinator for bank reconciliation.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -1376,70 +1785,10 @@ export default function AdmissionsCoordinatorPage() {
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  Confirm &amp; Enroll in SIS
+                  <span>Confirm &amp; Enroll in SIS</span>
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL 4: STANDALONE DROP LEAD ── */}
-      {dropModalEnquiry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Mark Lead as Dropped</h3>
-                <p className="text-[11px] text-slate-500">{dropModalEnquiry.student_name} ({dropModalEnquiry.parent_name})</p>
-              </div>
-              <button onClick={() => setDropModalEnquiry(null)} className="cursor-pointer">
-                <X className="h-4 w-4 text-slate-400 hover:text-slate-600 dark:hover:text-white" />
-              </button>
-            </div>
-            <form onSubmit={handleConfirmStandaloneDrop} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Reason for Dropping *</label>
-                <select 
-                  value={standaloneDropReason} 
-                  onChange={e => setStandaloneDropReason(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
-                >
-                  <option value="Fee Structure High">Fee Structure High (Budget Mismatch)</option>
-                  <option value="Timing Conflict">Online Timing / Schedule Conflict</option>
-                  <option value="Joined Another School">Joined Another School / Competitor</option>
-                  <option value="Not Interested / Invalid Contact">Not Interested / Phone Unreachable</option>
-                  <option value="Other">Other / Personal Reasons</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Additional Remarks (Optional)</label>
-                <textarea 
-                  rows={2}
-                  value={standaloneDropNote} 
-                  onChange={e => setStandaloneDropNote(e.target.value)} 
-                  placeholder="e.g. Parent enrolled in another local school." 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setDropModalEnquiry(null)}
-                  className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer"
-                >
-                  Confirm Drop
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

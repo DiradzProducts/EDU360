@@ -27,7 +27,6 @@ import {
   Coffee,
   Utensils,
   GraduationCap,
-  Bus,
   CheckSquare
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -53,18 +52,49 @@ interface FacultyProfile {
   weakConcepts?: string[];
   homeroomHighlights?: {
     attendancePct: number;
-    busRoute: string;
+    virtualClassroom: string;
     leaveStatus: string;
     conduct: string;
   };
 }
 
-export function ParentPtmView() {
-  // Homeroom Class Teacher
-  const homeroomTeacher: FacultyProfile = {
+interface ParentPtmViewProps {
+  studentId?: number;
+  studentName?: string;
+  className?: string;
+  homeroomFaculty?: string;
+}
+
+export function ParentPtmView({
+  studentId = 1,
+  studentName = 'Aarav Sharma',
+  className = 'Class 8-B',
+  homeroomFaculty = 'Mrs. Ananya Verma'
+}: ParentPtmViewProps = {}) {
+  const isPrimaryKid = studentId === 7 || (className && (className.includes('3') || className.toLowerCase().includes('primary')));
+
+  // Dynamically resolve Homeroom Class Teacher scoped strictly to the selected child
+  const homeroomTeacher: FacultyProfile = isPrimaryKid ? {
+    id: 'priya',
+    name: homeroomFaculty || 'Ms. Priya Nair',
+    role: `Primary Homeroom In-Charge (${className || 'Class 3-A'}) & Early Years Mentor`,
+    subject: 'Early Child Development & Foundational Growth',
+    email: 'priya.nair@edu360.internal',
+    phone: '+91 98111 00007',
+    officeHours: 'Mon - Fri • 02:30 PM - 03:30 PM',
+    avatarBg: 'bg-emerald-600',
+    status: 'Available for PTM',
+    scopeType: 'HOMEROOM_CLASS',
+    homeroomHighlights: {
+      attendancePct: 98.2,
+      virtualClassroom: `Virtual Room ${className || '3-A'} (Junior Interactive Pod)`,
+      leaveStatus: 'All Approved (0 Pending)',
+      conduct: 'Highly Creative, Enthusiastic & Artistic Explorer'
+    }
+  } : {
     id: 'ananya',
-    name: 'Mrs. Ananya Verma',
-    role: 'Homeroom Class Teacher (Class 8-B In-Charge) & Senior Academic Mentor',
+    name: homeroomFaculty || 'Mrs. Ananya Verma',
+    role: `Homeroom Class Teacher (${className || 'Class 8-B'} In-Charge) & Senior Academic Mentor`,
     subject: 'Homeroom Coordination & Holistic Mentorship',
     email: 'ananya.verma@edu360.internal',
     phone: '+91 98111 00002',
@@ -74,14 +104,57 @@ export function ParentPtmView() {
     scopeType: 'HOMEROOM_CLASS',
     homeroomHighlights: {
       attendancePct: 94.2,
-      busRoute: 'Bus #12 • Route B (Pickup 07:45 AM • Drop 03:45 PM)',
+      virtualClassroom: `Virtual Room ${className || '8-B'} (Google Meet & Zoom Enterprise Pro Active)`,
       leaveStatus: 'All Approved (0 Pending Applications)',
       conduct: 'Exemplary Leadership & STEM Club Representative'
     }
   };
 
-  // Subject Faculty Directory
-  const subjectTeachers: FacultyProfile[] = [
+  // Dynamically resolve Subject Faculty Directory scoped strictly to the selected child
+  const subjectTeachers: FacultyProfile[] = isPrimaryKid ? [
+    {
+      id: 'priya_story',
+      name: 'Ms. Priya Nair',
+      role: 'Early Literacy & Phonics Specialist',
+      subject: 'Phonics & Story Magic',
+      email: 'priya.nair@edu360.internal',
+      phone: '+91 98111 00007',
+      officeHours: 'Mon, Wed • 02:30 PM - 03:30 PM',
+      avatarBg: 'bg-pink-600',
+      status: 'Available for PTM',
+      scopeType: 'SUBJECT_SPECIFIC',
+      masteryPct: 92,
+      weakConcepts: ['Blended Consonants & Silent E']
+    },
+    {
+      id: 'kavita_math',
+      name: 'Mrs. Kavita Reddy',
+      role: 'Primary Numeracy & Mental Math Mentor',
+      subject: 'Foundational Mathematics',
+      email: 'kavita.reddy@edu360.internal',
+      phone: '+91 98111 22339',
+      officeHours: 'Tue, Thu • 02:30 PM - 03:30 PM',
+      avatarBg: 'bg-amber-600',
+      status: 'Available for PTM',
+      scopeType: 'SUBJECT_SPECIFIC',
+      masteryPct: 84,
+      weakConcepts: ['2-Digit Carry-Over Addition']
+    },
+    {
+      id: 'sneha_evs',
+      name: 'Ms. Sneha Joshi',
+      role: 'Environmental Studies & Creative Arts Lead',
+      subject: 'EVS & Art Expression',
+      email: 'sneha.joshi@edu360.internal',
+      phone: '+91 98111 22340',
+      officeHours: 'Wed, Fri • 02:00 PM - 03:00 PM',
+      avatarBg: 'bg-teal-600',
+      status: 'Available for PTM',
+      scopeType: 'SUBJECT_SPECIFIC',
+      masteryPct: 95,
+      weakConcepts: ['Plant Life Cycles']
+    }
+  ] : [
     {
       id: 'sunitha',
       name: 'Mrs. Sunitha Rao',
@@ -144,6 +217,11 @@ export function ParentPtmView() {
   const [activeSubTab, setActiveSubTab] = useState<'ptm' | 'notes'>('ptm');
   const [targetTeacher, setTargetTeacher] = useState<FacultyProfile>(homeroomTeacher);
 
+  // Synchronize targetTeacher when parent switches children
+  useEffect(() => {
+    setTargetTeacher(homeroomTeacher);
+  }, [studentId, className]);
+
   // Notes state
   const [notes, setNotes] = useState<ParentTeacherNote[]>([]);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -160,13 +238,8 @@ export function ParentPtmView() {
   const [slots, setSlots] = useState<PTMSlot[]>([]);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState<PTMSlot | null>(null);
   const [ptmModalOpen, setPtmModalOpen] = useState(false);
-  const [isSiblingChaining, setIsSiblingChaining] = useState(false);
-  const [selectedAgendas, setSelectedAgendas] = useState<string[]>(['Algebraic Fractions', 'Midterm Unit Test Review']);
+  const [selectedAgendas, setSelectedAgendas] = useState<string[]>(['Midterm Unit Test Review', 'Mastery Progress']);
   const [ptmBookingSuccess, setPtmBookingSuccess] = useState(false);
-
-  // Sibling alert visibility
-  const [showSiblingPrompt, setShowSiblingPrompt] = useState(false);
-  const [siblingCandidateSlot, setSiblingCandidateSlot] = useState<PTMSlot | null>(null);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -179,7 +252,7 @@ export function ParentPtmView() {
         const [configRes, slotsRes, notesRes] = await Promise.all([
           api.getParentPTMEventConfig(),
           api.getParentPTMSlots(),
-          api.getParentNotes(1)
+          api.getParentNotes(studentId)
         ]);
         setPtmConfig(configRes);
         setSlots(slotsRes);
@@ -189,7 +262,7 @@ export function ParentPtmView() {
       }
     }
     loadParentPtmData();
-  }, []);
+  }, [studentId]);
 
   // Slide Timeline left/right
   const scrollTimeline = (direction: 'left' | 'right') => {
@@ -211,91 +284,7 @@ export function ParentPtmView() {
     }
 
     setSelectedSlotForBooking(slot);
-
-    // Sibling detection logic: Check if next slot is available (e.g. 10:20 AM and 10:30 AM)
-    const slotIdx = slots.findIndex(s => s.id === slot.id);
-    const nextSlot = slotIdx >= 0 && slotIdx + 1 < slots.length ? slots[slotIdx + 1] : null;
-    if (nextSlot && nextSlot.status === 'AVAILABLE') {
-      setSiblingCandidateSlot(nextSlot);
-      setShowSiblingPrompt(true);
-    } else {
-      setShowSiblingPrompt(false);
-      setSiblingCandidateSlot(null);
-    }
-
     setPtmModalOpen(true);
-  };
-
-  const handleBookSiblingChainingDirect = async () => {
-    if (!selectedSlotForBooking || !siblingCandidateSlot) return;
-
-    try {
-      // Book Slot 1 (for Aarav)
-      await api.parentBookPTMSlot({
-        slot_id: selectedSlotForBooking.id,
-        booked_student_id: 1,
-        booked_student_name: 'Aarav Sharma',
-        booked_class: '8-B',
-        booked_parent_id: 'par-01',
-        booked_parent_name: 'Mr. Rajesh Sharma',
-        interaction_scope: targetTeacher.scopeType,
-        subject_name: targetTeacher.subject,
-        is_sibling_combo: true,
-        sibling_student_id: 6,
-        sibling_student_name: 'Vihaan Sharma (Class 6-A)',
-        focus_table_agenda: selectedAgendas
-      });
-
-      // Book Slot 2 (consecutive for Vihaan)
-      await api.parentBookPTMSlot({
-        slot_id: siblingCandidateSlot.id,
-        booked_student_id: 6,
-        booked_student_name: 'Vihaan Sharma',
-        booked_class: '6-A',
-        booked_parent_id: 'par-01',
-        booked_parent_name: 'Mr. Rajesh Sharma',
-        interaction_scope: targetTeacher.scopeType,
-        subject_name: targetTeacher.subject,
-        is_sibling_combo: true,
-        sibling_student_id: 1,
-        sibling_student_name: 'Aarav Sharma (Class 8-B)',
-        focus_table_agenda: ['Foundation Bridge & Sibling Review']
-      });
-
-      // Update state locally
-      setSlots(prev => prev.map(s => {
-        if (s.id === selectedSlotForBooking.id) {
-          return {
-            ...s,
-            status: 'BOOKED',
-            booked_student_name: 'Aarav Sharma (8-B)',
-            is_sibling_combo: true,
-            sibling_student_name: 'Vihaan Sharma (6-A)'
-          };
-        }
-        if (s.id === siblingCandidateSlot.id) {
-          return {
-            ...s,
-            status: 'BOOKED',
-            booked_student_name: 'Vihaan Sharma (6-A)',
-            is_sibling_combo: true,
-            sibling_student_name: 'Aarav Sharma (8-B)'
-          };
-        }
-        return s;
-      }));
-
-      setPtmBookingSuccess(true);
-      setShowSiblingPrompt(false);
-      setTimeout(() => {
-        setPtmBookingSuccess(false);
-        setPtmModalOpen(false);
-        triggerToast(`Consecutive 20-min double slot locked for Aarav & Vihaan (${selectedSlotForBooking.start_time} - ${siblingCandidateSlot.end_time})!`);
-      }, 1600);
-    } catch (err) {
-      console.error(err);
-      triggerToast('Error locking consecutive sibling slots.');
-    }
   };
 
   const handleBookSingleSlot = async (e: React.FormEvent) => {
@@ -305,16 +294,14 @@ export function ParentPtmView() {
     try {
       const booked = await api.parentBookPTMSlot({
         slot_id: selectedSlotForBooking.id,
-        booked_student_id: 1,
-        booked_student_name: 'Aarav Sharma',
-        booked_class: '8-B',
+        booked_student_id: studentId,
+        booked_student_name: studentName,
+        booked_class: className || (studentId === 7 ? 'Class 3-A' : 'Class 8-B'),
         booked_parent_id: 'par-01',
         booked_parent_name: 'Mr. Rajesh Sharma',
         interaction_scope: targetTeacher.scopeType,
         subject_name: targetTeacher.subject,
-        is_sibling_combo: isSiblingChaining,
-        sibling_student_id: isSiblingChaining ? 6 : undefined,
-        sibling_student_name: isSiblingChaining ? 'Vihaan Sharma (Class 6-A)' : undefined,
+        is_sibling_combo: false,
         focus_table_agenda: selectedAgendas
       });
 
@@ -323,7 +310,7 @@ export function ParentPtmView() {
       setTimeout(() => {
         setPtmBookingSuccess(false);
         setPtmModalOpen(false);
-        triggerToast(`PTM Slot (${booked.start_time}) confirmed with ${targetTeacher.name}!`);
+        triggerToast(`Atomic 10-min PTM slot (${booked.start_time}) confirmed with ${targetTeacher.name} for ${studentName}!`);
       }, 1400);
     } catch (err) {
       console.error(err);
@@ -339,9 +326,9 @@ export function ParentPtmView() {
     try {
       const newNote = await api.createParentNote({
         interaction_scope: targetTeacher.scopeType,
-        student_id: 1,
-        student_name: 'Aarav Sharma',
-        student_class: '8-B',
+        student_id: studentId,
+        student_name: studentName,
+        student_class: className || (studentId === 7 ? 'Class 3-A' : 'Class 8-B'),
         parent_id: 'par-01',
         parent_name: 'Mr. Rajesh Sharma',
         parent_phone: '+91 98111 00003',
@@ -368,6 +355,27 @@ export function ParentPtmView() {
     }
   };
 
+  const handleParentCancelSlot = async (slotId: string) => {
+    if (!window.confirm("Are you sure you want to cancel your PTM reservation? The slot will immediately become available for other parents.")) {
+      return;
+    }
+    try {
+      await api.parentCancelPTMSlot(slotId, { cancellation_reason: "Parent-Initiated Cancellation" });
+      setSlots(prev => prev.map(s => s.id === slotId ? {
+        ...s,
+        status: 'AVAILABLE',
+        booked_student_id: undefined,
+        booked_student_name: undefined,
+        booked_parent_name: undefined,
+        meeting_url: undefined
+      } : s));
+      triggerToast("Your PTM reservation has been cancelled. Slot is now available to re-book.");
+    } catch (err) {
+      console.error(err);
+      triggerToast("Failed to cancel reservation.");
+    }
+  };
+
   const toggleAgendaPill = (agenda: string) => {
     setSelectedAgendas(prev => 
       prev.includes(agenda) ? prev.filter(a => a !== agenda) : [...prev, agenda]
@@ -386,53 +394,58 @@ export function ParentPtmView() {
       )}
 
       {/* Top Banner: Dual-Mode Connection Hub */}
-      <div className="rounded-3xl border border-blue-200 dark:border-blue-900/60 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div className="rounded-3xl border border-purple-200 dark:border-purple-900/60 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs font-bold border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 px-3 py-1 text-xs font-bold border border-purple-200 dark:border-purple-800">
               <Users className="h-3.5 w-3.5" />
-              Parent-Faculty Engagement Portal
+              Parent-Teacher Meeting (PTM) Portal
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Student: Aarav Sharma • Class 8-B
+            <span className="text-xs text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+              Student: {studentName} &bull; {className || (isPrimaryKid ? 'Class 3-A' : 'Class 8-B')}
+            </span>
+            <span className="text-[10px] text-purple-700 dark:text-purple-300 font-semibold bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
+              Isolated Child Schedule
             </span>
           </div>
           <h2 className="mt-2 text-xl font-black text-slate-900 dark:text-white">
-            Dual-Category Faculty Directory &amp; Sliding PTM Engine
+            Parent-Teacher Conference &amp; 10-Minute Slot Booking
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Book strict 10-minute atomic conferences across operational hours (09:00 AM – 03:30 PM), audit homeroom transit &amp; attendance, and stream verifiable Focus Table evidence.
+            Select the Homeroom Class Teacher or any Subject Specialist below to view their remaining available 10-minute conference slots based on their free periods.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => {
-              setTargetTeacher(homeroomTeacher);
-              setNoteModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span>Send Direct Note</span>
-          </button>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>4 Slots Available Today</span>
+          </span>
+        </div>
+      </div>
 
-          <button
-            onClick={() => setActiveSubTab(activeSubTab === 'ptm' ? 'notes' : 'ptm')}
-            className="flex items-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer"
-          >
-            {activeSubTab === 'ptm' ? (
-              <>
-                <MessageSquare className="h-4 w-4 text-blue-600" />
-                <span>Intervention Notes Feed ({notes.length})</span>
-              </>
-            ) : (
-              <>
-                <Video className="h-4 w-4 text-purple-600" />
-                <span>10-Min Sliding Timeline</span>
-              </>
-            )}
-          </button>
+      {/* ISOLATED STUDENT PTM PROFILE BANNER */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/80 p-4 rounded-3xl">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-purple-600/20">
+            <GraduationCap className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black text-purple-950 dark:text-purple-200 uppercase tracking-wider">
+                Active Child Conference Stream
+              </span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-100">
+                {studentName} ({className || (isPrimaryKid ? 'Class 3-A' : 'Class 8-B')})
+              </span>
+            </div>
+            <p className="text-[11px] text-purple-800 dark:text-purple-300 mt-0.5">
+              Conferences and faculty slots are strictly isolated for this student. No cross-sibling overlap or faculty schedule confusion.
+            </p>
+          </div>
+        </div>
+        <div className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-white dark:bg-slate-800 px-3.5 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 shadow-2xs">
+          Assigned Homeroom: <strong>{homeroomTeacher.name}</strong>
         </div>
       </div>
 
@@ -459,7 +472,7 @@ export function ParentPtmView() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-purple-500/20">
-                  AV
+                  {homeroomTeacher.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -467,7 +480,7 @@ export function ParentPtmView() {
                       {homeroomTeacher.name}
                     </h4>
                     <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 px-2.5 py-0.5 text-[10px] font-black uppercase">
-                      Class 8-B Homeroom In-Charge
+                      {className || (isPrimaryKid ? 'Class 3-A' : 'Class 8-B')} Homeroom In-Charge
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
@@ -497,17 +510,6 @@ export function ParentPtmView() {
                 <button
                   onClick={() => {
                     setTargetTeacher(homeroomTeacher);
-                    setNoteModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 text-xs font-bold cursor-pointer"
-                >
-                  <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
-                  <span>Send Homeroom Note</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setTargetTeacher(homeroomTeacher);
                     setActiveSubTab('ptm');
                     if (timelineScrollRef.current) {
                       timelineScrollRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -518,56 +520,6 @@ export function ParentPtmView() {
                   <Video className="h-3.5 w-3.5" />
                   <span>Book 10-Min PTM Slot</span>
                 </button>
-              </div>
-            </div>
-
-            {/* Homeroom Pillars Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-purple-200/80 dark:border-purple-900/60 shadow-xs">
-                <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 text-[10px] font-bold uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  <span>Overall Attendance</span>
-                </div>
-                <div className="mt-1 flex items-baseline gap-1">
-                  <span className="text-xl font-black text-slate-900 dark:text-white">
-                    {homeroomTeacher.homeroomHighlights?.attendancePct}%
-                  </span>
-                  <span className="text-[11px] font-semibold text-emerald-600">Punctual</span>
-                </div>
-                <span className="text-[10px] text-slate-500 mt-0.5 block">145 / 154 Sessions Attended</span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-purple-200/80 dark:border-purple-900/60 shadow-xs">
-                <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-                  <Bus className="h-3.5 w-3.5" />
-                  <span>Bus Transit Radar</span>
-                </div>
-                <span className="text-xs font-black text-slate-900 dark:text-white block mt-1">
-                  Route #12 (Active)
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5 block">Pickup 07:45 AM • Drop 03:45 PM</span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-purple-200/80 dark:border-purple-900/60 shadow-xs">
-                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>Student Leaves</span>
-                </div>
-                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block mt-1">
-                  All Approved ✓
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5 block">0 Pending Medical Notes</span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-purple-200/80 dark:border-purple-900/60 shadow-xs">
-                <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Conduct &amp; Growth</span>
-                </div>
-                <span className="text-xs font-black text-slate-900 dark:text-white block mt-1 truncate">
-                  Exemplary Mentee
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5 block truncate">Leadership &amp; STEM Club</span>
               </div>
             </div>
           </div>
@@ -679,16 +631,7 @@ export function ParentPtmView() {
                     <span>Book 10-Min PTM Slot</span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setTargetTeacher(st);
-                      setNoteModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                  >
-                    <MessageSquare className="h-3 w-3 text-blue-600" />
-                    <span>Send Subject Note</span>
-                  </button>
+
                 </div>
               </div>
             ))}
@@ -899,28 +842,35 @@ export function ParentPtmView() {
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate">
                       👤 {slot.booked_student_name || 'Aarav Sharma'}
                     </span>
-                    {slot.is_sibling_combo && (
-                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold block truncate">
-                        👥 20-Min Sibling Chained
-                      </span>
-                    )}
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold block truncate">
+                      🎯 Dedicated 10-Min Atomic Session
+                    </span>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
                     {slot.meeting_url ? (
                       <a
                         href={slot.meeting_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                        className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
                       >
                         <Video className="h-3 w-3" />
-                        <span>Google Meet Link</span>
+                        <span>Google Meet</span>
                         <ExternalLink className="h-2.5 w-2.5" />
                       </a>
                     ) : (
-                      <span className="text-[10px] text-slate-400 block text-center">Confirmed Session</span>
+                      <span className="text-[10px] text-slate-400">Confirmed Session</span>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleParentCancelSlot(slot.id)}
+                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                      title="Cancel this conference booking to free the slot"
+                    >
+                      Cancel Booking
+                    </button>
                   </div>
                 </div>
               );
@@ -1188,30 +1138,17 @@ export function ParentPtmView() {
             ) : (
               <div className="space-y-4">
                 
-                {/* 20-MIN SIBLING CHAINING ALERT BANNER */}
-                {showSiblingPrompt && siblingCandidateSlot && (
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-blue-950/40 border-2 border-purple-300 dark:border-purple-800 space-y-2.5 animate-in fade-in duration-200">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-purple-600 animate-spin" />
-                      <span className="text-xs font-black text-purple-900 dark:text-purple-200">
-                        Sibling Chaining Detected!
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-purple-950 dark:text-purple-200 font-medium leading-relaxed">
-                      We noticed you also have <strong className="text-purple-700 dark:text-purple-300 font-black">Vihaan (Class 6-A)</strong>. Would you like to reserve consecutive 20-minute slots (<span className="font-mono font-bold">{selectedSlotForBooking.start_time} – {siblingCandidateSlot.end_time}</span>)?
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={handleBookSiblingChainingDirect}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-                    >
-                      <Users className="h-4 w-4" />
-                      <span>Reserve 20-Min Double Slot (Aarav &amp; Vihaan)</span>
-                    </button>
+                {/* ISOLATED ATOMIC SESSION INFO */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Student &amp; Class</span>
+                    <span className="font-black text-slate-900 dark:text-white">{studentName} ({className || (isPrimaryKid ? 'Class 3-A' : 'Class 8-B')})</span>
                   </div>
-                )}
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Faculty Member</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-400">{targetTeacher.name}</span>
+                  </div>
+                </div>
 
                 <form onSubmit={handleBookSingleSlot} className="space-y-4">
                   {/* Focus Table Agenda Linking */}

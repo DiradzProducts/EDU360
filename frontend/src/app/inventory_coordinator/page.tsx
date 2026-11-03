@@ -33,6 +33,7 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
+import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { AdminTask, InventoryRecord, PurchaseOrderItem, AssetCustodyLogItem } from '@/lib/types';
@@ -1111,7 +1112,8 @@ export default function InventoryCoordinatorPage() {
             </div>
           </div>
         )}
-      </main>
+        <Footer />
+        </main>
 
       {/* ── MODAL: STOCK ADJUSTMENT (+/-) ── */}
       {showAdjustModal && selectedItem && (

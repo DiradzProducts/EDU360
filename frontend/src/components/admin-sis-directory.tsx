@@ -158,7 +158,7 @@ export function AdminSisDirectory({
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               <Upload className="h-4 w-4" />
-              <span>+ Upload Official Certificate / TC</span>
+              <span>Upload Official Certificate / TC</span>
             </button>
           </div>
         </div>
@@ -456,7 +456,7 @@ export function AdminSisDirectory({
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
               >
                 <Upload className="h-4 w-4" />
-                <span>+ Upload Official Certificate</span>
+                <span>Upload Official Certificate</span>
               </button>
             </div>
 
@@ -751,7 +751,7 @@ export function AdminSisDirectory({
                           title="Upload Official Certificate / TC for this student"
                         >
                           <Upload className="h-3 w-3" />
-                          <span>+ Upload</span>
+                          <span>Upload</span>
                         </button>
                       </div>
                     </td>

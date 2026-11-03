@@ -24,6 +24,7 @@ import {
   Volume2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { DynamicSealModal } from '@/components/proctor/dynamic-seal-modal';
 
 interface OnlineExamModalProps {
   isOpen: boolean;
@@ -65,6 +66,9 @@ export function OnlineExamModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isConfirmedSubmitted, setIsConfirmedSubmitted] = useState<boolean>(false);
   const [confirmSubmitDialogOpen, setConfirmSubmitDialogOpen] = useState<boolean>(false);
+  const [showDynamicSealModal, setShowDynamicSealModal] = useState<boolean>(false);
+  const [activeAnomalyWarning, setActiveAnomalyWarning] = useState<string | null>(null);
+  const [proctorStrikes, setProctorStrikes] = useState<number>(0);
 
   // Start webcam proctoring
   useEffect(() => {
@@ -402,11 +406,11 @@ export function OnlineExamModal({
 
                 <button
                   type="button"
-                  onClick={() => setConfirmSubmitDialogOpen(true)}
+                  onClick={() => setShowDynamicSealModal(true)}
                   className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-5 py-2.5 shadow-md shadow-purple-500/20 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  <span>Submit Exam Paper</span>
+                  <span>Seal &amp; Scan Upload (15-Min Window)</span>
                 </button>
               </div>
 
@@ -434,6 +438,16 @@ export function OnlineExamModal({
                     muted
                     className="w-full h-full object-cover transform -scale-x-100"
                   />
+
+                  {/* Real-time YOLO Bounding Box & Anomaly Overlay */}
+                  <div className="absolute inset-4 border-2 border-dashed border-emerald-400/80 rounded-2xl pointer-events-none flex flex-col justify-between p-2">
+                    <span className="self-start text-[8px] font-mono font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow-sm">
+                      YOLO: Candidate In-Frame (0.94)
+                    </span>
+                    <span className="self-end text-[8px] font-mono font-bold bg-black/70 text-emerald-300 px-1.5 py-0.5 rounded">
+                      Gaze: Desk Focus ✓
+                    </span>
+                  </div>
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-900/90 text-white">
                       <Camera className="h-8 w-8 text-purple-400 mb-1 animate-pulse" />
@@ -572,6 +586,16 @@ export function OnlineExamModal({
           </div>
         )}
 
+        {/* Dynamic Security Seal Modal */}
+        <DynamicSealModal
+          isOpen={showDynamicSealModal}
+          sealCode="#EDU-8492"
+          onConfirmUpload={(data) => {
+            setShowDynamicSealModal(false);
+            handleSubmitFinal();
+          }}
+          onCancel={() => setShowDynamicSealModal(false)}
+        />
       </div>
     </div>
   );

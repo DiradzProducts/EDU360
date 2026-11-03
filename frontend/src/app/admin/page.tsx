@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon3D } from '@/components/ui/icon-3d';
 import React, { useState, useEffect } from 'react';
 import { 
   Building2, 
@@ -86,6 +87,7 @@ import { TriageCard } from '@/components/triage-card';
 import { CRMBoard } from '@/components/crm-board';
 import { ExitClearanceView } from '@/components/exit-clearance-modal';
 import { RoleGuard } from '@/components/role-guard';
+import { UnifiedSISView } from '@/components/unified-sis-view';
 import { Footer } from '@/components/footer';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
 import { useTheme } from '@/lib/theme-context';
@@ -171,6 +173,14 @@ export default function AdminPage() {
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
   const [escalateReason, setEscalateReason] = useState('');
   const [reassignTaskId, setReassignTaskId] = useState<number | null>(null);
+  // Task Verification & Review State
+  const [reviewModalTask, setReviewModalTask] = useState<AdminTask | null>(null);
+  const [reviewRemarks, setReviewRemarks] = useState('');
+  const [revisionReason, setRevisionReason] = useState('');
+  const [showRevisionInput, setShowRevisionInput] = useState(false);
+  // Admin Emergency Override State
+  const [overrideModalTask, setOverrideModalTask] = useState<AdminTask | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
   const [reassignPeer, setReassignPeer] = useState<string>('Mrs. Neha Roy');
   const [resolveEscalateTaskId, setResolveEscalateTaskId] = useState<number | null>(null);
   const [resolveEscalateNotes, setResolveEscalateNotes] = useState<string>('');
@@ -285,6 +295,24 @@ export default function AdminPage() {
     }, 4000);
   };
 
+  // Listen for global command palette navigation events
+  useEffect(() => {
+    const handleSwitchTab = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    window.addEventListener('edu360:switch-tab', handleSwitchTab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setActiveTab(tabParam as AdminTab);
+      }
+    }
+    return () => window.removeEventListener('edu360:switch-tab', handleSwitchTab);
+  }, []);
+
   // Load initial data
   useEffect(() => {
     async function loadData() {
@@ -381,6 +409,60 @@ export default function AdminPage() {
     triggerToast(`Task status updated to ${status}`);
   };
 
+  const handleApproveTask = async (task: AdminTask) => {
+    await api.approveAdminTask(task.id, {
+      approved_by: 'Principal Dr. Sharma',
+      remarks: reviewRemarks.trim() || 'Verified all compliance requirements.'
+    });
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
+    setTasks(updated);
+    setTaskCockpit(cockpit);
+    setReviewModalTask(null);
+    setReviewRemarks('');
+    triggerToast(`Task "${task.title}" verified & marked Completed!`);
+  };
+
+  const handleRejectTask = async (task: AdminTask) => {
+    if (!revisionReason.trim()) {
+      triggerToast('Please provide feedback/reason for requesting revision.');
+      return;
+    }
+    await api.rejectAdminTask(task.id, { rejection_reason: revisionReason.trim() });
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
+    setTasks(updated);
+    setTaskCockpit(cockpit);
+    setReviewModalTask(null);
+    setRevisionReason('');
+    setShowRevisionInput(false);
+    triggerToast(`Returned task to ${task.assigned_to} for revisions.`);
+  };
+
+  const handleOverrideTask = async (task: AdminTask) => {
+    if (!overrideReason.trim()) {
+      triggerToast('Mandatory: Please provide rationale for Admin Override.');
+      return;
+    }
+    await api.overrideAdminTask(task.id, {
+      override_reason: overrideReason.trim(),
+      override_by: 'Super Admin / Principal'
+    });
+    const [updated, cockpit] = await Promise.all([
+      api.getAdminTasks(taskDomainFilter !== 'all' ? taskDomainFilter : undefined, taskStatusFilter !== 'all' ? taskStatusFilter : undefined),
+      api.getTaskExecutiveCockpit()
+    ]);
+    setTasks(updated);
+    setTaskCockpit(cockpit);
+    setOverrideModalTask(null);
+    setOverrideReason('');
+    triggerToast(`Task #${task.id} force-closed via Admin Override.`);
+  };
+
   const handleEscalateTask = async (id: number) => {
     if (!escalateReason.trim()) { triggerToast('Please enter an escalation reason.'); return; }
     await api.escalateAdminTask(id, escalateReason);
@@ -458,6 +540,13 @@ export default function AdminPage() {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle) return;
+    
+    // Auto-detect role
+    const assigneeLower = newTaskAssignee.toLowerCase();
+    const isTeacher = ['verma', 'raman', 'joshi', 'sen', 'roy', 'teacher', 'faculty', 'math'].some(term => assigneeLower.includes(term));
+    const isCoordinator = assigneeLower.includes('coordinator') || ['krishnan', 'iyer', 'pillai', 'nair'].some(t => assigneeLower.includes(t));
+    const assignedRole = isTeacher ? 'teacher' : (isCoordinator ? (newTaskDomain === 'exam' ? 'exam_coordinator' : 'academic_coordinator') : (newTaskDomain === 'executive' ? 'admin' : 'staff'));
+
     await api.createAdminTask({
       title: newTaskTitle,
       description: newTaskDescription,
@@ -465,6 +554,7 @@ export default function AdminPage() {
       domain: newTaskDomain,
       due_date: newTaskDueDate,
       assigned_to: newTaskAssignee,
+      assigned_to_role: assignedRole,
       priority: newTaskPriority,
       sla_hours: newTaskSlaHours,
       status: 'Pending'
@@ -1112,6 +1202,26 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Back Button ABOVE the first card when viewing a student in SIS */}
+        {activeTab === 'sis' && selectedStudentForSIS && (
+          <div className="flex items-center justify-between pb-1">
+            <button
+              type="button"
+              onClick={() => setSelectedStudentForSIS(null)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs transition-all cursor-pointer hover:border-blue-400 active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span>Back to Roster Directory</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-medium">Viewing Record:</span>
+              <span className="rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-3 py-1 text-xs font-black">
+                {selectedStudentForSIS.name} &bull; Roll #{selectedStudentForSIS.roll_no}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* ===================================================== */}
                 {activeTab !== 'cockpit' && (
           /* ===================================================== */
@@ -1122,7 +1232,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
                   {activeTab === 'crm' ? 'Admissions & Inquiries'
-                    : activeTab === 'sis' ? 'Student Directory & Records (SIS)'
+                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Student Dossier • Roll #${selectedStudentForSIS.roll_no}` : 'Student Directory & Records (SIS)')
                     : activeTab === 'triage' ? "Today's Action Alerts"
                     : activeTab === 'substitutions' ? 'Teacher Attendance & Class Cover'
                     : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
@@ -1156,7 +1266,7 @@ export default function AdminPage() {
                 <div>
                   <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                     {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
-                      : activeTab === 'sis' ? 'Student Directory & Information System (SIS)'
+                      : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
                       : activeTab === 'triage' ? "Today's School Action Alerts"
                       : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
                       : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
@@ -1171,7 +1281,7 @@ export default function AdminPage() {
                   </h1>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
-                      : activeTab === 'sis' ? 'Complete student roster, class and section filters, 360° student records, and certificates'
+                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Complete academic standing, biometrics, legal documents vault, and fee ledger for ${selectedStudentForSIS.name}.` : 'Complete student roster, class and section filters, 360° student records, and certificates')
                       : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
                       : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
                       : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
@@ -1198,7 +1308,7 @@ export default function AdminPage() {
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>+ Assign Task</span>
+                  <span>Assign Task</span>
                 </button>
               )}
             </div>
@@ -1366,327 +1476,13 @@ export default function AdminPage() {
           {activeTab === 'sis' && (
             <div className="space-y-6">
               {selectedStudentForSIS ? (
-                /* ======================================================= */
-                /* COMPLETE CLARIFIED SIS (STUDENT INFORMATION SYSTEM)     */
-                /* ======================================================= */
-                <div className="space-y-6">
-                  {/* Top Bar / Navigation */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setSelectedStudentForSIS(null)}
-                        className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        <span>Back to Student Directory</span>
-                      </button>
-                      <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                        <span>Directory</span>
-                        <span>/</span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedStudentForSIS.class_name} - {selectedStudentForSIS.section}</span>
-                        <span>/</span>
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">{selectedStudentForSIS.name}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>Official SIS Record • AY 2026–27</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Student Hero Header Card */}
-                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
-                          {selectedStudentForSIS.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                              {selectedStudentForSIS.name}
-                            </h2>
-                            <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                              {selectedStudentForSIS.class_name}-{selectedStudentForSIS.section}
-                            </span>
-                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-mono font-bold">
-                              Roll #{selectedStudentForSIS.roll_no}
-                            </span>
-                            <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 text-[11px] font-bold border border-emerald-200/80">
-                              ✓ {selectedStudentForSIS.status || 'Active Enrolled'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
-                            <span>Admission ID: <strong className="text-slate-700 dark:text-slate-200 font-mono">{selectedStudentForSIS.admission_no}</strong></span>
-                            <span>Guardian: <strong className="text-slate-700 dark:text-slate-200">{selectedStudentForSIS.guardian_name}</strong> ({selectedStudentForSIS.guardian_phone})</span>
-                            <span>Board: <strong className="text-slate-700 dark:text-slate-200 font-mono">CBSE Affiliation #103049</strong></span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Quick Metrics */}
-                      <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-                        <div className="text-right">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Attendance</span>
-                          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
-                            {selectedStudentForSIS.attendance_pct || 94.2}%
-                          </span>
-                        </div>
-                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
-                        <div className="text-right">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Academic Avg</span>
-                          <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">
-                            {selectedStudentForSIS.academic_average_pct || 78.5}%
-                          </span>
-                        </div>
-                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
-                        <div className="text-right">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Fee Balance</span>
-                          <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
-                            ₹18,500
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Sub-Tabs Switcher */}
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      {[
-                        { key: 'profile', label: '📋 Demographic & Personal Profile' },
-                        { key: 'academic', label: '📊 Academic Records & Standing' },
-                        { key: 'certificates', label: '📑 Legal Certificates Vault (Admin Edit Only)' },
-                        { key: 'fees', label: '💳 Fee & Accounts Ledger' }
-                      ].map(tab => (
-                        <button
-                          key={tab.key}
-                          onClick={() => setSisActiveSubTab(tab.key as any)}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            sisActiveSubTab === tab.key
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* SUB-PANEL 1: PERSONAL & GUARDIAN PROFILE */}
-                  {sisActiveSubTab === 'profile' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <Users className="h-4 w-4 text-blue-600" />
-                          <span>Personal &amp; Demographic Data</span>
-                        </h3>
-                        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Date of Birth:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">12 May 2012 (14 Yrs)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Gender &amp; Blood Group:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">Male • B+ Positive</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Aadhaar / National ID:</span>
-                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">XXXX-XXXX-4819 (Verified)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Mother Tongue &amp; Category:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">Telugu / Hindi • General (CBSE)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Permanent Address:</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200 text-right max-w-xs">#42, 4th Cross, Green Glen Layout, Bellandur, Bangalore 560103</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <PhoneCall className="h-4 w-4 text-emerald-600" />
-                          <span>Parent &amp; Emergency Guardians</span>
-                        </h3>
-                        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Father / Guardian:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">{selectedStudentForSIS.guardian_name} (Sr. Director)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Father Contact &amp; Email:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">{selectedStudentForSIS.guardian_phone} • {selectedStudentForSIS.guardian_email}</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Mother Name:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">Mrs. Priya Sharma (Consultant)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Emergency Phone:</span>
-                            <span className="font-mono font-bold text-red-600 dark:text-red-400">+91 98450 99881 (24/7 Priority)</span>
-                          </div>
-                          <div className="py-2.5 flex justify-between">
-                            <span className="text-slate-500">Transport Fleet Stop:</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">Bus Route #4 (Sarjapur - Bellandur Junction)</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SUB-PANEL 2: ACADEMIC RECORDS & STANDING */}
-                  {sisActiveSubTab === 'academic' && (
-                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5 shadow-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-                        <div>
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Academic Performance Ledger • CBSE Class 8 Cohort</h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Homeroom Mentor: Mrs. Ananya Verma • Term 1 Assessment Status: Completed</p>
-                        </div>
-                        <span className="text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-xl">
-                          Term GPA: 8.2 / 10.0
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        {[
-                          { subject: 'Mathematics', score: '72/100', grade: 'B1', status: 'Focus: Quadratic Factorization' },
-                          { subject: 'Physics & Chem', score: '84/100', grade: 'A2', status: 'Optimal Lab Performance' },
-                          { subject: 'English Lit', score: '88/100', grade: 'A1', status: 'Distinction in Prose' },
-                          { subject: 'Social Studies', score: '79/100', grade: 'B1', status: 'Good History Mapping' },
-                          { subject: 'Computer Sci', score: '92/100', grade: 'A1', status: 'Exemplary Python Code' }
-                        ].map(sub => (
-                          <div key={sub.subject} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
-                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">{sub.subject}</span>
-                            <div className="flex items-baseline justify-between">
-                              <span className="text-base font-black text-slate-900 dark:text-white">{sub.score}</span>
-                              <span className="text-xs font-bold text-blue-600">{sub.grade}</span>
-                            </div>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block line-clamp-1">{sub.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SUB-PANEL 3: OFFICIAL CERTIFICATES VAULT (ADMIN EDIT ONLY) */}
-                  {sisActiveSubTab === 'certificates' && (
-                    <div className="space-y-6">
-                      {/* Security Banner */}
-                      <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-                            <Lock className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Strict Legal Certificate Authority (Admin Only)</h4>
-                              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">Admin Edit Rights</span>
-                            </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                              Only School Administration has rights to upload, sign, and revoke legal certificates. Teachers and parents have strictly read-only access.
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => setShowDocModal(true)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
-                        >
-                          <Upload className="h-4 w-4" />
-                          <span>+ Upload Official Certificate</span>
-                        </button>
-                      </div>
-
-                      {/* Documents List */}
-                      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
-                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                            Verified Legal Certificates ({documents.length})
-                          </h4>
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            All certificates sealed with official SHA-256 verification hash
-                          </span>
-                        </div>
-
-                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {documents.map(doc => (
-                            <div key={doc.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 p-2 rounded-xl transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                                  <FileText className="h-5 w-5" />
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">{doc.title}</h5>
-                                    <span className="rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[9px] font-bold">
-                                      {doc.doc_type}
-                                    </span>
-                                  </div>
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                                    Seal: {doc.verified_stamp || 'EDU360 Official Seal - Reg #9921'} &bull; Uploaded by Administrator
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <ShieldCheck className="h-3 w-3" />
-                                  Official School Seal
-                                </span>
-                                <button
-                                  onClick={() => downloadOfficialDocumentFile(doc.title, selectedStudentForSIS.name, `CERT-${doc.id}`)}
-                                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
-                                >
-                                  View
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteDocument(doc.id)}
-                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
-                                  title="Revoke Certificate"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SUB-PANEL 4: FEES & TRANSACTION HISTORY */}
-                  {sisActiveSubTab === 'fees' && (
-                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Fee Statement &amp; Cleared Milestone Receipts</h4>
-                        <span className="text-xs font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-xl">
-                          Outstanding: ₹18,500 (Term 2)
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/60">
-                          <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 block">Term 1 Tuition</span>
-                          <span className="text-base font-black text-emerald-700 dark:text-emerald-400">₹35,000 Paid</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">Cleared 12 Jul 2026 • Ref: UPI-9842</span>
-                        </div>
-                        <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/60">
-                          <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 block">Annual Lab &amp; STEM</span>
-                          <span className="text-base font-black text-emerald-700 dark:text-emerald-400">₹15,000 Paid</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">Cleared 12 Jul 2026 • Ref: HDFC-4412</span>
-                        </div>
-                        <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/60">
-                          <span className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-300 block">Term 2 Tuition &amp; Bus</span>
-                          <span className="text-base font-black text-amber-700 dark:text-amber-400">₹18,500 Pending</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">Due Date: 25 Oct 2026</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <UnifiedSISView
+                  studentId={selectedStudentForSIS.id}
+                  student={selectedStudentForSIS}
+                  viewerRole="admin"
+                  onBack={() => setSelectedStudentForSIS(null)}
+                  hideBack={true}
+                />
               ) : (
                 /* ======================================================= */
                 /* STUDENT DIRECTORY PAGE (ROSTER & FILTERS)               */
@@ -2236,7 +2032,221 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {activeTab === 'staff' && (
             <div className="space-y-6">
-              {/* Header & Controls */}
+              {selectedStaffForModal ? (
+                /* ======================================================= */
+                /* DEDICATED FULL-PAGE STAFF DOSSIER SECTION (NO MODAL)    */
+                /* ======================================================= */
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  {/* Top Navigation */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setSelectedStaffForModal(null)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        <span>Back to Staff Directory</span>
+                      </button>
+                      <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span>Staff Directory</span>
+                        <span>/</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedStaffForModal.department}</span>
+                        <span>/</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">{selectedStaffForModal.name}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>{selectedStaffForModal.status} &bull; Biometric Verified</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Hero Dossier Card */}
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                      <div className="flex items-center gap-4">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-xl font-black shadow-md shrink-0">
+                          {selectedStaffForModal.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                              {selectedStaffForModal.name}
+                            </h1>
+                            <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold">
+                              {selectedStaffForModal.department}
+                            </span>
+                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-bold">
+                              Emp ID: EMP-{1000 + selectedStaffForModal.id}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+                            {selectedStaffForModal.role} &bull; {selectedStaffForModal.phone} &bull; {selectedStaffForModal.email}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => triggerToast(`Direct administrative memo dispatched to ${selectedStaffForModal.name}.`)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          <span>Send Notice / Memo</span>
+                        </button>
+                        <button
+                          onClick={() => triggerToast(`Exported Official Service Dossier PDF for ${selectedStaffForModal.name}.`)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs shadow-xs transition-all cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          <span>Export Service Dossier</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 4 Metric Tiles */}
+                    <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-slate-100 dark:border-slate-800 pt-5">
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Monthly Compensation</span>
+                        <span className="text-lg font-black text-slate-900 dark:text-white mt-0.5 block">
+                          ₹{selectedStaffForModal.salary.toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">CTC: ₹{((selectedStaffForModal.salary * 12) / 100000).toFixed(1)}L / Annum</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Experience &amp; Cadre</span>
+                        <span className="text-lg font-black text-slate-900 dark:text-white mt-0.5 block">
+                          {selectedStaffForModal.experience || '8 Yrs Experience'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">{selectedStaffForModal.qualification || 'M.Sc, B.Ed'}</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Leave Quota Balance</span>
+                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+                          {(selectedStaffForModal.leaves_total || 12) - (selectedStaffForModal.leaves_taken || 2)} Days Remaining
+                        </span>
+                        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: `${Math.round((((selectedStaffForModal.leaves_total || 12) - (selectedStaffForModal.leaves_taken || 2)) / (selectedStaffForModal.leaves_total || 12)) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Leave Requests</span>
+                        <span className="text-lg font-black text-slate-900 dark:text-white mt-0.5 block">
+                          {selectedStaffForModal.requests_submitted || 2} Submitted
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-bold">100% Resolved &bull; 0 Pending</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3 Detailed Dossier Sections */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {/* Card 1: Academic & Classroom Duties */}
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
+                        <BookOpen className="h-4 w-4 text-blue-600" />
+                        <span>Classroom Allocations &amp; Duties</span>
+                      </div>
+                      
+                      <div className="space-y-3 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Assigned Classes</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(selectedStaffForModal.assigned_classes || ['Class 8-A', 'Class 8-B', 'Class 9-A']).map((cls: string, i: number) => (
+                              <span key={i} className="px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold text-xs">
+                                {cls}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Institutional Duties &amp; Mentorship</span>
+                          <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                            {selectedStaffForModal.assigned_duties || 'Homeroom Guidance, Math Olympiad Mentorship, and Central Examination Room Supervision.'}
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between text-slate-500">
+                          <span>Weekly Workload:</span>
+                          <strong className="text-slate-900 dark:text-white">28 Periods / Week</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Biometric Attendance & Punctuality */}
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
+                        <Clock className="h-4 w-4 text-emerald-600" />
+                        <span>Biometric Shifts &amp; Punctuality</span>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-emerald-900 dark:text-emerald-200">Today's Check-in</span>
+                            <span className="rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 text-[9px] font-bold px-2 py-0.5">On Time</span>
+                          </div>
+                          <div className="text-xl font-black text-emerald-800 dark:text-emerald-200 mt-1">07:42 AM</div>
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-300">Terminal: Gate 2 Facial Biometric</span>
+                        </div>
+
+                        <div className="space-y-2 pt-1 text-slate-600 dark:text-slate-400">
+                          <div className="flex justify-between">
+                            <span>Duty Shift:</span>
+                            <strong className="text-slate-900 dark:text-white">07:45 AM &ndash; 03:30 PM</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>30-Day Attendance Rate:</span>
+                            <strong className="text-emerald-600 font-bold">98.4% (22/22 days)</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Late Marks:</span>
+                            <strong className="text-slate-900 dark:text-white">0 This Month</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Leave Ledger & Permission History */}
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
+                        <Calendar className="h-4 w-4 text-amber-600" />
+                        <span>Recent Leave &amp; Permission Logs</span>
+                      </div>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-slate-900 dark:text-white">Casual Leave (1 Day)</span>
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">Approved</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block">14 Oct 2026 &bull; Reason: Family Event</span>
+                          <span className="text-[10px] text-slate-500">Authorized by Fr. George Varghese</span>
+                        </div>
+
+                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-slate-900 dark:text-white">On-Duty Movement</span>
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">Approved</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block">22 Sep 2026 &bull; Reason: Inter-school Math Fest</span>
+                          <span className="text-[10px] text-slate-500">Escorting 6 students to IISc Bangalore</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <div className="overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4 p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div>
@@ -2385,8 +2395,9 @@ export default function AdminPage() {
                   </table>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
           {/* TAB: FACULTY PERMISSIONS & SHIFTS                    */}
           {/* ===================================================== */}
@@ -2601,7 +2612,7 @@ export default function AdminPage() {
                     className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>+ Add New School Event</span>
+                    <span>Add New School Event</span>
                   </button>
                 </div>
               </div>
@@ -2746,10 +2757,10 @@ export default function AdminPage() {
               {examSubTab === 'upcoming' && (() => {
                 const upcomingExams = [
                   { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                  { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Science Block 204', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
-                  { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Room 102', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                  { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Room 104', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
-                  { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Room 201', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
+                  { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
+                  { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
+                  { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Gamma (Camera AI)', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
+                  { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
                   { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
                 ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
 
@@ -2778,7 +2789,7 @@ export default function AdminPage() {
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
                         <div className="mt-2 text-xs text-slate-500 space-y-0.5">
                           <div>Seating: <strong className="text-slate-700 dark:text-slate-300">{exam.hall}</strong></div>
-                          <div>Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
+                          <div>Proctor: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
                         </div>
                         <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -2805,7 +2816,7 @@ export default function AdminPage() {
               {/* SUB-VIEW 2: OVERDUE EXAMS */}
               {examSubTab === 'overdue' && (() => {
                 const overdueExams = [
-                  { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Room 102', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
+                  { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
                 ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
 
                 if (overdueExams.length === 0) {
@@ -2832,7 +2843,7 @@ export default function AdminPage() {
                         </div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
                         <div className="mt-2 text-xs text-slate-500">
-                          Invigilator: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong>
+                          Proctor: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong>
                         </div>
                       </div>
                     ))}
@@ -3228,10 +3239,12 @@ export default function AdminPage() {
                                         onChange={(e) => setReassignPeer(e.target.value)}
                                         className="flex-1 min-w-[200px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
                                       >
+                                        <option value="Mrs. Ananya Verma">Mrs. Ananya Verma (Math Lead)</option>
+                                        <option value="Dr. K. Raman">Dr. K. Raman (Science & Physics)</option>
                                         <option value="Mrs. Neha Roy">Mrs. Neha Roy (English)</option>
-                                        <option value="Dr. Suresh Babu">Dr. Suresh Babu (Science)</option>
-                                        <option value="Mr. Vikram Sharma">Mr. Vikram Sharma (Physics)</option>
-                                        <option value="Mrs. Rekha Sharma">Mrs. Rekha Sharma (Hindi)</option>
+                                        <option value="Dr. Hemanth Sen">Dr. Hemanth Sen (Biology)</option>
+                                        <option value="Mr. Vikram Joshi">Mr. Vikram Joshi (Sports/Discipline)</option>
+                                        <option value="Ms. Priya Sen">Ms. Priya Sen (Arts/Culture)</option>
                                       </select>
                                       <button
                                         type="button"
@@ -3318,44 +3331,124 @@ export default function AdminPage() {
                               </div>
                             )}
 
-                            {/* Status Change Stepper */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-slate-500 mr-1">Update Status:</span>
-                                {['Pending', 'In Progress', 'Completed'].map(s => (
+                            {/* Governance & Verification Lifecycle */}
+                            {task.status === 'Pending Review' ? (
+                              <div className="p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                    <Icon3D name="memo" className="h-4 w-4" /> Work Submitted for Verification
+                                  </span>
+                                  {task.submitted_at && (
+                                    <span className="text-[10px] text-amber-700/80 dark:text-amber-400">
+                                      {new Date(task.submitted_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                                {task.submission_notes && (
+                                  <div className="text-xs text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-900">
+                                    <span className="font-semibold text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Assignee Notes:</span>
+                                    {task.submission_notes}
+                                  </div>
+                                )}
+                                {task.completion_proof_url && (
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={task.completion_proof_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800"
+                                    >
+                                      📎 View Attached Proof / Dossier
+                                    </a>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 pt-1">
                                   <button
-                                    key={s}
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateTaskStatus(task.id, s);
-                                    }}
-                                    disabled={task.status === s}
-                                    className={`rounded-xl px-3 py-1 text-xs font-bold border transition-all cursor-pointer ${
-                                      task.status === s
-                                        ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 border-slate-300 dark:border-slate-600 cursor-not-allowed'
-                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600'
-                                    }`}
+                                    onClick={() => { setReviewModalTask(task); setReviewRemarks('Verified all documents & compliance requirements.'); setShowRevisionInput(false); }}
+                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
                                   >
-                                    {s === 'Completed' ? '✓ Mark Done' : s}
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Verify &amp; Sign-off
                                   </button>
-                                ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => { setReviewModalTask(task); setShowRevisionInput(true); }}
+                                    className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 text-xs font-bold hover:bg-amber-100 cursor-pointer"
+                                  >
+                                    ↺ Request Revision
+                                  </button>
+                                </div>
                               </div>
+                            ) : task.status === 'Completed' ? (
+                              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold">Verified &amp; Closed</span>
+                                    {task.approved_by && (
+                                      <span className="text-slate-600 dark:text-slate-400 text-[11px] block">
+                                        Approved by {task.approved_by} {task.approved_at ? `on ${new Date(task.approved_at).toLocaleDateString()}` : ''}
+                                      </span>
+                                    )}
+                                    {task.is_admin_override && (
+                                      <span className="text-rose-600 dark:text-rose-400 text-[10px] block font-semibold">
+                                        [Force Closed]: {task.admin_override_reason}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                {task.completion_proof_url && (
+                                  <a
+                                    href={task.completion_proof_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    View Dossier ↗
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-slate-500">Assignee Status:</span>
+                                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
+                                    task.status === 'In Progress'
+                                      ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                  }`}>
+                                    {task.status === 'In Progress' ? '⚡ In Progress by Assignee' : '⏳ Awaiting Assignee Action'}
+                                  </span>
+                                </div>
 
-                              {!task.is_escalated && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEscalateTaskId(task.id);
-                                    setEscalateReason('');
-                                  }}
-                                  className="rounded-xl px-3 py-1 text-xs font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer"
-                                >
-                                  🚨 Escalate to Principal
-                                </button>
-                              )}
-                            </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOverrideModalTask(task);
+                                      setOverrideReason('');
+                                    }}
+                                    className="rounded-xl px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                                    title="Use only if assignee is on leave or task completed externally"
+                                  >
+                                    Force Close (Override)
+                                  </button>
+                                  {!task.is_escalated && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEscalateTaskId(task.id);
+                                        setEscalateReason('');
+                                      }}
+                                      className="rounded-xl px-3 py-1 text-xs font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer"
+                                    >
+                                      🚨 Escalate
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Escalation Form */}
                             {escalateTaskId === task.id && (
@@ -3895,19 +3988,51 @@ export default function AdminPage() {
                   {/* Coordinator + Priority */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Assign To Coordinator *</label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Assign To Faculty / Teacher / Coordinator *
+                      </label>
                       <select
                         value={newTaskAssignee}
                         onChange={(e) => setNewTaskAssignee(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                       >
-                        <option value="Dr. Ananya Krishnan">Dr. Ananya Krishnan — Academic</option>
-                        <option value="Ms. Rekha Iyer">Ms. Rekha Iyer — Exam Cell</option>
-                        <option value="Mr. Suresh Pillai">Mr. Suresh Pillai — Transport</option>
-                        <option value="Mr. Vikram Rao">Mr. Vikram Rao — Inventory</option>
-                        <option value="Ms. Priya Nair">Ms. Priya Nair — Admissions</option>
-                        <option value="Mrs. Lakshmi Narayan">Mrs. Lakshmi Narayan — Finance</option>
-                        <option value="Principal Sharma">Principal Sharma — Executive</option>
+                        <optgroup label="Academic Faculty & Subject Teachers">
+                          <option value="Mrs. Ananya Verma">Mrs. Ananya Verma — Senior Math Lead (Class 10-A)</option>
+                          <option value="Dr. K. Raman">Dr. K. Raman — Head of Science & Physics Lead</option>
+                          <option value="Mrs. Neha Roy">Mrs. Neha Roy — Senior English & Humanities</option>
+                          <option value="Dr. Hemanth Sen">Dr. Hemanth Sen — Biology & Senior Science</option>
+                          <option value="Mr. Vikram Joshi">Mr. Vikram Joshi — Physical Education & Discipline</option>
+                          <option value="Ms. Priya Sen">Ms. Priya Sen — Arts & Cultural Lead</option>
+                          {staffMembers
+                            .filter(s => s.department === 'Academics' && !['Mrs. Ananya Verma', 'Dr. K. Raman'].includes(s.name))
+                            .map(s => (
+                              <option key={s.id} value={s.name}>
+                                {s.name} — {s.role} ({s.department})
+                              </option>
+                            ))}
+                        </optgroup>
+
+                        <optgroup label="Department & Cell Coordinators">
+                          <option value="Dr. Ananya Krishnan">Dr. Ananya Krishnan — Academic Coordinator</option>
+                          <option value="Ms. Rekha Iyer">Ms. Rekha Iyer — Exam Cell Coordinator</option>
+                          <option value="Mr. Suresh Pillai">Mr. Suresh Pillai — Transport Fleet Lead</option>
+                          <option value="Mr. Vikram Rao">Mr. Vikram Rao — Lab & Inventory Store</option>
+                          <option value="Ms. Priya Nair">Ms. Priya Nair — Admissions & Student CRM</option>
+                          <option value="Mrs. Lakshmi Narayan">Mrs. Lakshmi Narayan — Accounts & Bursar</option>
+                        </optgroup>
+
+                        <optgroup label="Leadership & Campus Operations">
+                          <option value="Dr. Sunita Kapoor">Dr. Sunita Kapoor — Principal & Administrator</option>
+                          <option value="Principal Sharma">Principal Sharma — Executive Institutional Board</option>
+                          <option value="Ramesh Kumar">Ramesh Kumar — Senior Transport Lead</option>
+                          {staffMembers
+                            .filter(s => !['Academics'].includes(s.department || '') && !['Dr. Sunita Kapoor', 'Ramesh Kumar', 'Horizon AV Tech Solutions'].includes(s.name))
+                            .map(s => (
+                              <option key={s.id} value={s.name}>
+                                {s.name} — {s.role} ({s.department})
+                              </option>
+                            ))}
+                        </optgroup>
                       </select>
                     </div>
                     <div>
@@ -4191,10 +4316,10 @@ export default function AdminPage() {
       {/* ========================================================= */}
       {convertModalEnquiry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
                   🎓
                 </div>
                 <div>
@@ -4207,28 +4332,75 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3.5 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Student Name:</span>
+                  <span className="text-slate-500 font-medium">Student Name:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.student_name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Grade / Target Class:</span>
+                  <span className="text-slate-500 font-medium">Grade / Target Class:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.target_grade}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Parent &amp; Phone:</span>
+                  <span className="text-slate-500 font-medium">Parent &amp; Phone:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.parent_name} ({convertModalEnquiry.phone})</span>
                 </div>
               </div>
 
-              {/* Document Readiness Summary */}
-              <div className="p-2.5 rounded-xl border text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  Academic Certificates &amp; Birth Records Verified by Admissions Desk
-                </span>
+              {/* Mandatory Document Verification & TC Upload Vault */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    Document Verification &amp; TC Upload Vault
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                    3/4 Documents Ready
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-[11px]">
+                  {/* Transfer Certificate (TC / SLC) */}
+                  <div className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="h-4 w-4 text-blue-600 shrink-0" />
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white block">Transfer Certificate (TC / SLC) *</span>
+                        <span className="text-[10px] text-slate-500">Official migration slip from previous recognized school</span>
+                      </div>
+                    </div>
+                    <label className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] cursor-pointer shadow-xs transition-all flex items-center gap-1">
+                      <Upload className="h-3 w-3" />
+                      <span>Attach TC</span>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            triggerToast(`Transfer Certificate attached: ${e.target.files[0].name}`);
+                          }
+                        }} 
+                      />
+                    </label>
+                  </div>
+
+                  {/* Other Vital Documents */}
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Birth Certificate</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Marks Card</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
+                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Aadhaar Card</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -4250,7 +4422,7 @@ export default function AdminPage() {
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     One-Time Admission Fee Structure
                   </span>
-                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
                     Accounts Auto-Sync
                   </span>
                 </div>
@@ -4279,12 +4451,31 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                {/* Dynamic Payment Method: Disabled when Pending, Enabled/Popped when Paid */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Payment Method</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                      Payment Method
+                    </label>
+                    {convertFeeStatus === 'Pending' ? (
+                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">
+                        Disabled (Pending Status)
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
+                        Active Immediate Receipt
+                      </span>
+                    )}
+                  </div>
                   <select
+                    disabled={convertFeeStatus === 'Pending'}
                     value={convertPaymentMethod}
                     onChange={e => setConvertPaymentMethod(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
+                    className={`w-full rounded-xl border p-2 text-xs font-bold transition-all ${
+                      convertFeeStatus === 'Pending'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-400 cursor-not-allowed opacity-50'
+                        : 'border-emerald-500/60 dark:border-emerald-500/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white ring-2 ring-emerald-500/20 animate-in fade-in zoom-in-95'
+                    }`}
                   >
                     <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
                     <option value="Net Banking / NEFT">Net Banking / NEFT</option>
@@ -4292,6 +4483,17 @@ export default function AdminPage() {
                     <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
                     <option value="Cash Payment">Cash Payment at Counter</option>
                   </select>
+                  {convertFeeStatus === 'Pending' ? (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      Mode of payment is locked because collection status is set to Pending. Accounts team will collect later.
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-1">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      Immediate official fee receipt will be generated and auto-synced with Accounts.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -4312,7 +4514,7 @@ export default function AdminPage() {
                     const updatedStudents = await api.getStudents();
                     setStudentsList(updatedStudents);
                     setConvertModalEnquiry(null);
-                    triggerToast(`✓ ${convertModalEnquiry.student_name} officially enrolled into SIS with Section ${convertSection} allotment!`);
+                    triggerToast(`🎉 ${convertModalEnquiry.student_name} officially enrolled into SIS with Section ${convertSection} allotment!`);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                 >
@@ -4328,68 +4530,7 @@ export default function AdminPage() {
       {/* ========================================================= */}
       {/* MODAL: STAFF DOSSIER INSPECTOR                            */}
       {/* ========================================================= */}
-      {selectedStaffForModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950 text-teal-600 font-black flex items-center justify-center">
-                  {selectedStaffForModal.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">{selectedStaffForModal.name}</h3>
-                  <p className="text-xs text-slate-500">{selectedStaffForModal.role} • {selectedStaffForModal.department}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedStaffForModal(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
-                <div>
-                  <span className="text-slate-400 block font-bold text-[10px]">Monthly Compensation:</span>
-                  <span className="text-base font-black text-slate-900 dark:text-white">₹{selectedStaffForModal.salary.toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block font-bold text-[10px]">Teaching Experience:</span>
-                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedStaffForModal.experience || '8 Yrs Experience'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block font-bold text-[10px]">Leave Quota Balance:</span>
-                  <span className="text-sm font-bold text-emerald-600">{(selectedStaffForModal.leaves_total || 12) - (selectedStaffForModal.leaves_taken || 2)} Days Remaining</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block font-bold text-[10px]">Total Leave Requests:</span>
-                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedStaffForModal.requests_submitted || 2} Submitted</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Assigned Classes &amp; Academic Duties:</span>
-                <p className="text-slate-600 dark:text-slate-300 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
-                  {selectedStaffForModal.assigned_duties || 'Homeroom Mentorship & Subject Classes'}
-                </p>
-              </div>
-
-              <div>
-                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Contact:</span>
-                <p className="text-slate-600 dark:text-slate-300">{selectedStaffForModal.phone} &bull; {selectedStaffForModal.email}</p>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-right">
-              <button
-                onClick={() => setSelectedStaffForModal(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-              >
-                Close Dossier
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {/* ========================================================= */}
       {/* MODAL: ADD NEW SCHOOL EVENT (PRINCIPAL AUTHORITY)          */}
@@ -4565,7 +4706,184 @@ export default function AdminPage() {
         </div>
       )}
 
-    </div>
+    
+      {/* Task Verification & Approval Modal */}
+      {reviewModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  {showRevisionInput ? 'Request Revisions on Task' : 'Verify & Sign-off Task Completion'}
+                </h3>
+                <p className="text-xs text-slate-500">{reviewModalTask.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewModalTask(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Assignee:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{reviewModalTask.assigned_to}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Domain &amp; SLA:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{reviewModalTask.domain} • {reviewModalTask.sla_hours}h SLA</span>
+                </div>
+              </div>
+
+              {reviewModalTask.submission_notes && (
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Submitted Evidence &amp; Notes:
+                  </label>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                    {reviewModalTask.submission_notes}
+                  </div>
+                </div>
+              )}
+
+              {reviewModalTask.completion_proof_url && (
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Attached Document:
+                  </label>
+                  <a
+                    href={reviewModalTask.completion_proof_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl font-bold hover:underline"
+                  >
+                    📎 Open Submission Document / Dossier ↗
+                  </a>
+                </div>
+              )}
+
+              {!showRevisionInput ? (
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Principal Verification Remarks:
+                  </label>
+                  <input
+                    type="text"
+                    value={reviewRemarks}
+                    onChange={(e) => setReviewRemarks(e.target.value)}
+                    placeholder="e.g. Verified certificates, approved for CBSE renewal dossier."
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="font-bold text-rose-700 dark:text-rose-400 block mb-1">
+                    Required Changes / Revision Reason *:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={revisionReason}
+                    onChange={(e) => setRevisionReason(e.target.value)}
+                    placeholder="Specify what needs to be fixed before this task can be approved..."
+                    className="w-full p-2.5 rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setReviewModalTask(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              {!showRevisionInput ? (
+                <button
+                  type="button"
+                  onClick={() => handleApproveTask(reviewModalTask)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Approve &amp; Close Task
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleRejectTask(reviewModalTask)}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  Return for Revision
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Emergency Override Modal */}
+      {overrideModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                  Admin Force Close (Override)
+                </h3>
+                <p className="text-xs text-slate-500">{overrideModalTask.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOverrideModalTask(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Admin Override logs a formal audit trail and closes this task immediately without requiring the assignee&apos;s digital submission.
+            </p>
+
+            <div>
+              <label className="font-bold text-xs text-slate-700 dark:text-slate-300 block mb-1">
+                Mandatory Reason for Override *:
+              </label>
+              <textarea
+                rows={3}
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="e.g. Faculty is hospitalized; verified offline via physical inspection register."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setOverrideModalTask(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOverrideTask(overrideModalTask)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Confirm Force Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
     </RoleGuard>
   );
 }

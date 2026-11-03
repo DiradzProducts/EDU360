@@ -14,12 +14,17 @@ from app.core.database import AsyncSessionLocal
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure database schema is initialized and seeded
+    # Ensure database schema is initialized
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Check and seed initial data if needed
+    # Seed initial data only if database is completely empty
     try:
-        await seed_data()
+        from app.models.models import User
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User).limit(1))
+            if not result.scalars().first():
+                await seed_data()
     except Exception as e:
         print(f"Seed info: {e}")
     

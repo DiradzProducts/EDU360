@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
 import datetime
 
@@ -146,6 +146,13 @@ class AdminTaskUpdate(BaseModel):
     is_escalated: Optional[bool] = None
     escalation_reason: Optional[str] = None
     completion_proof_url: Optional[str] = None
+    submission_notes: Optional[str] = None
+    submitted_at: Optional[datetime.datetime] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime.datetime] = None
+    rejection_reason: Optional[str] = None
+    is_admin_override: Optional[bool] = None
+    admin_override_reason: Optional[str] = None
 
 class AdminTaskResponse(BaseModel):
     id: int
@@ -166,6 +173,13 @@ class AdminTaskResponse(BaseModel):
     is_escalated: Optional[bool] = False
     escalation_reason: Optional[str] = None
     completion_proof_url: Optional[str] = None
+    submission_notes: Optional[str] = None
+    submitted_at: Optional[datetime.datetime] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime.datetime] = None
+    rejection_reason: Optional[str] = None
+    is_admin_override: Optional[bool] = False
+    admin_override_reason: Optional[str] = None
     relief_requested: Optional[bool] = False
     relief_reason: Optional[str] = None
     relief_justification: Optional[str] = None
@@ -177,6 +191,22 @@ class AdminTaskResponse(BaseModel):
     updated_at: Optional[datetime.datetime] = None
     class Config:
         from_attributes = True
+
+
+class SubmitTaskWorkRequest(BaseModel):
+    submission_notes: str
+    completion_proof_url: Optional[str] = None
+
+class ApproveTaskRequest(BaseModel):
+    approved_by: Optional[str] = "Administrator"
+    remarks: Optional[str] = "Approved after review"
+
+class RejectTaskRequest(BaseModel):
+    rejection_reason: str
+
+class AdminOverrideTaskRequest(BaseModel):
+    override_reason: str
+    override_by: Optional[str] = "Administrator"
 
 class EscalateTaskRequest(BaseModel):
     reason: str
@@ -490,6 +520,9 @@ class LeaveRequestCreate(BaseModel):
     from_date: str
     to_date: str
     reason: str
+    is_medical: Optional[bool] = False
+    attachment_name: Optional[str] = None
+    attachment_url: Optional[str] = None
 
 class LeaveRequestReview(BaseModel):
     status: str  # Approved or Rejected
@@ -505,9 +538,45 @@ class LeaveRequestResponse(BaseModel):
     reason: str
     status: str
     teacher_notes: Optional[str] = None
+    is_medical: Optional[bool] = False
+    attachment_name: Optional[str] = None
+    attachment_url: Optional[str] = None
+    approval_stage: Optional[str] = "Submitted"
     applied_at: datetime.datetime
     class Config:
         from_attributes = True
+
+# --- Parent-Teacher Direct Messaging Schemas ---
+class ParentTeacherChatMessageCreate(BaseModel):
+    student_id: int
+    sender_role: str = "PARENT"  # PARENT or TEACHER
+    sender_name: str
+    receiver_role: str = "TEACHER"
+    receiver_name: str
+    message_text: str
+    attachment_name: Optional[str] = None
+    attachment_url: Optional[str] = None
+
+class ParentTeacherChatMessageResponse(BaseModel):
+    id: int
+    student_id: int
+    student_name: Optional[str] = None
+    sender_role: str
+    sender_name: str
+    receiver_role: str
+    receiver_name: str
+    message_text: str
+    attachment_name: Optional[str] = None
+    attachment_url: Optional[str] = None
+    is_read: bool
+    created_at: datetime.datetime
+    class Config:
+        from_attributes = True
+
+class ReportCardSignRequest(BaseModel):
+    signer_name: str
+    remarks: Optional[str] = "Acknowledged and reviewed term performance."
+
 
 # --- Fee Schemas ---
 class FeePayRequest(BaseModel):
@@ -913,6 +982,20 @@ class PTMSlotResponse(BaseModel):
     sibling_student_name: Optional[str] = None
     meeting_url: Optional[str] = None
     focus_table_agenda: Optional[List[str]] = None
+    cancellation_reason: Optional[str] = None
+    cancelled_by: Optional[str] = None
+    cancelled_at: Optional[str] = None
+
+class PTMSlotCancelRequest(BaseModel):
+    slot_id: str
+    cancelled_by: str = "TEACHER"
+    cancellation_reason: str = "Official School Duty / Emergency"
+    reopen_as_free: bool = True
+    notify_parent: bool = True
+
+class PTMSlotRestoreRequest(BaseModel):
+    slot_id: str
+    previous_state: Dict[str, Any]
 
 class PTMSlotBookRequest(BaseModel):
     slot_id: str
@@ -1179,6 +1262,40 @@ class FinanceDashboardStats(BaseModel):
 # =========================================================================
 # CASH OUTFLOW DOMAIN SCHEMAS (PAYROLL, PROCUREMENT, FLEET)
 # =========================================================================
+
+class StaffSalaryInquiryCreate(BaseModel):
+    teacher_id: Optional[int] = None
+    teacher_name: str
+    department: Optional[str] = "Academics"
+    month: str = "Oct 2026"
+    reason: str
+    message: str
+    net_salary: Optional[float] = 0.0
+    utr: Optional[str] = None
+
+class StaffSalaryInquiryResolve(BaseModel):
+    status: str = "Resolved"  # Resolved | Under Review | Rejected
+    resolution_notes: str
+    resolved_by: Optional[str] = "Accounts Coordinator"
+
+class StaffSalaryInquiryResponse(BaseModel):
+    id: int
+    teacher_id: Optional[int] = None
+    teacher_name: str
+    department: Optional[str] = "Academics"
+    month: str
+    reason: str
+    message: str
+    net_salary: Optional[float] = 0.0
+    utr: Optional[str] = None
+    status: str
+    resolution_notes: Optional[str] = None
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
 
 class StaffPayslipResponse(BaseModel):
     id: int

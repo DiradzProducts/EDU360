@@ -11,8 +11,10 @@ import {
   Moon,
   LogOut,
   User,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react';
+import { CommandPalette } from '@/components/command-palette';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 
@@ -39,6 +41,18 @@ export function Navbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -68,9 +82,38 @@ export function Navbar() {
           </Link>
         </div>
 
+        {/* Center: Global Omnisearch / Command Palette Trigger */}
+        <div className="flex-1 max-w-lg mx-3 sm:mx-6 hidden md:block">
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="w-full flex items-center justify-between px-4 py-2 rounded-2xl bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 transition-all shadow-2xs group cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <Search className="h-4 w-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+              <span className="font-medium text-slate-600 dark:text-slate-300">
+                Search students, modules, tasks...
+              </span>
+            </div>
+            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400 shadow-2xs">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </button>
+        </div>
+
         {/* Right Section: Theme Toggle, Notifications, Authenticated User Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
           
+          {/* Mobile Search Button */}
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs cursor-pointer"
+            title="Search (Ctrl + K)"
+          >
+            <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          </button>
+
           {/* THEME TOGGLE BUTTON (Dark / Light) */}
           <button
             type="button"
@@ -266,6 +309,12 @@ export function Navbar() {
         </div>,
         document.body
       )}
+      {/* Global Command Palette / Omnisearch Modal */}
+      <CommandPalette 
+        isOpen={commandPaletteOpen} 
+        onClose={() => setCommandPaletteOpen(false)} 
+        currentRole={role} 
+      />
     </header>
   );
 }
