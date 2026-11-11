@@ -339,12 +339,19 @@ class VendorEquipmentResponse(BaseModel):
         from_attributes = True
 
 # --- Exit Clearance Schemas ---
+class ExitClearanceInitiateRequest(BaseModel):
+    student_id: int
+    fee_cleared: bool = True
+    library_cleared: bool = True
+    inventory_cleared: bool = True
+    tc_ready: bool = True
+
 class ExitClearanceDigitalSign(BaseModel):
-    parent_confirmation: bool
-    confirmation_text: str
+    parent_confirmation: bool = True
+    confirmation_text: Optional[str] = "I confirm receipt of original Transfer Certificate and final mark memo in good condition."
 
 class ExitClearancePhysicalUpload(BaseModel):
-    physical_scan_url: str
+    physical_scan_url: Optional[str] = "/assets/signed_tc_handover_slip.pdf"
 
 class ExitClearanceResponse(BaseModel):
     id: int
@@ -1099,7 +1106,7 @@ class AIStudyAssistantResponse(BaseModel):
     has_backlog: bool = False
     backlog_count: int = 0
     source: str = "gemini"
-    model_used: str = "gemini-3.5-flash"
+    model_used: str = "gemini-1.5-flash"
 
 
 # =========================================================================

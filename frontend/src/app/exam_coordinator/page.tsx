@@ -1,97 +1,235 @@
 'use client';
+
 import { Icon3D } from '@/components/ui/icon-3d';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  FileCheck, 
-  Award, 
-  Calendar, 
-  Layers, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
-  AlertCircle,
-  Sparkles, 
-  Plus, 
-  Download, 
-  Printer, 
-  ChevronLeft, 
-  ChevronRight, 
-  ShieldCheck, 
-  Search, 
-  Filter, 
-  FileText,
-  Building2,
-  X,
-  Lock,
-  Eye,
-  Send,
-  RefreshCw,
-  Share2,
-  BookOpen,
-  UserCheck,
-  Check,
-  Menu,
-  ArrowRight,
-  Ticket,
-  LayoutDashboard,
-  Video,
-  GraduationCap,
-  TrendingUp,
-  Users
-} from 'lucide-react';
-import { Footer } from '@/components/footer';
-import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth-context';
-import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem, ReExamRequestItem, StaffMemberItem } from '@/lib/types';
-import { exportToCsv, printDossierReport, downloadMarksMemoFile } from '@/lib/export-utils';
-import { LiveInvigilatorCockpit } from '@/components/proctor/live-invigilator-cockpit';
 
-type ExamTab = 'dashboard' | 'secrecy_vault' | 'schedules' | 'cockpit' | 'moderation' | 'report_cards' | 'tasks';
+
+import React, { useState, useEffect } from 'react';
+
+import { 
+
+  FileCheck, 
+
+  Award, 
+
+  Calendar, 
+
+  Layers, 
+
+  CheckCircle2, 
+
+  Clock, 
+
+  AlertTriangle, 
+
+  AlertCircle,
+
+  Sparkles, 
+
+  Plus, 
+
+  Download, 
+
+  Printer, 
+
+  ChevronLeft, 
+
+  ChevronRight, 
+
+  ShieldCheck, 
+
+  Search, 
+
+  Filter, 
+
+  FileText,
+
+  Building2,
+
+  X,
+
+  Lock,
+
+  Eye,
+
+  Send,
+
+  RefreshCw,
+
+  Share2,
+
+  BookOpen,
+
+  UserCheck,
+
+  Check,
+
+  Menu,
+
+  ArrowRight,
+
+  Ticket,
+
+  LayoutDashboard,
+
+  Video,
+
+  GraduationCap,
+
+  TrendingUp,
+
+  Users,
+
+  Monitor,
+
+  QrCode
+
+} from 'lucide-react';
+
+import { Footer } from '@/components/footer';
+
+import { api } from '@/lib/api';
+
+import { useAuth } from '@/lib/auth-context';
+
+import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem, ReExamRequestItem, StaffMemberItem } from '@/lib/types';
+
+import { exportToCsv, printDossierReport, downloadMarksMemoFile } from '@/lib/export-utils';
+
+
+import { ProctorIntegrityDossierModal } from '@/components/proctor/proctor-integrity-dossier-modal';
+
+
+
+type ExamTab = 'dashboard' | 'secrecy_vault' | 'schedules' | 'moderation' | 'report_cards' | 'tasks';
+
+
+
+// Time 12h <-> 24h helper for native input[type="time"]
+const toTime24 = (t: string) => {
+  if (!t) return '09:00';
+  if (/^\d{2}:\d{2}$/.test(t)) return t;
+  const parts = t.trim().split(' ');
+  const time = parts[0];
+  const mod = parts[1] ? parts[1].toUpperCase() : '';
+  const [h, m] = time.split(':');
+  let hours = parseInt(h || '9', 10);
+  const minutes = (m || '00').padStart(2, '0');
+  if (mod === 'PM' && hours < 12) hours += 12;
+  if (mod === 'AM' && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+};
+
+const toTime12 = (t24: string) => {
+  if (!t24) return '09:00 AM';
+  const [h, m] = t24.split(':');
+  let hours = parseInt(h || '9', 10);
+  const minutes = (m || '00').padStart(2, '0');
+  const mod = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${String(hours).padStart(2, '0')}:${minutes} ${mod}`;
+};
 
 export default function ExamCoordinatorPage() {
+
   const { user } = useAuth();
+
   const [activeTab, setActiveTab] = useState<ExamTab>('dashboard');
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dossierCandidateId, setDossierCandidateId] = useState<number | null>(null);
+  const [showDossierModal, setShowDossierModal] = useState<boolean>(false);
+
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+
+
   // Data State
+
   const [tasks, setTasks] = useState<AdminTask[]>([]);
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
+
   const [newTaskDesc, setNewTaskDesc] = useState('');
+
   const [newTaskAssignee, setNewTaskAssignee] = useState('Mrs. Ananya Verma (Math Teacher)');
+
   const [newTaskPriority, setNewTaskPriority] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
+
   const [newTaskSlaHours, setNewTaskSlaHours] = useState(48);
+
   const [newTaskLabel, setNewTaskLabel] = useState('📋 Invigilation Duty');
+
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
+
   const [escalateReason, setEscalateReason] = useState('');
 
+
+
   // Secrecy Vault State
+
   const [questionPapers, setQuestionPapers] = useState<QuestionPaperItem[]>([]);
+
   const [selectedPaperForVault, setSelectedPaperForVault] = useState<QuestionPaperItem | null>(null);
+
   const [vaultFilter, setVaultFilter] = useState<'in_custody' | 'all'>('in_custody');
 
+
+
   // Requisition Blueprint from Academic Coordinator State
+
   const [showRequisitionModal, setShowRequisitionModal] = useState(false);
+
   const [reqClass, setReqClass] = useState('Class 8');
+
   const [reqSubject, setReqSubject] = useState('Mathematics');
+
   const [reqSeries, setReqSeries] = useState('Term 1 Final Examination 2026');
+
   const [reqDueDate, setReqDueDate] = useState('2026-10-28');
+
   const [reqNotes, setReqNotes] = useState('Please audit syllabus coverage, verify Bloom taxonomy distribution, and deposit approved QP into Vault.');
 
+
+
   // Schedules State
+
   const [schedules, setSchedules] = useState<ExamScheduleItem[]>([]);
+
   const [reExamMandates, setReExamMandates] = useState<ReExamRequestItem[]>([]);
+
   const [facultyRoster, setFacultyRoster] = useState<StaffMemberItem[]>([]);
 
-  // Derived teacher names for invigilation assignment
-  const availableTeachers = facultyRoster.length > 0 
-    ? facultyRoster.map(f => f.name) 
+
+
+  // Derived teaching faculty strictly for invigilation duty (filtering out admin/principals/academic coordinators)
+  const teachingFaculty = (facultyRoster || []).filter(f => {
+    const role = ((f as any).role || (f as any).designation || (f as any).department || '').toLowerCase();
+    const name = (f.name || '').toLowerCase();
+    const isExcluded = 
+      role.includes('coordinator') || 
+      role.includes('principal') || 
+      role.includes('admin') || 
+      role.includes('account') || 
+      role.includes('transport') ||
+      name.includes('rajeshwari') || 
+      name.includes('sundaram') || 
+      name.includes('shweta');
+    return !isExcluded;
+  });
+
+  const availableTeachers = teachingFaculty.length > 0 
+    ? teachingFaculty.map(f => f.name) 
     : [
         'Mrs. Ananya Verma',
         'Dr. Suresh Babu',
@@ -99,2916 +237,5909 @@ export default function ExamCoordinatorPage() {
         'Mrs. Sunitha Rao',
         'Mrs. Neha Roy',
         'Mr. Rajesh Kumar',
-        'Ms. Priya Sharma',
-        'Mr. K. Venkatesh'
+        'Ms. Priya Sharma'
       ];
+
   const [schedulingReExam, setSchedulingReExam] = useState<ReExamRequestItem | null>(null);
+
   const [reExamSlotDate, setReExamSlotDate] = useState('2026-10-30');
+
   const [reExamSlotTime, setReExamSlotTime] = useState('02:00 PM - 05:00 PM');
+
   const [reExamSlotRoom, setReExamSlotRoom] = useState('Secure Online Session (1-on-1 AI Proctor)');
+
   const [reExamInvigilator, setReExamInvigilator] = useState('Mr. S. Raman (Senior Invigilator)');
+
   const [reExamSuccessMsg, setReExamSuccessMsg] = useState<string | null>(null);
+
   const [schedClassFilter, setSchedClassFilter] = useState<string>('All');
+
   const [showCreateScheduleModal, setShowCreateScheduleModal] = useState(false);
+
   const [newSchedQuestionPaperId, setNewSchedQuestionPaperId] = useState<number | null>(null);
+
   const [newSchedExamName, setNewSchedExamName] = useState('Term 1 Final Examination');
+
   const [newSchedSubject, setNewSchedSubject] = useState('Mathematics');
+
   const [newSchedClass, setNewSchedClass] = useState('Class 8');
+
   const [newSchedSection, setNewSchedSection] = useState('B');
+
   const [newSchedDate, setNewSchedDate] = useState('2026-11-05');
+
   const [newSchedStartTime, setNewSchedStartTime] = useState('09:00 AM');
+
   const [newSchedEndTime, setNewSchedEndTime] = useState('12:00 PM');
+
   const [newSchedHall, setNewSchedHall] = useState('Virtual Room A (AI Proctor Session)');
+
   const [newSchedInvigilator, setNewSchedInvigilator] = useState('Dr. Suresh Babu');
+  const [newSchedExamMode, setNewSchedExamMode] = useState<'MODE_CBT' | 'MODE_HYBRID_SCAN' | 'MODE_OFFLINE'>('MODE_HYBRID_SCAN');
+
+
 
   // Class-Wise Batch Timetable Modal State
+
   const [showBatchModal, setShowBatchModal] = useState(false);
+
   const [batchClass, setBatchClass] = useState('Class 8');
+
   const [batchSeriesName, setBatchSeriesName] = useState('Term 1 Final Examination 2026');
+
   const [batchSlots, setBatchSlots] = useState([
+
     { subject: 'Mathematics', exam_date: '2026-11-02', start_time: '09:00 AM', end_time: '12:00 PM', hall_name: 'Virtual Room A (Camera AI)', invigilator: 'Mrs. Ananya Verma' },
+
     { subject: 'Science', exam_date: '2026-11-04', start_time: '09:00 AM', end_time: '12:00 PM', hall_name: 'Virtual Room B (Camera AI)', invigilator: 'Dr. Suresh Babu' },
+
     { subject: 'English', exam_date: '2026-11-06', start_time: '09:00 AM', end_time: '12:00 PM', hall_name: 'Virtual Room A (Camera AI)', invigilator: 'Mr. Arvind Saxena' },
+
     { subject: 'Social Studies', exam_date: '2026-11-09', start_time: '09:00 AM', end_time: '12:00 PM', hall_name: 'Virtual Room C (Camera AI)', invigilator: 'Mrs. Sunitha Rao' },
+
     { subject: 'Hindi', exam_date: '2026-11-11', start_time: '09:00 AM', end_time: '12:00 PM', hall_name: 'Virtual Room B (Camera AI)', invigilator: 'Mrs. Neha Roy' },
+
   ]);
+
+
 
   // Timetable & Hall Ticket Publishing State (Gap 2: Decoupled from Fee Collection)
+
   const [isTimetablePublished, setIsTimetablePublished] = useState(true);
+
   const [publishingTimetable, setPublishingTimetable] = useState(false);
 
+
+
   const handlePublishTimetableAndHallTickets = () => {
+
     setPublishingTimetable(true);
+
     setTimeout(() => {
+
       setIsTimetablePublished(true);
+
       setPublishingTimetable(false);
+
       setSchedules(prev => prev.map(s => ({ ...s, is_published: true, hall_ticket_published: true })));
+
       triggerToast('✓ Timetable published & Hall Tickets issued for all students! (Admit cards released without fee blockades per Board Mandate)');
+
     }, 600);
+
   };
+
+
 
   // Live Marks Submission Tracker & Ledger State
+
   const [submissionsSummary, setSubmissionsSummary] = useState<any[]>([]);
+
   const [absentees, setAbsentees] = useState<any[]>([]);
+
   const [retestModalItem, setRetestModalItem] = useState<any | null>(null);
+
   const [retestDate, setRetestDate] = useState('2026-11-14');
 
+
+
   // Report Cards State
+
   const [reportCards, setReportCards] = useState<ReportCardItem[]>([]);
+
   const [rcClassFilter, setRcClassFilter] = useState<string>('Class 8');
+
   const [rcSectionFilter, setRcSectionFilter] = useState<string>('B');
+
   const [rcTermFilter, setRcTermFilter] = useState<string>('Term 1');
+
   const [selectedReportCard, setSelectedReportCard] = useState<ReportCardItem | null>(null);
+
   const [batchGenLoading, setBatchGenLoading] = useState(false);
+
   const [publishLoading, setPublishLoading] = useState(false);
+
   const [classReadiness, setClassReadiness] = useState<any>(null);
+
   const [forceBatchGen, setForceBatchGen] = useState<boolean>(false);
 
+
+
   // Moderation state
+
   const [moderationList, setModerationList] = useState([
+
     { id: 1, class: 'Class 8-B', subject: 'Mathematics', teacher: 'Mrs. Ananya Verma', papers: 38, avgMarks: 76.4, status: 'Pending Sign-off' },
+
     { id: 2, class: 'Class 8-B', subject: 'General Science', teacher: 'Dr. Suresh Babu', papers: 38, avgMarks: 81.2, status: 'Approved' },
+
     { id: 3, class: 'Class 9-A', subject: 'English Language', teacher: 'Mrs. Neha Roy', papers: 42, avgMarks: 78.9, status: 'Approved' },
+
     { id: 4, class: 'Class 10-A', subject: 'Social Sciences', teacher: 'Mr. Arvind Saxena', papers: 45, avgMarks: 74.5, status: 'Pending Sign-off' },
+
   ]);
 
+
+
   const triggerToast = (msg: string) => {
+
     setToastMessage(msg);
+
     setTimeout(() => setToastMessage(null), 3500);
+
   };
+
+
 
   const loadData = async () => {
+
     setLoading(true);
+
     try {
+
       const [tRes, qpRes, schedRes, rcRes, sumRes, absRes, reExamsRes, staffRes] = await Promise.all([
+
         api.getAdminTasks('exam'),
+
         api.getQuestionPapers(),
+
         api.getExamSchedules(),
+
         api.getReportCards({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter }),
+
         api.getExamSubmissionsSummary({ class_name: rcClassFilter, term: rcTermFilter }),
+
         api.getAbsenteeRecords(),
+
         api.getReExamRequests(),
+
         api.getStaff()
+
       ]);
+
       setReExamMandates(reExamsRes || []);
+
       setFacultyRoster(staffRes || []);
+
       if (tRes && tRes.length > 1) {
+
         setTasks(tRes);
+
       } else {
+
         // Simple, realistic delegated exam tasks
+
         setTasks([
+
           {
+
             id: 101,
+
             title: 'Submit Class 8-B Mathematics Term 1 Question Paper & Rubric',
+
             description: 'Provide 80-mark draft question paper, step-wise solution keys, and unit weightage breakdown.',
+
             status: 'Pending',
+
             priority: 'High',
+
             category: 'urgent',
+
             domain: 'exam',
+
             assigned_to: 'Mrs. Ananya Verma (Math Teacher)',
+
             due_date: '2026-10-26',
+
             sla_hours: 48,
+
             is_escalated: false,
+
             task_label: '📑 Question Paper Submission'
+
           },
+
           {
+
             id: 102,
+
             title: 'Online Exam Invigilation Duty: Class 8-B Mathematics',
+
             description: 'Monitor candidate live webcams, attendance roster, and proctor session for Virtual Room Alpha.',
+
             status: 'In Progress',
+
             priority: 'High',
+
             category: 'urgent',
+
             domain: 'exam',
+
             assigned_to: 'Mrs. Ananya Verma (Math Teacher)',
+
             due_date: '2026-11-02',
+
             sla_hours: 24,
+
             is_escalated: false,
+
             task_label: '📋 Invigilation Duty'
+
           },
+
           {
+
             id: 103,
+
             title: 'Verify Blueprint Alignment & Syllabus Clearance for Class 8',
+
             description: 'Audit syllabus pacing and ensure Class 8 Term 1 papers comply with CBSE blueprint guidelines.',
+
             status: 'Pending',
+
             priority: 'Critical',
+
             category: 'urgent',
+
             domain: 'exam',
+
             assigned_to: 'Prof. Rajeshwari Nair (Academic Coordinator)',
+
             due_date: '2026-10-28',
+
             sla_hours: 36,
+
             is_escalated: false,
+
             task_label: '📐 Blueprint & Clearance'
+
           },
+
           {
+
             id: 104,
+
             title: 'Evaluate Class 8-B Science Answer Scripts & Upload Marks',
+
             description: 'Grade submitted student answer papers and enter marks into portal for gradebook moderation.',
+
             status: 'Pending',
+
             priority: 'High',
+
             category: 'upcoming',
+
             domain: 'exam',
+
             assigned_to: 'Dr. Suresh Babu (Science Faculty)',
+
             due_date: '2026-11-08',
+
             sla_hours: 72,
+
             is_escalated: false,
+
             task_label: '📝 Marks Evaluation'
+
           }
+
         ]);
+
       }
+
       setQuestionPapers(qpRes);
+
       setSchedules(schedRes);
+
       setReportCards(rcRes);
+
       if (sumRes && sumRes.length > 0) {
+
         setSubmissionsSummary(sumRes);
+
         setModerationList(sumRes.map((s, idx) => ({
+
           id: s.exam_id || idx + 1,
+
           class: `${s.class_name}-${s.section}`,
+
           subject: s.subject,
+
           teacher: s.teacher_name || 'Mrs. Ananya Verma',
+
           papers: s.evaluated_count || 38,
+
           avgMarks: s.average_score || 76.4,
+
           status: s.is_moderated ? 'Approved' : (s.status === 'Completed' ? 'Pending Sign-off' : 'In Progress')
+
         })));
+
       } else {
+
         // Fallback default realistic summary for Class 8
+
         setSubmissionsSummary([
+
           { exam_id: 1, title: 'Term 1 Mathematics Final', class_name: 'Class 8', section: 'B', subject: 'Mathematics', teacher_name: 'Mrs. Ananya Verma', total_students: 38, evaluated_count: 38, missing_count: 0, average_score: 76.4, status: 'Completed', is_locked: false, is_moderated: false },
+
           { exam_id: 2, title: 'Term 1 General Science Final', class_name: 'Class 8', section: 'B', subject: 'General Science', teacher_name: 'Dr. Suresh Babu', total_students: 38, evaluated_count: 32, missing_count: 6, average_score: 81.2, status: 'In Progress', is_locked: false, is_moderated: false },
+
           { exam_id: 3, title: 'Term 1 English Language Final', class_name: 'Class 9', section: 'A', subject: 'English Language', teacher_name: 'Mrs. Neha Roy', total_students: 42, evaluated_count: 42, missing_count: 0, average_score: 78.9, status: 'Completed', is_locked: true, is_moderated: true },
+
           { exam_id: 4, title: 'Term 1 Social Sciences Final', class_name: 'Class 10', section: 'A', subject: 'Social Sciences', teacher_name: 'Mr. Arvind Saxena', total_students: 45, evaluated_count: 0, missing_count: 45, average_score: 0, status: 'Pending', is_locked: false, is_moderated: false },
+
         ]);
+
       }
+
       setAbsentees(absRes || []);
+
     } catch (err) {
+
       console.error('Failed to load exam data', err);
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
+
+
 
   // Listen for global command palette navigation events
+
   useEffect(() => {
+
     const handleSwitchTab = (e: any) => {
+
       if (e.detail?.tab) {
+
         setActiveTab(e.detail.tab);
+
       }
+
     };
+
     window.addEventListener('edu360:switch-tab', handleSwitchTab);
+
     if (typeof window !== 'undefined') {
+
       const params = new URLSearchParams(window.location.search);
+
       const tabParam = params.get('tab');
+
       if (tabParam) {
+
         setActiveTab(tabParam as ExamTab);
+
       }
+
     }
+
     return () => window.removeEventListener('edu360:switch-tab', handleSwitchTab);
+
   }, []);
 
+
+
   useEffect(() => {
+
     loadData();
+
     api.getClassReadiness({
+
       class_name: rcClassFilter,
+
       section: rcSectionFilter,
+
       term: rcTermFilter
+
     }).then(res => setClassReadiness(res)).catch(() => {});
+
   }, [rcClassFilter, rcSectionFilter, rcTermFilter]);
 
+
+
   const handleUpdateStatus = async (taskId: number, newStatus: string) => {
+
     await api.updateAdminTask(taskId, { status: newStatus });
+
     const updated = await api.getAdminTasks('exam');
+
     setTasks(updated);
+
     triggerToast(`Exam task status updated to ${newStatus}`);
+
   };
+
+
 
   const handleEscalate = async (taskId: number) => {
+
     if (!escalateReason.trim()) { triggerToast('Please specify escalation reason.'); return; }
+
     await api.escalateAdminTask(taskId, escalateReason);
+
     const updated = await api.getAdminTasks('exam');
+
     setTasks(updated);
+
     setEscalateTaskId(null);
+
     setEscalateReason('');
+
     triggerToast('Escalated to Principal & Chief Examination Board.');
+
   };
+
+
 
   const handleCreateTask = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!newTaskTitle.trim()) return;
+
     await api.createAdminTask({
+
       title: newTaskTitle.trim(),
+
       description: newTaskDesc.trim(),
+
       category: 'urgent',
+
       domain: 'exam',
+
       due_date: 'Within 3 Days',
+
       assigned_to: newTaskAssignee,
+
       assigned_to_role: 'exam_coordinator',
+
       priority: newTaskPriority,
+
       sla_hours: newTaskSlaHours,
+
       status: 'Pending',
+
       task_label: newTaskLabel,
+
       task_type: newTaskLabel
+
     });
+
     const updated = await api.getAdminTasks('exam');
+
     setTasks(updated);
+
     setShowCreateModal(false);
+
     setNewTaskTitle('');
+
     setNewTaskDesc('');
+
     triggerToast('Examination cell task logged into SQLite');
+
   };
+
+
 
   const handleApproveModeration = async (id: number) => {
+
     try {
+
       await api.moderateExamGradebook(id);
+
       await api.lockExamGradebook(id);
+
     } catch (e) {
+
       console.warn("Moderation API fallback:", e);
+
     }
+
     setModerationList(prev => prev.map(m => m.id === id ? { ...m, status: 'Approved' } : m));
+
     triggerToast('Marks ledger signed, cryptographically hashed & gradebook locked.');
+
   };
+
+
 
   const handleExportCsv = () => {
+
     const headers = ['Class', 'Subject', 'Teacher', 'Total Papers', 'Average Score %', 'Moderation Status'];
+
     const rows = moderationList.map(m => [m.class, m.subject, m.teacher, m.papers, `${m.avgMarks}%`, m.status]);
+
     exportToCsv('EDU360_Exam_Moderation_LOC_Report', headers, rows);
+
     triggerToast('Examination moderation dossier exported as CSV.');
+
   };
+
+
 
   const handlePrintDossier = () => {
+
     const headers = ['Class & Subject', 'Evaluating Faculty', 'Papers Checked', 'Class Average', 'Status'];
+
     const rows = moderationList.map(m => [`${m.class} · ${m.subject}`, m.teacher, m.papers, `${m.avgMarks}%`, m.status]);
+
     printDossierReport(
+
       'Official Examination Cell Moderation Dossier',
+
       'Term 1 Consolidated Evaluation, Grade Standardization, and Board LOC Proof',
+
       'Examination & Assessment Cell',
+
       headers,
+
       rows
+
     );
+
   };
+
+
 
   // Schedule Creation Handler
+
   const handleCreateSchedule = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     try {
+
       const vaultPaper = questionPapers.find((p: any) => p.id === newSchedQuestionPaperId);
+
       const res = await api.createExamSchedule({
+
         exam_name: newSchedExamName,
+
+        title: newSchedExamName,
+
         subject: newSchedSubject,
+
+        exam_mode: newSchedExamMode,
+
         class_name: newSchedClass,
+
         section: newSchedSection,
+
         exam_date: newSchedDate,
+
         start_time: newSchedStartTime,
+
         end_time: newSchedEndTime,
+
         duration_minutes: 180,
+
         room_hall: newSchedHall,
+
         invigilator_name: newSchedInvigilator,
+
         question_paper_id: newSchedQuestionPaperId,
+
         question_paper_title: vaultPaper?.title || undefined
+
       });
+
       if (res.success) {
+
         triggerToast('Exam schedule created & forwarded for Academic Clearance!');
+
         setShowCreateScheduleModal(false);
+
         const updated = await api.getExamSchedules();
+
         setSchedules(updated);
+
       }
+
     } catch (err) {
+
       console.error(err);
+
       triggerToast('Failed to create exam schedule.');
+
     }
+
   };
+
+
 
   // Requisition Blueprint from Academic Coordinator
+
   const handleRequisitionSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     try {
+
       await api.createAdminTask({
+
         title: `Requisition: Approve ${reqClass} ${reqSubject} Blueprint & Syllabus Clearance`,
+
         description: `Exam Cell requires approved Question Paper Blueprint for ${reqSeries}. Due: ${reqDueDate}. Protocol Notes: ${reqNotes}`,
+
         category: 'urgent',
+
         domain: 'academic',
+
         due_date: reqDueDate,
+
         assigned_to: 'Prof. Rajeshwari Nair (Academic Coordinator)',
+
         assigned_to_role: 'academic_coordinator',
+
         priority: 'High',
+
         sla_hours: 48,
+
         status: 'Pending',
+
         task_label: '📐 QP Blueprint Draft',
+
         task_type: '📐 QP Blueprint Draft'
+
       });
+
       setShowRequisitionModal(false);
+
       triggerToast(`✓ Formal Requisition sent to Academic Coordinator (Prof. Rajeshwari Nair) for ${reqClass} ${reqSubject}!`);
+
     } catch {
+
       setShowRequisitionModal(false);
+
       triggerToast(`✓ Blueprint requisition logged for Prof. Rajeshwari Nair`);
+
     }
+
   };
+
+
 
   const handleNudgeAcademic = (subject: string, className: string) => {
+
     triggerToast(`🔔 Urgent reminder dispatched to Prof. Rajeshwari Nair for ${className} ${subject} blueprint & syllabus clearance!`);
+
   };
+
+
 
   // Class-Wise Multi-Subject Batch Schedule Handler
+
   const handleCreateBatchSchedules = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     try {
+
       const res = await api.createBatchClassSchedule({
+
         class_name: batchClass,
+
         series_name: batchSeriesName,
+
         slots: batchSlots.map(s => ({
+
           subject: s.subject,
+
           exam_date: s.exam_date,
+
           start_time: s.start_time,
+
           end_time: s.end_time,
+
           hall_name: s.hall_name,
+
           chief_invigilator_name: s.invigilator
+
         }))
+
       });
+
       if (res.success) {
+
         triggerToast(`Class ${batchClass} schedule created (${batchSlots.length} subjects) & routed for Academic Clearance!`);
+
         setShowBatchModal(false);
+
         const updated = await api.getExamSchedules();
+
         setSchedules(updated);
+
       }
+
     } catch (err) {
+
       console.error(err);
+
       triggerToast('Failed to publish class schedule batch.');
+
     }
+
   };
+
+
 
   // Lock & Seal Gradebook Handler
+
   const handleLockGradebook = async (examId: number) => {
+
     try {
+
       await api.lockExamGradebook(examId);
+
       setSubmissionsSummary(prev => prev.map(s => s.exam_id === examId ? { ...s, is_locked: true, is_moderated: true } : s));
+
       triggerToast('Gradebook locked & sealed! No further marks modification permitted.');
+
     } catch {
+
       setSubmissionsSummary(prev => prev.map(s => s.exam_id === examId ? { ...s, is_locked: true, is_moderated: true } : s));
+
       triggerToast('Gradebook locked & sealed! Ready for report card compilation.');
+
     }
+
   };
+
+
 
   // Digital Hall Tickets / Admit Cards Release
+
   const handleReleaseHallTickets = async () => {
+
     try {
+
       const res = await api.releaseHallTickets({ class_name: 'Class 8', series_name: 'Term 1 Final Examination 2026' });
+
       triggerToast(res.message || 'Official digital admit cards released to Student & Parent Portals!');
+
     } catch {
+
       triggerToast('Official digital admit cards released for Class 8!');
+
     }
+
   };
+
+
 
   // Absentee Medical Retest Scheduling
+
   const handleScheduleRetest = async () => {
+
     if (!retestModalItem) return;
+
     try {
+
       await api.scheduleAbsenteeRetest(retestModalItem.id, retestDate);
+
       triggerToast(`Supplementary Retest scheduled for ${retestModalItem.student_name} on ${retestDate}. Notification sent to parent!`);
+
       setAbsentees(prev => prev.map(a => a.id === retestModalItem.id ? { ...a, retest_scheduled: true, retest_date: retestDate } : a));
+
       setRetestModalItem(null);
+
     } catch {
+
       triggerToast(`Supplementary Retest scheduled for ${retestDate}.`);
+
       setRetestModalItem(null);
+
     }
+
   };
+
+
 
   // Batch Report Card Generation (CBSE grid + Gemini AI narrative)
+
   const handleGenerateBatch = async () => {
+
     setBatchGenLoading(true);
+
     try {
+
       const res = await api.generateBatchReportCards({
+
         class_name: rcClassFilter,
+
         section: rcSectionFilter,
+
         term: rcTermFilter,
+
         force: forceBatchGen
+
       });
+
       if (res.success) {
+
         triggerToast(res.message || 'Batch Report Cards generated with Gemini AI Pedagogical Narratives!');
+
         const updated = await api.getReportCards({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter });
+
         setReportCards(updated);
+
         // Refresh readiness
+
         const rRes = await api.getClassReadiness({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter });
+
         setClassReadiness(rRes);
+
       }
+
     } catch (err: any) {
+
       console.error(err);
+
       triggerToast(err.message || 'Failed to batch generate report cards. Verify all subject submissions.');
+
     } finally {
+
       setBatchGenLoading(false);
+
     }
+
   };
+
+
 
   // Batch Publish Report Cards to Student/Parent Portals
+
   const handlePublishBatch = async () => {
+
     setPublishLoading(true);
+
     try {
+
       const res = await api.publishBatchReportCards({
+
         class_name: rcClassFilter,
+
         section: rcSectionFilter,
+
         term: rcTermFilter
+
       });
+
       if (res.success) {
+
         triggerToast(res.message || 'All report cards published to Student & Parent Portals!');
+
         const updated = await api.getReportCards({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter });
+
         setReportCards(updated);
+
       }
+
     } catch (err) {
+
       console.error(err);
+
       triggerToast('Failed to publish report cards.');
+
     } finally {
+
       setPublishLoading(false);
+
     }
+
   };
 
+
+
   // Print / Download official single student report card
+
   const handlePrintStudentReportCard = (rc: ReportCardItem) => {
+
     downloadMarksMemoFile(rc.student_name, `${rc.class_name}-${rc.section} ${rc.term}`);
+
     triggerToast(`Official CBSE Marks Memo generated for ${rc.student_name}`);
+
   };
+
+
 
   const filteredTasks = tasks.filter(t => statusFilter === 'all' || t.status === statusFilter);
 
+
+
   return (
+
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 dark:bg-slate-950">
+
       {/* Toast */}
+
       {toastMessage && (
+
         <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-3 text-xs font-bold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3">
+
           <Sparkles className="h-4 w-4 text-violet-400 dark:text-violet-600" />
+
           <span>{toastMessage}</span>
+
         </div>
+
       )}
+
+
 
       {/* ── Mobile Drawer Backdrop ── */}
+
       {mobileDrawerOpen && (
+
         <div 
+
           onClick={() => setMobileDrawerOpen(false)}
+
           className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
+
           aria-hidden="true"
+
         />
+
       )}
 
+
+
       {/* ── Harmonized Left Collapsible Sidebar ── */}
+
       <aside className={`
+
         fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
+
         h-screen md:h-[calc(100vh-4rem)] md:self-start
+
         ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+
         ${sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'}
+
         transition-all duration-300 ease-in-out shrink-0 select-none
+
         bg-white text-slate-800 border-r border-slate-200/90
+
         dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90
+
         flex flex-col justify-between overflow-hidden
+
       `}>
+
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+
             {/* Context Card (Top of Sidebar) */}
+
             <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
+
               {!sidebarCollapsed ? (
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+
                     EX
+
                   </div>
+
                   <div className="min-w-0">
+
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
+
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Dr. Hemanth Sen</span>
+
                   </div>
+
                 </div>
+
               ) : (
+
                 <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+
                   EX
+
                 </div>
+
               )}
+
               <button 
+
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+
                 className={`p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
+
                 title="Collapse Sidebar"
+
               >
+
                 <ChevronLeft className="h-4 w-4" />
+
               </button>
+
               <button
+
                 onClick={() => setMobileDrawerOpen(false)}
+
                 className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+
                 title="Close Sidebar"
+
+              >
+
+                <X className="h-4 w-4" />
+
+              </button>
+
+            </div>
+
+
+
+            {sidebarCollapsed && (
+
+              <div className="hidden md:flex justify-center pt-2">
+
+                <button
+
+                  onClick={() => setSidebarCollapsed(false)}
+
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+
+                  title="Expand Sidebar"
+
+                >
+
+                  <ChevronRight className="h-4 w-4" />
+
+                </button>
+
+              </div>
+
+            )}
+
+
+
+            {/* Menu */}
+
+            <div className="p-3 space-y-1">
+
+              {!sidebarCollapsed && (
+
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
+                  Examination Authority
+
+                </span>
+
+              )}
+
+              {[
+
+                { id: 'dashboard', label: 'Exams Dashboard', icon: LayoutDashboard },
+
+                { id: 'secrecy_vault', label: 'Paper Vault & Custody', icon: Lock, badge: `${questionPapers.filter(p => p.status === 'sent_to_exam_cell').length} Sealed`, badgeType: 'amber' },
+
+                { id: 'schedules', label: 'Exam Schedules & Virtual Rooms', icon: Calendar, badge: `${schedules.length} Slots`, badgeType: 'blue' },
+
+                
+
+                { id: 'moderation', label: 'Grade Moderation', icon: Award, badge: `${moderationList.filter(m => m.status.includes('Pending')).length ? `${moderationList.filter(m => m.status.includes('Pending')).length} Pending` : '100% Synced'}`, badgeType: 'emerald' },
+
+                { id: 'report_cards', label: 'Report Cards & Memos', icon: FileText, badge: `${reportCards.length} Cards`, badgeType: 'blue' },
+
+                { id: 'tasks', label: 'Invigilation & Tasks', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' }
+
+              ].map(item => {
+
+                const Icon = item.icon;
+
+                const active = activeTab === item.id;
+
+                return (
+
+                  <button
+
+                    key={item.id}
+
+                    onClick={() => {
+
+                      setActiveTab(item.id as ExamTab);
+
+                      setMobileDrawerOpen(false);
+
+                    }}
+
+                    className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
+                      active 
+
+                        ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400' 
+
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
+                    }`}
+
+                    title={item.label}
+
+                  >
+
+                    <div className="flex items-center gap-2.5 min-w-0">
+
+                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
+                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+
+                    </div>
+
+                    {!sidebarCollapsed && item.badge && (
+
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+
+                        item.badgeType === 'amber'
+
+                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
+
+                          : item.badgeType === 'emerald'
+
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+
+                          : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60'
+
+                      }`}>
+
+                        {item.badge}
+
+                      </span>
+
+                    )}
+
+                  </button>
+
+                );
+
+              })}
+
+            </div>
+
+          </div>
+
+
+
+          {/* Bottom Status Footer */}
+
+          <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
+
+            {!sidebarCollapsed ? (
+
+              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
+
+                <span className="flex items-center gap-1.5 font-medium">
+
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+
+                  Academic Term 2
+
+                </span>
+
+                <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
+
+              </div>
+
+            ) : (
+
+              <div className="flex justify-center py-1">
+
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
+
+              </div>
+
+            )}
+
+          </div>
+
+        </aside>
+
+
+
+        {/* ── Main Content Canvas ── */}
+
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+          {/* Top Bar Header */}
+
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
+
+            <div className="flex items-center gap-3">
+
+              <button
+
+                onClick={() => setMobileDrawerOpen(true)}
+
+                className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
+
+                title="Open Sidebar"
+
+              >
+
+                <Menu className="h-5 w-5" />
+
+              </button>
+
+              <div>
+
+                <div className="flex items-center gap-2">
+
+                  <span className="rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 px-2.5 py-0.5 text-[10px] font-bold border border-violet-200/60 dark:border-violet-800/60">
+
+                    Examination Authority
+
+                  </span>
+
+                  <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">Term Assessments &amp; Secrecy Wing</span>
+
+                </div>
+
+                <h1 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+
+                  {activeTab === 'dashboard' && 'Examination Controller Command Center'}
+
+                  {activeTab === 'secrecy_vault' && 'Question Paper Secrecy Vault & Strongroom Custody'}
+
+                  {activeTab === 'schedules' && 'Examination Timetables & Virtual Room Governance'}
+
+                  {activeTab === 'moderation' && 'Grade Moderation & Marksheet Normalization'}
+
+                  {activeTab === 'report_cards' && 'Report Cards & Gemini AI Performance Memos'}
+
+                  {activeTab === 'tasks' && 'Invigilation Duties & Examination Tasks'}
+
+                </h1>
+
+              </div>
+
+            </div>
+
+            <div className="flex items-center gap-2">
+
+              {activeTab === 'schedules' && (
+
+                <button
+
+                  onClick={() => setShowBatchModal(true)}
+
+                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                >
+
+                  <Plus className="h-3.5 w-3.5" />
+
+                  <span>Schedule Exams for Class</span>
+
+                </button>
+
+              )}
+
+              {activeTab === 'tasks' && (
+
+                <button
+
+                  onClick={() => setShowCreateModal(true)}
+
+                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                >
+
+                  <Plus className="h-3.5 w-3.5" />
+
+                  <span>Assign Exam Task</span>
+
+                </button>
+
+              )}
+
+              {activeTab === 'dashboard' && (
+
+                <button
+
+                  onClick={() => setActiveTab('schedules')}
+
+                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                >
+
+                  <Calendar className="h-3.5 w-3.5" />
+
+                  <span>View Active Timetables</span>
+
+                </button>
+
+              )}
+
+            </div>
+
+          </div>
+
+
+
+          {/* ── TAB 0: EXAM CONTROLLER EXECUTIVE DASHBOARD (BENTO) ── */}
+
+          {activeTab === 'dashboard' && (
+
+            <div className="space-y-6">
+
+              {/* 6 Core Examination Bento Metric Cards */}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                {/* Card 1: Question Paper Secrecy Vault */}
+
+                <div 
+
+                  onClick={() => setActiveTab('secrecy_vault')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-600">
+
+                        <Lock className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Paper Secrecy Vault</span>
+
+                        <p className="text-[10px] text-slate-400">Dean-sealed exam custody</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+
+                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell').length} In Vault
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+
+                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell' || p.status === 'approved').length} / {questionPapers.length}
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      {questionPapers.filter(p => p.status === 'under_review').length} papers pending academic moderation
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-violet-600 dark:text-violet-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Open Strongroom Vault</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Card 2: Examination Timetables & Schedules */}
+
+                <div 
+
+                  onClick={() => setActiveTab('schedules')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
+
+                        <Calendar className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Exam Schedules &amp; Halls</span>
+
+                        <p className="text-[10px] text-slate-400">Timetable slots &amp; venues</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+
+                      {schedules.length} Exam Slots
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+
+                      {schedules.filter(s => s.academic_clearance).length} / {schedules.length}
+
+                    </div>
+
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+
+                      <div 
+
+                        className="bg-blue-600 h-1.5 rounded-full" 
+
+                        style={{ width: `${Math.round((schedules.filter(s => s.academic_clearance).length / (schedules.length || 1)) * 100)}%` }} 
+
+                      />
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      Academic clearance verified for scheduled halls
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Manage Exam Calendar</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Card 3: Hall Tickets / Admit Cards */}
+
+                <div 
+
+                  onClick={() => setActiveTab('schedules')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
+
+                        <Ticket className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Hall Ticket Publishing</span>
+
+                        <p className="text-[10px] text-slate-400">Decoupled admit pass access</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+
+                      {isTimetablePublished ? 'Released ✓' : 'Draft'}
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+
+                      100% Issued
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      Admit dockets generated without fee-gate locking
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Audit Hall Tickets</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Card 4: Teacher Marks Sync & Moderation */}
+
+                <div 
+
+                  onClick={() => setActiveTab('moderation')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-fuchsia-50 dark:bg-fuchsia-950/50 text-fuchsia-600">
+
+                        <Award className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Grade Moderation</span>
+
+                        <p className="text-[10px] text-slate-400">Teacher marksheets &amp; normalization</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-100 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-200 dark:border-fuchsia-800">
+
+                      100% Synced
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+
+                      {moderationList.length} Subject Sets
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      Standard deviation verified across faculty submissions
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Moderate Grades</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Card 5: AI Report Cards & Memos */}
+
+                <div 
+
+                  onClick={() => setActiveTab('report_cards')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
+
+                        <FileCheck className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Report Cards &amp; Memos</span>
+
+                        <p className="text-[10px] text-slate-400">Gemini AI performance summaries</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+
+                      {reportCards.filter(r => r.is_published).length} Published
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+
+                      {reportCards.length} Generated
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      CBSE/ICSE grade cards ready for parent portal dispatch
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Review Report Cards</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Card 6: Re-Exam & Special Accommodation Window */}
+
+                <div 
+
+                  onClick={() => setActiveTab('schedules')}
+
+                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+
+                >
+
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
+
+                        <AlertTriangle className="h-4 w-4" />
+
+                      </div>
+
+                      <div>
+
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Re-Exam Mandates</span>
+
+                        <p className="text-[10px] text-slate-400">Medical leaves &amp; special retests</p>
+
+                      </div>
+
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+
+                      {reExamMandates.length} Approved
+
+                    </span>
+
+                  </div>
+
+                  <div className="my-3">
+
+                    <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
+
+                      {reExamMandates.length} Retests
+
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+
+                      Admin-approved retests scheduled in Secrecy Wing
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+
+                    <span>Manage Retests</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+
+              {/* Middle Section: Strongroom Vault Security Radar & Live Marks Submission Tracker */}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Strongroom Paper Vault Custody Monitor */}
+
+                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+
+                  <div className="flex items-center justify-between mb-4">
+
+                    <div>
+
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                        <Lock className="h-4 w-4 text-violet-600" />
+
+                        Secrecy Strongroom Custody Tracker
+
+                      </h3>
+
+                      <p className="text-xs text-slate-500">Live seal integrity and physical/digital handover status</p>
+
+                    </div>
+
+                    <button
+
+                      onClick={() => setActiveTab('secrecy_vault')}
+
+                      className="text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
+
+                    >
+
+                      View All
+
+                    </button>
+
+                  </div>
+
+
+
+                  <div className="space-y-3">
+
+                    {questionPapers.slice(0, 3).map(paper => (
+
+                      <div key={paper.id} className="p-3.5 rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-3">
+
+                        <div>
+
+                          <div className="flex items-center gap-2">
+
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300">
+
+                              {paper.class_name} • {paper.subject}
+
+                            </span>
+
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-xs">
+
+                              {paper.title}
+
+                            </span>
+
+                          </div>
+
+                          <p className="text-[11px] text-slate-500 mt-1">
+
+                            Authored by: <b className="text-slate-700 dark:text-slate-300">{paper.teacher_name || 'Department Faculty'}</b> • Total {paper.blueprint?.total_marks || paper.total_marks || 100} Marks
+
+                          </p>
+
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${
+
+                          paper.status === 'sent_to_exam_cell' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+
+                          paper.status === 'approved' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
+
+                          'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+
+                        }`}>
+
+                          {paper.status === 'sent_to_exam_cell' ? 'Sealed in Vault ✓' : paper.status === 'approved' ? 'Dean Cleared' : 'In Moderation'}
+
+                        </span>
+
+                      </div>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Grade Moderation & Faculty Sync Health */}
+
+                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+
+                  <div className="flex items-center justify-between mb-4">
+
+                    <div>
+
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                        <Award className="h-4 w-4 text-fuchsia-600" />
+
+                        Teacher Marksheet Submission &amp; Moderation
+
+                      </h3>
+
+                      <p className="text-xs text-slate-500">Subject grade normalization and bell-curve audits</p>
+
+                    </div>
+
+                    <button
+
+                      onClick={() => setActiveTab('moderation')}
+
+                      className="text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
+
+                    >
+
+                      Audit All
+
+                    </button>
+
+                  </div>
+
+
+
+                  <div className="space-y-3">
+
+                    {moderationList.slice(0, 4).map(item => (
+
+                      <div key={item.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+
+                        <div>
+
+                          <div className="flex items-center gap-2 text-xs">
+
+                            <span className="font-bold text-slate-900 dark:text-white">{item.class} • {item.subject}</span>
+
+                            <span className="text-[10px] text-slate-400">({item.teacher})</span>
+
+                          </div>
+
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+
+                            Average Marks: <b className="text-slate-800 dark:text-slate-200">{item.avgMarks}%</b> • Papers: <span className="text-violet-600 font-bold">{item.papers} Evaluated</span>
+
+                          </div>
+
+                        </div>
+
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+
+                          item.status.includes('Approved') || item.status.includes('Synced') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+
+                        }`}>
+
+                          {item.status}
+
+                        </span>
+
+                      </div>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+
+              {/* Bottom Section: Active Examination Schedule Roster */}
+
+              <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+
+                <div className="flex items-center justify-between mb-4">
+
+                  <div>
+
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                      <Calendar className="h-4 w-4 text-blue-600" />
+
+                      Upcoming Examination Slots &amp; Hall Allocations
+
+                    </h3>
+
+                    <p className="text-xs text-slate-500">Class 6–12 official term assessment timetable</p>
+
+                  </div>
+
+                  <button
+
+                    onClick={() => setActiveTab('schedules')}
+
+                    className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
+
+                  >
+
+                    <span>View All {schedules.length} Exam Slots</span>
+
+                    <ArrowRight className="h-3.5 w-3.5" />
+
+                  </button>
+
+                </div>
+
+
+
+                <div className="overflow-x-auto">
+
+                  <table className="w-full text-left text-xs">
+
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] font-bold">
+
+                      <tr>
+
+                        <th className="p-3 rounded-l-xl">Subject &amp; Exam</th>
+
+                        <th className="p-3">Class</th>
+
+                        <th className="p-3">Date &amp; Time</th>
+
+                        <th className="p-3">Online Room &amp; Proctor</th>
+
+                        <th className="p-3">Clearance</th>
+
+                        <th className="p-3 rounded-r-xl text-right">Admit Card</th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+
+                      {schedules.slice(0, 5).map(sched => (
+
+                        <tr key={sched.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+
+                          <td className="p-3">
+
+                            <div className="font-bold text-slate-900 dark:text-white">{sched.subject}</div>
+
+                            <span className="text-[10px] text-slate-400">{sched.exam_name}</span>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800">
+
+                              {sched.class_name}-{sched.section}
+
+                            </span>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <div className="font-semibold">{sched.exam_date}</div>
+
+                            <span className="text-[10px] text-slate-400">{sched.start_time} - {sched.end_time}</span>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <div>{sched.hall_name}</div>
+
+                            <span className="text-[10px] text-slate-400">{sched.invigilator_name}</span>
+
+                          </td>
+
+                          <td className="p-3">
+
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+
+                              sched.academic_clearance ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+
+                            }`}>
+
+                              {sched.academic_clearance ? 'Dean Cleared ✓' : 'Awaiting Seal'}
+
+                            </span>
+
+                          </td>
+
+                          <td className="p-3 text-right">
+
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+
+                              Issued ✓
+
+                            </span>
+
+                          </td>
+
+                        </tr>
+
+                      ))}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          )}
+
+
+
+
+
+          {/* ── TAB 1: EXAM TASKS & SLAS ── */}
+
+          {activeTab === 'tasks' && (
+
+            <div className="space-y-4">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Delegated Faculty &amp; Academic Exam Tasks</h2>
+
+                  <p className="text-xs text-slate-500">Direct follow-ups for invigilation duties, question paper submissions, blueprints, and marks evaluation</p>
+
+                </div>
+
+                <select 
+
+                  value={statusFilter} 
+
+                  onChange={e => setStatusFilter(e.target.value)}
+
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
+
+                >
+
+                  <option value="all">All Statuses</option>
+
+                  <option value="Pending">Pending</option>
+
+                  <option value="In Progress">In Progress</option>
+
+                  <option value="Completed">Completed</option>
+
+                </select>
+
+              </div>
+
+
+
+              <div className="space-y-2.5">
+
+                {filteredTasks.map(task => {
+
+                  const isExpanded = taskExpandedId === task.id;
+
+                  const taskLabel = task.task_label || (
+
+                    task.title.toLowerCase().includes('invigil') || task.title.toLowerCase().includes('proctor') ? '📋 Invigilation Duty' :
+
+                    task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('clearance') ? '📐 Blueprint & Clearance' :
+
+                    task.title.toLowerCase().includes('evaluat') || task.title.toLowerCase().includes('marks') ? '📝 Marks Evaluation' :
+
+                    task.title.toLowerCase().includes('paper') || task.title.toLowerCase().includes('question') ? '📑 Question Paper Submission' :
+
+                    task.task_type || null
+
+                  );
+
+                  return (
+
+                    <div key={task.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+                        <div className="flex items-start gap-3">
+
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold mt-0.5 ${
+
+                            task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
+
+                            task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+
+                          }`}>
+
+                            {task.status}
+
+                          </span>
+
+                          <div>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+
+                              <h3 className="text-xs font-bold text-slate-900 dark:text-white">{task.title}</h3>
+
+                              {taskLabel && (
+
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+
+                                  {taskLabel}
+
+                                </span>
+
+                              )}
+
+                            </div>
+
+                            <div className="flex items-center gap-2.5 text-[11px] text-slate-500 mt-1">
+
+                              <span>Assignee: <b className="text-slate-800 dark:text-slate-200">{task.assigned_to}</b></span>
+
+                              <span>•</span>
+
+                              <span>Due: {task.due_date}</span>
+
+                              <span>•</span>
+
+                              <span className="font-semibold text-violet-600 dark:text-violet-400">SLA: {task.sla_hours || 24}h</span>
+
+                              {task.is_escalated && (
+
+                                <span className="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded font-black text-[9px]">
+
+                                  CRITICAL ESCALATION
+
+                                </span>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+
+                    {task.status === 'Completed' ? (
+
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+
+                        <CheckCircle2 className="h-3 w-3" />
+
+                        <span>Done</span>
+
+                      </span>
+
+                    ) : (
+
+                      <>
+
+                        {task.status === 'Pending' && (
+
+                          <button
+
+                            onClick={() => handleUpdateStatus(task.id, 'In Progress')}
+
+                            className="rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300 px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer"
+
+                            title="Mark duty as currently underway"
+
+                          >
+
+                            In-Progress
+
+                          </button>
+
+                        )}
+
+                        <button
+
+                          onClick={() => handleUpdateStatus(task.id, 'Completed')}
+
+                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+
+                          title="Mark duty as fully inspected & completed"
+
+                        >
+
+                          <Check className="h-3 w-3" />
+
+                          <span>Complete Duty</span>
+
+                        </button>
+
+                      </>
+
+                    )}
+
+                    <button
+
+                      onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
+
+                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 cursor-pointer font-medium"
+
+                    >
+
+                      {isExpanded ? 'Less' : 'Details'}
+
+                    </button>
+
+                  </div>
+
+                    </div>
+
+
+
+                      {isExpanded && (
+
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+
+                          <p>{task.description || 'No description provided.'}</p>
+
+                          {task.escalation_reason && (
+
+                            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200">
+
+                              <b>Escalation Reason:</b> {task.escalation_reason}
+
+                            </div>
+
+                          )}
+
+                          {!task.is_escalated && task.status !== 'Completed' && (
+
+                            <div className="pt-2">
+
+                              {escalateTaskId === task.id ? (
+
+                                <div className="flex items-center gap-2">
+
+                                  <input 
+
+                                    type="text" 
+
+                                    value={escalateReason} 
+
+                                    onChange={e => setEscalateReason(e.target.value)} 
+
+                                    placeholder="Reason for board escalation..." 
+
+                                    className="flex-1 rounded-lg border border-rose-300 p-1.5 text-xs text-slate-900"
+
+                                  />
+
+                                  <button onClick={() => handleEscalate(task.id)} className="bg-rose-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold">Confirm</button>
+
+                                  <button onClick={() => setEscalateTaskId(null)} className="text-slate-400 text-xs">Cancel</button>
+
+                                </div>
+
+                              ) : (
+
+                                <button onClick={() => setEscalateTaskId(task.id)} className="text-rose-600 hover:underline text-xs font-bold">
+
+                                  ⚠️ Escalate to Principal
+
+                                </button>
+
+                              )}
+
+                            </div>
+
+                          )}
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  );
+
+                })}
+
+              </div>
+
+              {/* MALPRACTICE AUDIT & POST-EXAM PROCTORING DOSSIER DESK */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center font-bold">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        Post-Exam Malpractice Audit &amp; Candidate Credibility Ledgers
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Official examination cell review: verify AI infraction timeline, strikes, tab switches, and sign off marks penalties or disqualification before sealing
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Audit Verification Active
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                        <th className="py-2.5 px-3">Candidate</th>
+                        <th className="py-2.5 px-3">Exam / Grade</th>
+                        <th className="py-2.5 px-3">Credibility Index</th>
+                        <th className="py-2.5 px-3">Infractions</th>
+                        <th className="py-2.5 px-3">Strikes</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                      <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 dark:text-white">Aarav Patel</div>
+                          <span className="text-[10px] text-slate-400">Roll #01 &bull; ID #101</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="text-slate-800 dark:text-slate-200 font-semibold">Mathematics</div>
+                          <span className="text-[10px] text-slate-400">Class 10-A &bull; CBT</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-rose-600 dark:text-rose-400 text-sm">12.0%</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                              High Risk
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="text-slate-700 dark:text-slate-300">12 Infractions</div>
+                          <span className="text-[10px] text-rose-500 font-bold">Phone Detected, Multiple Faces</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-black text-rose-600">3 / 3 Strikes</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                            Disqualified
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDossierCandidateId(1);
+                              setShowDossierModal(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <span>Audit Dossier</span>
+                          </button>
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 dark:text-white">Ananya Sharma</div>
+                          <span className="text-[10px] text-slate-400">Roll #04 &bull; ID #102</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="text-slate-800 dark:text-slate-200 font-semibold">Mathematics</div>
+                          <span className="text-[10px] text-slate-400">Class 10-A &bull; CBT</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">98.4%</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              Clean
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="text-slate-700 dark:text-slate-300">0 Infractions</div>
+                          <span className="text-[10px] text-emerald-500 font-bold">Flawless Session</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-bold text-slate-500">0 / 3 Strikes</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Verified Clean
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDossierCandidateId(2);
+                              setShowDossierModal(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <span>Audit Dossier</span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+
+            </div>
+
+          )}
+
+
+
+          {/* ── TAB 2: SECRECY VAULT (APPROVED QUESTION PAPERS) ── */}
+
+          {activeTab === 'secrecy_vault' && (
+
+            <div className="space-y-4">
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+                <div>
+
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                    <Lock className="h-4 w-4 text-violet-600" />
+
+                    Examination Secrecy Strongroom &amp; Custody
+
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+
+                    Question papers approved by Academic Coordinator and handed over into official Examination Cell custody.
+
+                  </p>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <button
+
+                    onClick={() => setShowRequisitionModal(true)}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                  >
+
+                    <FileText className="h-3.5 w-3.5" />
+
+                    <span>Requisition Blueprint from Academic Cell</span>
+
+                  </button>
+
+                  <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+
+                    <button
+
+                      onClick={() => setVaultFilter('in_custody')}
+
+                      className={`px-3 py-1 rounded-lg transition-all ${
+
+                        vaultFilter === 'in_custody'
+
+                          ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+
+                          : 'text-slate-500 hover:text-slate-900'
+
+                      }`}
+
+                    >
+
+                      In Strongroom Custody ({questionPapers.filter(p => p.status === 'sent_to_exam_cell').length})
+
+                    </button>
+
+                    <button
+
+                      onClick={() => setVaultFilter('all')}
+
+                      className={`px-3 py-1 rounded-lg transition-all ${
+
+                        vaultFilter === 'all'
+
+                          ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+
+                          : 'text-slate-500 hover:text-slate-900'
+
+                      }`}
+
+                    >
+
+                      All Blueprints ({questionPapers.length})
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {questionPapers
+
+                  .filter(qp => vaultFilter === 'in_custody' ? qp.status === 'sent_to_exam_cell' : true)
+
+                  .map(qp => {
+
+                    const isReadyInCell = qp.status === 'sent_to_exam_cell';
+
+                    const marks = qp.total_marks || qp.blueprint?.total_marks || 80;
+
+                    const duration = qp.duration_minutes || qp.blueprint?.duration_minutes || 180;
+
+                    const faculty = qp.teacher_name || qp.created_by_teacher_name || 'Mrs. Ananya Verma';
+
+                    const title = qp.title || qp.exam_name || `${qp.subject} Term 1 Assessment`;
+
+                    return (
+
+                      <div key={qp.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+
+                        <div className="flex items-start justify-between gap-3">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
+
+                              isReadyInCell 
+
+                                ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' 
+
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+
+                            }`}>
+
+                              <Lock className="h-5 w-5" />
+
+                            </div>
+
+                            <div>
+
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+
+                                {qp.class_name} · {qp.subject}
+
+                              </span>
+
+                              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
+                                {title}
+
+                              </h3>
+
+                            </div>
+
+                          </div>
+
+
+
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+
+                            isReadyInCell 
+
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300' 
+
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
+                          }`}>
+
+                            {isReadyInCell ? 'In Exam Cell Custody ✓' : qp.status.replace(/_/g, ' ')}
+
+                          </span>
+
+                        </div>
+
+
+
+                        {/* Paper Metadata */}
+
+                        <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl text-[11px]">
+
+                          <div>
+
+                            <span className="text-slate-400 block text-[9px] font-bold">TOTAL MARKS</span>
+
+                            <span className="font-bold text-slate-900 dark:text-white">{marks} Marks</span>
+
+                          </div>
+
+                          <div>
+
+                            <span className="text-slate-400 block text-[9px] font-bold">DURATION</span>
+
+                            <span className="font-bold text-slate-900 dark:text-white">{duration} Mins</span>
+
+                          </div>
+
+                          <div>
+
+                            <span className="text-slate-400 block text-[9px] font-bold">FACULTY</span>
+
+                            <span className="font-bold text-slate-900 dark:text-white truncate block">{faculty}</span>
+
+                          </div>
+
+                        </div>
+
+
+
+                        {/* Secrecy & Envelope Info */}
+
+                        <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-3 text-xs space-y-1.5">
+
+                          <div className="flex items-center justify-between text-[11px] font-bold text-violet-900 dark:text-violet-200">
+
+                            <span className="flex items-center gap-1.5">
+
+                              <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
+
+                              Academic Approval Seal
+
+                            </span>
+
+                            <span className="text-emerald-600">Verified &amp; Cleared</span>
+
+                          </div>
+
+                          <p className="text-[10px] text-slate-600 dark:text-slate-400">
+
+                            Draft File: <b className="text-slate-800 dark:text-slate-200">{qp.draft_file_name || 'Draft_QP_Final.pdf'}</b>
+
+                          </p>
+
+                          {qp.answer_key_url && (
+
+                            <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+
+                              Answer Key &amp; Rubric: Deposited in Strongroom
+
+                            </p>
+
+                          )}
+
+                        </div>
+
+
+
+                        {/* Secrecy Actions */}
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
+                          <button
+
+                            onClick={() => setSelectedPaperForVault(qp)}
+
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
+
+                          >
+
+                            <Eye className="h-3.5 w-3.5 text-violet-600" />
+
+                            <span>Inspect Packet</span>
+
+                          </button>
+
+                          {isReadyInCell ? (
+
+                            <button
+
+                              onClick={() => {
+
+                                triggerToast(`Official Sealed Envelopes (40 Copies + 2 Buffer) printed with Barcode for ${qp.subject}!`);
+
+                              }}
+
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                            >
+
+                              <Printer className="h-3.5 w-3.5" />
+
+                              <span>Print Sealed Packet</span>
+
+                            </button>
+
+                          ) : (
+
+                            <button
+
+                              onClick={() => handleNudgeAcademic(qp.subject, qp.class_name)}
+
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                            >
+
+                              <Clock className="h-3.5 w-3.5" />
+
+                              <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
+
+                            </button>
+
+                          )}
+
+                        </div>
+
+                      </div>
+
+                    );
+
+                  })}
+
+              </div>
+
+            </div>
+
+          )}
+
+
+
+          {/* ── TAB 3: SCHEDULES & ACADEMIC CLEARANCE ── */}
+
+          {activeTab === 'schedules' && (
+
+            <div className="space-y-4">
+
+
+
+              {/* Toast for Re-Exam Scheduling */}
+
+              {reExamSuccessMsg && (
+
+                <div className="rounded-2xl bg-emerald-600 text-white p-3.5 text-xs font-bold flex items-center justify-between shadow-lg">
+
+                  <div className="flex items-center gap-2">
+
+                    <CheckCircle2 className="h-4 w-4" />
+
+                    <span>{reExamSuccessMsg}</span>
+
+                  </div>
+
+                  <button onClick={() => setReExamSuccessMsg(null)} className="text-white/80 hover:text-white">✕</button>
+
+                </div>
+
+              )}
+
+
+
+              {/* Principal Mandated Re-Examinations Section */}
+
+              {reExamMandates.filter(r => r.status === 'Approved by Admin').length > 0 && (
+
+                <div className="rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 p-4.5 shadow-sm">
+
+                  <div className="flex items-center justify-between mb-3">
+
+                    <div className="flex items-center gap-2">
+
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+
+                      <h3 className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">
+
+                        Principal Mandates: Special Re-Examinations to Conduct ({reExamMandates.filter(r => r.status === 'Approved by Admin').length})
+
+                      </h3>
+
+                    </div>
+
+                    <span className="text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+
+                      Legally Cleared on Medical/Exemption Grounds
+
+                    </span>
+
+                  </div>
+
+
+
+                  <div className="space-y-2.5">
+
+                    {reExamMandates.filter(r => r.status === 'Approved by Admin').map(item => (
+
+                      <div key={item.id} className="rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+
+                        <div>
+
+                          <div className="flex items-center gap-2">
+
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+
+                              {item.student_name} &bull; {item.class_name}-{item.section}
+
+                            </h4>
+
+                            <span className="rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5">
+
+                              {item.subject}
+
+                            </span>
+
+                            <span className="rounded-md bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
+
+                              {item.exam_name}
+
+                            </span>
+
+                          </div>
+
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+
+                            <strong>Reason:</strong> {item.reason_category} &bull; {item.reason_details}
+
+                          </p>
+
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium mt-0.5">
+
+                            <strong>Principal Order:</strong> {item.admin_remarks || 'Medical certificate verified. Conduct re-exam.'} (Parent: {item.parent_name})
+
+                          </p>
+
+                        </div>
+
+
+
+                        <div className="shrink-0 flex items-center gap-2">
+
+                          <button
+
+                            onClick={() => setSchedulingReExam(item)}
+
+                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+
+                          >
+
+                            <Calendar className="h-3.5 w-3.5" />
+
+                            <span>Schedule Re-Test Slot</span>
+
+                          </button>
+
+                        </div>
+
+                      </div>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+              )}
+
+
+
+
+
+              {/* Confirmed Re-Examinations with Live Digital Admit Passes */}
+
+              {reExamMandates.filter(r => r.status === 'Scheduled').length > 0 && (
+
+                <div className="rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 p-4.5 shadow-sm">
+
+                  <div className="flex items-center justify-between mb-3">
+
+                    <div className="flex items-center gap-2">
+
+                      <span className="h-2 w-2 rounded-full bg-teal-500" />
+
+                      <h3 className="text-xs font-extrabold text-teal-900 dark:text-teal-200 uppercase tracking-wide">
+
+                        Confirmed Supplementary Retests: Admit Passes Active ({reExamMandates.filter(r => r.status === 'Scheduled').length})
+
+                      </h3>
+
+                    </div>
+
+                    <span className="text-[10px] font-bold bg-teal-200 dark:bg-teal-900 text-teal-800 dark:text-teal-300 px-2 py-0.5 rounded-full">
+
+                      Synced with Parent &amp; Student Portals ✓
+
+                    </span>
+
+                  </div>
+
+
+
+                  <div className="space-y-2.5">
+
+                    {reExamMandates.filter(r => r.status === 'Scheduled').map(item => (
+
+                      <div key={item.id} className="rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/60 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+
+                        <div>
+
+                          <div className="flex items-center gap-2">
+
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+
+                              {item.student_name} &bull; {item.class_name}-{item.section}
+
+                            </h4>
+
+                            <span className="rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5">
+
+                              {item.subject}
+
+                            </span>
+
+                            <span className="rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0.5">
+
+                              {item.re_exam_date} ({item.re_exam_time})
+
+                            </span>
+
+                          </div>
+
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+
+                            <strong>Virtual Room:</strong> {item.re_exam_venue || 'Virtual Room A (Camera AI Proctor)'} &bull; <strong>Invigilator:</strong> {item.coordinator_assigned || 'Mr. S. Raman'}
+
+                          </p>
+
+                        </div>
+
+
+
+                        <div className="shrink-0 flex items-center gap-2">
+
+                          <span className="rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 px-3 py-1.5 text-xs font-bold border border-teal-300 dark:border-teal-800 flex items-center gap-1.5">
+
+                            <Check className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+
+                            <span>Admit Pass Issued</span>
+
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+              )}
+
+
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+                <div>
+
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">CBSE &amp; Internal Examination Time-Table</h2>
+
+                  <p className="text-xs text-slate-500">Virtual proctoring allocation, invigilator deployment, and synchronized Academic Coordinator clearance gates</p>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <select
+
+                    value={schedClassFilter}
+
+                    onChange={e => setSchedClassFilter(e.target.value)}
+
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
+
+                  >
+
+                    <option value="All">All Classes</option>
+
+                    <option value="Class 8">Class 8</option>
+
+                    <option value="Class 9">Class 9</option>
+
+                    <option value="Class 10">Class 10</option>
+
+                  </select>
+
+                  <button
+
+                    onClick={handlePublishTimetableAndHallTickets}
+
+                    disabled={publishingTimetable}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+
+                  >
+
+                    <Ticket className="h-3.5 w-3.5" />
+
+                    <span>{publishingTimetable ? 'Issuing...' : `Publish Timetable & Issue Admit Cards (${schedClassFilter === 'All' ? 'All Classes' : schedClassFilter})`}</span>
+
+                  </button>
+
+                  <button
+
+                    onClick={() => setShowBatchModal(true)}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                  >
+
+                    <Plus className="h-3.5 w-3.5" />
+
+                    <span>Batch Schedule Class</span>
+
+                  </button>
+
+                  <button
+
+                    onClick={() => setShowCreateScheduleModal(true)}
+
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
+
+                  >
+
+                    <span>Single Slot</span>
+
+                  </button>
+
+                </div>
+
+              </div>
+
+
+
+              {/* Board Invariant Banner: 100% Hall Ticket Issuance Unlinked from Fees */}
+
+              {isTimetablePublished && (
+
+                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+
+                  <div className="flex items-center gap-2.5">
+
+                    <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+
+                      <CheckCircle2 className="h-4 w-4" />
+
+                    </div>
+
+                    <div>
+
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+
+                        Examination Timetable &amp; 100% Student Admit Cards Active ({schedClassFilter === 'All' ? 'All Classes' : schedClassFilter})
+
+                      </h4>
+
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+
+                        Admit cards and duty rosters active for {schedClassFilter === 'All' ? 'enrolled students' : schedClassFilter}. CBSE Invariant: Fees never block exam entry or hall ticket generation.
+
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+
+                    <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300">
+
+                      38/38 Hall Tickets Issued ✓
+
+                    </span>
+
+                  </div>
+
+                </div>
+
+              )}
+
+
+
+              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
+
+                <table className="w-full text-left text-xs">
+
+                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+
+                    <tr>
+
+                      <th className="p-3.5">Exam Date &amp; Time</th>
+
+                      <th className="p-3.5">Grade / Section</th>
+
+                      <th className="p-3.5">Subject Paper</th>
+
+                      <th className="p-3.5">Proctored Virtual Room</th>
+
+                      <th className="p-3.5">Chief Invigilator</th>
+
+                      <th className="p-3.5">Academic Clearance</th>
+
+                      <th className="p-3.5">Digital Admit Pass Status</th>
+                      <th className="p-3.5 text-right">Duty Order & Status</th>
+
+                    </tr>
+
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+
+                    {schedules
+
+                      .filter(s => schedClassFilter === 'All' || s.class_name.includes(schedClassFilter))
+
+                      .map(row => (
+
+                      <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">
+
+                        <td className="p-3.5 font-bold text-slate-900 dark:text-white">
+
+                          <div>{row.exam_date}</div>
+
+                          <div className="text-[10px] text-slate-400 font-normal">{row.start_time} - {row.end_time}</div>
+
+                        </td>
+
+                        <td className="p-3.5 font-semibold text-violet-600 dark:text-violet-400">
+
+                          {row.class_name} {row.section ? `- ${row.section}` : ''}
+
+                        </td>
+
+                        <td className="p-3.5 font-bold text-slate-800 dark:text-slate-200">
+
+                          {row.subject}
+
+                          <div className="text-[10px] text-slate-400 font-normal">{row.title || row.exam_name}</div>
+
+                        </td>
+
+                        <td className="p-3.5 text-slate-600 dark:text-slate-300">{row.room_hall || row.hall_name}</td>
+
+                        <td className="p-3.5 text-slate-600 dark:text-slate-300">
+
+                          <div className="font-bold text-slate-900 dark:text-white">
+
+                            {row.invigilator_name || row.chief_invigilator_name || 'Mrs. Ananya Verma'}
+
+                          </div>
+
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/50 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-800 mt-1">
+
+                            <span>Duty Order Dispatched ✓</span>
+
+                          </span>
+
+                        </td>
+
+                        <td className="p-3.5">
+
+                          {row.academic_clearance ? (
+
+                            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/50 font-bold text-[11px] w-fit">
+
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+
+                              <span>Cleared by Academics ✓</span>
+
+                            </div>
+
+                          ) : (
+
+                            <div className="space-y-1">
+
+                              <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/50 font-bold text-[11px] w-fit">
+
+                                <Clock className="h-3.5 w-3.5" />
+
+                                <span>Clearance Pending ⏳</span>
+
+                              </div>
+
+                              <button
+
+                                onClick={() => handleNudgeAcademic(row.subject, row.class_name)}
+
+                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+
+                              >
+
+                                <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
+
+                              </button>
+
+                            </div>
+
+                          )}
+
+                          {row.academic_clearance_notes && (
+
+                            <div className="text-[9px] text-slate-400 mt-1 max-w-[200px] truncate" title={row.academic_clearance_notes}>
+
+                              {row.academic_clearance_notes}
+
+                            </div>
+
+                          )}
+
+                        </td>
+
+                        <td className="p-3.5">
+
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
+
+                            <Ticket className="h-3 w-3" />
+
+                            <span>Admit Card Active</span>
+
+                          </span>
+
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            <span>Order Deployed: {row.chief_invigilator_name || 'Invigilator'}</span>
+                          </div>
+                        </td>
+
+                      </tr>
+
+                    ))}
+
+                  </tbody>
+
+                </table>
+
+              </div>
+
+            </div>
+
+          )}
+
+
+
+          
+
+
+
+          {/* ── TAB 4: LIVE TEACHER MARKS SUBMISSION TRACKER & MODERATION ── */}
+
+          {activeTab === 'moderation' && (
+
+            <div className="space-y-6">
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+
+                <div>
+
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                    <FileCheck className="h-4 w-4 text-violet-600" />
+
+                    Live Teacher Mark Submission Tracker &amp; Moderation
+
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+
+                    Real-time verification of teacher evaluation bundles, missing student tracking, and tamper-proof gradebook sealing
+
+                  </p>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <button
+
+                    onClick={handleExportCsv}
+
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs cursor-pointer"
+
+                  >
+
+                    <Download className="h-3.5 w-3.5 text-violet-600" />
+
+                    <span>Export CSV</span>
+
+                  </button>
+
+                  <button
+
+                    onClick={handlePrintDossier}
+
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs cursor-pointer"
+
+                  >
+
+                    <Printer className="h-3.5 w-3.5 text-violet-600" />
+
+                    <span>Print Dossier</span>
+
+                  </button>
+
+                </div>
+
+              </div>
+
+
+
+              {/* Live Submission Table */}
+
+              <div className="space-y-3">
+
+                {submissionsSummary.map((item, idx) => {
+
+                  const pct = Math.round((item.evaluated_count / (item.total_students || 38)) * 100);
+
+                  const isComplete = pct >= 100;
+
+                  return (
+
+                    <div 
+
+                      key={item.exam_id || idx} 
+
+                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3"
+
+                    >
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+                        <div>
+
+                          <div className="flex items-center gap-2">
+
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
+                              {item.class_name} {item.section ? `(${item.section})` : ''} · {item.subject}
+
+                            </h3>
+
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+
+                              isComplete ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+
+                              pct > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+
+                              'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+
+                            }`}>
+
+                              {isComplete ? 'Evaluation Complete ✓' : pct > 0 ? `${pct}% Checked ⏳` : 'Not Started'}
+
+                            </span>
+
+                          </div>
+
+                          <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+
+                            <span>Faculty: <b className="text-slate-800 dark:text-slate-200">{item.teacher_name}</b></span>
+
+                            <span>•</span>
+
+                            <span>Average Class Score: <b className="text-violet-600 dark:text-violet-400">{item.average_score}%</b></span>
+
+                          </div>
+
+                        </div>
+
+
+
+                        <div className="flex items-center gap-2 shrink-0">
+
+                          {item.missing_count > 0 && (
+
+                            <button
+
+                              onClick={() => triggerToast(`Missing entries: Roll #${item.missing_students?.map((s: any) => s.roll_no).join(', Roll #') || '05, 14'}`)}
+
+                              className="px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold hover:bg-amber-100 cursor-pointer"
+
+                            >
+
+                              ⚠️ View {item.missing_count} Missing Roll Nos
+
+                            </button>
+
+                          )}
+
+                          {item.is_locked ? (
+
+                            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+
+                              <Lock className="h-3.5 w-3.5" />
+
+                              <span>Gradebook Sealed &amp; Locked</span>
+
+                            </span>
+
+                          ) : (
+
+                            <button
+
+                              onClick={() => handleLockGradebook(item.exam_id)}
+
+                              className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
+                            >
+
+                              Lock &amp; Seal Gradebook
+
+                            </button>
+
+                          )}
+
+                        </div>
+
+                      </div>
+
+
+
+                      {/* Visual Progress Bar */}
+
+                      <div>
+
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
+
+                          <span>Correction Bundle Progress: {item.evaluated_count} / {item.total_students} Papers Verified</span>
+
+                          <span className={isComplete ? 'text-emerald-600 font-black' : 'text-amber-600 font-black'}>{pct}%</span>
+
+                        </div>
+
+                        <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+
+                          <div 
+
+                            className={`h-full rounded-full transition-all duration-500 ${
+
+                              isComplete ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-rose-500'
+
+                            }`}
+
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+
+                          />
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  );
+
+                })}
+
+              </div>
+
+
+
+              {/* Absentee & Medical Retest Reconciliation Desk */}
+
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+
+                <div className="flex items-center justify-between">
+
+                  <div className="flex items-center gap-2.5">
+
+                    <div className="h-8 w-8 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 flex items-center justify-center font-bold">
+
+                      🩺
+
+                    </div>
+
+                    <div>
+
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
+                        Absentee &amp; Medical Retest Reconciliation Desk
+
+                      </h3>
+
+                      <p className="text-xs text-slate-500">
+
+                        Cross-references parent leave requests, verified doctor notes, and schedules supplementary assessment slots
+
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800 pt-2">
+
+                  {absentees.map((abs, idx) => (
+
+                    <div key={abs.id || idx} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+
+                      <div>
+
+                        <div className="flex items-center gap-2">
+
+                          <span className="font-bold text-slate-900 dark:text-white">{abs.student_name || 'Rohan Deshmukh'}</span>
+
+                          <span className="text-[10px] font-bold text-slate-400">Roll #{abs.roll_no || '14'} ({abs.class_name || 'Class 8'}-{abs.section || 'B'})</span>
+
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+
+                            Absent in {abs.subject || 'Mathematics'}
+
+                          </span>
+
+                        </div>
+
+                        <div className="text-[11px] text-slate-500 mt-1">
+
+                          Medical Status: <b className="text-slate-800 dark:text-slate-200">{abs.reason || 'Viral Bronchitis (Doctor Note Verified)'}</b>
+
+                        </div>
+
+                      </div>
+
+
+
+                      <div className="flex items-center gap-2">
+
+                        {abs.retest_scheduled ? (
+
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-3 py-1.5 rounded-xl border border-emerald-200">
+
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+
+                            <span>Retest: {abs.retest_date || '14 Nov, 2026'} ✓</span>
+
+                          </span>
+
+                        ) : (
+
+                          <button
+
+                            onClick={() => {
+
+                              setRetestModalItem(abs);
+
+                            }}
+
+                            className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
+
+                          >
+
+                            Schedule Supplementary Retest
+
+                          </button>
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+              </div>
+
+            </div>
+
+          )}
+
+
+
+          {/* ── TAB 5: REPORT CARDS & AI OBSERVATIONS ── */}
+
+          {activeTab === 'report_cards' && (
+
+            <div className="space-y-4">
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+                <div>
+
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
+                    <Sparkles className="h-4 w-4 text-violet-600" />
+
+                    Official Report Cards &amp; Gemini AI Growth Memos
+
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+
+                    Deterministic CBSE grade matrix integrated with individualized Gemini AI pedagogical growth narratives.
+
+                  </p>
+
+                </div>
+
+
+
+                <div className="flex items-center gap-2">
+
+                  <button
+
+                    onClick={handleGenerateBatch}
+
+                    disabled={batchGenLoading}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+
+                  >
+
+                    {batchGenLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+
+                    <span>{batchGenLoading ? 'Generating with AI...' : 'Generate Batch (AI Memos)'}</span>
+
+                  </button>
+
+
+
+                  <button
+
+                    onClick={handlePublishBatch}
+
+                    disabled={publishLoading}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+
+                  >
+
+                    {publishLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+
+                    <span>Publish All to Portals</span>
+
+                  </button>
+
+                </div>
+
+              </div>
+
+
+
+              {/* Class & Section Filter */}
+
+              <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+
+                <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+
+                  <Filter className="h-3.5 w-3.5" /> Filter Cohort:
+
+                </span>
+
+                <select
+
+                  value={rcClassFilter}
+
+                  onChange={e => setRcClassFilter(e.target.value)}
+
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
+
+                >
+
+                  <option value="Class 8">Class 8</option>
+
+                  <option value="Class 9">Class 9</option>
+
+                  <option value="Class 10">Class 10</option>
+
+                </select>
+
+                <select
+
+                  value={rcSectionFilter}
+
+                  onChange={e => setRcSectionFilter(e.target.value)}
+
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
+
+                >
+
+                  <option value="B">Section B</option>
+
+                  <option value="A">Section A</option>
+
+                </select>
+
+                <select
+
+                  value={rcTermFilter}
+
+                  onChange={e => setRcTermFilter(e.target.value)}
+
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
+
+                >
+
+                  <option value="Term 1">Term 1 Final</option>
+
+                  <option value="Term 2">Term 2 Final</option>
+
+                </select>
+
+
+
+                <div className="ml-auto text-xs text-slate-500 font-semibold">
+
+                  Showing <b>{reportCards.length}</b> Generated Report Cards
+
+                </div>
+
+              </div>
+
+
+
+              {/* SUBJECT SUBMISSION READINESS MATRIX */}
+
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+
+                  <div className="flex items-center gap-2">
+
+                    <CheckCircle2 className={`h-4 w-4 ${classReadiness?.all_ready ? 'text-emerald-600' : 'text-amber-500'}`} />
+
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+
+                      Subject Submission Readiness Matrix ({rcClassFilter}-{rcSectionFilter} · {rcTermFilter})
+
+                    </span>
+
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${classReadiness?.all_ready ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}`}>
+
+                      {classReadiness ? `${classReadiness.sealed_subjects}/${classReadiness.total_subjects} Subjects Sealed` : '5/5 Subjects Sealed'}
+
+                    </span>
+
+                  </div>
+
+
+
+                  <div className="flex items-center gap-3">
+
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
+
+                      <input 
+
+                        type="checkbox" 
+
+                        checked={forceBatchGen} 
+
+                        onChange={e => setForceBatchGen(e.target.checked)}
+
+                        className="rounded border-slate-300 text-violet-600 focus:ring-violet-500 h-3.5 w-3.5"
+
+                      />
+
+                      <span>Override Readiness Gate (Force Compile)</span>
+
+                    </label>
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Subject Cards */}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+
+                  {(classReadiness?.subjects || [
+
+                    { subject: "Mathematics", teacher_name: "Mrs. Ananya Verma", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
+
+                    { subject: "General Science", teacher_name: "Dr. Suresh Babu", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
+
+                    { subject: "English Literature", teacher_name: "Mrs. Sunitha Rao", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
+
+                    { subject: "Social Science", teacher_name: "Mr. Arvind Saxena", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
+
+                    { subject: "Hindi", teacher_name: "Mrs. Priya Sharma", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 }
+
+                  ]).map((sub: any, sIdx: number) => (
+
+                    <div 
+
+                      key={sIdx}
+
+                      className={`p-2.5 rounded-xl border text-xs flex flex-col justify-between gap-1.5 ${sub.is_sealed ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40' : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40'}`}
+
+                    >
+
+                      <div className="flex items-center justify-between">
+
+                        <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{sub.subject}</span>
+
+                        {sub.is_sealed ? (
+
+                          <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded">✓ Sealed</span>
+
+                        ) : (
+
+                          <span className="text-[9px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded">Pending</span>
+
+                        )}
+
+                      </div>
+
+                      <div className="text-[10px] text-slate-500 truncate">{sub.teacher_name}</div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium pt-1 border-t border-slate-200/50 dark:border-slate-800">
+
+                        <span>Graded</span>
+
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{sub.graded_count} / {sub.total_students}</span>
+
+                      </div>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+
+
+                {!classReadiness?.all_ready && !forceBatchGen && classReadiness !== null && (
+
+                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+
+                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+
+                    <span>
+
+                      <b>Readiness Gate Active:</b> Cannot compile final report cards until all subject teachers have evaluated answer sheets and submitted sealed gradebooks. Enable override only for emergency provisional drafts.
+
+                    </span>
+
+                  </div>
+
+                )}
+
+              </div>
+
+
+
+              {/* Cards Grid */}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                {reportCards.map(rc => {
+
+                  const hasRemedial = Object.values(rc.grades_grid || {}).some(g => g.remedial_flag);
+
+                  return (
+
+                    <div 
+
+                      key={rc.id} 
+
+                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3 hover:border-violet-300 dark:hover:border-violet-700 transition-all"
+
+                    >
+
+                      <div className="flex items-start justify-between">
+
+                        <div>
+
+                          <div className="flex items-center gap-2">
+
+                            <span className="text-[10px] font-bold text-slate-400">Roll #{rc.roll_no}</span>
+
+                            <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">{rc.class_name}-{rc.section}</span>
+
+                          </div>
+
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+
+                            {rc.student_name}
+
+                          </h3>
+
+                        </div>
+
+
+
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+
+                          rc.overall_grade === 'A1' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+
+                          rc.overall_grade === 'A2' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+
+                          'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
+                        }`}>
+
+                          Grade: {rc.overall_grade}
+
+                        </span>
+
+                      </div>
+
+
+
+                      {/* Score metrics */}
+
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl text-[11px]">
+
+                        <div>
+
+                          <span className="text-slate-400 block text-[9px] font-bold">TOTAL</span>
+
+                          <span className="font-bold text-slate-900 dark:text-white">{rc.total_marks_obtained} / {rc.max_total_marks}</span>
+
+                        </div>
+
+                        <div>
+
+                          <span className="text-slate-400 block text-[9px] font-bold">PERCENTAGE</span>
+
+                          <span className="font-bold text-violet-600 dark:text-violet-400">{rc.overall_percentage}%</span>
+
+                        </div>
+
+                        <div>
+
+                          <span className="text-slate-400 block text-[9px] font-bold">ATTENDANCE</span>
+
+                          <span className="font-bold text-slate-900 dark:text-white">{rc.attendance_pct || 85}%</span>
+
+                        </div>
+
+                      </div>
+
+
+
+                      {/* AI Observation Excerpt */}
+
+                      {rc.ai_teacher_narrative && (
+
+                        <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-2.5 text-[11px] text-slate-600 dark:text-slate-300">
+
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 mb-1">
+
+                            <Sparkles className="h-3 w-3" />
+
+                            <span>Gemini Pedagogical Observation</span>
+
+                          </div>
+
+                          <p className="line-clamp-2 text-[10px] leading-relaxed italic">
+
+                            &ldquo;{rc.ai_teacher_narrative}&rdquo;
+
+                          </p>
+
+                        </div>
+
+                      )}
+
+
+
+                      {/* Status Badges */}
+
+                      <div className="flex items-center justify-between text-[10px]">
+
+                        {hasRemedial ? (
+
+                          <span className="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-2 py-0.5 rounded font-bold">
+
+                            ⚠️ 1-Week Remedial Active
+
+                          </span>
+
+                        ) : (
+
+                          <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
+
+                            Exempt from Remedial ✓
+
+                          </span>
+
+                        )}
+
+
+
+                        <span className={`font-bold ${rc.is_published ? 'text-emerald-600' : 'text-amber-500'}`}>
+
+                          {rc.is_published ? 'Published to Portal ✓' : 'Draft Only'}
+
+                        </span>
+
+                      </div>
+
+
+
+                      {/* Action buttons */}
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
+                        <button
+
+                          onClick={() => setSelectedReportCard(rc)}
+
+                          className="flex-1 flex items-center justify-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+
+                        >
+
+                          <Eye className="h-3 w-3 text-violet-600" />
+
+                          <span>View Memo</span>
+
+                        </button>
+
+                        <button
+
+                          onClick={() => handlePrintStudentReportCard(rc)}
+
+                          className="flex items-center justify-center p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-900 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+
+                          title="Download Official PDF Memo"
+
+                        >
+
+                          <Download className="h-3.5 w-3.5" />
+
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  );
+
+                })}
+
+              </div>
+
+            </div>
+
+          )}
+
+          <Footer />
+
+        </main>
+
+
+
+      {/* ── ASSIGN EXAM TASK MODAL ── */}
+
+      {showCreateModal && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
+              <div>
+
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Assign Exam Task to Faculty / Academic Cell</h3>
+
+                <p className="text-[11px] text-slate-500">Dispatch actionable duties for question papers, invigilation, blueprints, or marks entry</p>
+
+              </div>
+
+              <button onClick={() => setShowCreateModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+
+            </div>
+
+            <form onSubmit={handleCreateTask} className="space-y-3 text-xs">
+
+              <div>
+
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Task Type Label</label>
+
+                <div className="flex flex-wrap gap-1.5">
+
+                  {[
+
+                    '📋 Invigilation Duty',
+
+                    '📑 Question Paper Submission',
+
+                    '📐 Blueprint & Clearance',
+
+                    '📝 Marks Evaluation'
+
+                  ].map(lbl => (
+
+                    <button
+
+                      key={lbl}
+
+                      type="button"
+
+                      onClick={() => setNewTaskLabel(lbl)}
+
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+
+                        newTaskLabel === lbl
+
+                          ? 'bg-violet-600 text-white shadow-xs'
+
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+
+                      }`}
+
+                    >
+
+                      {lbl}
+
+                    </button>
+
+                  ))}
+
+                </div>
+
+              </div>
+
+              <div>
+
+                <label className="font-bold text-slate-700 dark:text-slate-300">Task Title / Deliverable</label>
+
+                <input 
+
+                  type="text" 
+
+                  required
+
+                  value={newTaskTitle} 
+
+                  onChange={e => setNewTaskTitle(e.target.value)} 
+
+                  placeholder="e.g. Submit Class 8-B Term 1 Final Mathematics Paper" 
+
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
+                />
+
+              </div>
+
+              <div>
+
+                <label className="font-bold text-slate-700 dark:text-slate-300">Task Instructions / Notes</label>
+
+                <textarea 
+
+                  rows={2}
+
+                  value={newTaskDesc} 
+
+                  onChange={e => setNewTaskDesc(e.target.value)} 
+
+                  placeholder="Include question paper draft, blueprint weighting, and marking rubric..." 
+
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
+                />
+
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+
+                <div>
+
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Assign To</label>
+
+                  <select 
+
+                    value={newTaskAssignee} 
+
+                    onChange={e => setNewTaskAssignee(e.target.value)}
+
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+
+                  >
+
+                    <option value="Mrs. Ananya Verma (Math Teacher)">Mrs. Ananya Verma (Math Teacher)</option>
+
+                    <option value="Dr. Suresh Babu (Science Faculty)">Dr. Suresh Babu (Science Faculty)</option>
+
+                    <option value="Prof. Rajeshwari Nair (Academic Coordinator)">Prof. Rajeshwari Nair (Academic Coordinator)</option>
+
+                    <option value="Mr. Arvind Saxena (Social Sciences)">Mr. Arvind Saxena (Social Sciences)</option>
+
+                    <option value="Mrs. Neha Roy (English Faculty)">Mrs. Neha Roy (English Faculty)</option>
+
+                  </select>
+
+                </div>
+
+                <div>
+
+                  <label className="font-bold text-slate-700 dark:text-slate-300">SLA Hours</label>
+
+                  <input 
+
+                    type="number" 
+
+                    value={newTaskSlaHours} 
+
+                    onChange={e => setNewTaskSlaHours(Number(e.target.value))}
+
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
+                  />
+
+                </div>
+
+              </div>
+
+              <button type="submit" className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold mt-2 cursor-pointer shadow-sm">
+
+                Assign Task ✓
+
+              </button>
+
+            </form>
+
+          </div>
+
+        </div>
+
+      )}
+
+
+
+      {/* ── CREATE SCHEDULE MODAL ── */}
+
+      {showCreateScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95 my-8 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b pb-4 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-violet-600/10 text-violet-600 flex items-center justify-center font-bold">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Schedule New Examination
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Draft new exam timetable slot, delivery mode, venue &amp; invigilator
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowCreateScheduleModal(false)}
+                className="h-8 w-8 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {sidebarCollapsed && (
-              <div className="hidden md:flex justify-center pt-2">
-                <button
-                  onClick={() => setSidebarCollapsed(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                  title="Expand Sidebar"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {/* Menu */}
-            <div className="p-3 space-y-1">
-              {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
-                  Examination Authority
-                </span>
-              )}
-              {[
-                { id: 'dashboard', label: 'Exams Dashboard', icon: LayoutDashboard },
-                { id: 'secrecy_vault', label: 'Paper Vault & Custody', icon: Lock, badge: `${questionPapers.filter(p => p.status === 'sent_to_exam_cell').length} Sealed`, badgeType: 'amber' },
-                { id: 'schedules', label: 'Exam Schedules & Virtual Rooms', icon: Calendar, badge: `${schedules.length} Slots`, badgeType: 'blue' },
-                { id: 'cockpit', label: 'Live AI Proctor Cockpit', icon: Video, badge: 'Live Stream', badgeType: 'amber' },
-                { id: 'moderation', label: 'Grade Moderation', icon: Award, badge: `${moderationList.filter(m => m.status.includes('Pending')).length ? `${moderationList.filter(m => m.status.includes('Pending')).length} Pending` : '100% Synced'}`, badgeType: 'emerald' },
-                { id: 'report_cards', label: 'Report Cards & Memos', icon: FileText, badge: `${reportCards.length} Cards`, badgeType: 'blue' },
-                { id: 'tasks', label: 'Invigilation & Tasks', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' }
-              ].map(item => {
-                const Icon = item.icon;
-                const active = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id as ExamTab);
-                      setMobileDrawerOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
-                      active 
-                        ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400' 
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
-                    }`}
-                    title={item.label}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
-                    </div>
-                    {!sidebarCollapsed && item.badge && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                        item.badgeType === 'amber'
-                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
-                          : item.badgeType === 'emerald'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
-                          : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60'
-                      }`}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bottom Status Footer */}
-          <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
-            {!sidebarCollapsed ? (
-              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  Academic Term 2
-                </span>
-                <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
-              </div>
-            ) : (
-              <div className="flex justify-center py-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* ── Main Content Canvas ── */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-          {/* Top Bar Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setMobileDrawerOpen(true)}
-                className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
-                title="Open Sidebar"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 px-2.5 py-0.5 text-[10px] font-bold border border-violet-200/60 dark:border-violet-800/60">
-                    Examination Authority
-                  </span>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">Term Assessments &amp; Secrecy Wing</span>
-                </div>
-                <h1 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
-                  {activeTab === 'dashboard' && 'Examination Controller Command Center'}
-                  {activeTab === 'secrecy_vault' && 'Question Paper Secrecy Vault & Strongroom Custody'}
-                  {activeTab === 'schedules' && 'Examination Timetables & Virtual Room Governance'}
-                  {activeTab === 'moderation' && 'Grade Moderation & Marksheet Normalization'}
-                  {activeTab === 'report_cards' && 'Report Cards & Gemini AI Performance Memos'}
-                  {activeTab === 'tasks' && 'Invigilation Duties & Examination Tasks'}
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {activeTab === 'schedules' && (
-                <button
-                  onClick={() => setShowBatchModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Schedule Exams for Class</span>
-                </button>
-              )}
-              {activeTab === 'tasks' && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Assign Exam Task</span>
-                </button>
-              )}
-              {activeTab === 'dashboard' && (
-                <button
-                  onClick={() => setActiveTab('schedules')}
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                >
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>View Active Timetables</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ── TAB 0: EXAM CONTROLLER EXECUTIVE DASHBOARD (BENTO) ── */}
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* 6 Core Examination Bento Metric Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Card 1: Question Paper Secrecy Vault */}
-                <div 
-                  onClick={() => setActiveTab('secrecy_vault')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-600">
-                        <Lock className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Paper Secrecy Vault</span>
-                        <p className="text-[10px] text-slate-400">Dean-sealed exam custody</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell').length} In Vault
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
-                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell' || p.status === 'approved').length} / {questionPapers.length}
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      {questionPapers.filter(p => p.status === 'under_review').length} papers pending academic moderation
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-violet-600 dark:text-violet-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Open Strongroom Vault</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Card 2: Examination Timetables & Schedules */}
-                <div 
-                  onClick={() => setActiveTab('schedules')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
-                        <Calendar className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Exam Schedules &amp; Halls</span>
-                        <p className="text-[10px] text-slate-400">Timetable slots &amp; venues</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      {schedules.length} Exam Slots
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
-                      {schedules.filter(s => s.academic_clearance).length} / {schedules.length}
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div 
-                        className="bg-blue-600 h-1.5 rounded-full" 
-                        style={{ width: `${Math.round((schedules.filter(s => s.academic_clearance).length / (schedules.length || 1)) * 100)}%` }} 
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Academic clearance verified for scheduled halls
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Manage Exam Calendar</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Card 3: Hall Tickets / Admit Cards */}
-                <div 
-                  onClick={() => setActiveTab('schedules')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-                        <Ticket className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Hall Ticket Publishing</span>
-                        <p className="text-[10px] text-slate-400">Decoupled admit pass access</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      {isTimetablePublished ? 'Released ✓' : 'Draft'}
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                      100% Issued
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Admit dockets generated without fee-gate locking
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Audit Hall Tickets</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Card 4: Teacher Marks Sync & Moderation */}
-                <div 
-                  onClick={() => setActiveTab('moderation')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-fuchsia-50 dark:bg-fuchsia-950/50 text-fuchsia-600">
-                        <Award className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Grade Moderation</span>
-                        <p className="text-[10px] text-slate-400">Teacher marksheets &amp; normalization</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-100 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-200 dark:border-fuchsia-800">
-                      100% Synced
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
-                      {moderationList.length} Subject Sets
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Standard deviation verified across faculty submissions
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Moderate Grades</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Card 5: AI Report Cards & Memos */}
-                <div 
-                  onClick={() => setActiveTab('report_cards')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
-                        <FileCheck className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Report Cards &amp; Memos</span>
-                        <p className="text-[10px] text-slate-400">Gemini AI performance summaries</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      {reportCards.filter(r => r.is_published).length} Published
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
-                      {reportCards.length} Generated
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      CBSE/ICSE grade cards ready for parent portal dispatch
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Review Report Cards</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Card 6: Re-Exam & Special Accommodation Window */}
-                <div 
-                  onClick={() => setActiveTab('schedules')}
-                  className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
-                        <AlertTriangle className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Re-Exam Mandates</span>
-                        <p className="text-[10px] text-slate-400">Medical leaves &amp; special retests</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                      {reExamMandates.length} Approved
-                    </span>
-                  </div>
-                  <div className="my-3">
-                    <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                      {reExamMandates.length} Retests
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Admin-approved retests scheduled in Secrecy Wing
-                    </p>
-                  </div>
-                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span>Manage Retests</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Middle Section: Strongroom Vault Security Radar & Live Marks Submission Tracker */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Strongroom Paper Vault Custody Monitor */}
-                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Lock className="h-4 w-4 text-violet-600" />
-                        Secrecy Strongroom Custody Tracker
-                      </h3>
-                      <p className="text-xs text-slate-500">Live seal integrity and physical/digital handover status</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab('secrecy_vault')}
-                      className="text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
-                    >
-                      View All
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {questionPapers.slice(0, 3).map(paper => (
-                      <div key={paper.id} className="p-3.5 rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300">
-                              {paper.class_name} • {paper.subject}
-                            </span>
-                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-xs">
-                              {paper.title}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-1">
-                            Authored by: <b className="text-slate-700 dark:text-slate-300">{paper.teacher_name || 'Department Faculty'}</b> • Total {paper.blueprint?.total_marks || paper.total_marks || 100} Marks
-                          </p>
-                        </div>
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${
-                          paper.status === 'sent_to_exam_cell' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
-                          paper.status === 'approved' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
-                          'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                        }`}>
-                          {paper.status === 'sent_to_exam_cell' ? 'Sealed in Vault ✓' : paper.status === 'approved' ? 'Dean Cleared' : 'In Moderation'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grade Moderation & Faculty Sync Health */}
-                <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Award className="h-4 w-4 text-fuchsia-600" />
-                        Teacher Marksheet Submission &amp; Moderation
-                      </h3>
-                      <p className="text-xs text-slate-500">Subject grade normalization and bell-curve audits</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab('moderation')}
-                      className="text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
-                    >
-                      Audit All
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {moderationList.slice(0, 4).map(item => (
-                      <div key={item.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-slate-900 dark:text-white">{item.class} • {item.subject}</span>
-                            <span className="text-[10px] text-slate-400">({item.teacher})</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Average Marks: <b className="text-slate-800 dark:text-slate-200">{item.avgMarks}%</b> • Papers: <span className="text-violet-600 font-bold">{item.papers} Evaluated</span>
-                          </div>
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                          item.status.includes('Approved') || item.status.includes('Synced') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Section: Active Examination Schedule Roster */}
-              <div className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-blue-600" />
-                      Upcoming Examination Slots &amp; Hall Allocations
-                    </h3>
-                    <p className="text-xs text-slate-500">Class 6–12 official term assessment timetable</p>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab('schedules')}
-                    className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400 cursor-pointer"
-                  >
-                    <span>View All {schedules.length} Exam Slots</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] font-bold">
-                      <tr>
-                        <th className="p-3 rounded-l-xl">Subject &amp; Exam</th>
-                        <th className="p-3">Class</th>
-                        <th className="p-3">Date &amp; Time</th>
-                        <th className="p-3">Online Room &amp; Proctor</th>
-                        <th className="p-3">Clearance</th>
-                        <th className="p-3 rounded-r-xl text-right">Admit Card</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                      {schedules.slice(0, 5).map(sched => (
-                        <tr key={sched.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <td className="p-3">
-                            <div className="font-bold text-slate-900 dark:text-white">{sched.subject}</div>
-                            <span className="text-[10px] text-slate-400">{sched.exam_name}</span>
-                          </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800">
-                              {sched.class_name}-{sched.section}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <div className="font-semibold">{sched.exam_date}</div>
-                            <span className="text-[10px] text-slate-400">{sched.start_time} - {sched.end_time}</span>
-                          </td>
-                          <td className="p-3">
-                            <div>{sched.hall_name}</div>
-                            <span className="text-[10px] text-slate-400">{sched.invigilator_name}</span>
-                          </td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              sched.academic_clearance ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                            }`}>
-                              {sched.academic_clearance ? 'Dean Cleared ✓' : 'Awaiting Seal'}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                              Issued ✓
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-
-          {/* ── TAB 1: EXAM TASKS & SLAS ── */}
-          {activeTab === 'tasks' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Delegated Faculty &amp; Academic Exam Tasks</h2>
-                  <p className="text-xs text-slate-500">Direct follow-ups for invigilation duties, question paper submissions, blueprints, and marks evaluation</p>
-                </div>
-                <select 
-                  value={statusFilter} 
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-
-              <div className="space-y-2.5">
-                {filteredTasks.map(task => {
-                  const isExpanded = taskExpandedId === task.id;
-                  const taskLabel = task.task_label || (
-                    task.title.toLowerCase().includes('invigil') || task.title.toLowerCase().includes('proctor') ? '📋 Invigilation Duty' :
-                    task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('clearance') ? '📐 Blueprint & Clearance' :
-                    task.title.toLowerCase().includes('evaluat') || task.title.toLowerCase().includes('marks') ? '📝 Marks Evaluation' :
-                    task.title.toLowerCase().includes('paper') || task.title.toLowerCase().includes('question') ? '📑 Question Paper Submission' :
-                    task.task_type || null
-                  );
-                  return (
-                    <div key={task.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold mt-0.5 ${
-                            task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                            task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {task.status}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-xs font-bold text-slate-900 dark:text-white">{task.title}</h3>
-                              {taskLabel && (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                                  {taskLabel}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2.5 text-[11px] text-slate-500 mt-1">
-                              <span>Assignee: <b className="text-slate-800 dark:text-slate-200">{task.assigned_to}</b></span>
-                              <span>•</span>
-                              <span>Due: {task.due_date}</span>
-                              <span>•</span>
-                              <span className="font-semibold text-violet-600 dark:text-violet-400">SLA: {task.sla_hours || 24}h</span>
-                              {task.is_escalated && (
-                                <span className="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded font-black text-[9px]">
-                                  CRITICAL ESCALATION
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {task.status === 'Completed' ? (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span>Done</span>
-                      </span>
-                    ) : (
-                      <>
-                        {task.status === 'Pending' && (
-                          <button
-                            onClick={() => handleUpdateStatus(task.id, 'In Progress')}
-                            className="rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300 px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer"
-                            title="Mark duty as currently underway"
-                          >
-                            In-Progress
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleUpdateStatus(task.id, 'Completed')}
-                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                          title="Mark duty as fully inspected & completed"
-                        >
-                          <Check className="h-3 w-3" />
-                          <span>Complete Duty</span>
-                        </button>
-                      </>
-                    )}
-                    <button
-                      onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
-                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 cursor-pointer font-medium"
-                    >
-                      {isExpanded ? 'Less' : 'Details'}
-                    </button>
-                  </div>
-                    </div>
-
-                      {isExpanded && (
-                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                          <p>{task.description || 'No description provided.'}</p>
-                          {task.escalation_reason && (
-                            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200">
-                              <b>Escalation Reason:</b> {task.escalation_reason}
-                            </div>
-                          )}
-                          {!task.is_escalated && task.status !== 'Completed' && (
-                            <div className="pt-2">
-                              {escalateTaskId === task.id ? (
-                                <div className="flex items-center gap-2">
-                                  <input 
-                                    type="text" 
-                                    value={escalateReason} 
-                                    onChange={e => setEscalateReason(e.target.value)} 
-                                    placeholder="Reason for board escalation..." 
-                                    className="flex-1 rounded-lg border border-rose-300 p-1.5 text-xs text-slate-900"
-                                  />
-                                  <button onClick={() => handleEscalate(task.id)} className="bg-rose-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold">Confirm</button>
-                                  <button onClick={() => setEscalateTaskId(null)} className="text-slate-400 text-xs">Cancel</button>
-                                </div>
-                              ) : (
-                                <button onClick={() => setEscalateTaskId(task.id)} className="text-rose-600 hover:underline text-xs font-bold">
-                                  ⚠️ Escalate to Principal
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── TAB 2: SECRECY VAULT (APPROVED QUESTION PAPERS) ── */}
-          {activeTab === 'secrecy_vault' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-violet-600" />
-                    Examination Secrecy Strongroom &amp; Custody
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Question papers approved by Academic Coordinator and handed over into official Examination Cell custody.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowRequisitionModal(true)}
-                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>Requisition Blueprint from Academic Cell</span>
-                  </button>
-                  <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
-                    <button
-                      onClick={() => setVaultFilter('in_custody')}
-                      className={`px-3 py-1 rounded-lg transition-all ${
-                        vaultFilter === 'in_custody'
-                          ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      In Strongroom Custody ({questionPapers.filter(p => p.status === 'sent_to_exam_cell').length})
-                    </button>
-                    <button
-                      onClick={() => setVaultFilter('all')}
-                      className={`px-3 py-1 rounded-lg transition-all ${
-                        vaultFilter === 'all'
-                          ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      All Blueprints ({questionPapers.length})
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {questionPapers
-                  .filter(qp => vaultFilter === 'in_custody' ? qp.status === 'sent_to_exam_cell' : true)
-                  .map(qp => {
-                    const isReadyInCell = qp.status === 'sent_to_exam_cell';
-                    const marks = qp.total_marks || qp.blueprint?.total_marks || 80;
-                    const duration = qp.duration_minutes || qp.blueprint?.duration_minutes || 180;
-                    const faculty = qp.teacher_name || qp.created_by_teacher_name || 'Mrs. Ananya Verma';
-                    const title = qp.title || qp.exam_name || `${qp.subject} Term 1 Assessment`;
-                    return (
-                      <div key={qp.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold ${
-                              isReadyInCell 
-                                ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' 
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                            }`}>
-                              <Lock className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <span className="text-[10px] uppercase font-bold text-slate-400">
-                                {qp.class_name} · {qp.subject}
-                              </span>
-                              <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                                {title}
-                              </h3>
-                            </div>
-                          </div>
-
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            isReadyInCell 
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300' 
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          }`}>
-                            {isReadyInCell ? 'In Exam Cell Custody ✓' : qp.status.replace(/_/g, ' ')}
-                          </span>
-                        </div>
-
-                        {/* Paper Metadata */}
-                        <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl text-[11px]">
-                          <div>
-                            <span className="text-slate-400 block text-[9px] font-bold">TOTAL MARKS</span>
-                            <span className="font-bold text-slate-900 dark:text-white">{marks} Marks</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[9px] font-bold">DURATION</span>
-                            <span className="font-bold text-slate-900 dark:text-white">{duration} Mins</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[9px] font-bold">FACULTY</span>
-                            <span className="font-bold text-slate-900 dark:text-white truncate block">{faculty}</span>
-                          </div>
-                        </div>
-
-                        {/* Secrecy & Envelope Info */}
-                        <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-3 text-xs space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-violet-900 dark:text-violet-200">
-                            <span className="flex items-center gap-1.5">
-                              <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
-                              Academic Approval Seal
-                            </span>
-                            <span className="text-emerald-600">Verified &amp; Cleared</span>
-                          </div>
-                          <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                            Draft File: <b className="text-slate-800 dark:text-slate-200">{qp.draft_file_name || 'Draft_QP_Final.pdf'}</b>
-                          </p>
-                          {qp.answer_key_url && (
-                            <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
-                              Answer Key &amp; Rubric: Deposited in Strongroom
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Secrecy Actions */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                          <button
-                            onClick={() => setSelectedPaperForVault(qp)}
-                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
-                          >
-                            <Eye className="h-3.5 w-3.5 text-violet-600" />
-                            <span>Inspect Packet</span>
-                          </button>
-                          {isReadyInCell ? (
-                            <button
-                              onClick={() => {
-                                triggerToast(`Official Sealed Envelopes (40 Copies + 2 Buffer) printed with Barcode for ${qp.subject}!`);
-                              }}
-                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                              <Printer className="h-3.5 w-3.5" />
-                              <span>Print Sealed Packet</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleNudgeAcademic(qp.subject, qp.class_name)}
-                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                              <Clock className="h-3.5 w-3.5" />
-                              <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
-
-          {/* ── TAB 3: SCHEDULES & ACADEMIC CLEARANCE ── */}
-          {activeTab === 'schedules' && (
-            <div className="space-y-4">
-
-              {/* Toast for Re-Exam Scheduling */}
-              {reExamSuccessMsg && (
-                <div className="rounded-2xl bg-emerald-600 text-white p-3.5 text-xs font-bold flex items-center justify-between shadow-lg">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>{reExamSuccessMsg}</span>
-                  </div>
-                  <button onClick={() => setReExamSuccessMsg(null)} className="text-white/80 hover:text-white">✕</button>
-                </div>
-              )}
-
-              {/* Principal Mandated Re-Examinations Section */}
-              {reExamMandates.filter(r => r.status === 'Approved by Admin').length > 0 && (
-                <div className="rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 p-4.5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                      <h3 className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">
-                        Principal Mandates: Special Re-Examinations to Conduct ({reExamMandates.filter(r => r.status === 'Approved by Admin').length})
-                      </h3>
-                    </div>
-                    <span className="text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">
-                      Legally Cleared on Medical/Exemption Grounds
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {reExamMandates.filter(r => r.status === 'Approved by Admin').map(item => (
-                      <div key={item.id} className="rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                              {item.student_name} &bull; {item.class_name}-{item.section}
-                            </h4>
-                            <span className="rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5">
-                              {item.subject}
-                            </span>
-                            <span className="rounded-md bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
-                              {item.exam_name}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
-                            <strong>Reason:</strong> {item.reason_category} &bull; {item.reason_details}
-                          </p>
-                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium mt-0.5">
-                            <strong>Principal Order:</strong> {item.admin_remarks || 'Medical certificate verified. Conduct re-exam.'} (Parent: {item.parent_name})
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-2">
-                          <button
-                            onClick={() => setSchedulingReExam(item)}
-                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Calendar className="h-3.5 w-3.5" />
-                            <span>Schedule Re-Test Slot</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-
-              {/* Confirmed Re-Examinations with Live Digital Admit Passes */}
-              {reExamMandates.filter(r => r.status === 'Scheduled').length > 0 && (
-                <div className="rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 p-4.5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-teal-500" />
-                      <h3 className="text-xs font-extrabold text-teal-900 dark:text-teal-200 uppercase tracking-wide">
-                        Confirmed Supplementary Retests: Admit Passes Active ({reExamMandates.filter(r => r.status === 'Scheduled').length})
-                      </h3>
-                    </div>
-                    <span className="text-[10px] font-bold bg-teal-200 dark:bg-teal-900 text-teal-800 dark:text-teal-300 px-2 py-0.5 rounded-full">
-                      Synced with Parent &amp; Student Portals ✓
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {reExamMandates.filter(r => r.status === 'Scheduled').map(item => (
-                      <div key={item.id} className="rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/60 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                              {item.student_name} &bull; {item.class_name}-{item.section}
-                            </h4>
-                            <span className="rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5">
-                              {item.subject}
-                            </span>
-                            <span className="rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0.5">
-                              {item.re_exam_date} ({item.re_exam_time})
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
-                            <strong>Virtual Room:</strong> {item.re_exam_venue || 'Virtual Room A (Camera AI Proctor)'} &bull; <strong>Invigilator:</strong> {item.coordinator_assigned || 'Mr. S. Raman'}
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 px-3 py-1.5 text-xs font-bold border border-teal-300 dark:border-teal-800 flex items-center gap-1.5">
-                            <Check className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                            <span>Admit Pass Issued</span>
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">CBSE &amp; Internal Examination Time-Table</h2>
-                  <p className="text-xs text-slate-500">Virtual proctoring allocation, invigilator deployment, and synchronized Academic Coordinator clearance gates</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={schedClassFilter}
-                    onChange={e => setSchedClassFilter(e.target.value)}
-                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
-                  >
-                    <option value="All">All Classes</option>
-                    <option value="Class 8">Class 8</option>
-                    <option value="Class 9">Class 9</option>
-                    <option value="Class 10">Class 10</option>
-                  </select>
-                  <button
-                    onClick={handlePublishTimetableAndHallTickets}
-                    disabled={publishingTimetable}
-                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    <Ticket className="h-3.5 w-3.5" />
-                    <span>{publishingTimetable ? 'Issuing...' : `Publish Timetable & Issue Admit Cards (${schedClassFilter === 'All' ? 'All Classes' : schedClassFilter})`}</span>
-                  </button>
-                  <button
-                    onClick={() => setShowBatchModal(true)}
-                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Batch Schedule Class</span>
-                  </button>
-                  <button
-                    onClick={() => setShowCreateScheduleModal(true)}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                  >
-                    <span>Single Slot</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Board Invariant Banner: 100% Hall Ticket Issuance Unlinked from Fees */}
-              {isTimetablePublished && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                        Examination Timetable &amp; 100% Student Admit Cards Active ({schedClassFilter === 'All' ? 'All Classes' : schedClassFilter})
-                      </h4>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                        Admit cards and duty rosters active for {schedClassFilter === 'All' ? 'enrolled students' : schedClassFilter}. CBSE Invariant: Fees never block exam entry or hall ticket generation.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300">
-                      38/38 Hall Tickets Issued ✓
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    <tr>
-                      <th className="p-3.5">Exam Date &amp; Time</th>
-                      <th className="p-3.5">Grade / Section</th>
-                      <th className="p-3.5">Subject Paper</th>
-                      <th className="p-3.5">Proctored Virtual Room</th>
-                      <th className="p-3.5">Chief Invigilator</th>
-                      <th className="p-3.5">Academic Clearance</th>
-                      <th className="p-3.5">Digital Admit Pass Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {schedules
-                      .filter(s => schedClassFilter === 'All' || s.class_name.includes(schedClassFilter))
-                      .map(row => (
-                      <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="p-3.5 font-bold text-slate-900 dark:text-white">
-                          <div>{row.exam_date}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{row.start_time} - {row.end_time}</div>
-                        </td>
-                        <td className="p-3.5 font-semibold text-violet-600 dark:text-violet-400">
-                          {row.class_name} {row.section ? `- ${row.section}` : ''}
-                        </td>
-                        <td className="p-3.5 font-bold text-slate-800 dark:text-slate-200">
-                          {row.subject}
-                          <div className="text-[10px] text-slate-400 font-normal">{row.title || row.exam_name}</div>
-                        </td>
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">{row.room_hall || row.hall_name}</td>
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">
-                          <div className="font-bold text-slate-900 dark:text-white">
-                            {row.invigilator_name || row.chief_invigilator_name || 'Mrs. Ananya Verma'}
-                          </div>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/50 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-800 mt-1">
-                            <span>Duty Order Dispatched ✓</span>
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          {row.academic_clearance ? (
-                            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/50 font-bold text-[11px] w-fit">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              <span>Cleared by Academics ✓</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/50 font-bold text-[11px] w-fit">
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>Clearance Pending ⏳</span>
-                              </div>
-                              <button
-                                onClick={() => handleNudgeAcademic(row.subject, row.class_name)}
-                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
-                              >
-                                <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
-                              </button>
-                            </div>
-                          )}
-                          {row.academic_clearance_notes && (
-                            <div className="text-[9px] text-slate-400 mt-1 max-w-[200px] truncate" title={row.academic_clearance_notes}>
-                              {row.academic_clearance_notes}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3.5">
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
-                            <Ticket className="h-3 w-3" />
-                            <span>Admit Card Active</span>
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ── TAB 4: LIVE TEACHER MARKS SUBMISSION TRACKER & MODERATION ── */}
-          {activeTab === 'moderation' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <FileCheck className="h-4 w-4 text-violet-600" />
-                    Live Teacher Mark Submission Tracker &amp; Moderation
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Real-time verification of teacher evaluation bundles, missing student tracking, and tamper-proof gradebook sealing
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleExportCsv}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs cursor-pointer"
-                  >
-                    <Download className="h-3.5 w-3.5 text-violet-600" />
-                    <span>Export CSV</span>
-                  </button>
-                  <button
-                    onClick={handlePrintDossier}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs cursor-pointer"
-                  >
-                    <Printer className="h-3.5 w-3.5 text-violet-600" />
-                    <span>Print Dossier</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Live Submission Table */}
-              <div className="space-y-3">
-                {submissionsSummary.map((item, idx) => {
-                  const pct = Math.round((item.evaluated_count / (item.total_students || 38)) * 100);
-                  const isComplete = pct >= 100;
-                  return (
-                    <div 
-                      key={item.exam_id || idx} 
-                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                              {item.class_name} {item.section ? `(${item.section})` : ''} · {item.subject}
-                            </h3>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              isComplete ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
-                              pct > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
-                              'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                            }`}>
-                              {isComplete ? 'Evaluation Complete ✓' : pct > 0 ? `${pct}% Checked ⏳` : 'Not Started'}
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                            <span>Faculty: <b className="text-slate-800 dark:text-slate-200">{item.teacher_name}</b></span>
-                            <span>•</span>
-                            <span>Average Class Score: <b className="text-violet-600 dark:text-violet-400">{item.average_score}%</b></span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          {item.missing_count > 0 && (
-                            <button
-                              onClick={() => triggerToast(`Missing entries: Roll #${item.missing_students?.map((s: any) => s.roll_no).join(', Roll #') || '05, 14'}`)}
-                              className="px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold hover:bg-amber-100 cursor-pointer"
-                            >
-                              ⚠️ View {item.missing_count} Missing Roll Nos
-                            </button>
-                          )}
-                          {item.is_locked ? (
-                            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                              <Lock className="h-3.5 w-3.5" />
-                              <span>Gradebook Sealed &amp; Locked</span>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleLockGradebook(item.exam_id)}
-                              className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                              Lock &amp; Seal Gradebook
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Visual Progress Bar */}
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
-                          <span>Correction Bundle Progress: {item.evaluated_count} / {item.total_students} Papers Verified</span>
-                          <span className={isComplete ? 'text-emerald-600 font-black' : 'text-amber-600 font-black'}>{pct}%</span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isComplete ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${Math.min(pct, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Absentee & Medical Retest Reconciliation Desk */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+            <form onSubmit={handleCreateSchedule} className="space-y-4 text-xs">
+              {/* EXAM DELIVERY MODE: SINGLE TOGGLE (Hybrid Active vs CBT On Hold) */}
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 flex items-center justify-center font-bold">
-                      🩺
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Absentee &amp; Medical Retest Reconciliation Desk
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Cross-references parent leave requests, verified doctor notes, and schedules supplementary assessment slots
-                      </p>
-                    </div>
-                  </div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 text-xs">
+                    <Monitor className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Examination Delivery Mode</span>
+                  </label>
+                  <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Hybrid Mode Active</span>
+                  </span>
                 </div>
 
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  {absentees.map((abs, idx) => (
-                    <div key={abs.id || idx} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 dark:text-white">{abs.student_name || 'Rohan Deshmukh'}</span>
-                          <span className="text-[10px] font-bold text-slate-400">Roll #{abs.roll_no || '14'} ({abs.class_name || 'Class 8'}-{abs.section || 'B'})</span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                            Absent in {abs.subject || 'Mathematics'}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-1">
-                          Medical Status: <b className="text-slate-800 dark:text-slate-200">{abs.reason || 'Viral Bronchitis (Doctor Note Verified)'}</b>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {abs.retest_scheduled ? (
-                          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-3 py-1.5 rounded-xl border border-emerald-200">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span>Retest: {abs.retest_date || '14 Nov, 2026'} ✓</span>
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setRetestModalItem(abs);
-                            }}
-                            className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                          >
-                            Schedule Supplementary Retest
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── TAB 5: REPORT CARDS & AI OBSERVATIONS ── */}
-          {activeTab === 'report_cards' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-violet-600" />
-                    Official Report Cards &amp; Gemini AI Growth Memos
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Deterministic CBSE grade matrix integrated with individualized Gemini AI pedagogical growth narratives.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
+                {/* Clean Segmented Toggle Bar */}
+                <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
                   <button
-                    onClick={handleGenerateBatch}
-                    disabled={batchGenLoading}
-                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                    type="button"
+                    onClick={() => setNewSchedExamMode('MODE_HYBRID_SCAN')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      newSchedExamMode === 'MODE_HYBRID_SCAN'
+                        ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-sm border border-slate-200 dark:border-slate-700'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
                   >
-                    {batchGenLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    <span>{batchGenLoading ? 'Generating with AI...' : 'Generate Batch (AI Memos)'}</span>
+                    <span>📝 Hybrid Exam</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-extrabold">Paper + AI Proctor</span>
                   </button>
 
                   <button
-                    onClick={handlePublishBatch}
-                    disabled={publishLoading}
-                    className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                    type="button"
+                    disabled
+                    title="CBT Online is currently on hold. Focus is strictly on Hybrid Examinations."
+                    className="py-2 px-3 rounded-xl font-medium text-xs opacity-50 cursor-not-allowed flex items-center justify-center gap-1.5 text-slate-400 dark:text-slate-500"
                   >
-                    {publishLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    <span>Publish All to Portals</span>
+                    <span>💻 CBT Online</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold">On Hold</span>
                   </button>
                 </div>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                  Students write answers on physical sheets under live webcam/YOLO proctoring and digital audio intercom. Final scripts are verified with dynamic submission tokens.
+                </p>
               </div>
 
-              {/* Class & Section Filter */}
-              <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-                  <Filter className="h-3.5 w-3.5" /> Filter Cohort:
-                </span>
-                <select
-                  value={rcClassFilter}
-                  onChange={e => setRcClassFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="Class 8">Class 8</option>
-                  <option value="Class 9">Class 9</option>
-                  <option value="Class 10">Class 10</option>
-                </select>
-                <select
-                  value={rcSectionFilter}
-                  onChange={e => setRcSectionFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="B">Section B</option>
-                  <option value="A">Section A</option>
-                </select>
-                <select
-                  value={rcTermFilter}
-                  onChange={e => setRcTermFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs px-3 py-1.5 font-bold"
-                >
-                  <option value="Term 1">Term 1 Final</option>
-                  <option value="Term 2">Term 2 Final</option>
-                </select>
-
-                <div className="ml-auto text-xs text-slate-500 font-semibold">
-                  Showing <b>{reportCards.length}</b> Generated Report Cards
-                </div>
-              </div>
-
-              {/* SUBJECT SUBMISSION READINESS MATRIX */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className={`h-4 w-4 ${classReadiness?.all_ready ? 'text-emerald-600' : 'text-amber-500'}`} />
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-100">
-                      Subject Submission Readiness Matrix ({rcClassFilter}-{rcSectionFilter} · {rcTermFilter})
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${classReadiness?.all_ready ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}`}>
-                      {classReadiness ? `${classReadiness.sealed_subjects}/${classReadiness.total_subjects} Subjects Sealed` : '5/5 Subjects Sealed'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        checked={forceBatchGen} 
-                        onChange={e => setForceBatchGen(e.target.checked)}
-                        className="rounded border-slate-300 text-violet-600 focus:ring-violet-500 h-3.5 w-3.5"
-                      />
-                      <span>Override Readiness Gate (Force Compile)</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Subject Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                  {(classReadiness?.subjects || [
-                    { subject: "Mathematics", teacher_name: "Mrs. Ananya Verma", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
-                    { subject: "General Science", teacher_name: "Dr. Suresh Babu", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
-                    { subject: "English Literature", teacher_name: "Mrs. Sunitha Rao", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
-                    { subject: "Social Science", teacher_name: "Mr. Arvind Saxena", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 },
-                    { subject: "Hindi", teacher_name: "Mrs. Priya Sharma", status: "Sealed & Submitted", is_sealed: true, graded_count: 38, total_students: 38 }
-                  ]).map((sub: any, sIdx: number) => (
-                    <div 
-                      key={sIdx}
-                      className={`p-2.5 rounded-xl border text-xs flex flex-col justify-between gap-1.5 ${sub.is_sealed ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40' : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{sub.subject}</span>
-                        {sub.is_sealed ? (
-                          <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded">✓ Sealed</span>
-                        ) : (
-                          <span className="text-[9px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded">Pending</span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-slate-500 truncate">{sub.teacher_name}</div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium pt-1 border-t border-slate-200/50 dark:border-slate-800">
-                        <span>Graded</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">{sub.graded_count} / {sub.total_students}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {!classReadiness?.all_ready && !forceBatchGen && classReadiness !== null && (
-                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-                    <span>
-                      <b>Readiness Gate Active:</b> Cannot compile final report cards until all subject teachers have evaluated answer sheets and submitted sealed gradebooks. Enable override only for emergency provisional drafts.
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {reportCards.map(rc => {
-                  const hasRemedial = Object.values(rc.grades_grid || {}).some(g => g.remedial_flag);
-                  return (
-                    <div 
-                      key={rc.id} 
-                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3 hover:border-violet-300 dark:hover:border-violet-700 transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400">Roll #{rc.roll_no}</span>
-                            <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">{rc.class_name}-{rc.section}</span>
-                          </div>
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                            {rc.student_name}
-                          </h3>
-                        </div>
-
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          rc.overall_grade === 'A1' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
-                          rc.overall_grade === 'A2' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
-                          'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        }`}>
-                          Grade: {rc.overall_grade}
-                        </span>
-                      </div>
-
-                      {/* Score metrics */}
-                      <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl text-[11px]">
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold">TOTAL</span>
-                          <span className="font-bold text-slate-900 dark:text-white">{rc.total_marks_obtained} / {rc.max_total_marks}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold">PERCENTAGE</span>
-                          <span className="font-bold text-violet-600 dark:text-violet-400">{rc.overall_percentage}%</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold">ATTENDANCE</span>
-                          <span className="font-bold text-slate-900 dark:text-white">{rc.attendance_pct || 85}%</span>
-                        </div>
-                      </div>
-
-                      {/* AI Observation Excerpt */}
-                      {rc.ai_teacher_narrative && (
-                        <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-2.5 text-[11px] text-slate-600 dark:text-slate-300">
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 mb-1">
-                            <Sparkles className="h-3 w-3" />
-                            <span>Gemini Pedagogical Observation</span>
-                          </div>
-                          <p className="line-clamp-2 text-[10px] leading-relaxed italic">
-                            &ldquo;{rc.ai_teacher_narrative}&rdquo;
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Status Badges */}
-                      <div className="flex items-center justify-between text-[10px]">
-                        {hasRemedial ? (
-                          <span className="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-2 py-0.5 rounded font-bold">
-                            ⚠️ 1-Week Remedial Active
-                          </span>
-                        ) : (
-                          <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
-                            Exempt from Remedial ✓
-                          </span>
-                        )}
-
-                        <span className={`font-bold ${rc.is_published ? 'text-emerald-600' : 'text-amber-500'}`}>
-                          {rc.is_published ? 'Published to Portal ✓' : 'Draft Only'}
-                        </span>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <button
-                          onClick={() => setSelectedReportCard(rc)}
-                          className="flex-1 flex items-center justify-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <Eye className="h-3 w-3 text-violet-600" />
-                          <span>View Memo</span>
-                        </button>
-                        <button
-                          onClick={() => handlePrintStudentReportCard(rc)}
-                          className="flex items-center justify-center p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-900 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
-                          title="Download Official PDF Memo"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <Footer />
-        </main>
-
-      {/* ── ASSIGN EXAM TASK MODAL ── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Assign Exam Task to Faculty / Academic Cell</h3>
-                <p className="text-[11px] text-slate-500">Dispatch actionable duties for question papers, invigilation, blueprints, or marks entry</p>
-              </div>
-              <button onClick={() => setShowCreateModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleCreateTask} className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Task Type Label</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    '📋 Invigilation Duty',
-                    '📑 Question Paper Submission',
-                    '📐 Blueprint & Clearance',
-                    '📝 Marks Evaluation'
-                  ].map(lbl => (
-                    <button
-                      key={lbl}
-                      type="button"
-                      onClick={() => setNewTaskLabel(lbl)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                        newTaskLabel === lbl
-                          ? 'bg-violet-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
-                      }`}
-                    >
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Task Title / Deliverable</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newTaskTitle} 
-                  onChange={e => setNewTaskTitle(e.target.value)} 
-                  placeholder="e.g. Submit Class 8-B Term 1 Final Mathematics Paper" 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Task Instructions / Notes</label>
-                <textarea 
-                  rows={2}
-                  value={newTaskDesc} 
-                  onChange={e => setNewTaskDesc(e.target.value)} 
-                  placeholder="Include question paper draft, blueprint weighting, and marking rubric..." 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+              {/* Class & Section Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Assign To</label>
-                  <select 
-                    value={newTaskAssignee} 
-                    onChange={e => setNewTaskAssignee(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1">
+                    <GraduationCap className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Class Cohort</span>
+                  </label>
+                  <select
+                    value={newSchedClass}
+                    onChange={e => {
+                      setNewSchedClass(e.target.value);
+                      setNewSchedExamName(`${e.target.value} ${newSchedSubject} Examination`);
+                    }}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
                   >
-                    <option value="Mrs. Ananya Verma (Math Teacher)">Mrs. Ananya Verma (Math Teacher)</option>
-                    <option value="Dr. Suresh Babu (Science Faculty)">Dr. Suresh Babu (Science Faculty)</option>
-                    <option value="Prof. Rajeshwari Nair (Academic Coordinator)">Prof. Rajeshwari Nair (Academic Coordinator)</option>
-                    <option value="Mr. Arvind Saxena (Social Sciences)">Mr. Arvind Saxena (Social Sciences)</option>
-                    <option value="Mrs. Neha Roy (English Faculty)">Mrs. Neha Roy (English Faculty)</option>
+                    {['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'].map(cls => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">SLA Hours</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1">
+                    <Users className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Section Roster</span>
+                  </label>
+                  <select
+                    value={newSchedSection}
+                    onChange={e => setNewSchedSection(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
+                  >
+                    <option value="A">Section A</option>
+                    <option value="B">Section B</option>
+                    <option value="C">Section C</option>
+                    <option value="D">Section D</option>
+                    <option value="All">All Sections (Combined Cohort)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject Selection (Clean Select with Custom Input Option) */}
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1">
+                  <BookOpen className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                  <span>Subject</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    value={['Mathematics', 'English Literature', 'General Science', 'Social Studies', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'Hindi', 'Telugu'].includes(newSchedSubject) ? newSchedSubject : 'custom'}
+                    onChange={e => {
+                      if (e.target.value !== 'custom') {
+                        setNewSchedSubject(e.target.value);
+                        setNewSchedExamName(`${newSchedClass} ${e.target.value} Examination`);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
+                  >
+                    <option value="Mathematics">📐 Mathematics</option>
+                    <option value="English Literature">📖 English Literature</option>
+                    <option value="General Science">🔬 General Science</option>
+                    <option value="Social Studies">🌍 Social Studies</option>
+                    <option value="Physics">⚡ Physics</option>
+                    <option value="Chemistry">🧪 Chemistry</option>
+                    <option value="Biology">🌱 Biology</option>
+                    <option value="Computer Science">💻 Computer Science</option>
+                    <option value="Hindi">🇮🇳 Hindi</option>
+                    <option value="Telugu">🗣️ Telugu</option>
+                    <option value="custom">✏️ Other / Custom Subject</option>
+                  </select>
+
                   <input 
-                    type="number" 
-                    value={newTaskSlaHours} 
-                    onChange={e => setNewTaskSlaHours(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    type="text" 
+                    required
+                    value={newSchedSubject} 
+                    onChange={e => {
+                      setNewSchedSubject(e.target.value);
+                      setNewSchedExamName(`${newSchedClass} ${e.target.value} Examination`);
+                    }} 
+                    placeholder="Enter subject name..."
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
                   />
                 </div>
               </div>
-              <button type="submit" className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold mt-2 cursor-pointer shadow-sm">
-                Assign Task ✓
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* ── CREATE SCHEDULE MODAL ── */}
-      {showCreateScheduleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-violet-600" />
-                Schedule New Examination
-              </h3>
-              <button onClick={() => setShowCreateScheduleModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleCreateSchedule} className="space-y-3 text-xs">
+              {/* Exam Title */}
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  Attach Approved Question Paper (Secrecy Vault)
+                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1">
+                  <Award className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                  <span>Exam Title</span>
                 </label>
+                <input 
+                  type="text" 
+                  required
+                  value={newSchedExamName} 
+                  onChange={e => setNewSchedExamName(e.target.value)} 
+                  placeholder="e.g. Class 8 Mathematics Term 1 Descriptive Final"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
+                />
+              </div>
+
+              {/* Examination Date & Timing */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Examination Date &amp; Timing Schedule</span>
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300">
+                    3.0 Hours Session
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                      Exam Date
+                    </label>
+                    <input 
+                      type="date" 
+                      required
+                      value={newSchedDate} 
+                      onChange={e => setNewSchedDate(e.target.value)} 
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium text-xs [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                      Start Time
+                    </label>
+                    <input 
+                      type="time" 
+                      required
+                      value={toTime24(newSchedStartTime)} 
+                      onChange={e => setNewSchedStartTime(toTime12(e.target.value))} 
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium text-xs [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                      End Time
+                    </label>
+                    <input 
+                      type="time" 
+                      required
+                      value={toTime24(newSchedEndTime)} 
+                      onChange={e => setNewSchedEndTime(toTime12(e.target.value))} 
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium text-xs [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Chief Invigilator Assignment (Filtered Subject Teaching Faculty Only) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <UserCheck className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Chief Invigilator (Teaching Faculty Only)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">Excludes Academic/Admin Coordinators</span>
+                </div>
                 <select
-                  value={newSchedQuestionPaperId || ''}
-                  onChange={(e) => {
-                    const pid = e.target.value ? Number(e.target.value) : null;
-                    setNewSchedQuestionPaperId(pid);
-                    if (pid) {
-                      const sel = questionPapers.find((p: any) => p.id === pid);
-                      if (sel) {
-                        setNewSchedSubject(sel.subject);
-                        setNewSchedClass(sel.class_name);
-                        setNewSchedExamName(`${sel.term} ${sel.subject} Examination`);
-                      }
-                    }
-                  }}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  value={newSchedInvigilator}
+                  onChange={e => setNewSchedInvigilator(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
                 >
-                  <option value="">-- Select Approved Paper from Vault (Optional) --</option>
-                  {questionPapers.map((vp: any) => (
-                    <option key={vp.id} value={vp.id}>
-                      {vp.title} ({vp.class_name} - {vp.subject} | Status: {vp.status})
+                  {availableTeachers.map((t: string) => (
+                    <option key={t} value={t}>
+                      {t} (Faculty Invigilator)
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Exam Title</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={newSchedExamName} 
-                    onChange={e => setNewSchedExamName(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Subject</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={newSchedSubject} 
-                    onChange={e => setNewSchedSubject(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
+              {/* Automated Fan-Out Notification Notice */}
+              <div className="p-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-900 dark:text-violet-200 text-[11px] flex items-start gap-2">
+                <span className="text-sm">🔔</span>
+                <span>
+                  Once submitted, the system automatically dispatches notifications to <b>Students</b>, <b>Parents</b>, and deploys an active duty assignment to <b>{newSchedInvigilator}</b>.
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Class &amp; Section</label>
-                  <div className="grid grid-cols-2 gap-1 mt-1">
-                    <input 
-                      type="text" 
-                      value={newSchedClass} 
-                      onChange={e => setNewSchedClass(e.target.value)} 
-                      placeholder="Class 8"
-                      className="rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800"
-                    />
-                    <input 
-                      type="text" 
-                      value={newSchedSection} 
-                      onChange={e => setNewSchedSection(e.target.value)} 
-                      placeholder="B"
-                      className="rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Date</label>
-                  <input 
-                    type="date" 
-                    required
-                    value={newSchedDate} 
-                    onChange={e => setNewSchedDate(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Start Time</label>
-                  <input 
-                    type="text" 
-                    value={newSchedStartTime} 
-                    onChange={e => setNewSchedStartTime(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">End Time</label>
-                  <input 
-                    type="text" 
-                    value={newSchedEndTime} 
-                    onChange={e => setNewSchedEndTime(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Exam Mode / Virtual Room</label>
-                  <input 
-                    type="text" 
-                    value={newSchedHall} 
-                    onChange={e => setNewSchedHall(e.target.value)} 
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Chief Invigilator</label>
-                    {schedules.some(sc => sc.exam_date === newSchedDate && sc.invigilator_name === newSchedInvigilator && newSchedInvigilator) && (
-                      <span className="text-[10px] font-bold text-rose-500 animate-pulse">
-                        Busy on {newSchedDate}!
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    value={newSchedInvigilator}
-                    onChange={e => {
-                      const selected = e.target.value;
-                      const hasConflict = schedules.find(sc => sc.exam_date === newSchedDate && sc.invigilator_name === selected);
-                      if (hasConflict) {
-                        triggerToast(`Notice: ${selected} is already invigilating ${hasConflict.subject} on ${newSchedDate}. 1 exam per day limit.`);
-                      }
-                      setNewSchedInvigilator(selected);
-                    }}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium"
-                  >
-                    <option value="">-- Select Chief Invigilator --</option>
-                    {availableTeachers.map(teacher => {
-                      const isBusy = schedules.some(sc => sc.exam_date === newSchedDate && sc.invigilator_name === teacher);
-                      return (
-                        <option key={teacher} value={teacher}>
-                          {teacher} {isBusy ? `(Busy on ${newSchedDate})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-                </div>
-
-              <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold pt-1">
-                ℹ️ Once created, the schedule will trigger an automated clearance task for Academic Coordinator (Prof. Rajeshwari Nair) to audit syllabus coverage.
-              </p>
-
-              <button type="submit" className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold mt-2 cursor-pointer">
-                Submit &amp; Route for Academic Clearance
+              {/* Submit Button */}
+              <button 
+                type="submit" 
+                className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white py-3.5 font-bold text-xs shadow-md shadow-violet-500/20 hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Check className="h-4 w-4" />
+                <span>Submit &amp; Dispatch Duty Orders (Student • Teacher • Parent)</span>
               </button>
             </form>
           </div>
         </div>
       )}
+
+
 
       {/* ── BATCH SCHEDULE CLASS MODAL ── */}
+
       {showBatchModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+
           <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
+
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
               <div className="flex items-center gap-2">
+
                 <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold">
+
                   <Calendar className="h-4 w-4" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                     Class-Wise Batch Timetable Scheduler
+
                   </h3>
+
                   <span className="text-[10px] text-slate-400">Configure all term subject exam slots for a class in one unified view</span>
+
                 </div>
+
               </div>
+
               <button onClick={() => setShowBatchModal(false)} className="cursor-pointer">
+
                 <X className="h-4 w-4 text-slate-400" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleCreateBatchSchedules} className="space-y-4 text-xs">
+
               <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target Class</label>
+
                   <select
+
                     value={batchClass}
+
                     onChange={e => setBatchClass(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+
                   >
+
                     <option value="Class 8">Class 8 (Sections A, B)</option>
+
                     <option value="Class 9">Class 9 (Sections A, B)</option>
+
                     <option value="Class 10">Class 10 (Sections A, B)</option>
+
                   </select>
+
                 </div>
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Examination Series</label>
+
                   <input
+
                     type="text"
+
                     value={batchSeriesName}
+
                     onChange={e => setBatchSeriesName(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+
                   />
+
                 </div>
+
               </div>
+
+
 
               {/* Multi-Row Subjects Table */}
+
               <div>
+
                 <div className="flex items-center justify-between mb-2">
+
                   <span className="font-bold text-slate-700 dark:text-slate-300">Subject Exam Timings &amp; Hall Allocations</span>
+
                   <span className="text-[10px] text-violet-600 font-bold">{batchSlots.length} Subject Papers</span>
+
                 </div>
+
+
 
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+
                   {batchSlots.map((slot, index) => (
+
                     <div key={index} className="grid grid-cols-12 gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 items-center">
+
                       <div className="col-span-3">
+
                         <span className="text-[9px] text-slate-400 block font-bold">SUBJECT</span>
+
                         <input
+
                           type="text"
+
                           value={slot.subject}
+
                           onChange={e => {
+
                             const val = e.target.value;
+
                             setBatchSlots(prev => prev.map((s, i) => i === index ? { ...s, subject: val } : s));
+
                           }}
+
                           className="w-full p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-xs bg-white dark:bg-slate-900"
+
                         />
+
                       </div>
+
                       <div className="col-span-3">
+
                         <span className="text-[9px] text-slate-400 block font-bold">DATE</span>
+
                         <input
+
                           type="date"
+
                           value={slot.exam_date}
+
                           onChange={e => {
+
                             const val = e.target.value;
+
                             setBatchSlots(prev => prev.map((s, i) => i === index ? { ...s, exam_date: val } : s));
+
                           }}
+
                           className="w-full p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+
                         />
+
                       </div>
+
                       <div className="col-span-3">
+
                         <span className="text-[9px] text-slate-400 block font-bold">ONLINE ROOM / PROCTOR</span>
+
                         <input
+
                           type="text"
+
                           value={slot.hall_name}
+
                           onChange={e => {
+
                             const val = e.target.value;
+
                             setBatchSlots(prev => prev.map((s, i) => i === index ? { ...s, hall_name: val } : s));
+
                           }}
+
                           className="w-full p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+
                         />
+
                       </div>
+
                       <div className="col-span-3">
+
                         <div className="flex items-center justify-between">
+
                           <span className="text-[9px] text-slate-400 block font-bold">CHIEF INVIGILATOR</span>
+
                           {(() => {
+
                             const sameDayConflict = batchSlots.some((s, idx) => idx !== index && s.exam_date === slot.exam_date && s.invigilator === slot.invigilator && slot.invigilator);
+
                             const existingSchedConflict = schedules.some(sc => sc.exam_date === slot.exam_date && sc.invigilator_name === slot.invigilator && slot.invigilator);
+
                             if (sameDayConflict || existingSchedConflict) {
+
                               return (
+
                                 <span className="text-[9px] font-bold text-rose-500 animate-pulse">
+
                                   Conflict! (1/Day)
+
                                 </span>
+
                               );
+
                             }
+
                             return null;
+
                           })()}
+
                         </div>
+
                         <select
+
                           value={slot.invigilator}
+
                           onChange={e => {
+
                             const selected = e.target.value;
+
                             const conflictInBatch = batchSlots.find((s, idx) => idx !== index && s.exam_date === slot.exam_date && s.invigilator === selected && selected);
+
                             const conflictInSchedules = schedules.find(sc => sc.exam_date === slot.exam_date && sc.invigilator_name === selected && selected);
+
                             if (conflictInBatch || conflictInSchedules) {
+
                               triggerToast(`Conflict: ${selected} is already assigned on ${slot.exam_date}. 1 exam per teacher per day.`);
+
                             }
+
                             setBatchSlots(prev => prev.map((s, i) => i === index ? { ...s, invigilator: selected } : s));
+
                           }}
+
                           className="w-full p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900 font-medium"
+
                         >
+
                           <option value="">-- Select Teacher --</option>
+
                           {availableTeachers.map(teacher => {
+
                             const busyOnDate = batchSlots.some((s, idx) => idx !== index && s.exam_date === slot.exam_date && s.invigilator === teacher);
+
                             return (
+
                               <option key={teacher} value={teacher}>
+
                                 {teacher} {busyOnDate ? '(Assigned on this Date)' : ''}
+
                               </option>
+
                             );
+
                           })}
+
                         </select>
+
                       </div>
+
                     </div>
+
                   ))}
+
                 </div>
+
               </div>
+
+
 
               <div className="p-3 bg-violet-50 dark:bg-violet-950/30 rounded-xl border border-violet-100 dark:border-violet-900/40 text-[11px] text-violet-900 dark:text-violet-200">
+
                 ⚡ <b>Atomic Workflow:</b> Submitting this batch timetable automatically populates the Academic Coordinator clearance desk to verify zero clashes with syllabus pacing, and dispatches official <b>Virtual Exam Invigilation Order Slips</b> to the assigned teachers.
+
               </div>
 
+
+
               <button
+
                 type="submit"
+
                 className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold transition-all shadow-md cursor-pointer"
+
               >
+
                 Publish Class {batchClass} Schedule ({batchSlots.length} Exams) &amp; Route to Academic Desk
+
               </button>
+
             </form>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* ── REQUISITION BLUEPRINT FROM ACADEMIC COORDINATOR MODAL ── */}
+
       {showRequisitionModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
               <div className="flex items-center gap-2">
+
                 <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold">
+
                   <FileText className="h-4 w-4" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                     Requisition Blueprint from Academic Cell
+
                   </h3>
+
                   <p className="text-[10px] text-slate-400">Demand approved question paper blueprint &amp; syllabus clearance</p>
+
                 </div>
+
               </div>
+
               <button onClick={() => setShowRequisitionModal(false)} className="cursor-pointer">
+
                 <X className="h-4 w-4 text-slate-400" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleRequisitionSubmit} className="space-y-3 text-xs">
+
               <div className="grid grid-cols-2 gap-2">
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300">Target Grade</label>
+
                   <select
+
                     value={reqClass}
+
                     onChange={e => setReqClass(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+
                   >
+
                     <option value="Class 8">Class 8</option>
+
                     <option value="Class 9">Class 9</option>
+
                     <option value="Class 10">Class 10</option>
+
                   </select>
+
                 </div>
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300">Subject Paper</label>
+
                   <input
+
                     type="text"
+
                     required
+
                     value={reqSubject}
+
                     onChange={e => setReqSubject(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+
                   />
+
                 </div>
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300">Examination Series</label>
+
                 <input
+
                   type="text"
+
                   value={reqSeries}
+
                   onChange={e => setReqSeries(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
                 />
+
               </div>
+
+
 
               <div className="grid grid-cols-2 gap-2">
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300">Target Officer</label>
+
                   <input
+
                     type="text"
+
                     disabled
+
                     value="Prof. Rajeshwari Nair"
+
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-800 p-2 mt-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold"
+
                   />
+
                 </div>
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300">Vault Deposit Due Date</label>
+
                   <input
+
                     type="date"
+
                     value={reqDueDate}
+
                     onChange={e => setReqDueDate(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
                   />
+
                 </div>
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300">Instructions / Secrecy Note</label>
+
                 <textarea
+
                   rows={2}
+
                   value={reqNotes}
+
                   onChange={e => setReqNotes(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
                 />
+
               </div>
+
+
 
               <div className="p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-900/40 text-[11px] text-violet-800 dark:text-violet-300">
+
                 ⚡ <b>Direct Coordination:</b> Submitting this requisition immediately logs an official <b>[📐 QP Blueprint Draft]</b> task onto Prof. Rajeshwari Nair&apos;s Academic Coordinator Desk.
+
               </div>
 
+
+
               <button
+
                 type="submit"
+
                 className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold transition-all shadow-md cursor-pointer"
+
               >
+
                 Dispatch Blueprint Requisition to Academic Cell
+
               </button>
+
             </form>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* ── RETEST SCHEDULING MODAL (ENHANCED ONLINE PROCTORING) ── */}
+
       {retestModalItem && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
               <div className="flex items-center gap-2">
+
                 <span className="p-1.5 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 inline-flex items-center"><Icon3D name="shield" size={16} /></span>
+
                 <div>
+
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">Schedule Online Supplementary Retest</h3>
+
                   <p className="text-[10px] text-slate-400">Medical concession &amp; sanctioned re-examination</p>
+
                 </div>
+
               </div>
+
               <button 
+
                 onClick={() => setRetestModalItem(null)}
+
                 className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+
               >
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <div className="space-y-3.5 text-xs">
+
               <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+
                 <div className="flex items-center justify-between">
+
                   <span className="font-bold text-slate-900 dark:text-white">{retestModalItem.student_name}</span>
+
                   <span className="text-[10px] font-mono font-bold bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+
                     Roll #{retestModalItem.roll_no} • {retestModalItem.class_name || 'Class 8-B'}
+
                   </span>
+
                 </div>
+
                 <div><b>Subject:</b> {retestModalItem.subject}</div>
+
                 <div className="text-slate-500">
+
                   <b>Verified Reason:</b> <span className="text-rose-600 dark:text-rose-400 font-medium">{retestModalItem.reason}</span>
+
                 </div>
+
               </div>
 
+
+
               <div className="grid grid-cols-2 gap-2">
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Retest Date *</label>
+
                   <input 
+
                     type="date" 
+
                     value={retestDate} 
+
                     onChange={e => setRetestDate(e.target.value)} 
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-xs font-semibold" 
+
                   />
+
                 </div>
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Time Slot *</label>
+
                   <input 
+
                     type="text" 
+
                     defaultValue="02:00 PM - 05:00 PM"
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-xs font-medium" 
+
                   />
+
                 </div>
+
               </div>
 
+
+
               <div className="grid grid-cols-2 gap-2">
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Online Exam Mode *</label>
+
                   <select className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-xs font-medium">
+
                     <option>Secure 1-on-1 AI Proctor</option>
+
                     <option>Zoom Camera Monitored</option>
+
                     <option>Timed Web Portal Session</option>
+
                   </select>
+
                 </div>
+
                 <div>
+
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Designated Proctor *</label>
+
                   <select className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-xs font-medium">
+
                     {availableTeachers.map(t => (
+
                       <option key={t} value={t}>{t}</option>
+
                     ))}
+
                   </select>
+
                 </div>
+
               </div>
+
+
 
               <button 
+
                 onClick={handleScheduleRetest}
+
                 className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold cursor-pointer transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
+
               >
+
                 <span>Confirm Slot &amp; Notify Parent via WhatsApp</span>
+
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* ── REPORT CARD PREVIEW MODAL (OFFICIAL CBSE DIGITAL MEMO + GEMINI AI NARRATIVE) ── */}
+
       {selectedReportCard && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+
           <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
+
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
               <div className="flex items-center gap-2">
+
                 <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold">
+
                   <Award className="h-4 w-4" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                     Official CBSE Statement of Marks · {selectedReportCard.term}
+
                   </h3>
+
                   <span className="text-[10px] text-slate-400">CBSE Affiliation #1930211 · Oakridge International School</span>
+
                 </div>
+
               </div>
+
               <button onClick={() => setSelectedReportCard(null)} className="cursor-pointer">
+
                 <X className="h-4 w-4 text-slate-400" />
+
               </button>
+
             </div>
+
+
 
             {/* Student Metadata Card */}
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs">
+
               <div>
+
                 <span className="text-[10px] font-bold text-slate-400 block">STUDENT NAME</span>
+
                 <span className="font-bold text-slate-900 dark:text-white">{selectedReportCard.student_name}</span>
+
               </div>
+
               <div>
+
                 <span className="text-[10px] font-bold text-slate-400 block">ROLL NUMBER</span>
+
                 <span className="font-bold text-slate-900 dark:text-white">{selectedReportCard.roll_no}</span>
+
               </div>
+
               <div>
+
                 <span className="text-[10px] font-bold text-slate-400 block">CLASS &amp; SECTION</span>
+
                 <span className="font-bold text-violet-600 dark:text-violet-400">{selectedReportCard.class_name} - {selectedReportCard.section}</span>
+
               </div>
+
               <div>
+
                 <span className="text-[10px] font-bold text-slate-400 block">ATTENDANCE</span>
+
                 <span className="font-bold text-slate-900 dark:text-white">{selectedReportCard.attendance_pct || 85}%</span>
+
               </div>
+
             </div>
+
+
 
             {/* CBSE Grades Grid Table */}
+
             <div>
+
               <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Subject Performance Matrix</h4>
+
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+
                 <table className="w-full text-left text-xs">
+
                   <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold text-slate-500 uppercase">
+
                     <tr>
+
                       <th className="p-2.5">Subject</th>
+
                       <th className="p-2.5 text-center">Max Marks</th>
+
                       <th className="p-2.5 text-center">Marks Obtained</th>
+
                       <th className="p-2.5 text-center">Grade</th>
+
                       <th className="p-2.5">Subject Remarks</th>
+
                     </tr>
+
                   </thead>
+
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                     {Object.entries(selectedReportCard.grades_grid || {}).map(([subject, detail]) => (
+
                       <tr key={subject} className={detail.remedial_flag ? 'bg-rose-50/30 dark:bg-rose-950/20' : ''}>
+
                         <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+
                           {subject}
+
                           {detail.remedial_flag && (
+
                             <span className="ml-2 text-[9px] font-bold text-rose-600 bg-rose-100 dark:bg-rose-950 px-1.5 py-0.5 rounded">
+
                               Remedial
+
                             </span>
+
                           )}
+
                         </td>
+
                         <td className="p-2.5 text-center text-slate-500">{detail.max}</td>
+
                         <td className="p-2.5 text-center font-black text-slate-900 dark:text-white">{detail.score}</td>
+
                         <td className="p-2.5 text-center">
+
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+
                             detail.grade.startsWith('A') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+
                             detail.grade.startsWith('B') ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+
                             'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
                           }`}>
+
                             {detail.grade}
+
                           </span>
+
                         </td>
+
                         <td className="p-2.5 text-slate-500 text-[11px]">{detail.remarks}</td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             </div>
+
+
 
             {/* Total Summary */}
+
             <div className="flex items-center justify-between bg-violet-50 dark:bg-violet-950/40 p-3 rounded-xl border border-violet-200 dark:border-violet-900 text-xs font-bold text-violet-900 dark:text-violet-200">
+
               <div>Aggregate: {selectedReportCard.total_marks_obtained} / {selectedReportCard.max_total_marks}</div>
+
               <div>Percentage: {selectedReportCard.overall_percentage}%</div>
+
               <div>Overall Grade: {selectedReportCard.overall_grade}</div>
+
             </div>
+
+
 
             {/* Gemini AI Pedagogical Growth Narrative */}
+
             <div className="rounded-2xl border border-violet-200 dark:border-violet-800/60 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-violet-950/30 p-4 space-y-2">
+
               <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 text-xs font-black">
+
                 <Sparkles className="h-4 w-4 text-violet-600" />
+
                 <span>Gemini AI Pedagogical Growth &amp; Teacher Observations</span>
+
               </div>
+
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
+
                 &ldquo;{selectedReportCard.ai_teacher_narrative}&rdquo;
+
               </p>
+
               <div className="text-[10px] text-slate-400 pt-1 flex items-center justify-between">
+
                 <span>Personalized cognitive analysis synthesized from exam scores &amp; remedial focus work</span>
+
                 <span className="font-semibold text-violet-600 dark:text-violet-400">Class Teacher: Mrs. Ananya Verma</span>
+
               </div>
+
             </div>
+
+
 
             {/* Actions */}
+
             <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
               <button
+
                 onClick={() => handlePrintStudentReportCard(selectedReportCard)}
+
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+
               >
+
                 <Printer className="h-3.5 w-3.5 text-violet-600" />
+
                 <span>Print Official PDF Memo</span>
+
               </button>
+
               <button
+
                 onClick={() => {
+
                   triggerToast(`Published to Student & Parent Portals for ${selectedReportCard.student_name}!`);
+
                   setSelectedReportCard(null);
+
                 }}
+
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+
               >
+
                 <Send className="h-3.5 w-3.5" />
+
                 <span>Publish to Parent Portal</span>
+
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* ── QUESTION PAPER SECRECY PACKET MODAL ── */}
+
       {selectedPaperForVault && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+
           <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+
               <div className="flex items-center gap-2">
+
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
+
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                   Secrecy Strongroom Custody Dossier
+
                 </h3>
+
               </div>
+
               <button onClick={() => setSelectedPaperForVault(null)} className="cursor-pointer">
+
                 <X className="h-4 w-4 text-slate-400" />
+
               </button>
+
             </div>
+
+
 
             <div className="space-y-3 text-xs">
+
               <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl space-y-1">
+
                 <div className="font-bold text-slate-900 dark:text-white text-sm">
+
                   {selectedPaperForVault.subject} ({selectedPaperForVault.class_name})
+
                 </div>
+
                 <div className="text-slate-500">
+
                   Exam: <b>{selectedPaperForVault.exam_name}</b> · {selectedPaperForVault.total_marks} Marks · {selectedPaperForVault.duration_minutes} Minutes
+
                 </div>
+
                 <div className="text-violet-600 dark:text-violet-400 font-semibold text-[11px]">
+
                   Setting Faculty: {selectedPaperForVault.teacher_name || 'Mrs. Ananya Verma'}
+
                 </div>
+
               </div>
+
+
 
               <div className="border border-violet-200 dark:border-violet-800/60 rounded-xl p-3 space-y-2 bg-violet-50/40 dark:bg-violet-950/20">
+
                 <div className="font-bold text-violet-900 dark:text-violet-200 text-xs flex items-center justify-between">
+
                   <span>Printing &amp; Strongroom Allocation:</span>
+
                   <span className="text-emerald-600 font-black">Ready for Packets</span>
+
                 </div>
+
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
+
                   <div className="bg-white dark:bg-slate-800 p-2 rounded-lg border">
+
                     <span className="text-slate-400 block text-[9px]">ENROLLED STUDENTS</span>
+
                     <b className="text-slate-800 dark:text-slate-200">38 Candidates</b>
+
                   </div>
+
                   <div className="bg-white dark:bg-slate-800 p-2 rounded-lg border">
+
                     <span className="text-slate-400 block text-[9px]">BUFFER COPIES</span>
+
                     <b className="text-slate-800 dark:text-slate-200">+2 Reserve Envelopes</b>
+
                   </div>
+
                 </div>
+
                 <p className="text-[10px] text-slate-500">
+
                   Barcode Hash: <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">SEC-2026-MTH-9844-SEALED</code>
+
                 </p>
+
               </div>
+
+
 
               <div className="space-y-1 text-slate-600 dark:text-slate-400 text-[11px]">
+
                 <p><b>Custody Protocol:</b> Transferred digitally by Academic Coordinator (Prof. Rajeshwari Nair) after syllabus compliance review.</p>
+
                 <p><b>Storage:</b> Fireproof Examination Vault A, Locker #04.</p>
+
               </div>
+
+
 
               <button
+
                 onClick={() => {
+
                   triggerToast(`Digitally sealed and locked ${selectedPaperForVault.subject} paper into Online Examination Bank!`);
+
                   setSelectedPaperForVault(null);
+
                 }}
+
                 className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold cursor-pointer flex items-center justify-center gap-2"
+
               >
+
                 <ShieldCheck className="h-4 w-4" />
+
                 <span>Seal & Digital Lock Exam Paper in Secrecy Vault</span>
+
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* Schedule Re-Test Slot Modal */}
+
       {schedulingReExam && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+
           <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
                 <Calendar className="h-4 w-4 text-emerald-600" />
+
                 Schedule Re-Test Slot for {schedulingReExam.student_name}
+
               </h3>
+
               <button onClick={() => setSchedulingReExam(null)} className="text-slate-400 hover:text-slate-600 p-1">
+
                 ✕
+
               </button>
+
             </div>
+
+
 
             <div className="mt-4 space-y-3.5">
+
               <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+
                 <div><strong>Subject:</strong> {schedulingReExam.subject}</div>
+
                 <div><strong>Class:</strong> {schedulingReExam.class_name}-{schedulingReExam.section}</div>
+
                 <div><strong>Exam:</strong> {schedulingReExam.exam_name}</div>
+
               </div>
 
+
+
               <div>
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+
                   Re-Test Date *
+
                 </label>
+
                 <input
+
                   type="date"
+
                   value={reExamSlotDate}
+
                   onChange={e => setReExamSlotDate(e.target.value)}
+
                   className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+
                   Time Slot *
+
                 </label>
+
                 <input
+
                   type="text"
+
                   value={reExamSlotTime}
+
                   onChange={e => setReExamSlotTime(e.target.value)}
+
                   className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+
                   Online Exam Room / Mode *
+
                 </label>
+
                 <input
+
                   type="text"
+
                   value={reExamSlotRoom}
+
                   onChange={e => setReExamSlotRoom(e.target.value)}
+
                   className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+
                   Designated Invigilator *
+
                 </label>
+
                 <input
+
                   type="text"
+
                   value={reExamInvigilator}
+
                   onChange={e => setReExamInvigilator(e.target.value)}
+
                   className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
+
                 />
+
               </div>
+
+
 
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   onClick={() => setSchedulingReExam(null)}
+
                   className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   onClick={async () => {
+
                     await api.scheduleReExamSlot(schedulingReExam.id, {
+
                       re_exam_date: reExamSlotDate,
+
                       re_exam_time: reExamSlotTime,
+
                       re_exam_venue: reExamSlotRoom,
+
                       coordinator_assigned: reExamInvigilator
+
                     });
+
                     setReExamMandates(prev => prev.map(r => r.id === schedulingReExam.id ? {
+
                       ...r,
+
                       status: 'Scheduled',
+
                       re_exam_date: reExamSlotDate,
+
                       re_exam_time: reExamSlotTime,
+
                       re_exam_venue: reExamSlotRoom,
+
                       coordinator_assigned: reExamInvigilator
+
                     } : r));
+
                     triggerToast(`✅ Retest confirmed for ${schedulingReExam.student_name}! Notifications dispatched to Parent & Student.`);
+
                     setReExamSuccessMsg(`Re-Test for ${schedulingReExam.student_name} scheduled on ${reExamSlotDate} (${reExamSlotTime}) in ${reExamSlotRoom}. Digital admit pass & AI Proctor credentials are now active in Parent & Student portals.`);
+
                     setSchedulingReExam(null);
+
                   }}
+
                   className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm cursor-pointer"
+
                 >
+
                   Confirm Slot & Issue Digital Admit Pass
+
                 </button>
+
               </div>
+
             </div>
+
           </div>
+
         </div>
+
+      )}
+
+
+
+
+      {/* POST-EXAM PROCTORING AUDIT DOSSIER MODAL */}
+      {showDossierModal && (
+        <ProctorIntegrityDossierModal
+          isOpen={showDossierModal}
+          candidateId={dossierCandidateId || 1}
+          onClose={() => setShowDossierModal(false)}
+          onVerdictApplied={() => {
+            triggerToast('Proctoring audit verdict logged successfully.');
+          }}
+        />
       )}
 
     </div>
+
   );
+
 }
+
+
 

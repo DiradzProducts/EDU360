@@ -1,4 +1,8 @@
-import React, { useState, useEffect } from 'react';
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { api } from '@/lib/api';
+import { ProctorIntegrityDossierModal } from './proctor-integrity-dossier-modal';
 import { 
   Users, 
   AlertTriangle, 
@@ -10,38 +14,55 @@ import {
   CheckCircle2, 
   X, 
   Play, 
+  Pause,
   Camera, 
   Video, 
   Filter, 
   Sparkles,
   Radio,
   FileCheck,
-  RefreshCw
+  RefreshCw,
+  Mic,
+  MessageSquare,
+  Ban,
+  UserX,
+  PhoneCall,
+  Lock,
+  Flame,
+  VolumeX
 } from 'lucide-react';
 
 export interface ProctorCandidate {
   id: number;
+  studentId?: number;
   name: string;
   rollNo: string;
   grade: string;
   section: string;
   subject: string;
   avatar: string;
-  status: 'normal' | 'warning' | 'critical' | 'uploading' | 'completed';
-  anomalyType?: 'Multiple Faces' | 'Phone Detected' | 'Off-Screen Gaze' | 'Writing in Scan Window' | 'Audio Anomaly';
+  status: 'normal' | 'warning' | 'critical' | 'uploading' | 'completed' | 'paused' | 'disqualified';
+  examMode?: 'MODE_CBT' | 'MODE_HYBRID_SCAN';
+  anomalyType?: string;
   suspicionScore: number; // 0 to 100
   strikes: number; // 0, 1, 2, 3
   tabSwitches: number;
   cameraActive: boolean;
+  isPaused?: boolean;
+  isDisqualified?: boolean;
+  isNudged?: boolean;
+  nudgeMessage?: string;
   scriptPagesUploaded: number;
   sealVerified: boolean;
   lastAnomalyTime?: string;
-  isNudged?: boolean;
+  decibels?: number;
+  gaze?: string;
 }
 
 const INITIAL_CANDIDATES: ProctorCandidate[] = [
   {
     id: 1,
+    studentId: 1,
     name: 'Aarav Sharma',
     rollNo: '14',
     grade: 'Class 8',
@@ -49,6 +70,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
     status: 'normal',
+    examMode: 'MODE_CBT',
     suspicionScore: 12,
     strikes: 0,
     tabSwitches: 0,
@@ -58,6 +80,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 2,
+    studentId: 2,
     name: 'Rohan Deshmukh',
     rollNo: '22',
     grade: 'Class 8',
@@ -65,6 +88,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
     status: 'critical',
+    examMode: 'MODE_CBT',
     anomalyType: 'Multiple Faces',
     suspicionScore: 84,
     strikes: 2,
@@ -76,6 +100,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 3,
+    studentId: 3,
     name: 'Diya Sen',
     rollNo: '09',
     grade: 'Class 8',
@@ -83,6 +108,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
     status: 'warning',
+    examMode: 'MODE_CBT',
     anomalyType: 'Off-Screen Gaze',
     suspicionScore: 48,
     strikes: 1,
@@ -94,6 +120,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 4,
+    studentId: 4,
     name: 'Kabir Mehta',
     rollNo: '18',
     grade: 'Class 8',
@@ -101,6 +128,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
     status: 'uploading',
+    examMode: 'MODE_HYBRID_SCAN',
     suspicionScore: 18,
     strikes: 0,
     tabSwitches: 0,
@@ -111,6 +139,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 5,
+    studentId: 5,
     name: 'Ananya Rao',
     rollNo: '03',
     grade: 'Class 8',
@@ -118,6 +147,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
     status: 'normal',
+    examMode: 'MODE_CBT',
     suspicionScore: 8,
     strikes: 0,
     tabSwitches: 0,
@@ -127,6 +157,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 6,
+    studentId: 6,
     name: 'Vikram Joshi',
     rollNo: '31',
     grade: 'Class 8',
@@ -134,6 +165,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
     status: 'warning',
+    examMode: 'MODE_HYBRID_SCAN',
     anomalyType: 'Writing in Scan Window',
     suspicionScore: 62,
     strikes: 1,
@@ -145,6 +177,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 7,
+    studentId: 7,
     name: 'Tanvi Patel',
     rollNo: '27',
     grade: 'Class 8',
@@ -152,6 +185,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
     status: 'completed',
+    examMode: 'MODE_HYBRID_SCAN',
     suspicionScore: 5,
     strikes: 0,
     tabSwitches: 0,
@@ -161,6 +195,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
   },
   {
     id: 8,
+    studentId: 8,
     name: 'Aditya Nair',
     rollNo: '02',
     grade: 'Class 8',
@@ -168,6 +203,7 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
     subject: 'Mathematics',
     avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150',
     status: 'normal',
+    examMode: 'MODE_CBT',
     suspicionScore: 15,
     strikes: 0,
     tabSwitches: 0,
@@ -179,63 +215,297 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = [
 
 export function LiveInvigilatorCockpit() {
   const [candidates, setCandidates] = useState<ProctorCandidate[]>(INITIAL_CANDIDATES);
-  const [filter, setFilter] = useState<'all' | 'flagged' | 'uploading' | 'completed'>('all');
-  const [selectedCandidate, setSelectedCandidate] = useState<ProctorCandidate | null>(null);
+  const [filter, setFilter] = useState<'all' | 'flagged' | 'paused' | 'completed'>('all');
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Active Interactive States
+  const [activeIntercomCandidateId, setActiveIntercomCandidateId] = useState<number | null>(null);
+  const [warningModalCandidate, setWarningModalCandidate] = useState<ProctorCandidate | null>(null);
+  const [customWarningText, setCustomWarningText] = useState('');
+  const [evictModalCandidate, setEvictModalCandidate] = useState<ProctorCandidate | null>(null);
+  const [evictReason, setEvictReason] = useState('Malpractice confirmed by invigilator');
+  const [dossierCandidateId, setDossierCandidateId] = useState<number | null>(null);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // 1-Click Audio Nudge
-  const handleNudge = (id: number, name: string) => {
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, isNudged: true } : c));
-    triggerToast(`Sent chime audio-nudge to ${name}: "Invigilator requests desk focus."`);
+  // Poll backend candidates for live sync
+  const loadCandidates = async () => {
+    try {
+      const res = await api.getExamCandidates();
+      if (res && res.success && res.candidates && res.candidates.length > 0) {
+        setCandidates(prev => {
+          return res.candidates.map((newCand: ProctorCandidate) => {
+            const existing = prev.find(p => p.id === newCand.id || p.studentId === newCand.studentId);
+            if (!existing) return newCand;
+            const effectiveStrikes = Math.max(existing.strikes || 0, newCand.strikes || 0);
+            return {
+              ...newCand,
+              strikes: effectiveStrikes,
+              status: effectiveStrikes >= 2 ? 'critical' : effectiveStrikes === 1 ? 'warning' : (existing.isPaused ? 'paused' : newCand.status),
+              anomalyType: existing.anomalyType || newCand.anomalyType,
+              isPaused: existing.isPaused !== undefined ? existing.isPaused : newCand.isPaused,
+              decibels: existing.decibels !== undefined ? existing.decibels : newCand.decibels,
+              gaze: existing.gaze || newCand.gaze
+            };
+          });
+        });
+      }
+    } catch {
+      // Keep initial candidates on error
+    }
+  };
+
+  // Real-Time Cross-Window Synchronization with Student Exam Hall
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.onmessage = (e) => {
+        const data = e.data;
+        if (!data) return;
+
+        if (data.type === 'STUDENT_TELEMETRY' && data.candidateId) {
+          setCandidates(prev => prev.map(c => {
+            if (c.id === data.candidateId || c.studentId === data.candidateId) {
+              const newStrikes = data.strikes !== undefined ? data.strikes : c.strikes;
+              return {
+                ...c,
+                strikes: newStrikes,
+                status: (newStrikes >= 2 || data.isCritical) ? 'critical' : newStrikes === 1 ? 'warning' : c.status,
+                anomalyType: data.anomalyType || c.anomalyType,
+                cameraActive: data.cameraActive !== undefined ? data.cameraActive : c.cameraActive,
+                decibels: data.audioDb || c.decibels,
+                gaze: data.gaze || c.gaze
+              };
+            }
+            return c;
+          }));
+        }
+      };
+    } catch {}
+
+  return () => {
+      if (channel) channel.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    loadCandidates();
+    const interval = setInterval(loadCandidates, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 1. Push-To-Talk 1-on-1 Audio Intercom
+  const handleToggleIntercom = (candidate: ProctorCandidate) => {
+    if (activeIntercomCandidateId === candidate.id) {
+      setActiveIntercomCandidateId(null);
+      triggerToast(`Ended private intercom with ${candidate.name}. Audio channel closed.`);
+      try {
+        const channel = new BroadcastChannel('edu360_exam_live_channel');
+        channel.postMessage({
+          type: 'END_INTERCOM',
+          candidateId: candidate.id
+        });
+        channel.close();
+      } catch {}
+    } else {
+      setActiveIntercomCandidateId(candidate.id);
+      triggerToast(`🎙️ 1-on-1 Intercom Active with ${candidate.name}. Speaking directly to candidate.`);
+      try {
+        const channel = new BroadcastChannel('edu360_exam_live_channel');
+        channel.postMessage({
+          type: 'TALK_ONE_ON_ONE',
+          candidateId: candidate.id,
+          studentId: candidate.studentId,
+          invigilatorName: 'Mrs. Ananya Verma',
+          message: (candidate.anomalyType && candidate.anomalyType.includes('CELL_PHONE'))
+            ? `${candidate.name}, put away the unauthorized mobile device immediately! Strike ${candidate.strikes || 1} has been recorded in your Analysis Sheet.`
+            : (candidate.anomalyType && candidate.anomalyType.includes('MULTIPLE_PERSONS'))
+            ? `${candidate.name}, multiple persons detected in your room. Ensure you are alone during this exam.`
+            : `${candidate.name}, please adjust your device camera so that your physical paper booklet and hands remain visible on your desk.`
+        });
+        channel.close();
+      } catch {}
+      api.sendProctorAction({
+        candidate_id: candidate.id,
+        action: 'INTERCOM',
+        reason: '1-on-1 push-to-talk audio intercom established.'
+      }).catch(console.error);
+    }
+  };
+
+  // 2. Direct Warning Chat (HUD Alert)
+  const handleSendWarning = (candidateId: number, message: string) => {
+    const cand = candidates.find(c => c.id === candidateId);
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isNudged: true, nudgeMessage: message } : c));
+    triggerToast(`HUD Alert dispatched to ${cand?.name || 'Student'}: "${message}"`);
+    setWarningModalCandidate(null);
+    setCustomWarningText('');
+
+    try {
+      const channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.postMessage({ type: 'ISSUE_WARNING', candidateId, message });
+      channel.close();
+    } catch {}
+
+    api.sendProctorAction({
+      candidate_id: candidateId,
+      action: 'NUDGE',
+      reason: message
+    }).catch(console.error);
+
     setTimeout(() => {
-      setCandidates(prev => prev.map(c => c.id === id ? { ...c, isNudged: false } : c));
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isNudged: false } : c));
     }, 4000);
   };
 
-  // Add Formal Strike
-  const handleAddStrike = (id: number, name: string) => {
+  // 3. Pause / Resume Candidate Exam
+  const handleTogglePause = (candidate: ProctorCandidate) => {
+    const willPause = !candidate.isPaused;
+    const action = willPause ? 'PAUSE' : 'RESUME';
+
     setCandidates(prev => prev.map(c => {
-      if (c.id === id) {
-        const nextStrikes = Math.min(3, c.strikes + 1);
-        return { 
-          ...c, 
-          strikes: nextStrikes, 
-          status: nextStrikes >= 2 ? 'critical' : 'warning',
-          suspicionScore: Math.min(100, c.suspicionScore + 25)
+      if (c.id === candidate.id) {
+        return {
+          ...c,
+          isPaused: willPause,
+          status: willPause ? 'paused' : (c.strikes >= 2 ? 'critical' : c.strikes === 1 ? 'warning' : 'normal')
         };
       }
       return c;
     }));
-    triggerToast(`Formal strike issued to ${name}. Telemetry synced with Principal exam record.`);
+
+    triggerToast(willPause 
+      ? `⏸️ Exam Paused for ${candidate.name}. Candidate screen frozen & timer locked.`
+      : `▶️ Exam Resumed for ${candidate.name}. Timer & canvas unlocked.`
+    );
+
+    try {
+      const channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.postMessage({ type: willPause ? 'EXAM_PAUSE' : 'EXAM_RESUME', candidateId: candidate.id });
+      channel.close();
+    } catch {}
+
+    api.sendProctorAction({
+      candidate_id: candidate.id,
+      action,
+      reason: willPause ? 'Invigilator paused session for desk verification' : 'Invigilator resumed exam'
+    }).catch(console.error);
+  };
+
+  // 4. Force Eviction & Disqualification
+  const handleConfirmEvict = () => {
+    if (!evictModalCandidate) return;
+    const cand = evictModalCandidate;
+
+    setCandidates(prev => prev.map(c => {
+      if (c.id === cand.id) {
+        return {
+          ...c,
+          isDisqualified: true,
+          isPaused: true,
+          status: 'disqualified',
+          suspicionScore: 100
+        };
+      }
+      return c;
+    }));
+
+    triggerToast(`🚫 Candidate ${cand.name} EVICTED for malpractice. Disqualification synced with Principal.`);
+    setEvictModalCandidate(null);
+
+    api.sendProctorAction({
+      candidate_id: cand.id,
+      action: 'EVICT',
+      reason: evictReason
+    }).catch(console.error);
+  };
+
+  // Add Formal Strike (Incrementing 1, 2, 3)
+  const handleAddStrike = (candidate: ProctorCandidate) => {
+    const nextStrikes = Math.min(3, (candidate.strikes || 0) + 1);
+    const nextScore = Math.min(100, (candidate.suspicionScore || 0) + 25);
+    const willPause = nextStrikes >= 3;
+
+    setCandidates(prev => prev.map(c => {
+      if (c.id === candidate.id) {
+        return {
+          ...c,
+          strikes: nextStrikes,
+          suspicionScore: nextScore,
+          isPaused: willPause,
+          status: nextStrikes >= 2 ? 'critical' : 'warning'
+        };
+      }
+      return c;
+    }));
+
+    triggerToast(nextStrikes >= 3 
+      ? `🚨 STRIKE #3 issued to ${candidate.name}! Screen locked. Critical malpractice triage alert sent to Principal.`
+      : `Formal Strike #${nextStrikes}/3 issued to ${candidate.name}. Suspicion: ${nextScore}%.`
+    );
+
+    api.sendProctorAction({
+      candidate_id: candidate.id,
+      action: 'STRIKE',
+      reason: `Formal strike #${nextStrikes} issued for telemetry violations.`
+    }).catch(console.error);
   };
 
   // Broadcast to all students in room
   const handleBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
     if (!broadcastMessage.trim()) return;
+    try {
+      const channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.postMessage({ type: 'INTERCOM_BROADCAST', message: broadcastMessage });
+      channel.close();
+    } catch {}
     triggerToast(`Room Announcement Broadcasted: "${broadcastMessage}"`);
     setBroadcastMessage('');
   };
 
-  // Candidate sorting: Critical candidates bubble to the top!
-  const sortedCandidates = [...candidates].sort((a, b) => b.suspicionScore - a.suspicionScore);
+  // Dynamic Priority Auto-Triage: Flagged, Critical & Strike candidates sort to the top-left!
+  const sortedCandidates = [...candidates].sort((a, b) => {
+    // 1. Highest strikes first
+    if ((b.strikes || 0) !== (a.strikes || 0)) {
+      return (b.strikes || 0) - (a.strikes || 0);
+    }
+    // 2. Highest suspicion score next
+    if ((b.suspicionScore || 0) !== (a.suspicionScore || 0)) {
+      return (b.suspicionScore || 0) - (a.suspicionScore || 0);
+    }
+    // 3. Paused / critical status
+    if (a.status === 'critical' && b.status !== 'critical') return -1;
+    if (b.status === 'critical' && a.status !== 'critical') return 1;
+    return a.id - b.id;
+  });
+
+  // Priority Malpractice Candidates for Left-Corner Dock
+  const flaggedCandidates = candidates.filter(c => 
+    (c.strikes && c.strikes > 0) || 
+    c.status === 'critical' || 
+    c.status === 'warning' || 
+    c.isPaused || 
+    c.status === 'paused' ||
+    (c.suspicionScore > 40)
+  );
 
   const filteredCandidates = sortedCandidates.filter(c => {
-    if (filter === 'flagged') return c.status === 'warning' || c.status === 'critical';
-    if (filter === 'uploading') return c.status === 'uploading';
+    if (filter === 'flagged') return c.status === 'warning' || c.status === 'critical' || (c.strikes || 0) > 0;
+    if (filter === 'paused') return c.isPaused || c.status === 'paused' || c.status === 'disqualified';
     if (filter === 'completed') return c.status === 'completed';
     return true;
   });
 
-  const criticalCount = candidates.filter(c => c.status === 'critical').length;
-  const warningCount = candidates.filter(c => c.status === 'warning').length;
-  const uploadingCount = candidates.filter(c => c.status === 'uploading').length;
+  const criticalCount = candidates.filter(c => c.status === 'critical' || (c.strikes || 0) >= 2).length;
+  const warningCount = candidates.filter(c => c.status === 'warning' || (c.strikes || 0) === 1).length;
+  const pausedCount = candidates.filter(c => c.isPaused || c.status === 'paused').length;
 
   return (
     <div className="space-y-6">
@@ -248,22 +518,22 @@ export function LiveInvigilatorCockpit() {
       )}
 
       {/* Cockpit Command Header */}
-      <div className="rounded-3xl border border-violet-200 dark:border-violet-900/60 bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-950 p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div className="rounded-3xl border border-violet-200 dark:border-violet-900/60 bg-gradient-to-r from-violet-950 via-slate-900 to-indigo-950 p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-400/30 px-3 py-1 text-[11px] font-black">
               <Radio className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
-              LIVE PROCTOR STREAM
+              LIVE PROCTOR SFU STREAM
             </span>
             <span className="text-xs text-violet-300/80 font-mono">
-              Virtual Room Alpha (Camera AI Session)
+              Virtual Room Alpha &bull; LiveKit WebRTC Mesh Active
             </span>
           </div>
           <h2 className="text-xl font-black tracking-tight">
             Live Invigilator Command Cockpit &bull; Class 8-B
           </h2>
           <p className="text-xs text-violet-200/70 max-w-2xl">
-            Real-time YOLO &amp; MediaPipe telemetry monitoring 38 candidates. Anomaly events auto-bubble to top. Camera remains locked through 15-min upload seal.
+            Real-time Edge YOLO &amp; Audio Telemetry. Dynamic Auto-Triage elevates flagged candidates to top-left. Push-to-Talk 1-on-1 private voice and instant exam pause controls active.
           </p>
         </div>
 
@@ -278,8 +548,8 @@ export function LiveInvigilatorCockpit() {
             <span className="text-xl font-black text-amber-400">{warningCount}</span>
           </div>
           <div className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 p-3 text-center min-w-[90px]">
-            <span className="text-[10px] text-violet-300 uppercase font-bold block">Scanning</span>
-            <span className="text-xl font-black text-blue-400">{uploadingCount}</span>
+            <span className="text-[10px] text-violet-300 uppercase font-bold block">Paused</span>
+            <span className="text-xl font-black text-blue-400">{pausedCount}</span>
           </div>
         </div>
       </div>
@@ -307,18 +577,18 @@ export function LiveInvigilatorCockpit() {
             }`}
           >
             <ShieldAlert className="h-3.5 w-3.5" />
-            <span>High Anomaly ({criticalCount + warningCount})</span>
+            <span>High Priority Flagged ({criticalCount + warningCount})</span>
           </button>
           <button
-            onClick={() => setFilter('uploading')}
+            onClick={() => setFilter('paused')}
             className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              filter === 'uploading'
+              filter === 'paused'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60'
             }`}
           >
-            <Camera className="h-3.5 w-3.5" />
-            <span>Scanning Window ({uploadingCount})</span>
+            <Pause className="h-3.5 w-3.5" />
+            <span>Paused / Under Review ({pausedCount})</span>
           </button>
           <button
             onClick={() => setFilter('completed')}
@@ -328,7 +598,7 @@ export function LiveInvigilatorCockpit() {
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
             }`}
           >
-            Sealed &amp; Submitted ({candidates.filter(c => c.status === 'completed').length})
+            Submitted ({candidates.filter(c => c.status === 'completed').length})
           </button>
         </div>
 
@@ -351,26 +621,154 @@ export function LiveInvigilatorCockpit() {
         </form>
       </div>
 
-      {/* CANDIDATES VIDEO MATRIX (16-Grid Responsive) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* MALPRACTICE INCIDENT TRIAGE & CANDIDATES MATRIX */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+
+        {/* STICKY LEFT-CORNER MALPRACTICE PRIORITY DOCK */}
+        <div className="w-full lg:w-84 shrink-0 space-y-3 lg:sticky lg:top-4">
+          <div className="rounded-3xl border-2 border-rose-500/70 bg-gradient-to-b from-rose-950/40 via-slate-900 to-slate-900 p-4 shadow-xl backdrop-blur-md">
+            <div className="flex items-center justify-between pb-3 border-b border-rose-500/30">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                </span>
+                <h3 className="text-xs font-black uppercase tracking-wider text-rose-400">
+                  Malpractice Priority Dock
+                </h3>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                flaggedCandidates.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 text-slate-400'
+              }`}>
+                {flaggedCandidates.length} Active
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-3 max-h-[680px] overflow-y-auto pr-1">
+              {flaggedCandidates.length === 0 ? (
+                <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                  <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-xs font-bold text-white">All Desks Compliant</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    Edge YOLO AI actively scanning face gaze and hands posture across all candidates.
+                  </p>
+                </div>
+              ) : (
+                flaggedCandidates.map((c: ProctorCandidate) => {
+                  const isIntercom = activeIntercomCandidateId === c.id;
+                  const isPaused = c.isPaused || c.status === 'paused';
+                  return (
+                    <div 
+                      key={`malpractice-dock-${c.id}`}
+                      className="p-3.5 rounded-2xl bg-rose-950/30 border-2 border-rose-500/80 shadow-lg space-y-2.5 animate-in slide-in-from-left duration-200"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={c.avatar}
+                            alt={c.name}
+                            className="h-10 w-10 rounded-xl object-cover border border-rose-400 shrink-0"
+                          />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-xs font-black text-white">{c.name}</h4>
+                              <span className="text-[9px] font-mono text-rose-300">Roll #{c.rollNo}</span>
+                            </div>
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-600 text-white mt-0.5">
+                              {c.anomalyType || 'Suspicious Posture'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white shrink-0">
+                          Strike {c.strikes || 1}/3
+                        </span>
+                      </div>
+
+                      {/* 1-Click Priority Action Buttons */}
+                      <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-rose-900/50">
+                        {/* 1. Talk 1-on-1 (Pops teacher video onto student screen) */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleIntercom(c)}
+                          className={`py-1.5 px-2 rounded-xl text-[10px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            isIntercom
+                              ? 'bg-emerald-500 text-slate-950 ring-2 ring-emerald-300 animate-pulse'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                          }`}
+                          title="Speak 1-on-1 with student"
+                        >
+                          <Mic className="h-3 w-3" />
+                          <span>{isIntercom ? 'Speaking' : 'Talk 1-on-1'}</span>
+                        </button>
+
+                        {/* 2. Pause Exam */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePause(c)}
+                          className={`py-1.5 px-2 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            isPaused
+                              ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300'
+                              : 'bg-amber-600 hover:bg-amber-500 text-white'
+                          }`}
+                          title="Pause candidate exam"
+                        >
+                          <Pause className="h-3 w-3" />
+                          <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                        </button>
+
+                        {/* 3. Push Warning HUD */}
+                        <button
+                          type="button"
+                          onClick={() => setWarningModalCandidate(c)}
+                          className="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Bell className="h-3 w-3 text-amber-400" />
+                          <span>Warning HUD</span>
+                        </button>
+
+                        {/* 4. Integrity Dossier */}
+                        <button
+                          type="button"
+                          onClick={() => setDossierCandidateId(c.id)}
+                          className="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-purple-900/60 hover:bg-purple-900/90 text-purple-200 border border-purple-700 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <FileCheck className="h-3 w-3 text-purple-400" />
+                          <span>Dossier</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT AREA: 16-GRID CANDIDATE MOSAIC */}
+        <div className="flex-1 min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredCandidates.map((candidate) => {
-          const isCritical = candidate.status === 'critical';
-          const isWarning = candidate.status === 'warning';
-          const isUploading = candidate.status === 'uploading';
-          const isCompleted = candidate.status === 'completed';
+          const isCritical = candidate.status === 'critical' || (candidate.strikes || 0) >= 2;
+          const isWarning = candidate.status === 'warning' || (candidate.strikes || 0) === 1;
+          const isPaused = candidate.isPaused || candidate.status === 'paused';
+          const isDisqualified = candidate.isDisqualified || candidate.status === 'disqualified';
+          const isIntercomActive = activeIntercomCandidateId === candidate.id;
 
           return (
             <div
               key={candidate.id}
               className={`relative rounded-3xl overflow-hidden bg-slate-900 border-2 transition-all duration-300 shadow-md ${
-                isCritical
-                  ? 'border-rose-500 shadow-rose-500/20 ring-4 ring-rose-500/20 animate-pulse'
+                isDisqualified
+                  ? 'border-rose-900 opacity-60'
+                  : isPaused
+                  ? 'border-amber-400 shadow-amber-500/20 ring-2 ring-amber-400/40'
+                  : isCritical
+                  ? 'border-rose-500 shadow-rose-500/30 ring-4 ring-rose-500/20 animate-pulse'
                   : isWarning
                   ? 'border-amber-400 shadow-amber-500/10'
-                  : isUploading
-                  ? 'border-blue-500'
-                  : isCompleted
-                  ? 'border-emerald-500/60 opacity-85'
                   : 'border-slate-700/80 hover:border-slate-500'
               }`}
             >
@@ -382,27 +780,28 @@ export function LiveInvigilatorCockpit() {
                   <span className="text-slate-400 font-normal">&bull; {candidate.name.split(' ')[0]}</span>
                 </div>
 
-                {/* Violation Tag */}
-                {isCritical && (
+                {/* Violation Tag & Strike Counter */}
+                {isDisqualified ? (
+                  <span className="bg-rose-950 text-rose-300 px-2 py-0.5 rounded-full font-black text-[9px] border border-rose-700">
+                    EVICTED
+                  </span>
+                ) : isPaused ? (
+                  <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black text-[9px] shadow-sm flex items-center gap-1">
+                    <Pause className="h-2.5 w-2.5" />
+                    PAUSED
+                  </span>
+                ) : isCritical ? (
                   <span className="bg-rose-600 text-white px-2 py-0.5 rounded-full font-black text-[9px] shadow-sm flex items-center gap-1">
                     <ShieldAlert className="h-3 w-3" />
                     STRIKE {candidate.strikes}/3
                   </span>
-                )}
-                {isWarning && (
+                ) : isWarning ? (
                   <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black text-[9px] shadow-sm">
-                    CAUTION
+                    CAUTION 1/3
                   </span>
-                )}
-                {isUploading && (
-                  <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full font-black text-[9px] shadow-sm flex items-center gap-1">
-                    <Camera className="h-3 w-3" />
-                    SCANNING (4p)
-                  </span>
-                )}
-                {isCompleted && (
-                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold text-[9px]">
-                    SEALED ✓
+                ) : (
+                  <span className="bg-emerald-600/80 text-white px-2 py-0.5 rounded-full font-bold text-[9px]">
+                    NORMAL
                   </span>
                 )}
               </div>
@@ -412,43 +811,60 @@ export function LiveInvigilatorCockpit() {
                 <img
                   src={candidate.avatar}
                   alt={candidate.name}
-                  className="w-full h-full object-cover filter brightness-90 contrast-105"
+                  className={`w-full h-full object-cover filter brightness-90 contrast-105 ${
+                    isDisqualified ? 'grayscale' : ''
+                  }`}
                 />
 
-                {/* YOLO Bounding Box Simulation */}
-                {isCritical && (
+                {/* YOLO Bounding Box Overlay */}
+                {isCritical && !isDisqualified && (
                   <div className="absolute inset-x-8 inset-y-6 border-2 border-dashed border-rose-500 rounded-2xl flex flex-col justify-between p-1.5 pointer-events-none bg-rose-500/10">
                     <span className="self-start text-[9px] font-mono font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded">
-                      YOLO: {candidate.anomalyType || 'Multiple Faces'} (0.89)
+                      YOLO: {candidate.anomalyType || 'Multiple Persons Detected'} (0.91)
                     </span>
                     <span className="self-end text-[8px] font-mono text-rose-300 bg-black/60 px-1 rounded">
-                      Strike Assigned
+                      Strike Active
                     </span>
                   </div>
                 )}
 
-                {isWarning && (
+                {isWarning && !isCritical && !isDisqualified && (
                   <div className="absolute inset-x-12 inset-y-8 border-2 border-dashed border-amber-400 rounded-2xl flex flex-col justify-between p-1.5 pointer-events-none bg-amber-400/10">
                     <span className="self-start text-[9px] font-mono font-bold bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded">
-                      {candidate.anomalyType || 'Gaze Anomaly'}
+                      {candidate.anomalyType || 'Off-Screen Gaze'}
                     </span>
                   </div>
                 )}
 
-                {/* Unbroken Camera Banner during Scan Window */}
-                {isUploading && (
-                  <div className="absolute inset-x-0 bottom-0 bg-blue-900/80 backdrop-blur-xs p-1 text-center text-[10px] text-white font-bold">
-                    Pose: Holding Mobile to Scan (Writing: Idle ✓)
+                {/* Intercom Active Audio Waves */}
+                {isIntercomActive && (
+                  <div className="absolute inset-0 bg-emerald-950/70 backdrop-blur-xs flex items-center justify-center p-3 text-center text-white animate-in zoom-in-95">
+                    <div className="space-y-1">
+                      <Mic className="h-7 w-7 text-emerald-400 mx-auto animate-pulse" />
+                      <span className="text-xs font-black block text-emerald-300">1-on-1 Voice Intercom Active</span>
+                      <span className="text-[10px] text-emerald-200">Other candidates cannot hear this call</span>
+                    </div>
                   </div>
                 )}
 
                 {/* Soft Audio Nudge Notification Overlay */}
-                {candidate.isNudged && (
+                {candidate.isNudged && !isIntercomActive && (
                   <div className="absolute inset-0 bg-violet-950/80 backdrop-blur-xs flex items-center justify-center p-3 text-center text-white animate-in zoom-in-95">
                     <div className="space-y-1">
                       <Volume2 className="h-6 w-6 text-violet-400 mx-auto animate-bounce" />
-                      <span className="text-xs font-black block">Audio Chime Sent</span>
-                      <span className="text-[10px] text-violet-200">Alerted on student headphones</span>
+                      <span className="text-xs font-black block">HUD Alert Dispatched</span>
+                      <span className="text-[10px] text-violet-200">{candidate.nudgeMessage || 'Maintain focus'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Disqualified Watermark */}
+                {isDisqualified && (
+                  <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-2 text-center text-rose-400">
+                    <div className="space-y-1">
+                      <Ban className="h-8 w-8 mx-auto text-rose-500" />
+                      <span className="text-xs font-black uppercase tracking-wider block">DISQUALIFIED</span>
+                      <span className="text-[9px] text-slate-400">Malpractice Terminated</span>
                     </div>
                   </div>
                 )}
@@ -476,22 +892,80 @@ export function LiveInvigilatorCockpit() {
                   </div>
                 </div>
 
-                {/* 1-Click Invigilator Actions */}
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                  <button
-                    onClick={() => handleNudge(candidate.id, candidate.name)}
-                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-1.5 text-[11px] font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                {/* 4 DYNAMIC INTERACTIVE CONTROLS */}
+                <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  {/* 1. Speak 1-on-1 Push-to-Talk Intercom */}
+                  <button 
+                    disabled={isDisqualified}
+                    onClick={() => handleToggleIntercom(candidate)} 
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                      isIntercomActive
+                        ? 'bg-emerald-500 text-slate-950 font-black ring-2 ring-emerald-400'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                    }`}
+                    title="Speak privately to this candidate"
                   >
-                    <Volume2 className="h-3 w-3 text-violet-500" />
-                    <span>Nudge</span>
+                    <Mic className="h-3.5 w-3.5 mb-0.5" />
+                    <span>{isIntercomActive ? 'Active' : 'Speak'}</span>
+                  </button>
+
+                  {/* 2. Direct Warning Chat */}
+                  <button 
+                    disabled={isDisqualified}
+                    onClick={() => setWarningModalCandidate(candidate)} 
+                    className="flex flex-col items-center justify-center p-1.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 text-[10px] font-bold transition-all cursor-pointer"
+                    title="Send immediate warning message to student's screen"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 mb-0.5" />
+                    <span>Warn</span>
+                  </button>
+
+                  {/* 3. Pause / Resume Candidate Exam */}
+                  <button 
+                    disabled={isDisqualified}
+                    onClick={() => handleTogglePause(candidate)} 
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                      isPaused 
+                        ? 'bg-amber-500 text-slate-950 font-black' 
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                    }`}
+                    title="Freeze candidate timer & canvas"
+                  >
+                    {isPaused ? <Play className="h-3.5 w-3.5 mb-0.5" /> : <Pause className="h-3.5 w-3.5 mb-0.5" />}
+                    <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                  </button>
+
+                  {/* 4. Force Disqualify / Evict */}
+                  <button 
+                    disabled={isDisqualified}
+                    onClick={() => setEvictModalCandidate(candidate)} 
+                    className="flex flex-col items-center justify-center p-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold transition-all cursor-pointer disabled:opacity-30"
+                    title="Terminate examination attempt for malpractice"
+                  >
+                    <Ban className="h-3.5 w-3.5 mb-0.5" />
+                    <span>Evict</span>
+                  </button>
+                </div>
+
+                {/* Strike & Dossier action buttons */}
+                <div className="pt-1 grid grid-cols-2 gap-1.5">
+                  <button
+                    disabled={isDisqualified}
+                    onClick={() => handleAddStrike(candidate)}
+                    className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 py-1.5 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
+                  >
+                    <ShieldAlert className="h-3 w-3 text-rose-500" />
+                    <span>Strike #{Math.min(3, (candidate.strikes || 0) + 1)}/3</span>
                   </button>
 
                   <button
-                    onClick={() => handleAddStrike(candidate.id, candidate.name)}
-                    className="rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 py-1.5 text-[11px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    type="button"
+                    onClick={() => setDossierCandidateId(candidate.id)}
+                    className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 py-1.5 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="Open candidate post-exam proctoring audit dossier"
                   >
-                    <ShieldAlert className="h-3 w-3" />
-                    <span>Strike</span>
+                    <ShieldCheck className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                    <span>Dossier</span>
                   </button>
                 </div>
               </div>
@@ -499,7 +973,146 @@ export function LiveInvigilatorCockpit() {
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
+
+      {/* ========================================================= */}
+      {/* DIRECT WARNING HUD CHAT MODAL                             */}
+      {/* ========================================================= */}
+      {warningModalCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-blue-500" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Send Warning HUD Alert &bull; {warningModalCandidate.name}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setWarningModalCandidate(null)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Select a quick preset directive or type a custom instruction to be displayed on the student&apos;s active exam canvas:
+            </p>
+
+            {/* Quick Warning Presets */}
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                "Please keep your eyes centered on the exam screen.",
+                "Multiple faces detected. Please ensure you are alone in the room.",
+                "Please lower background noise and maintain silence.",
+                "Please adjust your webcam so your full desk is clearly visible.",
+                "Integrity Warning: Alt-tabbing or window switching is recorded."
+              ].map((preset, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendWarning(warningModalCandidate.id, preset)}
+                  className="text-left text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-500/10 hover:border-blue-400 transition-all font-medium text-slate-700 dark:text-slate-200 cursor-pointer"
+                >
+                  &bull; {preset}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Input */}
+            <div className="space-y-1.5 pt-2">
+              <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                Custom Warning Message
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customWarningText}
+                  onChange={(e) => setCustomWarningText(e.target.value)}
+                  placeholder="Type custom proctor alert..."
+                  className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  disabled={!customWarningText.trim()}
+                  onClick={() => handleSendWarning(warningModalCandidate.id, customWarningText)}
+                  className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* FORCE EVICTION & DISQUALIFICATION MODAL                   */}
+      {/* ========================================================= */}
+      {evictModalCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 border border-rose-200 dark:border-rose-900/60 shadow-2xl space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+              <Ban className="h-7 w-7" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Confirm Candidate Disqualification?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Candidate: <b>{evictModalCandidate.name}</b> &bull; Roll #{evictModalCandidate.rollNo}
+                <br />
+                Terminating the exam attempt will immediately evict the student from the portal, log an irrevocable malpractice event, and escalate to the Principal.
+              </p>
+            </div>
+
+            <div className="text-left space-y-1">
+              <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                Official Malpractice Justification *
+              </label>
+              <textarea
+                value={evictReason}
+                onChange={(e) => setEvictReason(e.target.value)}
+                rows={2}
+                className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEvictModalCandidate(null)}
+                className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmEvict}
+                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white py-2.5 text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Ban className="h-4 w-4" />
+                <span>Confirm Eviction</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* POST-EXAM INTEGRITY DOSSIER MODAL */}
+      {dossierCandidateId !== null && (
+        <ProctorIntegrityDossierModal
+          isOpen={true}
+          candidateId={dossierCandidateId}
+          onClose={() => setDossierCandidateId(null)}
+          onVerdictApplied={() => {
+            loadCandidates();
+            triggerToast('Proctoring audit verdict logged successfully.');
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -219,12 +219,30 @@ export function ParentTeacherChatView({
     setLoading(true);
     fetchMessages();
 
+    // Real-time zero-latency cross-tab synchronization via BroadcastChannel
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      channel = new BroadcastChannel('edu360_chat_channel');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'NEW_CHAT_MESSAGE' && event.data?.message) {
+          const incoming = event.data.message;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev;
+            return [...prev, incoming];
+          });
+        }
+      };
+    }
+
     // Auto-polling every 3.5 seconds to pull new messages from teachers in real-time
     const interval = setInterval(() => {
       fetchMessages();
     }, 3500);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (channel) channel.close();
+    };
   }, [studentId]);
 
   // Reset selected teacher when student changes
@@ -287,6 +305,13 @@ export function ParentTeacherChatView({
 
       playStarCollect();
       setMessages((prev) => [...prev, saved]);
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const ch = new BroadcastChannel('edu360_chat_channel');
+          ch.postMessage({ type: 'NEW_CHAT_MESSAGE', message: saved });
+          ch.close();
+        } catch {}
+      }
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {

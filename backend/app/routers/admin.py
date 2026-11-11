@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from app.core.database import get_db
 from app.models.models import (
-    TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
+    User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
     StaffMember, InventoryItem, PTMEvent, PaymentTransaction, FeeDefaulter,
     LeaveRequest
@@ -20,11 +20,12 @@ from app.schemas.schemas import (
     SubmitTaskWorkRequest, ApproveTaskRequest, RejectTaskRequest, AdminOverrideTaskRequest,
     AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate, CallLogPayload,
     StudentResponse, OfficialDocumentResponse, OfficialDocumentCreate,
-    ExitClearanceResponse, ExitClearancePhysicalUpload,
+    ExitClearanceResponse, ExitClearancePhysicalUpload, ExitClearanceInitiateRequest,
     EventResponse, EventAssignmentResponse,
     VendorEquipmentResponse, VendorEquipmentUpdate,
     SubstitutionSlotResponse, AssignSubstitutionRequest, AvailableFacultyItem,
     SecurityAuditLogResponse, FeeFinancialAnalyticsResponse,
+    RecordFeePaymentRequest,
     AcademicRolloverClassResponse, ExecuteRolloverRequest,
     CurriculumPacingItem, LogLessonRequest,
     TaskReliefRequest, ApproveReliefRequest, ExtendSlaRequest, PTMGovernanceStatus,
@@ -807,6 +808,72 @@ async def get_enquiry(enquiry_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Enquiry not found")
     return enquiry
 
+@router.get("/crm/enquiries/{enquiry_id}/credentials")
+async def get_enquiry_credentials(enquiry_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    clean_student = "".join(ch for ch in enquiry.student_name.lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
+    clean_parent = "".join(ch for ch in (enquiry.parent_name or "parent").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
+
+    st_res = await db.execute(
+        select(Student).where(
+            (Student.guardian_phone == enquiry.phone) |
+            (Student.name.ilike(enquiry.student_name))
+        ).order_by(Student.id.desc())
+    )
+    student = st_res.scalars().first()
+
+    if not student:
+        return {
+            "success": True,
+            "is_enrolled": False,
+            "credentials": {
+                "student_name": enquiry.student_name,
+                "student_username": f"{clean_student}_{enquiry_id}",
+                "student_password": "Password123",
+                "student_roll": "Pending",
+                "student_class": enquiry.target_grade,
+                "student_admission_no": "Pending Enrolment",
+                "student_portal": "/student",
+                "parent_name": enquiry.parent_name,
+                "parent_username": f"parent_{clean_parent}_{enquiry_id}",
+                "parent_password": "Password123",
+                "parent_phone": enquiry.phone,
+                "parent_portal": "/parent"
+            }
+        }
+
+    student_user = None
+    if student.user_id:
+        student_user_res = await db.execute(select(User).where(User.id == student.user_id))
+        student_user = student_user_res.scalars().first()
+    
+    st_uname = student_user.username if student_user else f"{clean_student}_{student.id}"
+    pr_uname = f"parent_{clean_parent}_{student.id}"
+
+    return {
+        "success": True,
+        "is_enrolled": True,
+        "credentials": {
+            "student_id": student.id,
+            "student_name": student.name,
+            "student_username": st_uname,
+            "student_password": "Password123",
+            "student_roll": student.roll_no,
+            "student_class": f"{student.class_name}-{student.section}",
+            "student_admission_no": student.admission_no,
+            "student_portal": "/student",
+            "parent_name": student.guardian_name or enquiry.parent_name,
+            "parent_username": pr_uname,
+            "parent_password": "Password123",
+            "parent_phone": student.guardian_phone or enquiry.phone,
+            "parent_portal": "/parent"
+        }
+    }
+
 @router.post("/crm/enquiries", response_model=AdmissionEnquiryResponse)
 async def create_enquiry(req: AdmissionEnquiryCreate, db: AsyncSession = Depends(get_db)):
     enquiry = AdmissionEnquiry(
@@ -1114,6 +1181,48 @@ async def convert_enquiry_to_student(
         )
         db.add(new_defaulter)
 
+    # Generate Institutional User Credentials for Student & Parent
+    clean_student = "".join(ch for ch in new_student.name.lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
+    student_uname = f"{clean_student}_{new_student.id}"
+    clean_parent = "".join(ch for ch in (new_student.guardian_name or "parent").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
+    parent_uname = f"parent_{clean_parent}_{new_student.id}"
+
+    # Student Account
+    st_user_res = await db.execute(select(User).where(User.username == student_uname))
+    student_user = st_user_res.scalars().first()
+    if not student_user:
+        student_user = User(
+            name=new_student.name,
+            username=student_uname,
+            email=f"{student_uname}@student.edu360.internal",
+            role="student",
+            school_code="EDU-GLOBAL-360",
+            password="Password123",
+            phone=new_student.guardian_phone,
+            avatar="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150"
+        )
+        db.add(student_user)
+        await db.flush()
+
+    new_student.user_id = student_user.id
+
+    # Parent Account
+    pr_user_res = await db.execute(select(User).where(User.username == parent_uname))
+    parent_user = pr_user_res.scalars().first()
+    if not parent_user:
+        parent_user = User(
+            name=new_student.guardian_name or f"Parent of {new_student.name}",
+            username=parent_uname,
+            email=new_student.guardian_email or f"{parent_uname}@example.com",
+            role="parent",
+            school_code="EDU-GLOBAL-360",
+            password="Password123",
+            phone=new_student.guardian_phone,
+            avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
+        )
+        db.add(parent_user)
+        await db.flush()
+
     # In-App notification to Accounts Coordinator
     await create_system_notification(
         db=db,
@@ -1135,7 +1244,21 @@ async def convert_enquiry_to_student(
         "message": f"Successfully enrolled {new_student.name} into SIS ({new_student.class_name}-{new_student.section}) with Admission #{adm_no}",
         "student": new_student,
         "admission_fee": fee_amt,
-        "fee_status": fee_status
+        "fee_status": fee_status,
+        "credentials": {
+            "student_name": new_student.name,
+            "student_username": student_uname,
+            "student_password": "Password123",
+            "student_roll": new_student.roll_no,
+            "student_class": f"{new_student.class_name}-{new_student.section}",
+            "student_admission_no": adm_no,
+            "student_portal": "/student",
+            "parent_name": new_student.guardian_name or "Parent / Guardian",
+            "parent_username": parent_uname,
+            "parent_password": "Password123",
+            "parent_phone": new_student.guardian_phone or "",
+            "parent_portal": "/parent"
+        }
     }
 
 class CheckGuardianPhoneResponse(BaseModel):
@@ -1435,8 +1558,73 @@ async def delete_official_document(doc_id: int, db: AsyncSession = Depends(get_d
 # --- 5. Exit Clearance & Dual Signature Verification ---
 @router.get("/exit-clearances", response_model=list[ExitClearanceResponse])
 async def list_exit_clearances(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ExitClearance).order_by(ExitClearance.id.asc()))
+    result = await db.execute(select(ExitClearance).order_by(ExitClearance.id.desc()))
     return result.scalars().all()
+
+@router.get("/exit-clearances/student/{student_id}")
+async def get_student_exit_clearance(student_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ExitClearance).where(ExitClearance.student_id == student_id).order_by(ExitClearance.id.desc())
+    )
+    clearance = result.scalars().first()
+    return clearance
+
+@router.post("/exit-clearances/initiate")
+async def initiate_exit_clearance(req: ExitClearanceInitiateRequest, db: AsyncSession = Depends(get_db)):
+    # Check student
+    student_res = await db.execute(select(Student).where(Student.id == req.student_id))
+    student = student_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Check if exit clearance already exists
+    clearance_res = await db.execute(
+        select(ExitClearance).where(ExitClearance.student_id == req.student_id).order_by(ExitClearance.id.desc())
+    )
+    existing = clearance_res.scalars().first()
+    if existing:
+        return {
+            "success": True,
+            "message": f"Exit clearance protocol already active for {student.name}.",
+            "clearance": existing
+        }
+
+    # Create new exit clearance
+    new_clearance = ExitClearance(
+        student_id=student.id,
+        student_name=student.name,
+        class_name=student.class_name,
+        fee_cleared=req.fee_cleared,
+        library_cleared=req.library_cleared,
+        inventory_cleared=req.inventory_cleared,
+        tc_ready=req.tc_ready,
+        digital_parent_approved=False,
+        digital_approval_timestamp=None,
+        physical_scan_url=None,
+        physical_sign_verified=False,
+        status="Pending Dual Verification"
+    )
+    student.status = "Exit / TC Processing"
+    db.add(new_clearance)
+    await db.commit()
+    await db.refresh(new_clearance)
+
+    try:
+        await create_system_notification(
+            db=db,
+            title=f"Exit Clearance & TC Initiated: {student.name}",
+            message=f"Exit clearance protocol initiated for {student.name} ({student.class_name}). Dual verification pending.",
+            type="warning",
+            target_role="admin"
+        )
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": f"Exit clearance protocol initiated for {student.name}. Moved to active Exit Clearance Pipeline.",
+        "clearance": new_clearance
+    }
 
 @router.post("/exit-clearances/{clearance_id}/verify-physical")
 async def verify_physical_signature(clearance_id: int, req: ExitClearancePhysicalUpload, db: AsyncSession = Depends(get_db)):
@@ -1714,6 +1902,24 @@ async def remind_fee_defaulter(defaulter_id: int):
                 details=f"Dispatched WhatsApp payment reminder to {d['parent_phone']} for {d['milestone']} (₹{d['amount_due']:,})"
             )
             return {"success": True, "message": f"WhatsApp fee reminder dispatched to {d['parent_phone']}"}
+    raise HTTPException(status_code=404, detail="Defaulter record not found")
+
+@router.post("/fees/defaulters/{defaulter_id}/pay")
+async def pay_fee_defaulter(defaulter_id: int, req: RecordFeePaymentRequest):
+    for d in _fee_defaulters:
+        if d["id"] == defaulter_id:
+            paid = float(req.amount_paid)
+            d["amount_due"] = max(0.0, float(d["amount_due"]) - paid)
+            d["reminder_sent"] = False
+            _add_audit_log(
+                actor_name=req.received_by or "Admin Officer",
+                actor_role="admin",
+                action_type="FEE_PAYMENT_RECORDED",
+                target_entity=f"Student #{d['id']} ({d['student_name']})",
+                status="VERIFIED",
+                details=f"Recorded payment of ₹{paid:,.2f} via {req.payment_method}. Ref: {req.utr_or_cheque_no or 'N/A'}"
+            )
+            return {"success": True, "message": f"Payment recorded for {d['student_name']}", "remaining_due": d["amount_due"]}
     raise HTTPException(status_code=404, detail="Defaulter record not found")
 
 @router.get("/fees/analytics", response_model=FeeFinancialAnalyticsResponse)

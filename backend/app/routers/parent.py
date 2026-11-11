@@ -77,6 +77,109 @@ async def get_parent_ai_study_assistant(
 
 
 # --- 1. Moving Slider Banners (Anti-Spam High-Signal Engine) ---
+
+@router.get("/children")
+async def get_parent_children(
+    username: Optional[str] = None,
+    phone: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dynamically returns children for the logged-in parent account.
+    Supports legacy test parents (Sharma, Fernandes) and newly enrolled students.
+    """
+    # 1. If username is parent_john or contains fernandes
+    if username == "parent_john" or (username and "fernandes" in username.lower()):
+        st_res = await db.execute(select(Student).where(Student.id == 12))
+        st = st_res.scalars().first()
+        if st:
+            return [{
+                "id": st.id,
+                "name": st.name,
+                "className": f"{st.class_name}-{st.section}",
+                "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 25,
+                "initials": "JF",
+                "admissionNo": st.admission_no or f"ADM-2024-{st.id:03d}",
+                "attendance": f"{st.attendance_pct}%",
+                "gradeTier": st.grade_tier or "Senior (Grade 10)",
+                "academicAvg": f"{st.academic_average_pct}%",
+                "busRoute": "Route #4 (South City)",
+                "mentor": "Mr. Rajesh Nair"
+            }]
+
+    # 2. If parent username matches new enrolment pattern: parent_{name}_{student_id}
+    if username and username.startswith("parent_"):
+        parts = username.split("_")
+        if parts[-1].isdigit():
+            st_id = int(parts[-1])
+            st_res = await db.execute(select(Student).where(Student.id == st_id))
+            st = st_res.scalars().first()
+            if st:
+                initials = "".join([part[0].upper() for part in st.name.split() if part])[:2]
+                return [{
+                    "id": st.id,
+                    "name": st.name,
+                    "className": f"{st.class_name}-{st.section}",
+                    "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
+                    "initials": initials,
+                    "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
+                    "attendance": f"{st.attendance_pct}%",
+                    "gradeTier": st.grade_tier or f"{st.class_name}",
+                    "academicAvg": f"{st.academic_average_pct}%",
+                    "busRoute": "Route #4 (Campus Shuttle)",
+                    "mentor": "Mrs. Ananya Verma"
+                }]
+
+    # 3. Match by phone if supplied
+    if phone:
+        clean_phone = phone.strip()
+        st_res = await db.execute(select(Student).where(Student.guardian_phone == clean_phone))
+        sts = st_res.scalars().all()
+        if sts:
+            return [{
+                "id": st.id,
+                "name": st.name,
+                "className": f"{st.class_name}-{st.section}",
+                "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
+                "initials": "".join([part[0].upper() for part in st.name.split() if part])[:2],
+                "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
+                "attendance": f"{st.attendance_pct}%",
+                "gradeTier": st.grade_tier or f"{st.class_name}",
+                "academicAvg": f"{st.academic_average_pct}%",
+                "busRoute": "Route #4 (Campus Shuttle)",
+                "mentor": "Mrs. Ananya Verma"
+            } for st in sts]
+
+    # 4. Fallback: Return Sharma children (Aarav & Ananya)
+    return [
+        {
+            "id": 1,
+            "name": "Aarav Sharma",
+            "className": "Class 8-B",
+            "rollNo": 14,
+            "initials": "AS",
+            "admissionNo": "DPWS-2024-0014",
+            "attendance": "94.2%",
+            "gradeTier": "Senior (Grade 8)",
+            "academicAvg": "88.5%",
+            "busRoute": "Route #4 (North Corridor)",
+            "mentor": "Mrs. Ananya Verma"
+        },
+        {
+            "id": 2,
+            "name": "Ananya Sharma",
+            "className": "Class 3-A",
+            "rollNo": 8,
+            "initials": "ANS",
+            "admissionNo": "DPWS-2025-0089",
+            "attendance": "96.0%",
+            "gradeTier": "Junior (Grade 3)",
+            "academicAvg": "92.0%",
+            "busRoute": "Route #4 (North Corridor)",
+            "mentor": "Ms. Deepa Menon"
+        }
+    ]
+
 @router.get("/banners")
 async def get_parent_banners():
     return [
@@ -224,6 +327,12 @@ async def get_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(FeeMilestone).where(FeeMilestone.student_id == student_id))
     fees = result.scalars().all()
     if not fees:
+        if student_id == 12:
+            return [
+                FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Grade 10 Board Fee & Tuition", amount=42000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-4011", paid_at="10 Jul 2026, 10:00 AM", payment_method="Net Banking (SBI)"),
+                FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Term 2 Grade 10 Board & Lab Fee", amount=42000, due_date="15 Oct 2026", status="Paid", receipt_no="REC-2026-FEE-4012", paid_at="12 Oct 2026, 02:30 PM", payment_method="UPI (PhonePe)"),
+                FeeMilestone(id=3, student_id=student_id, title="Milestone 3: Complete Exit & TC Account Clearance", amount=0, due_date="30 Oct 2026", status="Paid", receipt_no="REC-2026-EXIT-CLEAR", paid_at="30 Oct 2026, 11:00 AM", payment_method="Institutional Accounts Clearance")
+            ]
         return [
             FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Tuition & Curriculum Fee", amount=35000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5821", paid_at="12 Jul 2026, 11:20 AM", payment_method="UPI (Google Pay)"),
             FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Q1 AC Bus Transport & GPS Fee", amount=14500, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5822", paid_at="15 Jul 2026, 03:40 PM", payment_method="Net Banking (HDFC)"),
@@ -413,7 +522,7 @@ async def get_student_leave_requests(student_id: int, db: AsyncSession = Depends
 # --- 6. Digital TC Sign-Off ---
 @router.post("/exit-clearance/{student_id}/digital-sign")
 async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ExitClearance).where(ExitClearance.student_id == student_id))
+    result = await db.execute(select(ExitClearance).where(ExitClearance.student_id == student_id).order_by(ExitClearance.id.desc()))
     clearance = result.scalars().first()
     if not clearance:
         raise HTTPException(status_code=404, detail="No active exit clearance record for this student")
@@ -448,7 +557,21 @@ async def get_parent_ptm_event_config():
     return _ptm_event_config
 
 @router.get("/ptm/slots", response_model=list[PTMSlotResponse])
-async def get_parent_ptm_slots(scope: str = None):
+async def get_parent_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
+    try:
+        from app.models.models import PTMSlot
+        from app.routers.teacher import _slot_to_dict
+        stmt = select(PTMSlot)
+        if scope and scope != "ALL":
+            from sqlalchemy import or_
+            stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
+        stmt = stmt.order_by(PTMSlot.start_time.asc())
+        res = await db.execute(stmt)
+        slots = res.scalars().all()
+        if slots:
+            return [_slot_to_dict(s) for s in slots]
+    except Exception as e:
+        print(f"Error querying PTMSlot in parent: {e}")
     if scope and scope != "ALL":
         return [s for s in _ptm_slots if s["interaction_scope"] == scope or s["status"] == "BREAK"]
     return _ptm_slots
@@ -480,6 +603,29 @@ async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depen
             slot["sibling_student_name"] = req.sibling_student_name
             slot["focus_table_agenda"] = req.focus_table_agenda or []
             slot["meeting_url"] = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
+            # DB Persistence
+            try:
+                from app.models.models import PTMSlot
+                import json
+                db_slot_res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id))
+                db_slot = db_slot_res.scalars().first()
+                if db_slot:
+                    db_slot.status = "BOOKED"
+                    db_slot.booked_student_id = req.booked_student_id
+                    db_slot.booked_student_name = req.booked_student_name
+                    db_slot.booked_class = req.booked_class
+                    db_slot.booked_parent_id = req.booked_parent_id
+                    db_slot.booked_parent_name = req.booked_parent_name
+                    db_slot.interaction_scope = req.interaction_scope
+                    db_slot.subject_name = req.subject_name
+                    db_slot.is_sibling_combo = req.is_sibling_combo
+                    db_slot.sibling_student_id = req.sibling_student_id
+                    db_slot.sibling_student_name = req.sibling_student_name
+                    db_slot.meeting_url = slot["meeting_url"]
+                    db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
+                    await db.commit()
+            except Exception as dbe:
+                print(f"DB slot persist error in parent: {dbe}")
 
             # Closed-Loop Telemetry: Auto-update Focus Table if agenda items selected
             if req.focus_table_agenda and req.booked_student_id:

@@ -65,6 +65,7 @@ import { JuniorExamsHub } from './JuniorExamsHub';
 import { JuniorTimetableHub } from './JuniorTimetableHub';
 import { JuniorTrophyHub } from './JuniorTrophyHub';
 import { JuniorNotificationDropdown } from './JuniorNotificationDropdown';
+import { EduVideoConferenceModal } from '@/components/livekit/edu-video-conference-modal';
 import { playStarCollect, playButtonClick } from '@/lib/sound-effects';
 import confetti from 'canvas-confetti';
 
@@ -409,6 +410,22 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
   const [newAwardEvent, setNewAwardEvent] = useState('');
   const [newAwardCategory, setNewAwardCategory] = useState<'achievement' | 'participation'>('achievement');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // LiveKit Cloud Video Conference State
+  const [isLiveConferenceOpen, setIsLiveConferenceOpen] = useState(false);
+  const [activeMeetingRoom, setActiveMeetingRoom] = useState({
+    roomName: 'class-3a-primary-adventure',
+    roomTitle: 'Class 3-A: Live Primary Learning Adventure & Storytelling'
+  });
+
+  const handleJoinLiveMeeting = (roomName?: string, roomTitle?: string) => {
+    setActiveMeetingRoom({
+      roomName: roomName || 'class-3a-primary-adventure',
+      roomTitle: roomTitle || 'Class 3-A: Live Primary Learning Adventure & Storytelling'
+    });
+    setIsLiveConferenceOpen(true);
+    triggerToast('Connecting to Live Video Classroom via LiveKit Cloud... 🎥🚀');
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -868,9 +885,9 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         <div className="space-y-6">
           <LiveLaunchpad
             studentName={user.name}
-            timetable={timetable}
             onOpenQuests={() => setActiveTab('adventures')}
             onEarnStars={(earned) => setStars((prev) => prev + earned)}
+            onJoinLiveMeeting={handleJoinLiveMeeting}
           />
         </div>
       )}
@@ -985,13 +1002,14 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
           <JuniorTimetableHub
             studentName={user.name}
             onOpenLiveClass={() => {
-              setActiveTab('dashboard');
-              triggerToast("Launching into Mrs. Ananya Verma's Class! 🚀");
+              handleJoinLiveMeeting('class-3a-mathematics', "Class 3-A: Mrs. Ananya Verma's Live Mathematics");
             }}
             onEarnStars={(earned) => setStars((prev) => prev + earned)}
           />
         )}
 
+        {/* Brand Footer inside scrollable main container */}
+        <Footer className="pb-8 pt-8 mt-12 w-full text-center border-t border-slate-200/40 dark:border-slate-800/60" />
       </main>
 
       {/* Upload Award Modal */}
@@ -1076,8 +1094,21 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
         />
       )}
 
-      {/* Brand Footer */}
-      <Footer className="pb-8" />
+      {/* LiveKit Cloud Video Conference Modal */}
+      <EduVideoConferenceModal
+        isOpen={isLiveConferenceOpen}
+        onClose={() => setIsLiveConferenceOpen(false)}
+        roomName={activeMeetingRoom.roomName}
+        roomTitle={activeMeetingRoom.roomTitle}
+        userName={user.name || 'Junior Explorer'}
+        userRole="STUDENT"
+        studentContextName={user.name || 'Junior Explorer'}
+        onAttendanceVerified={() => {
+          setStars((prev) => prev + 25);
+          playStarCollect();
+          triggerToast('🎉 +25 Stars earned for attending Live Class!');
+        }}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft,
+  Key,
   Phone,
   Mail,
   Copy,
@@ -79,6 +80,8 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
   const [enrollFeeStatus, setEnrollFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<string>('UPI Transfer');
   const [isEnrolling, setIsEnrolling] = useState<boolean>(false);
+  const [showCredentialsModal, setShowCredentialsModal] = useState<boolean>(false);
+  const [enrolmentCredentials, setEnrolmentCredentials] = useState<any>(null);
 
   // Intake Documents Verification & Upload State
   const [enrollDocReportCard, setEnrollDocReportCard] = useState<boolean>(true);
@@ -102,6 +105,16 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
         setEnquiry(data);
         if (data.next_followup_date) {
           setCallNextDate(data.next_followup_date);
+        }
+        if (data.stage === 'converted') {
+          try {
+            const credsRes = await api.getEnquiryCredentials(enquiryId);
+            if (credsRes && credsRes.credentials) {
+              setEnrolmentCredentials(credsRes.credentials);
+            }
+          } catch (e) {
+            console.error('Failed to load credentials:', e);
+          }
         }
       }
     } catch (err) {
@@ -269,6 +282,18 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
       });
 
       setShowEnrollModal(false);
+      if (res && res.credentials) {
+        setEnrolmentCredentials(res.credentials);
+        setShowCredentialsModal(true);
+      } else {
+        try {
+          const credsRes = await api.getEnquiryCredentials(enquiry.id);
+          if (credsRes && credsRes.credentials) {
+            setEnrolmentCredentials(credsRes.credentials);
+            setShowCredentialsModal(true);
+          }
+        } catch {}
+      }
       try {
         confetti({
           particleCount: 100,
@@ -502,10 +527,20 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
           )}
 
           {isConverted && (
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-black">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span>SIS Enrolment Sealed</span>
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCredentialsModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              >
+                <Key className="h-4 w-4" />
+                <span>View Credentials</span>
+              </button>
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-black">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span>SIS Enrolment Sealed</span>
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -586,6 +621,147 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                   <span className="font-semibold text-slate-700 dark:text-slate-300 mt-0.5 block capitalize">{enquiry.source || 'Website'}</span>
                 </div>
               </div>
+
+              {/* Portal Access & Credentials Embedded in Profile */}
+              {isConverted && (
+                <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Key className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                        Portal Credentials
+                      </span>
+                    </div>
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-black px-2 py-0.5 border border-emerald-200 dark:border-emerald-800">
+                      Live In SIS
+                    </span>
+                  </div>
+
+                  {/* Student Account Row */}
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-700 dark:text-slate-300">👨‍🎓 Student Portal</span>
+                      <Link href="/student" target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 text-[10px] font-bold">
+                        <span>/student</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Username</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                            {enrolmentCredentials?.student_username || `${enquiry.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(enrolmentCredentials?.student_username || `${enquiry.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`);
+                              triggerToast('Copied Student Username');
+                            }}
+                            className="p-0.5 hover:text-blue-600 cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Password</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            {enrolmentCredentials?.student_password || 'Password123'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(enrolmentCredentials?.student_password || 'Password123');
+                              triggerToast('Copied Student Password');
+                            }}
+                            className="p-0.5 hover:text-blue-600 cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parent Account Row */}
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-700 dark:text-slate-300">👨‍👩‍👧 Parent Portal</span>
+                      <Link href="/parent" target="_blank" className="text-purple-600 hover:underline flex items-center gap-1 text-[10px] font-bold">
+                        <span>/parent</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Username</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                            {enrolmentCredentials?.parent_username || `parent_${(enquiry.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(enrolmentCredentials?.parent_username || `parent_${(enquiry.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`);
+                              triggerToast('Copied Parent Username');
+                            }}
+                            className="p-0.5 hover:text-blue-600 cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Password</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            {enrolmentCredentials?.parent_password || 'Password123'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(enrolmentCredentials?.parent_password || 'Password123');
+                              triggerToast('Copied Parent Password');
+                            }}
+                            className="p-0.5 hover:text-blue-600 cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowCredentialsModal(true)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-[11px] font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                      <span>Full Details</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const stUser = enrolmentCredentials?.student_username || `${enquiry.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`;
+                        const prUser = enrolmentCredentials?.parent_username || `parent_${(enquiry.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry.id + 10}`;
+                        const text = `🎉 *Welcome to Oakridge International School (EDU360)*\n\nDear ${enquiry.parent_name},\nWe are pleased to confirm ${enquiry.student_name}'s admission to ${enquiry.target_grade}.\n\n🔑 *Portal Login Credentials:*\n\n👨‍🎓 *Student Portal:* http://localhost:3000/student\n• Username: \`${stUser}\`\n• Password: \`Password123\`\n\n👨‍👩‍👧 *Parent Portal:* http://localhost:3000/parent\n• Username: \`${prUser}\`\n• Password: \`Password123\`\n\nFor assistance, please contact the Admissions Helpdesk.`;
+                        navigator.clipboard.writeText(text);
+                        triggerToast('Copied WhatsApp Welcome Package!');
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>WhatsApp Kit</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1121,6 +1297,178 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
         </div>
       )}
 
+
+      {/* ======================================================== */}
+      {/* CELEBRATORY ENROLMENT CREDENTIALS MODAL                  */}
+      {/* ======================================================== */}
+      {showCredentialsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/25">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Institutional Portal Credentials
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {enrolmentCredentials?.student_name || enquiry?.student_name} &bull; {enrolmentCredentials?.student_class || enquiry?.target_grade}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCredentialsModal(false)}
+                className="h-8 w-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Student Credentials Card */}
+            <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                  👨‍🎓 Student Portal Access
+                </span>
+                <Link
+                  href="/student"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                >
+                  <span>Open /student</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-white dark:bg-slate-900 p-2.5 border border-blue-100 dark:border-blue-950">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Username</span>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                      {enrolmentCredentials?.student_username || `${enquiry?.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolmentCredentials?.student_username || `${enquiry?.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`);
+                        triggerToast('Copied Student Username');
+                      }}
+                      className="p-1 hover:text-blue-600 text-slate-400 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white dark:bg-slate-900 p-2.5 border border-blue-100 dark:border-blue-950">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Password</span>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      {enrolmentCredentials?.student_password || 'Password123'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolmentCredentials?.student_password || 'Password123');
+                        triggerToast('Copied Student Password');
+                      }}
+                      className="p-1 hover:text-blue-600 text-slate-400 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Parent Credentials Card */}
+            <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                  👨‍👩‍👧 Parent Portal Access
+                </span>
+                <Link
+                  href="/parent"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:underline"
+                >
+                  <span>Open /parent</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-white dark:bg-slate-900 p-2.5 border border-purple-100 dark:border-purple-950">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Username</span>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                      {enrolmentCredentials?.parent_username || `parent_${(enquiry?.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolmentCredentials?.parent_username || `parent_${(enquiry?.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`);
+                        triggerToast('Copied Parent Username');
+                      }}
+                      className="p-1 hover:text-purple-600 text-slate-400 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white dark:bg-slate-900 p-2.5 border border-purple-100 dark:border-purple-950">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Password</span>
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      {enrolmentCredentials?.parent_password || 'Password123'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolmentCredentials?.parent_password || 'Password123');
+                        triggerToast('Copied Parent Password');
+                      }}
+                      className="p-1 hover:text-purple-600 text-slate-400 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Copy Full WhatsApp Kit Button */}
+            <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowCredentialsModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const stUser = enrolmentCredentials?.student_username || `${enquiry?.student_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`;
+                  const prUser = enrolmentCredentials?.parent_username || `parent_${(enquiry?.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${enquiry?.id + 10}`;
+                  const text = `🎉 *Welcome to Oakridge International School (EDU360)*\n\nDear ${enquiry?.parent_name},\nWe are pleased to confirm ${enquiry?.student_name}'s admission to ${enquiry?.target_grade}.\n\n🔑 *Portal Login Credentials:*\n\n👨‍🎓 *Student Portal:* http://localhost:3000/student\n• Username: \`${stUser}\`\n• Password: \`Password123\`\n\n👨‍👩‍👧 *Parent Portal:* http://localhost:3000/parent\n• Username: \`${prUser}\`\n• Password: \`Password123\`\n\nFor assistance, please contact the Admissions Helpdesk.`;
+                  navigator.clipboard.writeText(text);
+                  triggerToast('Copied Full WhatsApp Welcome Package!');
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md shadow-emerald-600/25 cursor-pointer"
+              >
+                <Copy className="h-4 w-4" />
+                <span>Copy WhatsApp Welcome Package</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

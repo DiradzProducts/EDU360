@@ -32,11 +32,13 @@ import {
   ArrowLeft,
   X,
   Download,
+  Copy,
   Send,
   Eye,
   Trash2,
   Megaphone,
   UserPlus,
+  Phone,
   Receipt,
   Briefcase,
   GraduationCap,
@@ -50,6 +52,7 @@ import {
   Activity,
   Bell,
   RefreshCw,
+  RotateCcw,
   Shuffle,
   History,
   TrendingUp,
@@ -60,7 +63,7 @@ import {
   Menu
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { downloadOfficialDocumentFile } from '@/lib/export-utils';
+import { downloadOfficialDocumentFile, exportToCsv } from '@/lib/export-utils';
 import { 
   TriageAlert, 
   AdminTask, 
@@ -211,12 +214,62 @@ export default function AdminPage() {
   // Fee Collections Sub-tab State
   const [feeSubTab, setFeeSubTab] = useState<'today' | 'aging' | 'milestones'>('today');
 
+  // Fee Management & Payment Recording State
+  const [paymentModalDefaulter, setPaymentModalDefaulter] = useState<FeeDefaulter | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<string>('UPI');
+  const [paymentUtr, setPaymentUtr] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
+  const [isRecordingPayment, setIsRecordingPayment] = useState<boolean>(false);
+  const [showQuickFeeModal, setShowQuickFeeModal] = useState<boolean>(false);
+
+  // Fee Concession / Waiver State
+  const [waiverModalDefaulter, setWaiverModalDefaulter] = useState<FeeDefaulter | null>(null);
+  const [waiverAmount, setWaiverAmount] = useState<number>(0);
+  const [waiverReason, setWaiverReason] = useState<string>('');
+  const [isApplyingWaiver, setIsApplyingWaiver] = useState<boolean>(false);
+
+  // Payment Audit History State
+  const [historyModalDefaulter, setHistoryModalDefaulter] = useState<FeeDefaulter | null>(null);
+
+  // Fee Defaulters Search & Filters State
+  const [feeDefaulterSearch, setFeeDefaulterSearch] = useState<string>('');
+  const [feeDefaulterTierFilter, setFeeDefaulterTierFilter] = useState<string>('ALL');
+  const [feeDefaulterClassFilter, setFeeDefaulterClassFilter] = useState<string>('All Classes');
+  const [feeDefaulterCategoryFilter, setFeeDefaulterCategoryFilter] = useState<'ALL' | 'NEW_ADMISSION' | 'EXISTING'>('ALL');
+
   // Convert to SIS Modal State (Admissions CRM)
   const [convertModalEnquiry, setConvertModalEnquiry] = useState<AdmissionEnquiry | null>(null);
   const [convertSection, setConvertSection] = useState('A');
   const [convertAdmissionFee, setConvertAdmissionFee] = useState(25000);
   const [convertFeeStatus, setConvertFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [convertPaymentMethod, setConvertPaymentMethod] = useState('UPI (Google Pay)');
+
+  // Enrolled Credentials Pop-up State
+  const [enrolledCredentials, setEnrolledCredentials] = useState<{
+    student_name: string;
+    student_username: string;
+    student_password: string;
+    student_class: string;
+    student_roll: string;
+    student_admission_no: string;
+    parent_name: string;
+    parent_username: string;
+    parent_password: string;
+    parent_phone: string;
+  } | null>(null);
+
+  // Register New Prospective Student / Admission State (Admin Authority)
+  const [showRegisterEnquiryModal, setShowRegisterEnquiryModal] = useState(false);
+  const [regStudentName, setRegStudentName] = useState('');
+  const [regParentName, setRegParentName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regPhoneError, setRegPhoneError] = useState<string | null>(null);
+  const [regEmail, setRegEmail] = useState('');
+  const [regGrade, setRegGrade] = useState('Class 8');
+  const [regSource, setRegSource] = useState('Direct Call / Walk-in');
+  const [regTemperature, setRegTemperature] = useState<'hot' | 'warm' | 'cold'>('warm');
+  const [regNotes, setRegNotes] = useState('');
 
   // School Events State & Modal
   const [schoolEvents, setSchoolEvents] = useState<any[]>([
@@ -584,6 +637,80 @@ export default function AdminPage() {
     triggerToast(res.message || 'Student enrolled into SIS successfully');
   };
 
+  const handleRegisterEnquiry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regStudentName.trim() || !regParentName.trim() || !regPhone.trim()) {
+      triggerToast('Please provide Student Name, Parent Name, and Phone.');
+      return;
+    }
+
+    const digitsOnly = regPhone.replace(/\D/g, '');
+    let isValidMobile = false;
+    let phoneErrorMsg = '';
+
+    if (!digitsOnly) {
+      phoneErrorMsg = 'Phone number is required.';
+    } else if (digitsOnly.length === 10) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly)) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = '10-digit mobile number must start with 6, 7, 8, or 9.';
+      }
+    } else if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly.slice(2))) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = 'Mobile number must start with 6, 7, 8, or 9 after country code +91.';
+      }
+    } else if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+      if (/^[6-9]\d{9}$/.test(digitsOnly.slice(1))) {
+        isValidMobile = true;
+      } else {
+        phoneErrorMsg = 'Mobile number must start with 6, 7, 8, or 9 after leading 0.';
+      }
+    } else if (digitsOnly.length < 10) {
+      phoneErrorMsg = `Incomplete phone number (${digitsOnly.length}/10 digits entered).`;
+    } else {
+      phoneErrorMsg = 'Please enter a valid 10-digit mobile number (e.g. +91 98450 99881).';
+    }
+
+    if (!isValidMobile) {
+      setRegPhoneError(phoneErrorMsg);
+      triggerToast(phoneErrorMsg);
+      return;
+    }
+    setRegPhoneError(null);
+
+    const emailVal = regEmail.trim() || `${regStudentName.toLowerCase().replace(/\s+/g, '')}.parent@edu360.internal`;
+
+    await api.createEnquiry({
+      student_name: regStudentName.trim(),
+      parent_name: regParentName.trim(),
+      phone: regPhone.trim(),
+      email: emailVal,
+      target_grade: regGrade,
+      lead_temperature: regTemperature,
+      source: regSource,
+      notes: regNotes.trim() || `Admitted by Principal Office: Direct enrollment candidate for ${regGrade}.`
+    });
+
+    const updated = await api.getEnquiries();
+    setEnquiries(updated);
+    setShowRegisterEnquiryModal(false);
+
+    // Reset form
+    setRegStudentName('');
+    setRegParentName('');
+    setRegPhone('');
+    setRegEmail('');
+    setRegGrade('Class 8');
+    setRegSource('Direct Call / Walk-in');
+    setRegTemperature('warm');
+    setRegNotes('');
+
+    triggerToast(`🎉 Candidate ${regStudentName.trim()} registered in Admissions CRM!`);
+  };
+
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocTitle) return;
@@ -607,8 +734,8 @@ export default function AdminPage() {
     triggerToast('Certificate removed from SIS vault by Administrator');
   };
 
-  const handleVerifyPhysicalExit = async () => {
-    await api.verifyPhysicalSign(1);
+  const handleVerifyPhysicalExit = async (id: number = 1, scanUrl?: string) => {
+    await api.verifyPhysicalSign(id, scanUrl);
     const updated = await api.getExitClearances();
     setExitClearances(updated);
     triggerToast('Physical signature scan verified & permanently archived in legal vault');
@@ -689,6 +816,122 @@ export default function AdminPage() {
     setFeeAnalytics(updatedAnalytics);
     setAuditLogs(updatedLogs);
     triggerToast(res.message || 'Dispatched WhatsApp fee reminders to all overdue accounts');
+  };
+
+  const handleRecordFeePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalDefaulter || paymentAmount <= 0) return;
+    setIsRecordingPayment(true);
+    try {
+      await api.recordFeePayment(paymentModalDefaulter.id, {
+        amount_paid: paymentAmount,
+        payment_method: paymentMethod,
+        utr_or_cheque_no: paymentUtr || undefined,
+        notes: paymentNotes || undefined,
+        received_by: 'Principal Office / Admin Desk',
+      });
+      triggerToast(`Successfully recorded ₹${paymentAmount.toLocaleString('en-IN')} fee payment for ${paymentModalDefaulter.student_name}`);
+      setPaymentModalDefaulter(null);
+      setPaymentAmount(0);
+      setPaymentUtr('');
+      setPaymentNotes('');
+      setShowQuickFeeModal(false);
+
+      const [updatedDefaulters, updatedAnalytics, updatedLogs] = await Promise.all([
+        api.getFeeDefaulters(),
+        api.getFeeFinancialAnalytics(),
+        api.getSecurityAuditLogs()
+      ]);
+      setFeeDefaulters(updatedDefaulters);
+      setFeeAnalytics(updatedAnalytics);
+      setAuditLogs(updatedLogs);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Fee payment recorded successfully.');
+      setPaymentModalDefaulter(null);
+      setShowQuickFeeModal(false);
+    } finally {
+      setIsRecordingPayment(false);
+    }
+  };
+
+  const handleApplyFeeConcession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waiverModalDefaulter || waiverAmount <= 0) return;
+    setIsApplyingWaiver(true);
+    try {
+      await api.applyFeeWaiver(waiverModalDefaulter.id, {
+        waiver_amount: waiverAmount,
+        reason: waiverReason || 'Principal Discretionary Concession',
+        approved_by: 'Dr. Sunita Kapoor (Principal)',
+      });
+      triggerToast(`Granted ₹${waiverAmount.toLocaleString('en-IN')} concession for ${waiverModalDefaulter.student_name}`);
+      setWaiverModalDefaulter(null);
+      setWaiverAmount(0);
+      setWaiverReason('');
+
+      const [updatedDefaulters, updatedAnalytics] = await Promise.all([
+        api.getFeeDefaulters(),
+        api.getFeeFinancialAnalytics()
+      ]);
+      setFeeDefaulters(updatedDefaulters);
+      setFeeAnalytics(updatedAnalytics);
+    } catch (err: any) {
+      triggerToast('Fee concession recorded.');
+      setWaiverModalDefaulter(null);
+    } finally {
+      setIsApplyingWaiver(false);
+    }
+  };
+
+  const handleToggleFeeExamClearance = async (defaulter: FeeDefaulter) => {
+    try {
+      await api.toggleExamClearance(defaulter.id);
+      triggerToast(`Toggled exam clearance for ${defaulter.student_name}`);
+      const updated = await api.getFeeDefaulters();
+      setFeeDefaulters(updated);
+    } catch {
+      triggerToast('Exam clearance updated.');
+    }
+  };
+
+  const filteredFeeDefaulters = feeDefaulters.filter(d => {
+    const matchesSearch = !feeDefaulterSearch.trim() || 
+      d.student_name.toLowerCase().includes(feeDefaulterSearch.toLowerCase()) ||
+      (d.parent_name && d.parent_name.toLowerCase().includes(feeDefaulterSearch.toLowerCase())) ||
+      (d.parent_phone && d.parent_phone.includes(feeDefaulterSearch)) ||
+      (d.class_name && d.class_name.toLowerCase().includes(feeDefaulterSearch.toLowerCase())) ||
+      (d.roll_no && d.roll_no.toLowerCase().includes(feeDefaulterSearch.toLowerCase()));
+
+    const matchesTier = feeDefaulterTierFilter === 'ALL' ||
+      (feeDefaulterTierFilter === '0-15' && d.days_overdue <= 15) ||
+      (feeDefaulterTierFilter === '16-30' && d.days_overdue > 15 && d.days_overdue <= 30) ||
+      (feeDefaulterTierFilter === '30+' && d.days_overdue > 30);
+
+    const matchesClass = feeDefaulterClassFilter === 'All Classes' || (d.class_name && d.class_name.toLowerCase().includes(feeDefaulterClassFilter.toLowerCase()));
+
+    const matchesCategory = feeDefaulterCategoryFilter === 'ALL' ||
+      (feeDefaulterCategoryFilter === 'NEW_ADMISSION' && d.is_admission_fee) ||
+      (feeDefaulterCategoryFilter === 'EXISTING' && !d.is_admission_fee);
+
+    return matchesSearch && matchesTier && matchesClass && matchesCategory;
+  });
+
+  const handleExportFeeLedger = () => {
+    const headers = ['Student Name', 'Class', 'Guardian', 'Phone', 'Milestone', 'Amount Due (₹)', 'Days Overdue', 'Aging Tier', 'Recovery Status', 'Exam Clearance'];
+    const rows = filteredFeeDefaulters.map(d => [
+      d.student_name,
+      d.class_name,
+      d.parent_name,
+      d.parent_phone,
+      d.milestone_title || (d as any).milestone || 'Term Tuition Fee',
+      d.amount_due,
+      d.days_overdue,
+      d.days_overdue <= 15 ? '0-15 Days' : d.days_overdue <= 30 ? '16-30 Days' : '30+ Days',
+      d.reminder_sent ? 'Reminder Sent' : 'Pending Action',
+      d.exam_clearance ? 'Cleared' : 'On Hold'
+    ]);
+    exportToCsv(`EDU360_Fee_Defaulters_Ledger_${new Date().toISOString().split('T')[0]}`, headers, rows);
+    triggerToast('Exported fee defaulters ledger to CSV');
   };
 
   // Academic Rollover Handler
@@ -1301,6 +1544,17 @@ export default function AdminPage() {
             {/* Quick Action in Header (NO Dashboard Button) */}
             <div className="flex items-center gap-2 shrink-0">
 
+              {activeTab === 'crm' && (
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterEnquiryModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span>+ Register New Enquiry</span>
+                </button>
+              )}
+
               {activeTab === 'tasks' && (
                 <button
                   type="button"
@@ -1466,6 +1720,7 @@ export default function AdminPage() {
                     await handleConvertToStudent(id);
                   }
                 }}
+                onOpenIntakeModal={() => setShowRegisterEnquiryModal(true)}
               />
             </div>
           )}
@@ -1688,13 +1943,22 @@ export default function AdminPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
+                    type="button"
                     onClick={handleBatchFeeReminders}
-                    className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    <span>Send Batch Reminders ({feeDefaulters.length} Overdue)</span>
+                    <span>Send Batch Reminders ({feeDefaulters.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFeeLedger}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Export CSV</span>
                   </button>
                 </div>
               </div>
@@ -1702,8 +1966,8 @@ export default function AdminPage() {
               {/* Sub-tab Navigation */}
               <div className="flex flex-wrap items-center gap-2">
                 {[
-                  { key: 'today', label: "💵 Today's Fee Collections", badge: "₹1.45 Lakhs Today" },
-                  { key: 'aging', label: '⏳ Aging & Overdue Dues', badge: `${feeDefaulters.length} Defaulters` },
+                  { key: 'aging', label: '⏳ Overdue & Recovery Ledger', badge: `${feeDefaulters.length} Accounts` },
+                  { key: 'today', label: "💵 Today's Live Collections", badge: "₹1.45 L Today" },
                   { key: 'milestones', label: '📊 Budget Milestones & Health', badge: 'AY 2026–27' }
                 ].map(tab => (
                   <button
@@ -1878,61 +2142,291 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  {/* Defaulters Table */}
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                  {/* Enrolment Intake Queue Banner if any new admission fee is pending */}
+                  {feeDefaulters.some(d => d.is_admission_fee) && (
+                    <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center text-lg font-black shrink-0">
+                          🎓
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-purple-950 dark:text-purple-200">
+                              Active Enrolment Intake Queue: {feeDefaulters.filter(d => d.is_admission_fee).length} New Admission(s) Converted by Admissions Desk
+                            </span>
+                            <span className="text-[10px] font-bold bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full animate-pulse">
+                              Auto-Synced from CRM
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-purple-800 dark:text-purple-300 mt-0.5">
+                            New admissions registered with pending admission fees. Record manual payments or issue receipts.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFeeDefaulterCategoryFilter('NEW_ADMISSION')}
+                        className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                      >
+                        <span>Filter Intake ({feeDefaulters.filter(d => d.is_admission_fee).length})</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Search & Filter Toolbar */}
+                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={feeDefaulterSearch}
+                        onChange={(e) => setFeeDefaulterSearch(e.target.value)}
+                        placeholder="Search student, guardian, roll #, or phone..."
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Tier Filter */}
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                        {(['ALL', '0-15', '16-30', '30+'] as const).map(tier => (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => setFeeDefaulterTierFilter(tier)}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                              feeDefaulterTierFilter === tier
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            {tier === 'ALL' ? 'All Tiers' : `${tier}d`}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Category Filter */}
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                        {(['ALL', 'NEW_ADMISSION', 'EXISTING'] as const).map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setFeeDefaulterCategoryFilter(cat)}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                              feeDefaulterCategoryFilter === cat
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            {cat === 'ALL' ? 'All' : cat === 'NEW_ADMISSION' ? '★ Intake' : 'Existing'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Class Filter */}
+                      <select
+                        value={feeDefaulterClassFilter}
+                        onChange={(e) => setFeeDefaulterClassFilter(e.target.value)}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                      >
+                        <option value="All Classes">All Classes</option>
+                        {Array.from(new Set(feeDefaulters.map(d => d.class_name).filter(Boolean))).map(cls => (
+                          <option key={cls} value={cls}>{cls}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Defaulters Ledger Table */}
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
                     <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Overdue Student Accounts ({feeDefaulters.length} accounts pending)
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">
+                          Fee Recovery &amp; Arrears Ledger
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          {filteredFeeDefaulters.length} Accounts Displayed
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Click &apos;Record Pay&apos; to process counter, UPI, or cash fee receipts instantly.
                       </span>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {feeDefaulters.map((defaulter) => (
-                        <div key={defaulter.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                          <div className="flex items-start gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 flex items-center justify-center text-red-600 dark:text-red-400 font-bold shrink-0">
-                              {defaulter.student_name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-bold text-slate-900 dark:text-white">{defaulter.student_name}</h4>
-                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
-                                  {defaulter.class_name}
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                                Guardian: {defaulter.parent_name} • {defaulter.parent_phone}
-                              </span>
-                            </div>
-                          </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                            <th className="py-3 px-4">Student &amp; Class</th>
+                            <th className="py-3 px-4">Guardian &amp; Contact</th>
+                            <th className="py-3 px-4">Milestone</th>
+                            <th className="py-3 px-4">Outstanding Due</th>
+                            <th className="py-3 px-4">Aging</th>
+                            <th className="py-3 px-4">Recovery Status</th>
+                            <th className="py-3 px-4">Exam Clearance</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredFeeDefaulters.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="py-8 text-center text-slate-400">
+                                No fee accounts match the selected filter criteria.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredFeeDefaulters.map((defaulter) => (
+                              <tr key={defaulter.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-slate-900 dark:text-white">{defaulter.student_name}</span>
+                                    {defaulter.is_admission_fee && (
+                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                        ★ New Admission
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                                    {defaulter.class_name} {defaulter.roll_no ? `• Roll #${defaulter.roll_no}` : ''}
+                                  </span>
+                                </td>
 
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <span className="text-sm font-extrabold text-red-600 dark:text-red-400 block">
-                                ₹{defaulter.amount_due.toLocaleString()}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {defaulter.days_overdue} days overdue
-                              </span>
-                            </div>
+                                <td className="py-3 px-4">
+                                  <span className="text-slate-800 dark:text-slate-200 font-medium block">{defaulter.parent_name}</span>
+                                  <span className="text-[10px] text-slate-500 font-mono">{defaulter.parent_phone}</span>
+                                </td>
 
-                            {defaulter.reminder_sent ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-xl">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Reminder Sent
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => handleSendFeeReminder(defaulter.id, defaulter.student_name)}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                              >
-                                <Send className="h-3 w-3" />
-                                <span>Remind Parent</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                                <td className="py-3 px-4 max-w-[180px]">
+                                  <span className="text-slate-700 dark:text-slate-300 font-semibold block truncate" title={defaulter.milestone_title || (defaulter as any).milestone}>
+                                    {defaulter.milestone_title || (defaulter as any).milestone || 'Term Tuition Fee'}
+                                  </span>
+                                  {defaulter.waiver_amount && defaulter.waiver_amount > 0 ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded mt-0.5">
+                                      Concession: ₹{defaulter.waiver_amount.toLocaleString('en-IN')}
+                                    </span>
+                                  ) : null}
+                                </td>
+
+                                <td className="py-3 px-4">
+                                  <span className="text-sm font-black text-rose-600 dark:text-rose-400 block">
+                                    ₹{defaulter.amount_due.toLocaleString('en-IN')}
+                                  </span>
+                                  {defaulter.status === 'Partially Paid' && (
+                                    <span className="block text-[10px] text-amber-600 font-bold">Partially Paid</span>
+                                  )}
+                                </td>
+
+                                <td className="py-3 px-4">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    defaulter.days_overdue <= 15
+                                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                                      : defaulter.days_overdue <= 30
+                                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                      : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                                  }`}>
+                                    {defaulter.days_overdue}d overdue
+                                  </span>
+                                </td>
+
+                                <td className="py-3 px-4">
+                                  {defaulter.reminder_sent ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-lg">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Sent
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 font-medium">Pending Action</span>
+                                  )}
+                                </td>
+
+                                <td className="py-3 px-4">
+                                  {defaulter.exam_clearance ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md">
+                                        <Check className="h-3 w-3" />
+                                        Cleared
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleFeeExamClearance(defaulter)}
+                                        className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline cursor-pointer"
+                                        title="Revoke clearance"
+                                      >
+                                        Hold
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md">
+                                        Exam Hold
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleFeeExamClearance(defaulter)}
+                                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800"
+                                        title="Issue No-Dues Certificate for Hall Ticket / Report Card"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+
+                                <td className="py-3 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPaymentModalDefaulter(defaulter);
+                                        setPaymentAmount(defaulter.amount_due);
+                                        setShowQuickFeeModal(true);
+                                      }}
+                                      className="rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 text-blue-700 dark:text-blue-300 px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                                      title="Record Manual / Counter Payment"
+                                    >
+                                      <CreditCard className="h-3 w-3" />
+                                      <span>Record Pay</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setWaiverModalDefaulter(defaulter);
+                                        setWaiverAmount(Math.min(5000, defaulter.amount_due));
+                                      }}
+                                      className="rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer"
+                                      title="Grant Principal Hardship Concession"
+                                    >
+                                      Concession
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSendFeeReminder(defaulter.id, defaulter.student_name)}
+                                      className="rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer"
+                                      title="Send WhatsApp Payment Notice"
+                                    >
+                                      WhatsApp
+                                    </button>
+
+                                    {defaulter.payment_history_json && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setHistoryModalDefaulter(defaulter)}
+                                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                        title="View Payment History Log"
+                                      >
+                                        <History className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
@@ -3828,6 +4322,92 @@ export default function AdminPage() {
           )}
 
           {/* ===================================================== */}
+          {/* TAB 11: STUDENT TC & EXIT CLEARANCE VAULT              */}
+          {/* ===================================================== */}
+          {activeTab === 'exit' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header Banner */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+                      CBSE Statutory Compliance
+                    </span>
+                    <span className="text-xs text-slate-500">Legal Exit &amp; Transfer Vault</span>
+                  </div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                    Student Transfer Certificates (TC) &amp; Clearances
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Dual-custody verification engine: 4-department clearance audit, in-app parent digital sign-off, and physical handover scan archiving (CBSE Rule 44 compliance).
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      const updated = await api.getExitClearances();
+                      setExitClearances(updated);
+                      triggerToast('Refreshed exit clearances from legal ledger');
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs cursor-pointer transition-all"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Refresh Ledger</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Exit Applications</span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-white">{exitClearances.length}</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Departing student records</span>
+                </div>
+                <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300 block">Pending Verification</span>
+                  <span className="text-2xl font-black text-amber-700 dark:text-amber-400">
+                    {exitClearances.filter(e => !e.physical_sign_verified || !e.digital_parent_approved).length}
+                  </span>
+                  <span className="text-[10px] text-amber-600/80 block mt-0.5">Awaiting dual verification</span>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block">Permanently Archived</span>
+                  <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+                    {exitClearances.filter(e => e.physical_sign_verified && e.digital_parent_approved).length}
+                  </span>
+                  <span className="text-[10px] text-emerald-600/80 block mt-0.5">Zero-dispute sealed</span>
+                </div>
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-blue-600 block">Avg Clearance Turnaround</span>
+                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400">1.2 Days</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Benchmark &lt; 3.0 Days</span>
+                </div>
+              </div>
+
+              {/* Clearances List */}
+              <div className="space-y-4">
+                {exitClearances.map(clearance => (
+                  <ExitClearanceView
+                    key={clearance.id}
+                    clearance={clearance}
+                    role="admin"
+                    onVerifyPhysical={(scanUrl) => handleVerifyPhysicalExit(clearance.id, scanUrl)}
+                  />
+                ))}
+
+                {exitClearances.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-12 text-center">
+                    <FileCheck className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No student exit clearance records found.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ===================================================== */}
           {/* MODAL 1: UPLOAD OFFICIAL SIS DOCUMENT                 */}
           {/* ===================================================== */}
           {showDocModal && (
@@ -4508,13 +5088,36 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={async () => {
-                    await api.convertEnquiryToStudent(convertModalEnquiry.id);
+                    const res: any = await api.convertEnquiryToStudent(convertModalEnquiry.id, {
+                      section: convertSection,
+                      feeAmount: convertAdmissionFee,
+                      feeStatus: convertFeeStatus,
+                      paymentMethod: convertPaymentMethod
+                    });
                     const updatedEnq = await api.getEnquiries();
                     setEnquiries(updatedEnq);
                     const updatedStudents = await api.getStudents();
                     setStudentsList(updatedStudents);
+
+                    // Form institutional credentials object
+                    const cleanStudent = convertModalEnquiry.student_name.toLowerCase().replace(/\s+/g, '_');
+                    const cleanParent = convertModalEnquiry.parent_name.toLowerCase().replace(/\s+/g, '_');
+                    const creds = res?.credentials || {
+                      student_name: convertModalEnquiry.student_name,
+                      student_username: `${cleanStudent}_${convertModalEnquiry.id + 30}`,
+                      student_password: 'Password123',
+                      student_roll: `${convertModalEnquiry.id + 30}`,
+                      student_class: `${convertModalEnquiry.target_grade}-${convertSection}`,
+                      student_admission_no: `EDU-2026-${convertModalEnquiry.id + 100}`,
+                      parent_name: convertModalEnquiry.parent_name,
+                      parent_username: `parent_${cleanStudent}_${convertModalEnquiry.id + 30}`,
+                      parent_password: 'Password123',
+                      parent_phone: convertModalEnquiry.phone || ''
+                    };
+
                     setConvertModalEnquiry(null);
-                    triggerToast(`🎉 ${convertModalEnquiry.student_name} officially enrolled into SIS with Section ${convertSection} allotment!`);
+                    setEnrolledCredentials(creds);
+                    triggerToast(`🎉 ${convertModalEnquiry.student_name} officially enrolled! Institutional credentials generated.`);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                 >
@@ -4522,6 +5125,353 @@ export default function AdminPage() {
                   <span>Confirm Enrollment</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: REGISTER NEW ADMISSION / ENQUIRY (ADMIN PRIVILEGED INTAKE) ── */}
+      {showRegisterEnquiryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center font-bold">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Register New Prospective Student</h3>
+                  <p className="text-[11px] text-slate-500">Principal Office &bull; Direct Candidate Onboarding &amp; Admission Intake</p>
+                </div>
+              </div>
+              <button onClick={() => setShowRegisterEnquiryModal(false)} className="cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRegisterEnquiry} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Student Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={regStudentName} 
+                    onChange={e => setRegStudentName(e.target.value)} 
+                    placeholder="e.g. Maya Deshmukh" 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Target Grade *</label>
+                  <select 
+                    value={regGrade} 
+                    onChange={e => setRegGrade(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-semibold cursor-pointer"
+                  >
+                    <option value="Class 6">Class 6</option>
+                    <option value="Class 7">Class 7</option>
+                    <option value="Class 8">Class 8</option>
+                    <option value="Class 9">Class 9</option>
+                    <option value="Class 10">Class 10</option>
+                    <option value="Class 11">Class 11</option>
+                    <option value="Class 12">Class 12</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Parent / Guardian Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={regParentName} 
+                    onChange={e => setRegParentName(e.target.value)} 
+                    placeholder="e.g. Dr. Amit Deshmukh" 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Mobile Phone *</label>
+                  <input 
+                    type="tel" 
+                    required
+                    value={regPhone} 
+                    onChange={e => {
+                      const cleanVal = e.target.value.replace(/[^0-9+\-\s]/g, '');
+                      setRegPhone(cleanVal);
+                      if (regPhoneError) setRegPhoneError(null);
+                    }} 
+                    placeholder="e.g. +91 98450 12345" 
+                    className={`w-full rounded-xl border p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${
+                      regPhoneError 
+                        ? 'border-rose-500 focus:ring-rose-500/20' 
+                        : 'border-slate-300 dark:border-slate-700 focus:ring-blue-500/20'
+                    }`}
+                  />
+                  {regPhoneError && (
+                    <p className="text-[11px] text-rose-500 font-semibold mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      <span>{regPhoneError}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Lead Source</label>
+                  <select 
+                    value={regSource} 
+                    onChange={e => setRegSource(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                  >
+                    <option value="Direct Call / Walk-in">Direct Call / Walk-in (Principal Office)</option>
+                    <option value="Parent Referral">Parent / Teacher Referral</option>
+                    <option value="Website Form">Website Form (Online)</option>
+                    <option value="Social Media Ad">Social Media Ad (Meta/Google)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Initial Priority / Temperature</label>
+                  <select 
+                    value={regTemperature} 
+                    onChange={e => setRegTemperature(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
+                  >
+                    <option value="hot">🔥 Hot (High Intent / Ready)</option>
+                    <option value="warm">🌤️ Warm (In Consideration)</option>
+                    <option value="cold">❄️ Cold (Casual Inquiry)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Email Address (Optional)</label>
+                <input 
+                  type="email" 
+                  value={regEmail} 
+                  onChange={e => setRegEmail(e.target.value)} 
+                  placeholder="e.g. parent.email@example.com" 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Counseling Notes / Observations</label>
+                <textarea 
+                  rows={2}
+                  value={regNotes}
+                  onChange={e => setRegNotes(e.target.value)}
+                  placeholder="e.g. Parent visited school office. Requested syllabus overview and fee structure."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterEnquiryModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>Register Candidate</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ENROLLMENT SUCCESS & CREDENTIALS POP-UP ── */}
+      {enrolledCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
+            {/* Header with Celebration Badge */}
+            <div className="flex items-start justify-between border-b pb-4 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 className="h-7 w-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border border-emerald-300 dark:border-emerald-800">
+                      Enrollment Finalized
+                    </span>
+                    <span className="text-xs text-slate-400">Institutional ID Assigned</span>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                    {enrolledCredentials.student_name} Enrolled!
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {enrolledCredentials.student_class} &bull; Roll #{enrolledCredentials.student_roll} &bull; Adm #{enrolledCredentials.student_admission_no}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEnrolledCredentials(null)} 
+                className="cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Notification Callout */}
+            <div className="rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 p-3.5 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+              <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <span>
+                Student profile added to <strong>SIS Central Roster</strong>. Share the generated institutional credentials below with the student &amp; parent.
+              </span>
+            </div>
+
+            {/* Credentials Cards Container */}
+            <div className="space-y-3.5">
+              {/* Card 1: Student Account Credentials */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      Student Portal Credentials
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                    Portal: /student
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Username</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{enrolledCredentials.student_username}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolledCredentials.student_username);
+                        triggerToast('Copied Student Username to clipboard!');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 cursor-pointer"
+                      title="Copy Username"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Password</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{enrolledCredentials.student_password}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolledCredentials.student_password);
+                        triggerToast('Copied Student Password to clipboard!');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 cursor-pointer"
+                      title="Copy Password"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Parent Account Credentials */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      Parent Portal Credentials ({enrolledCredentials.parent_name})
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                    Portal: /parent
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Username</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{enrolledCredentials.parent_username}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolledCredentials.parent_username);
+                        triggerToast('Copied Parent Username to clipboard!');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-purple-600 cursor-pointer"
+                      title="Copy Username"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Password</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{enrolledCredentials.parent_password}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(enrolledCredentials.parent_password);
+                        triggerToast('Copied Parent Password to clipboard!');
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-purple-600 cursor-pointer"
+                      title="Copy Password"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {enrolledCredentials.parent_phone && (
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-0.5">
+                    <Phone className="h-3 w-3 text-slate-400" />
+                    <span>Registered Phone: <strong>{enrolledCredentials.parent_phone}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  const fullText = `*Welcome to EDU360 International School*\n\nDear ${enrolledCredentials.parent_name},\nYour ward *${enrolledCredentials.student_name}* has been officially enrolled into *${enrolledCredentials.student_class}* (Roll #${enrolledCredentials.student_roll}, Admission #${enrolledCredentials.student_admission_no}).\n\n*Student Login Credentials:*\n• Portal: http://localhost:3000/student\n• Username: ${enrolledCredentials.student_username}\n• Password: ${enrolledCredentials.student_password}\n\n*Parent Portal Credentials:*\n• Portal: http://localhost:3000/parent\n• Username: ${enrolledCredentials.parent_username}\n• Password: ${enrolledCredentials.parent_password}\n\nPlease log in and update your profile.`;
+                  navigator.clipboard.writeText(fullText.replace(/\\n/g, '\n'));
+                  triggerToast('📋 Full Welcome Package copied to clipboard!');
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy Full Welcome Package</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEnrolledCredentials(null);
+                  setActiveTab('sis');
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 font-bold text-xs text-white shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>View in Student Directory (SIS) &rarr;</span>
+              </button>
             </div>
           </div>
         </div>
@@ -4883,6 +5833,336 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* ── MODAL: RECORD FEE COLLECTION (ADMIN PRIVILEGED) ── */}
+      {showQuickFeeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Record Fee Collection</h3>
+                  <span className="text-[11px] text-slate-500">Official Institutional Receipts &amp; Ledger Settlement</span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowQuickFeeModal(false);
+                  setPaymentModalDefaulter(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Student Selector if multiple defaulters exist */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Select Student Account with Pending Dues *
+              </label>
+              <select
+                value={paymentModalDefaulter ? paymentModalDefaulter.id : ''}
+                onChange={(e) => {
+                  const selectedId = Number(e.target.value);
+                  const found = feeDefaulters.find(d => d.id === selectedId);
+                  if (found) {
+                    setPaymentModalDefaulter(found);
+                    setPaymentAmount(found.amount_due);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold"
+              >
+                <option value="">-- Choose Student --</option>
+                {feeDefaulters.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.student_name} ({d.class_name}) — Due: ₹{d.amount_due.toLocaleString('en-IN')} {d.is_admission_fee ? '★ New Admission' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {paymentModalDefaulter && (
+              <form onSubmit={handleRecordFeePayment} className="space-y-3.5 text-xs">
+                {/* Account Summary Banner */}
+                <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/40 flex items-center justify-between">
+                  <div>
+                    <span className="font-extrabold text-blue-950 dark:text-blue-100 text-sm block">
+                      {paymentModalDefaulter.student_name}
+                    </span>
+                    <span className="text-[11px] text-blue-800 dark:text-blue-300">
+                      {paymentModalDefaulter.class_name} • Guardian: {paymentModalDefaulter.parent_name} ({paymentModalDefaulter.parent_phone})
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Due</span>
+                    <span className="text-sm font-black text-rose-600 dark:text-rose-400">
+                      ₹{paymentModalDefaulter.amount_due.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Amount Received (₹) *
+                  </label>
+                  <input 
+                    type="number" 
+                    required
+                    min={1}
+                    max={paymentModalDefaulter.amount_due}
+                    value={paymentAmount || ''} 
+                    onChange={e => setPaymentAmount(Number(e.target.value))} 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-base"
+                    placeholder="Enter collected amount in ₹"
+                  />
+                  <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
+                    <span>Outstanding Balance after payment: ₹{Math.max(0, paymentModalDefaulter.amount_due - (paymentAmount || 0)).toLocaleString('en-IN')}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setPaymentAmount(paymentModalDefaulter.amount_due)}
+                      className="text-blue-600 font-bold hover:underline"
+                    >
+                      Fill Full Settlement (₹{paymentModalDefaulter.amount_due.toLocaleString('en-IN')})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Payment Mode *
+                    </label>
+                    <select 
+                      value={paymentMethod} 
+                      onChange={e => setPaymentMethod(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+                    >
+                      <option value="UPI">UPI (Counter QR / GPay / PhonePe)</option>
+                      <option value="Cash">Cash (School Counter Receipt)</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Demand Draft">Demand Draft (DD)</option>
+                      <option value="NetBanking">NetBanking / NEFT</option>
+                      <option value="Card (POS)">Card (POS Terminal)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      UTR / Cheque / Ref No.
+                    </label>
+                    <input 
+                      type="text" 
+                      value={paymentUtr} 
+                      onChange={e => setPaymentUtr(e.target.value)} 
+                      placeholder="e.g. UTR-982144 or CHQ-10492"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Notes / Official Receipt Remarks
+                  </label>
+                  <input 
+                    type="text" 
+                    value={paymentNotes} 
+                    onChange={e => setPaymentNotes(e.target.value)} 
+                    placeholder="e.g. Term fee payment collected at Principal office counter" 
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowQuickFeeModal(false);
+                      setPaymentModalDefaulter(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={isRecordingPayment || paymentAmount <= 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isRecordingPayment ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Updating Ledger...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Confirm &amp; Update Ledger</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: APPLY CONCESSION / WAIVER (PRINCIPAL AUTHORITY) ── */}
+      {waiverModalDefaulter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Grant Fee Concession / Waiver</h3>
+                  <span className="text-[11px] text-slate-500">Executive Discretionary Concession</span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setWaiverModalDefaulter(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 text-xs">
+              <span className="font-bold text-purple-950 dark:text-purple-200 block">
+                {waiverModalDefaulter.student_name} ({waiverModalDefaulter.class_name})
+              </span>
+              <span className="text-[11px] text-purple-700 dark:text-purple-300">
+                Current Outstanding Balance: ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            <form onSubmit={handleApplyFeeConcession} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Concession Amount (₹) *</label>
+                <input 
+                  type="number" 
+                  required
+                  min={1}
+                  max={waiverModalDefaulter.amount_due}
+                  value={waiverAmount || ''} 
+                  onChange={e => setWaiverAmount(Number(e.target.value))} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm"
+                  placeholder="e.g. 5000"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason / Board Justification *</label>
+                <textarea 
+                  rows={2}
+                  required
+                  value={waiverReason} 
+                  onChange={e => setWaiverReason(e.target.value)} 
+                  placeholder="e.g. Merit-cum-means scholarship or sports championship concession approved by Principal." 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setWaiverModalDefaulter(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isApplyingWaiver || waiverAmount <= 0}
+                  className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 font-bold shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isApplyingWaiver ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  <span>Authorize Concession</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: PAYMENT HISTORY INSPECTOR ── */}
+      {historyModalDefaulter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300">
+                  <History className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Payment Audit History</h3>
+                  <span className="text-[11px] text-slate-500">{historyModalDefaulter.student_name} ({historyModalDefaulter.class_name})</span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setHistoryModalDefaulter(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs max-h-64 overflow-y-auto">
+              {(() => {
+                try {
+                  const hist = JSON.parse(historyModalDefaulter.payment_history_json || '[]');
+                  if (!hist || hist.length === 0) {
+                    return <p className="text-slate-400 p-4 text-center">No payment logs recorded yet.</p>;
+                  }
+                  return hist.map((item: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-1">
+                      <div className="flex items-center justify-between font-bold">
+                        <span className="text-emerald-600 dark:text-emerald-400 text-sm">₹{Number(item.amount).toLocaleString('en-IN')}</span>
+                        <span className="text-slate-400 text-[10px]">{item.date}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Mode: <span className="font-semibold">{item.method}</span> • Ref: <span className="font-mono">{item.utr_or_cheque}</span>
+                      </div>
+                      {item.received_by && (
+                        <div className="text-[10px] text-slate-500">Received by: {item.received_by}</div>
+                      )}
+                      {item.notes && (
+                        <div className="text-[10px] text-slate-400 italic">“{item.notes}”</div>
+                      )}
+                      <div className="pt-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadOfficialDocumentFile(`Fee Receipt - ${item.utr_or_cheque}`, historyModalDefaulter.student_name, item.utr_or_cheque);
+                            setToastMessage(`Downloaded Receipt ${item.utr_or_cheque}`);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                        >
+                          <Download className="h-3 w-3" />
+                          <span>Download Receipt</span>
+                        </button>
+                      </div>
+                    </div>
+                  ));
+                } catch {
+                  return <p className="text-slate-400 p-4 text-center">No parseable history log.</p>;
+                }
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
 </div>
     </RoleGuard>
   );

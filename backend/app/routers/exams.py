@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from app.core.database import get_db
 from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask
 from app.core.config import settings, get_current_gemini_key, get_current_gemini_model
@@ -514,6 +514,196 @@ async def list_question_papers(
         })
     return {"success": True, "question_papers": out}
 
+@router.get("/question-papers/{paper_id}")
+async def get_question_paper_details(
+    paper_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns full question paper details, sections, instructions, and questions for examination unlocking.
+    """
+    res = await db.execute(select(QuestionPaper).where(QuestionPaper.id == paper_id))
+    paper = res.scalars().first()
+    if not paper:
+        res_any = await db.execute(select(QuestionPaper).order_by(QuestionPaper.id.asc()))
+        paper = res_any.scalars().first()
+
+    # Standard CBSE Class 8 Mathematics Final Questions Dataset
+    math_sections = [
+        {
+            "id": "SEC-A",
+            "name": "Section A: Linear Equations in One Variable",
+            "marks_per_question": 5,
+            "total_marks": 25,
+            "questions": [
+                {
+                    "q_num": 1,
+                    "marks": 5,
+                    "text": "Solve the linear equation for x: (2x - 3)/4 + (x + 1)/2 = (3x + 4)/5. Show step-by-step LHS/RHS transposition and verify your final answer.",
+                    "topic": "Linear Equations",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 2,
+                    "marks": 5,
+                    "text": "The ages of Rahul and Haroon are in the ratio 5:7. Four years later the sum of their ages will be 56 years. Formulate the linear equation and calculate their present ages.",
+                    "topic": "Age Word Problems",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 3,
+                    "marks": 5,
+                    "text": "The perimeter of a rectangular swimming pool is 154 m. Its length is 2 m more than twice its breadth. Determine the length and breadth of the pool.",
+                    "topic": "Perimeter Modeling",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 4,
+                    "marks": 5,
+                    "text": "Solve the decimal algebraic equation: 0.25(4f - 3) = 0.05(10f - 9).",
+                    "topic": "Decimals in Algebra",
+                    "bloom": "Understanding"
+                },
+                {
+                    "q_num": 5,
+                    "marks": 5,
+                    "text": "A two-digit number has digits whose sum is 9. When the digits are interchanged, the resulting number exceeds the original number by 27. Find the original two-digit number.",
+                    "topic": "Number Theory",
+                    "bloom": "HOTS"
+                }
+            ]
+        },
+        {
+            "id": "SEC-B",
+            "name": "Section B: Algebraic Expressions & Quadratic Factoring",
+            "marks_per_question": 6,
+            "total_marks": 30,
+            "questions": [
+                {
+                    "q_num": 6,
+                    "marks": 6,
+                    "text": "Factorize completely using the splitting-the-middle-term method: (a) 12x² - 7x + 1  and  (b) 2x² + 7x + 3.",
+                    "topic": "Quadratic Factorization",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 7,
+                    "marks": 6,
+                    "text": "Using standard algebraic identity (a + b)(a - b) = a² - b², evaluate (105 × 95) without direct multiplication.",
+                    "topic": "Algebraic Identities",
+                    "bloom": "Understanding"
+                },
+                {
+                    "q_num": 8,
+                    "marks": 6,
+                    "text": "Divide the polynomial [44(x⁴ - 5x³ - 24x²)] by 11x(x - 8). Write all factorization steps clearly.",
+                    "topic": "Polynomial Division",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 9,
+                    "marks": 6,
+                    "text": "Factorize the compound expression: p² - 10p + 25 - q².",
+                    "topic": "Compound Factorization",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 10,
+                    "marks": 6,
+                    "text": "If x + 1/x = 5, find the exact values of: (a) x² + 1/x²  and  (b) x⁴ + 1/x⁴.",
+                    "topic": "Rational Algebra",
+                    "bloom": "HOTS"
+                }
+            ]
+        },
+        {
+            "id": "SEC-C",
+            "name": "Section C: Mensuration & Solid Geometry",
+            "marks_per_question": 5,
+            "total_marks": 25,
+            "questions": [
+                {
+                    "q_num": 11,
+                    "marks": 5,
+                    "text": "An aquarium is in the form of a cuboid whose external measures are 80 cm × 30 cm × 40 cm. The base, side faces and back face are to be covered with colored paper. Find the area of the paper needed.",
+                    "topic": "Cuboid Surface Area",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 12,
+                    "marks": 5,
+                    "text": "A road roller takes 750 complete revolutions to move once over to level a road. Find the area of the road if the diameter of the road roller is 84 cm and length is 1 m.",
+                    "topic": "Cylinder Area",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 13,
+                    "marks": 5,
+                    "text": "The floor of a building consists of 3000 rhombus-shaped tiles. Diagonals are 45 cm and 30 cm in length. Find the total cost of polishing the floor, if the cost per m² is ₹4.",
+                    "topic": "Rhombus Area",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 14,
+                    "marks": 5,
+                    "text": "A cylindrical water tank has a capacity of 5632 m³. If the diameter of its base is 16 m, calculate its depth and total surface area.",
+                    "topic": "Cylinder Capacity",
+                    "bloom": "HOTS"
+                },
+                {
+                    "q_num": 15,
+                    "marks": 5,
+                    "text": "The area of a trapezium is 34 cm² and the length of one parallel side is 10 cm and its height is 4 cm. Determine the length of the other parallel side.",
+                    "topic": "Trapezium Geometry",
+                    "bloom": "Understanding"
+                }
+            ]
+        },
+        {
+            "id": "SEC-D",
+            "name": "Section D: Data Handling & Practical Applications",
+            "marks_per_question": 10,
+            "total_marks": 20,
+            "questions": [
+                {
+                    "q_num": 16,
+                    "marks": 10,
+                    "text": "The following survey shows favorite ice cream flavors chosen by 360 students: Vanilla: 90, Chocolate: 120, Strawberry: 60, Mango: 90. (a) Calculate central angles for each component. (b) Draw the labeled Pie Chart on your physical answer paper.",
+                    "topic": "Pie Charts",
+                    "bloom": "Application"
+                },
+                {
+                    "q_num": 17,
+                    "marks": 10,
+                    "text": "A fair six-sided die is tossed 100 times: 1 appears 18 times, 2 appears 15 times, 3 appears 20 times, 4 appears 16 times, 5 appears 14 times, 6 appears 17 times. Calculate: (a) Empirical probability of rolling a prime number. (b) Probability of rolling a multiple of 3.",
+                    "topic": "Empirical Probability",
+                    "bloom": "HOTS"
+                }
+            ]
+        }
+    ]
+
+    return {
+        "success": True,
+        "paper_id": paper.id if paper else paper_id,
+        "title": paper.title if paper else "Term 1 Mathematics Comprehensive Final",
+        "subject": paper.subject if paper else "Mathematics",
+        "class_name": paper.class_name if paper else "Class 8",
+        "section": paper.section if paper else "B",
+        "term": "Term 1",
+        "total_marks": 100,
+        "duration_minutes": 180,
+        "instructions": [
+            "All questions are compulsory. Solve with blue/black ballpoint pen on physical paper answer sheets.",
+            "Write your Roll Number (#14), Student Name, and Subject Code on the top margin of each page.",
+            "Sections A (25 Marks), B (30 Marks), C (25 Marks), and D (20 Marks). Total 100 Marks.",
+            "Use of calculators, smartwatches, or cellular devices is strictly prohibited.",
+            "Upon writing conclusion, dynamic seal token will be displayed. Write the code in ink on Page 1 before scanning."
+        ],
+        "sections": math_sections
+    }
+
+
 @router.post("/question-papers/order")
 async def order_question_paper(
     req: OrderQuestionPaperRequest,
@@ -768,15 +958,21 @@ class CreateExamScheduleRequest(BaseModel):
     exam_id: Optional[int] = None
     question_paper_id: Optional[int] = None
     question_paper_title: Optional[str] = None
-    title: str
+    title: Optional[str] = None
+    exam_name: Optional[str] = None
     subject: str
     class_name: str
+    section: Optional[str] = "B"
     exam_date: str
     start_time: str = "09:00 AM"
     end_time: str = "12:00 PM"
-    hall_name: str
+    hall_name: Optional[str] = None
+    room_hall: Optional[str] = None
     capacity: int = 80
-    chief_invigilator_name: str
+    chief_invigilator_name: Optional[str] = None
+    invigilator_name: Optional[str] = None
+    exam_mode: Optional[str] = "MODE_CBT"
+    duration_minutes: Optional[int] = 60
 
 class ExamScheduleClearanceRequest(BaseModel):
     academic_clearance: bool
@@ -786,8 +982,9 @@ class ExamScheduleClearanceRequest(BaseModel):
 async def list_exam_schedules(db: AsyncSession = Depends(get_db)):
     """
     List all examination schedules with hall deployment & academic clearance status.
+    Ordered by latest created first (id desc) so newly scheduled exams appear immediately.
     """
-    res = await db.execute(select(ExamSchedule).order_by(ExamSchedule.exam_date.asc()))
+    res = await db.execute(select(ExamSchedule).order_by(ExamSchedule.id.desc()))
     schedules = res.scalars().all()
     return {
         "success": True,
@@ -801,14 +998,19 @@ async def list_exam_schedules(db: AsyncSession = Depends(get_db)):
                 "title": s.title,
                 "subject": s.subject,
                 "class_name": s.class_name,
+                "section": getattr(s, "section", "B"),
+                "exam_mode": getattr(s, "exam_mode", "MODE_HYBRID_SCAN") or "MODE_HYBRID_SCAN",
                 "exam_date": s.exam_date,
                 "start_time": s.start_time,
                 "end_time": s.end_time,
                 "hall_name": s.hall_name,
                 "capacity": s.capacity,
                 "chief_invigilator_name": s.chief_invigilator_name,
+                "duration_minutes": getattr(s, "duration_minutes", 180) or 180,
+                "total_marks": 100,
                 "academic_clearance": s.academic_clearance,
-                "academic_clearance_notes": s.academic_clearance_notes
+                "academic_clearance_notes": s.academic_clearance_notes,
+                "created_at": s.created_at.isoformat() if s.created_at else None
             }
             for s in schedules
         ]
@@ -822,30 +1024,123 @@ async def create_exam_schedule(
     """
     Exam Coordinator drafts an examination timetable slot with hall and invigilator assignment.
     """
+    exam_title = req.title or req.exam_name or f"{req.subject} Examination"
+    final_hall = req.hall_name or req.room_hall or "Virtual Room A (AI Proctor Session)"
+    final_invigilator = req.chief_invigilator_name or req.invigilator_name or "Mrs. Ananya Verma"
+    final_mode = req.exam_mode or "MODE_HYBRID_SCAN"
+
+    # Automatically create/link published Exam record so student can test and launch immediately
+    exam = Exam(
+        title=exam_title,
+        subject=req.subject,
+        class_name=req.class_name,
+        section=req.section or "B",
+        term="Term 1",
+        exam_type="descriptive" if final_mode == "MODE_HYBRID_SCAN" else "hybrid",
+        exam_mode=final_mode,
+        duration_minutes=req.duration_minutes or 60,
+        is_published=True
+    )
+    db.add(exam)
+    await db.flush()
+
     sched = ExamSchedule(
-        exam_id=req.exam_id,
+        exam_id=exam.id,
         question_paper_id=req.question_paper_id,
         question_paper_title=req.question_paper_title,
         status="Scheduled",
-        title=req.title,
+        title=exam_title,
         subject=req.subject,
         class_name=req.class_name,
+        section=req.section or "B",
+        exam_mode=final_mode,
         exam_date=req.exam_date,
         start_time=req.start_time,
         end_time=req.end_time,
-        hall_name=req.hall_name,
+        hall_name=final_hall,
         capacity=req.capacity,
-        chief_invigilator_name=req.chief_invigilator_name,
+        chief_invigilator_name=final_invigilator,
         academic_clearance=False,
         academic_clearance_notes="Awaiting Academic Coordinator calendar clearance."
     )
     db.add(sched)
     await db.commit()
     await db.refresh(sched)
+
+    # Dispatch persistent notifications & invigilation duty order
+    try:
+        from app.routers.notifications import create_system_notification
+        from app.models.models import AdminTask
+
+        # 1. Notify Student Cohort
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="student",
+            sender_name="Exam Office (Mrs. Shweta Sengupta)",
+            sender_role="exam_coordinator",
+            title=f"New Examination Scheduled: {exam_title}",
+            message=f"{exam_title} ({req.subject}) is scheduled on {req.exam_date} ({req.start_time} - {req.end_time}) in {final_hall}. Delivery Mode: {final_mode}.",
+            notification_type="EXAM_SCHEDULED",
+            priority="HIGH",
+            action_url="/student",
+            metadata_dict={"schedule_id": sched.id, "subject": req.subject, "exam_mode": final_mode}
+        )
+
+        # 2. Notify Assigned Invigilator (Teacher)
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,
+            recipient_role="teacher",
+            sender_name="Exam Office (Mrs. Shweta Sengupta)",
+            sender_role="exam_coordinator",
+            title=f"Invigilation Duty Assigned: {exam_title}",
+            message=f"You are deployed as Chief Invigilator for {exam_title} ({req.class_name} {req.section or 'B'}) on {req.exam_date} ({req.start_time} - {req.end_time}) in {final_hall}.",
+            notification_type="DUTY_ASSIGNED",
+            priority="URGENT",
+            action_url="/teacher",
+            metadata_dict={"schedule_id": sched.id, "hall": final_hall}
+        )
+
+        # 3. Create AdminTask for Invigilator Duty Queue
+        duty_task = AdminTask(
+            title=f"Invigilation Duty: {exam_title} ({final_hall})",
+            description=f"Conduct examination session for {req.class_name} {req.section or 'B'}. Mode: {final_mode}. Time: {req.start_time} - {req.end_time}.",
+            category="urgent",
+            domain="exam",
+            due_date=req.exam_date,
+            assigned_to=final_invigilator,
+            assigned_to_role="teacher",
+            created_by="Mrs. Shweta Sengupta",
+            sla_hours=24,
+            priority="High",
+            status="pending"
+        )
+        db.add(duty_task)
+
+        # 4. Notify Parents of the Cohort
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="parent",
+            sender_name="Exam Office (Mrs. Shweta Sengupta)",
+            sender_role="exam_coordinator",
+            title=f"Official Date Sheet: {exam_title}",
+            message=f"Dear Parent, {exam_title} for {req.class_name} ({req.subject}) is scheduled on {req.exam_date} ({req.start_time} - {req.end_time}). Mode: {final_mode}. Ensure your ward has physical stationery & an active camera setup.",
+            notification_type="EXAM_SCHEDULED_PARENT",
+            priority="HIGH",
+            action_url="/parent",
+            metadata_dict={"schedule_id": sched.id, "subject": req.subject, "exam_mode": final_mode}
+        )
+        await db.commit()
+    except Exception as notif_err:
+        print(f"Error dispatching exam notifications/duties: {notif_err}")
+
     return {
         "success": True,
-        "message": f"Scheduled exam slot '{req.title}' on {req.exam_date} in {req.hall_name}.",
-        "schedule_id": sched.id
+        "message": f"Scheduled exam slot '{exam_title}' on {req.exam_date} in {final_hall} ({final_mode}). Notifications & duty orders dispatched.",
+        "schedule_id": sched.id,
+        "exam_id": exam.id
     }
 
 @router.post("/schedules/{schedule_id}/clearance")
@@ -1880,3 +2175,1245 @@ async def schedule_re_exam_slot(req_id: int, sched: ReExamScheduleRequest):
                 "request": req
             }
     raise HTTPException(status_code=404, detail=f"Re-exam request #{req_id} not found")
+
+class ProctorStrikeRequest(BaseModel):
+    candidate_id: int
+    candidate_name: str
+    roll_no: Optional[str] = "01"
+    room_id: Optional[str] = "ROOM-A"
+    anomaly_type: str = "Multiple Faces Detected"
+    strikes: int = 1
+    suspicion_score: float = 25.0
+    invigilator_notes: Optional[str] = "Formal strike issued by invigilator via YOLO telemetry"
+
+@router.post("/proctor/strike")
+async def record_proctor_strike(
+    req: ProctorStrikeRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    from app.models.models import ProctorTelemetryLog, TriageAlert
+    from app.routers.notifications import create_system_notification
+    log = ProctorTelemetryLog(
+        candidate_id=req.candidate_id,
+        candidate_name=req.candidate_name,
+        roll_no=req.roll_no,
+        room_id=req.room_id,
+        anomaly_type=req.anomaly_type,
+        strikes=req.strikes,
+        status="critical" if req.strikes >= 2 else "warning",
+        suspicion_score=req.suspicion_score,
+        invigilator_notes=req.invigilator_notes
+    )
+    db.add(log)
+    severity = "CRITICAL" if req.strikes >= 2 else "WARNING"
+    alert = TriageAlert(
+        title=f"Exam Malpractice Strike #{req.strikes}: {req.candidate_name}",
+        description=f"YOLO Anomaly: {req.anomaly_type}. Suspicion: {req.suspicion_score}%. Notes: {req.invigilator_notes}",
+        severity=severity,
+        category="ACADEMIC",
+        is_actionable=True,
+        action_label="Review Exam Camera Feed",
+        status="active"
+    )
+    db.add(alert)
+    await db.commit()
+    await db.refresh(log)
+    return {
+        "success": True,
+        "message": f"Strike #{req.strikes} recorded for {req.candidate_name}. Triage alert dispatched to Principal.",
+        "log_id": log.id
+    }
+
+
+
+
+# =========================================================================
+
+# LIVE PROCTOR COCKPIT & CBT EXAMINATION CONDUCTION API
+
+# =========================================================================
+
+
+
+class ProctorActionRequest(BaseModel):
+
+    candidate_id: int
+
+    action: str  # PAUSE, RESUME, STRIKE, EVICT, NUDGE, INTERCOM
+
+    reason: Optional[str] = None
+
+    invigilator_id: Optional[int] = 2
+
+    invigilator_name: Optional[str] = "Mrs. Ananya Verma"
+
+
+
+class ProctorTelemetryRequest(BaseModel):
+
+    candidate_id: int
+
+    anomaly_type: str  # PHONE_DETECTED, MULTIPLE_FACES, ABSENCE, OFF_SCREEN_GAZE, AUDIO_ANOMALY, TAB_SWITCH
+
+    confidence: Optional[float] = 0.90
+
+    details: Optional[str] = None
+
+
+
+class CandidateExamSubmitRequest(BaseModel):
+
+    words_count: Optional[int] = 0
+
+    time_spent_seconds: Optional[int] = 0
+
+    submission_content: str
+
+    script_pages_uploaded: Optional[int] = 0
+
+
+
+class CandidateEvaluateRequest(BaseModel):
+
+    evaluated_marks: float
+
+    evaluator_remarks: Optional[str] = None
+
+    teacher_id: Optional[int] = 2
+
+
+
+class AuthorExamPaperRequest(BaseModel):
+
+    title: str
+
+    subject: str
+
+    class_name: str
+
+    section: Optional[str] = "B"
+
+    exam_date: str
+
+    start_time: Optional[str] = "09:00 AM"
+
+    duration_minutes: Optional[int] = 60
+
+    total_marks: Optional[float] = 100.0
+
+    exam_mode: Optional[str] = "MODE_CBT"
+
+    strictness_profile: Optional[str] = "STANDARD"
+
+    question_paper_url: Optional[str] = None
+
+    question_paper_title: Optional[str] = None
+
+    teacher_id: Optional[int] = 2
+
+
+
+@router.get("/candidates")
+
+async def get_exam_candidates(
+
+    room_id: Optional[str] = None,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Get live list of examination candidates sorted by suspicion score & proctor status.
+
+    """
+
+    from app.models.models import ExamCandidateAttempt
+
+    query = select(ExamCandidateAttempt)
+
+    if room_id:
+
+        query = query.where(ExamCandidateAttempt.livekit_room_id == room_id)
+
+    result = await db.execute(query.order_by(ExamCandidateAttempt.suspicion_score.desc(), ExamCandidateAttempt.strikes.desc()))
+
+    candidates = result.scalars().all()
+
+    
+
+    return {
+
+        "success": True,
+
+        "count": len(candidates),
+
+        "candidates": [
+
+            {
+
+                "id": c.id,
+
+                "studentId": c.student_id,
+
+                "name": c.student_name,
+
+                "rollNo": c.roll_no,
+
+                "grade": c.class_name,
+
+                "section": c.section,
+
+                "subject": c.subject,
+
+                "avatar": c.avatar or "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150",
+
+                "status": c.status,
+
+                "examMode": c.exam_mode,
+
+                "suspicionScore": c.suspicion_score,
+
+                "strikes": c.strikes,
+
+                "tabSwitches": c.tab_switches,
+
+                "anomalyType": c.anomaly_type,
+
+                "cameraActive": c.camera_active,
+
+                "isPaused": c.is_paused,
+
+                "isDisqualified": c.is_disqualified,
+
+                "isNudged": c.is_nudged,
+
+                "nudgeMessage": c.nudge_message,
+
+                "timeRemainingSeconds": c.time_remaining_seconds,
+
+                "livekitRoomId": c.livekit_room_id,
+
+                "scriptPagesUploaded": c.script_pages_uploaded,
+
+                "sealVerified": c.seal_verified,
+
+                "lastAnomalyTime": c.last_anomaly_time,
+
+                "submissionContent": c.submission_content,
+
+                "evaluatedMarks": c.evaluated_marks,
+
+                "evaluatorRemarks": c.evaluator_remarks,
+
+                "submittedAt": c.submitted_at.isoformat() if c.submitted_at else None
+
+            }
+
+            for c in candidates
+
+        ]
+
+    }
+
+
+
+@router.post("/candidates/proctor-action")
+
+async def execute_proctor_action(
+
+    req: ProctorActionRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Executes live invigilator control action on candidate tile:
+
+    - PAUSE: freezes candidate canvas and timer
+
+    - RESUME: unfreezes candidate canvas
+
+    - STRIKE: increments strikes, updates suspicion score, logs audit event
+
+    - EVICT: disqualifies candidate for blatant malpractice
+
+    - NUDGE: pushes HUD alert to candidate screen
+
+    - INTERCOM: logs 1-on-1 private voice session
+
+    """
+
+    from app.models.models import ExamCandidateAttempt, ProctorAuditEvent, TriageAlert
+
+    res = await db.execute(select(ExamCandidateAttempt).where(ExamCandidateAttempt.id == req.candidate_id))
+
+    cand = res.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate attempt not found")
+
+        
+
+    action_upper = req.action.upper()
+
+    audit_event = ProctorAuditEvent(
+
+        candidate_id=cand.id,
+
+        candidate_name=cand.student_name,
+
+        roll_no=cand.roll_no,
+
+        room_id=cand.livekit_room_id or "VIRTUAL-EXAM-HALL-A",
+
+        event_type=action_upper,
+
+        invigilator_notes=req.reason or f"Action {action_upper} initiated by invigilator {req.invigilator_name}"
+
+    )
+
+    db.add(audit_event)
+
+
+
+    msg = ""
+
+    if action_upper == "PAUSE":
+
+        cand.is_paused = True
+
+        cand.status = "paused"
+
+        msg = f"Examination canvas paused for {cand.student_name}. Timer locked."
+
+    elif action_upper == "RESUME":
+
+        cand.is_paused = False
+
+        cand.status = "critical" if cand.strikes >= 2 else "warning" if cand.strikes == 1 else "normal"
+
+        msg = f"Examination canvas resumed for {cand.student_name}."
+
+    elif action_upper == "STRIKE":
+
+        cand.strikes = min(3, cand.strikes + 1)
+
+        cand.suspicion_score = min(100.0, cand.suspicion_score + 25.0)
+
+        cand.status = "critical" if cand.strikes >= 2 else "warning"
+
+        audit_event.strike_assigned = True
+
+        audit_event.suspicion_increment = 25.0
+
+        
+
+        # If reached 3 strikes, auto-pause candidate
+
+        if cand.strikes >= 3:
+
+            cand.is_paused = True
+
+            cand.status = "critical"
+
+            # Dispatch urgent TriageAlert to Principal
+
+            alert = TriageAlert(
+
+                title=f"Critical Exam Malpractice (3 Strikes): {cand.student_name}",
+
+                description=f"Candidate accumulated 3 strikes. Screen locked. YOLO Suspicion: {cand.suspicion_score}%. Notes: {req.reason or 'Accumulated 3 strikes'}",
+
+                severity="CRITICAL",
+
+                category="ACADEMIC",
+
+                is_actionable=True,
+
+                action_label="Review Exam Camera Feed",
+
+                status="active"
+
+            )
+
+            db.add(alert)
+
+        msg = f"Strike #{cand.strikes}/3 recorded for {cand.student_name}. Telemetry synchronized."
+
+    elif action_upper == "EVICT":
+
+        cand.is_disqualified = True
+
+        cand.is_paused = True
+
+        cand.status = "disqualified"
+
+        alert = TriageAlert(
+
+            title=f"Exam Disqualification (Evicted): {cand.student_name}",
+
+            description=f"Invigilator evicted student for blatant malpractice. Reason: {req.reason or 'Malpractice confirmed'}",
+
+            severity="CRITICAL",
+
+            category="ACADEMIC",
+
+            is_actionable=True,
+
+            action_label="View Malpractice Audit Dossier",
+
+            status="active"
+
+        )
+
+        db.add(alert)
+
+        msg = f"Candidate {cand.student_name} disqualified and evicted from examination session."
+
+    elif action_upper == "NUDGE":
+
+        cand.is_nudged = True
+
+        cand.nudge_message = req.reason or "Invigilator requests desk focus."
+
+        msg = f"HUD warning nudge sent to {cand.student_name}."
+
+    elif action_upper == "INTERCOM":
+
+        msg = f"Private 1-on-1 audio intercom established with {cand.student_name}."
+
+    else:
+
+        raise HTTPException(status_code=400, detail=f"Unsupported action: {req.action}")
+
+
+
+    await db.commit()
+
+    await db.refresh(cand)
+
+
+
+    return {
+
+        "success": True,
+
+        "action": action_upper,
+
+        "message": msg,
+
+        "candidate": {
+
+            "id": cand.id,
+
+            "status": cand.status,
+
+            "strikes": cand.strikes,
+
+            "suspicionScore": cand.suspicion_score,
+
+            "isPaused": cand.is_paused,
+
+            "isDisqualified": cand.is_disqualified,
+
+            "isNudged": cand.is_nudged,
+
+            "nudgeMessage": cand.nudge_message
+
+        }
+
+    }
+
+
+
+@router.post("/candidates/{candidate_id}/telemetry")
+
+async def record_candidate_telemetry(
+
+    candidate_id: int,
+
+    req: ProctorTelemetryRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Ingests client-side Edge YOLO & Web Audio telemetry anomalies:
+
+    - PHONE_DETECTED
+
+    - MULTIPLE_FACES
+
+    - ABSENCE
+
+    - OFF_SCREEN_GAZE
+
+    - AUDIO_ANOMALY
+
+    - TAB_SWITCH
+
+    """
+
+    from app.models.models import ExamCandidateAttempt, ProctorAuditEvent, TriageAlert
+
+    res = await db.execute(select(ExamCandidateAttempt).where(or_(ExamCandidateAttempt.id == candidate_id, ExamCandidateAttempt.student_id == candidate_id)))
+    cand = res.scalars().first()
+    if not cand:
+        res_any = await db.execute(select(ExamCandidateAttempt).order_by(ExamCandidateAttempt.id.asc()))
+        cand = res_any.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+
+
+    strike_assigned = False
+
+    suspicion_bump = 10.0
+
+    
+
+    if req.anomaly_type == "PHONE_DETECTED":
+
+        suspicion_bump = 40.0
+
+        strike_assigned = True
+
+    elif req.anomaly_type == "MULTIPLE_FACES":
+
+        suspicion_bump = 30.0
+
+        strike_assigned = True
+
+    elif req.anomaly_type == "TAB_SWITCH":
+
+        cand.tab_switches += 1
+
+        suspicion_bump = 15.0
+
+        if cand.tab_switches >= 3:
+
+            strike_assigned = True
+
+    elif req.anomaly_type == "AUDIO_ANOMALY":
+
+        suspicion_bump = 20.0
+
+    elif req.anomaly_type == "OFF_SCREEN_GAZE":
+
+        suspicion_bump = 12.0
+
+    elif req.anomaly_type == "ABSENCE":
+
+        suspicion_bump = 25.0
+
+
+
+    cand.suspicion_score = min(100.0, cand.suspicion_score + suspicion_bump)
+
+    cand.anomaly_type = req.anomaly_type.replace("_", " ").title()
+
+    cand.last_anomaly_time = "Just now"
+
+
+
+    if strike_assigned:
+
+        cand.strikes = min(3, cand.strikes + 1)
+
+        if cand.strikes >= 3:
+
+            cand.is_paused = True
+
+            cand.status = "critical"
+
+            alert = TriageAlert(
+
+                title=f"Automated AI Malpractice Lock: {cand.student_name}",
+
+                description=f"Auto-triggered 3 strikes via Edge YOLO ({req.anomaly_type}). Suspicion: {cand.suspicion_score}%. Exam paused.",
+
+                severity="CRITICAL",
+
+                category="ACADEMIC",
+
+                is_actionable=True,
+
+                action_label="Review Live Feed",
+
+                status="active"
+
+            )
+
+            db.add(alert)
+
+        else:
+
+            cand.status = "critical" if cand.strikes >= 2 else "warning"
+
+
+
+    audit = ProctorAuditEvent(
+
+        candidate_id=cand.id,
+
+        candidate_name=cand.student_name,
+
+        roll_no=cand.roll_no,
+
+        room_id=cand.livekit_room_id or "VIRTUAL-EXAM-HALL-A",
+
+        event_type=req.anomaly_type,
+
+        confidence=req.confidence or 0.90,
+
+        strike_assigned=strike_assigned,
+
+        suspicion_increment=suspicion_bump,
+
+        invigilator_notes=req.details or f"Edge YOLO detected {req.anomaly_type} (confidence={req.confidence})"
+
+    )
+
+    db.add(audit)
+
+    await db.commit()
+
+    await db.refresh(cand)
+
+
+
+    return {
+
+        "success": True,
+
+        "anomaly": req.anomaly_type,
+
+        "strikes": cand.strikes,
+
+        "suspicionScore": cand.suspicion_score,
+
+        "isPaused": cand.is_paused,
+
+        "strikeAssigned": strike_assigned
+
+    }
+
+
+
+@router.post("/candidates/{candidate_id}/submit")
+
+async def submit_candidate_cbt(
+
+    candidate_id: int,
+
+    req: CandidateExamSubmitRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Submits online CBT essay/response or uploaded script.
+
+    """
+
+    from app.models.models import ExamCandidateAttempt
+
+    res = await db.execute(select(ExamCandidateAttempt).where(or_(ExamCandidateAttempt.id == candidate_id, ExamCandidateAttempt.student_id == candidate_id)))
+    cand = res.scalars().first()
+    if not cand:
+        res_any = await db.execute(select(ExamCandidateAttempt).order_by(ExamCandidateAttempt.id.asc()))
+        cand = res_any.scalars().first()
+
+    cand = res.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+
+
+    cand.submission_content = req.submission_content
+
+    cand.status = "completed"
+
+    cand.submitted_at = datetime.datetime.utcnow()
+
+    if req.script_pages_uploaded and req.script_pages_uploaded > 0:
+
+        cand.script_pages_uploaded = req.script_pages_uploaded
+
+        cand.seal_verified = True
+
+
+
+    await db.commit()
+
+    await db.refresh(cand)
+
+
+
+    return {
+
+        "success": True,
+
+        "message": f"Examination successfully submitted and sealed for {cand.student_name}.",
+
+        "candidate_id": cand.id,
+
+        "submitted_at": cand.submitted_at.isoformat()
+
+    }
+
+
+
+@router.post("/candidates/{candidate_id}/evaluate")
+
+async def evaluate_candidate_submission(
+
+    candidate_id: int,
+
+    req: CandidateEvaluateRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    SpeedGrader dual-pane marks evaluation & teacher remarks entry.
+
+    """
+
+    from app.models.models import ExamCandidateAttempt
+
+    res = await db.execute(select(ExamCandidateAttempt).where(ExamCandidateAttempt.id == candidate_id))
+
+    cand = res.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+
+
+    cand.evaluated_marks = req.evaluated_marks
+
+    cand.evaluator_remarks = req.evaluator_remarks
+
+    await db.commit()
+
+    await db.refresh(cand)
+
+
+
+    return {
+
+        "success": True,
+
+        "message": f"Submission graded: {req.evaluated_marks} marks recorded for {cand.student_name}.",
+
+        "evaluated_marks": cand.evaluated_marks,
+
+        "evaluator_remarks": cand.evaluator_remarks
+
+    }
+
+
+
+@router.post("/author/upload-paper")
+
+async def author_and_schedule_exam(
+
+    req: AuthorExamPaperRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Teacher schedules an exam and attaches question paper PDF or CBT blueprint.
+
+    """
+
+    from app.models.models import Exam, ExamSchedule, QuestionPaper
+
+    
+
+    # 1. Create or link Question Paper
+
+    qp = QuestionPaper(
+
+        title=req.question_paper_title or f"{req.subject} Question Paper: {req.title}",
+
+        subject=req.subject,
+
+        class_name=req.class_name,
+
+        section=req.section or "All",
+
+        blueprint_json=json.dumps({
+
+            "total_marks": req.total_marks or 100.0,
+
+            "duration_minutes": req.duration_minutes or 60,
+
+            "exam_mode": req.exam_mode or "MODE_CBT",
+
+            "strictness": req.strictness_profile or "STANDARD"
+
+        }),
+
+        draft_file_url=req.question_paper_url or "/papers/sample_question_paper.pdf",
+
+        draft_file_name=f"{req.subject.lower()}_{req.class_name.lower().replace(' ', '_')}.pdf",
+
+        status="approved",
+
+        created_by_teacher_id=req.teacher_id or 2,
+
+        created_by_teacher_name="Mrs. Ananya Verma"
+
+    )
+
+    db.add(qp)
+
+    await db.flush()
+
+
+
+    # 2. Create Master Exam
+
+    exam = Exam(
+
+        title=req.title,
+
+        subject=req.subject,
+
+        class_name=req.class_name,
+
+        section=req.section or "B",
+
+        exam_type="mcq" if req.exam_mode == "MODE_CBT" else "descriptive",
+
+        exam_mode=req.exam_mode or "MODE_CBT",
+
+        duration_minutes=req.duration_minutes or 60,
+
+        question_paper_url=req.question_paper_url or "/papers/sample_question_paper.pdf",
+
+        strictness_profile=req.strictness_profile or "STANDARD",
+
+        total_marks=req.total_marks or 100.0,
+
+        exam_date=req.exam_date,
+
+        is_published=True,
+
+        published_at=datetime.datetime.utcnow()
+
+    )
+
+    db.add(exam)
+
+    await db.flush()
+
+
+
+    # 3. Create Exam Schedule
+
+    sched = ExamSchedule(
+
+        exam_id=exam.id,
+
+        title=req.title,
+
+        subject=req.subject,
+
+        class_name=req.class_name,
+
+        section=req.section or "B",
+
+        exam_mode=req.exam_mode or "MODE_CBT",
+
+        exam_date=req.exam_date,
+
+        start_time=req.start_time or "09:00 AM",
+
+        end_time="11:00 AM",
+
+        hall_name="Virtual Room Alpha (Camera AI)",
+
+        capacity=40,
+
+        chief_invigilator_name="Mrs. Ananya Verma",
+
+        question_paper_id=qp.id,
+
+        question_paper_title=qp.title,
+
+        status="Scheduled",
+
+        academic_clearance=True
+
+    )
+
+    db.add(sched)
+
+    await db.commit()
+
+    await db.refresh(exam)
+
+    await db.refresh(sched)
+
+
+
+    return {
+
+        "success": True,
+
+        "message": f"Exam '{req.title}' successfully scheduled for {req.class_name} with mode {req.exam_mode}.",
+
+        "exam_id": exam.id,
+
+        "schedule_id": sched.id,
+
+        "question_paper_id": qp.id
+
+    }
+
+
+
+
+
+class DossierVerdictRequest(BaseModel):
+
+    verdict: str  # APPROVED, PENALIZED, DISQUALIFIED
+
+    penalty_marks: Optional[float] = 0.0
+
+    notes: Optional[str] = None
+
+    evaluator_name: Optional[str] = "Mrs. Ananya Verma"
+
+
+
+@router.get("/candidates/{candidate_id}/dossier")
+
+async def get_candidate_proctor_dossier(
+
+    candidate_id: int,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Returns the comprehensive post-exam proctoring audit dossier, credibility index,
+
+    and chronological telemetry timeline for academic verification.
+
+    """
+
+    from app.models.models import ExamCandidateAttempt, ProctorAuditEvent
+
+    res = await db.execute(select(ExamCandidateAttempt).where(ExamCandidateAttempt.id == candidate_id))
+
+    cand = res.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate attempt not found")
+
+
+
+    events_res = await db.execute(
+
+        select(ProctorAuditEvent)
+
+        .where(ProctorAuditEvent.candidate_id == cand.id)
+
+        .order_by(ProctorAuditEvent.logged_at.asc())
+
+    )
+
+    audit_events = events_res.scalars().all()
+
+
+
+    credibility_index = max(5.0, round(100.0 - (cand.suspicion_score or 0.0), 1))
+
+    
+
+    if credibility_index >= 80.0 and cand.strikes == 0:
+
+        trust_tier = "HIGH_TRUST"
+
+        trust_label = "Clean Integrity (Verified)"
+
+    elif credibility_index >= 60.0 and cand.strikes <= 1:
+
+        trust_tier = "MEDIUM_TRUST"
+
+        trust_label = "Moderate Caution (Review Flukes)"
+
+    else:
+
+        trust_tier = "SUSPICIOUS"
+
+        trust_label = "High Malpractice Risk (Audit Mandated)"
+
+
+
+    return {
+
+        "success": True,
+
+        "candidate": {
+
+            "id": cand.id,
+
+            "studentId": cand.student_id,
+
+            "name": cand.student_name,
+
+            "rollNo": cand.roll_no,
+
+            "grade": cand.class_name,
+
+            "section": cand.section,
+
+            "subject": cand.subject,
+
+            "avatar": cand.avatar or "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150",
+
+            "status": cand.status,
+
+            "examMode": cand.exam_mode,
+
+            "suspicionScore": cand.suspicion_score,
+
+            "credibilityIndex": credibility_index,
+
+            "trustTier": trust_tier,
+
+            "trustLabel": trust_label,
+
+            "strikes": cand.strikes,
+
+            "tabSwitches": cand.tab_switches,
+
+            "anomalyType": cand.anomaly_type,
+
+            "isPaused": cand.is_paused,
+
+            "isDisqualified": cand.is_disqualified,
+
+            "submissionContent": cand.submission_content,
+
+            "evaluatedMarks": cand.evaluated_marks,
+
+            "evaluatorRemarks": cand.evaluator_remarks,
+
+            "submittedAt": cand.submitted_at.isoformat() if cand.submitted_at else None
+
+        },
+
+        "metrics": {
+
+            "totalInfractions": len(audit_events),
+
+            "strikesAssigned": cand.strikes,
+
+            "tabSwitchCount": cand.tab_switches,
+
+            "primaryAnomaly": cand.anomaly_type or "Clean Session"
+
+        },
+
+        "auditTimeline": [
+
+            {
+
+                "id": ev.id,
+
+                "eventType": ev.event_type,
+
+                "confidence": ev.confidence,
+
+                "strikeAssigned": ev.strike_assigned,
+
+                "suspicionIncrement": ev.suspicion_increment,
+
+                "notes": ev.invigilator_notes,
+
+                "loggedAt": ev.logged_at.isoformat() if ev.logged_at else None
+
+            }
+
+            for ev in audit_events
+
+        ]
+
+    }
+
+
+
+@router.post("/candidates/{candidate_id}/dossier-verdict")
+
+async def submit_candidate_dossier_verdict(
+
+    candidate_id: int,
+
+    req: DossierVerdictRequest,
+
+    db: AsyncSession = Depends(get_db)
+
+):
+
+    """
+
+    Teacher or Exam Coordinator signs off on the proctoring audit dossier:
+
+    - APPROVED: Clears suspicions, marks verified
+
+    - PENALIZED: Applies mark deduction penalty for minor infractions
+
+    - DISQUALIFIED: Formal cancellation of paper for confirmed cheating
+
+    """
+
+    from app.models.models import ExamCandidateAttempt, ProctorAuditEvent, TriageAlert
+
+    res = await db.execute(select(ExamCandidateAttempt).where(ExamCandidateAttempt.id == candidate_id))
+
+    cand = res.scalars().first()
+
+    if not cand:
+
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+
+
+    verdict_upper = req.verdict.upper()
+
+    audit_notes = req.notes or f"Audit verdict {verdict_upper} logged by {req.evaluator_name}"
+
+
+
+    if verdict_upper == "APPROVED":
+
+        cand.status = "verified"
+
+        cand.evaluator_remarks = f"Proctoring Audit Approved: {audit_notes}"
+
+    elif verdict_upper == "PENALIZED":
+
+        cand.status = "penalized"
+
+        penalty = req.penalty_marks or 5.0
+
+        current_marks = cand.evaluated_marks if cand.evaluated_marks is not None else 50.0
+
+        cand.evaluated_marks = max(0.0, current_marks - penalty)
+
+        cand.evaluator_remarks = f"Proctoring Penalty (-{penalty} marks): {audit_notes}"
+
+    elif verdict_upper == "DISQUALIFIED":
+
+        cand.status = "disqualified"
+
+        cand.is_disqualified = True
+
+        cand.evaluated_marks = 0.0
+
+        cand.evaluator_remarks = f"Paper Cancelled due to Malpractice: {audit_notes}"
+
+        alert = TriageAlert(
+
+            title=f"Malpractice Verdict Signed: {cand.student_name}",
+
+            description=f"Teacher finalized disqualification after dossier audit review. Reason: {audit_notes}",
+
+            severity="CRITICAL",
+
+            category="ACADEMIC",
+
+            is_actionable=True,
+
+            action_label="View Malpractice Dossier",
+
+            status="active"
+
+        )
+
+        db.add(alert)
+
+    else:
+
+        raise HTTPException(status_code=400, detail=f"Invalid verdict: {req.verdict}")
+
+
+
+    verdict_event = ProctorAuditEvent(
+
+        candidate_id=cand.id,
+
+        candidate_name=cand.student_name,
+
+        roll_no=cand.roll_no,
+
+        room_id=cand.livekit_room_id or "VIRTUAL-EXAM-HALL-A",
+
+        event_type=f"VERDICT_{verdict_upper}",
+
+        strike_assigned=verdict_upper == "DISQUALIFIED",
+
+        invigilator_notes=f"Verdict [{verdict_upper}] confirmed by {req.evaluator_name}. Notes: {audit_notes}"
+
+    )
+
+    db.add(verdict_event)
+
+
+
+    await db.commit()
+
+    await db.refresh(cand)
+
+
+
+    return {
+
+        "success": True,
+
+        "verdict": verdict_upper,
+
+        "message": f"Dossier verdict [{verdict_upper}] finalized for {cand.student_name}.",
+
+        "candidate": {
+
+            "id": cand.id,
+
+            "status": cand.status,
+
+            "evaluatedMarks": cand.evaluated_marks,
+
+            "evaluatorRemarks": cand.evaluator_remarks
+
+        }
+
+    }
+

@@ -232,6 +232,42 @@ class JuniorSoundEngine {
       osc.stop(startTime + duration + 0.05);
     });
   }
+
+  /**
+   * Crisp, pleasant two-tone chime (F5 ~698Hz -> A5 ~880Hz)
+   * Triggered when a student raises a live doubt or raises a hand in class
+   */
+  public playDoubtNotification(): void {
+    if (!this.soundEnabled) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(698.46, now); // F5
+    osc1.frequency.exponentialRampToValueAtTime(880.0, now + 0.14); // A5
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(1396.9, now + 0.04); // F6 harmonic
+    osc2.frequency.exponentialRampToValueAtTime(1760.0, now + 0.22); // A6
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.2, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(now);
+    osc2.start(now + 0.04);
+    osc1.stop(now + 0.65);
+    osc2.stop(now + 0.65);
+  }
 }
 
 // Global Singleton Instance
@@ -243,6 +279,7 @@ export const playChestOpen = () => soundEngine.playChestOpen();
 export const playButtonClick = () => soundEngine.playButtonClick();
 export const playRocketLaunch = () => soundEngine.playRocketLaunch();
 export const playFanfare = () => soundEngine.playFanfare();
+export const playDoubtNotification = () => soundEngine.playDoubtNotification();
 export const isSoundEffectsEnabled = () => soundEngine.isEnabled();
 export const setSoundEffectsEnabled = (enabled: boolean) => soundEngine.setEnabled(enabled);
 export const toggleSoundEffects = () => soundEngine.toggle();

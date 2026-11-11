@@ -87,6 +87,7 @@ import { OnlineExamModal } from '@/components/online-exam-modal';
 import { EvaluationKeyModal } from '@/components/evaluation-key-modal';
 import { UnifiedSISView } from '@/components/unified-sis-view';
 import { downloadStudyNotesFile, downloadMarksMemoFile } from '@/lib/export-utils';
+import { EduVideoConferenceModal } from '@/components/livekit/edu-video-conference-modal';
 
 type NavSection = 
   | 'dashboard' 
@@ -189,6 +190,7 @@ function StandardStudentDashboard() {
   const [onlineExamDuration, setOnlineExamDuration] = useState(20);
   const [onlineExamPrompt, setOnlineExamPrompt] = useState<string | undefined>(undefined);
   const [onlineExamMaxMarks, setOnlineExamMaxMarks] = useState<number>(20);
+  const [onlineExamMode, setOnlineExamMode] = useState<'MODE_CBT' | 'MODE_HYBRID_SCAN'>('MODE_HYBRID_SCAN');
   const [studentExamSchedules, setStudentExamSchedules] = useState<ExamScheduleItem[]>([]);
 
   // Announcement Carousel State
@@ -199,6 +201,19 @@ function StandardStudentDashboard() {
   const [isLiveClassModalOpen, setIsLiveClassModalOpen] = useState(false);
   const [hasJoinedLive, setHasJoinedLive] = useState(false);
   const [attendanceTimestamp, setAttendanceTimestamp] = useState<string | null>(null);
+  const [liveRoomStatus, setLiveRoomStatus] = useState<any>(null);
+
+  useEffect(() => {
+    async function checkLiveStatus() {
+      try {
+        const st = await api.getLiveRoomStatus('class-8b-mathematics');
+        if (st) setLiveRoomStatus(st);
+      } catch {}
+    }
+    checkLiveStatus();
+    const iv = setInterval(checkLiveStatus, 3000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Homework & Annotations State
   const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
@@ -495,6 +510,24 @@ function StandardStudentDashboard() {
     loadPortalData();
   }, []);
 
+  // Multi-window role testing sync: automatically update schedules when Exam Coordinator creates new slots in other windows
+  useEffect(() => {
+    const syncSchedulesFromStorage = () => {
+      api.getExamSchedules().then(res => {
+        if (res && Array.isArray(res) && res.length > 0) {
+          setStudentExamSchedules(res);
+        }
+      }).catch(() => {});
+    };
+
+    window.addEventListener('storage', syncSchedulesFromStorage);
+    window.addEventListener('edu360_exam_schedules_updated', syncSchedulesFromStorage);
+    return () => {
+      window.removeEventListener('storage', syncSchedulesFromStorage);
+      window.removeEventListener('edu360_exam_schedules_updated', syncSchedulesFromStorage);
+    };
+  }, []);
+
   // Continuous Carousel Auto-Advancement (pauses on hover)
   useEffect(() => {
     if (isCarouselPaused) return;
@@ -504,28 +537,47 @@ function StandardStudentDashboard() {
     return () => clearInterval(interval);
   }, [isCarouselPaused]);
 
-  // Listen for module navigation events from Navbar notifications or dashboard links
+  // Listen for module navigation events from Omnisearch, Navbar, or dashboard links
   useEffect(() => {
     const handleNavEvent = (e: any) => {
-      if (e.detail) {
-        setActiveNav(e.detail as NavSection);
+      const rawTarget = typeof e.detail === 'string' ? e.detail : e.detail?.tab;
+      if (rawTarget) {
+        let targetNav: NavSection = rawTarget as NavSection;
+        if (rawTarget === 'focus') targetNav = 'focus_table';
+        else if (rawTarget === 'exams_gradebook' || rawTarget === 'exam') targetNav = 'exams';
+        else if (rawTarget === 'live') targetNav = 'live_classes';
+        setActiveNav(targetNav);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
     window.addEventListener('edu360-navigate', handleNavEvent as EventListener);
+    window.addEventListener('edu360:switch-tab', handleNavEvent as EventListener);
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam) {
+        let targetNav: NavSection = tabParam as NavSection;
+        if (tabParam === 'focus') targetNav = 'focus_table';
+        else if (tabParam === 'exams_gradebook' || tabParam === 'exam') targetNav = 'exams';
+        else if (tabParam === 'live') targetNav = 'live_classes';
+        setActiveNav(targetNav);
+      }
+    }
+
     return () => {
       window.removeEventListener('edu360-navigate', handleNavEvent as EventListener);
+      window.removeEventListener('edu360:switch-tab', handleNavEvent as EventListener);
     };
   }, []);
 
   // Handlers
   const handleJoinLiveClass = () => {
     setIsLiveClassModalOpen(true);
-    if (!hasJoinedLive) {
-      setHasJoinedLive(true);
-      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setAttendanceTimestamp(timeStr);
-      triggerToast('🟢 On Time Auto-Attendance Confirmed! Marked Present in SIS.');
+    if (liveRoomStatus?.is_live) {
+      triggerToast('🔴 Connecting to Mrs. Ananya Verma\'s live broadcast...');
+    } else {
+      triggerToast('⏳ Entering Pre-Flight Waiting Lobby. Class has not started yet.');
     }
   };
 
@@ -596,15 +648,17 @@ function StandardStudentDashboard() {
   const handleLaunchExam = (
     subject: string = 'Mathematics',
     topic: string = 'Quadratic Equations Quiz',
-    duration: number = 20,
+    duration: number = 180,
     prompt?: string,
-    maxMarks: number = 20
+    maxMarks: number = 100,
+    mode: 'MODE_CBT' | 'MODE_HYBRID_SCAN' = 'MODE_HYBRID_SCAN'
   ) => {
     setOnlineExamSubject(subject);
     setOnlineExamTopic(topic);
     setOnlineExamDuration(duration);
     setOnlineExamPrompt(prompt);
     setOnlineExamMaxMarks(maxMarks);
+    setOnlineExamMode(mode);
     setIsOnlineExamOpen(true);
   };
 
@@ -1166,10 +1220,20 @@ function StandardStudentDashboard() {
                   <div className="flex flex-wrap lg:flex-col items-stretch lg:items-end gap-2.5 shrink-0">
                     <button
                       onClick={handleJoinLiveClass}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-rose-500 hover:from-rose-500 hover:to-pink-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-rose-600/20 hover:shadow-rose-600/30 transition-all duration-200 active:scale-98 border border-rose-400/30 cursor-pointer"
+                      className={`flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-bold text-white shadow-lg transition-all duration-200 active:scale-98 border cursor-pointer ${
+                        liveRoomStatus?.is_live
+                          ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/30 border-emerald-400/30 animate-pulse'
+                          : 'bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 hover:from-slate-600 hover:to-slate-700 shadow-slate-900/30 border-slate-600/30'
+                      }`}
                     >
-                      <Video className="h-4 w-4 animate-pulse" />
-                      <span>{hasJoinedLive ? 'Return to Live Classroom Stream' : '▶ Join Live Class Now'}</span>
+                      <Video className="h-4 w-4" />
+                      <span>
+                        {hasJoinedLive 
+                          ? 'Return to Live Classroom Stream' 
+                          : liveRoomStatus?.is_live 
+                            ? '▶ Join Live Class Now (In Session)' 
+                            : '⏳ Enter Waiting Lobby (Class Not Live Yet)'}
+                      </span>
                     </button>
 
                     <div className="flex items-center gap-2">
@@ -2742,45 +2806,60 @@ function StandardStudentDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Active Online Test Card */}
                     <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="relative flex h-2.5 w-2.5">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                           </span>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                            Live CBT Examination Portal
+                          <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                            {studentExamSchedules[0]?.exam_mode === 'MODE_HYBRID_SCAN'
+                              ? '📝 Hybrid Scan & Upload Examination'
+                              : studentExamSchedules[0]?.exam_mode === 'MODE_OFFLINE'
+                              ? '🏢 Physical Hall Examination'
+                              : '💻 Live CBT Examination Portal'}
                           </span>
+                          {studentExamSchedules.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              {studentExamSchedules[0].exam_mode === 'MODE_HYBRID_SCAN' ? 'Hybrid OCR' : studentExamSchedules[0].exam_mode || 'MODE_CBT'}
+                            </span>
+                          )}
                         </div>
                         <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                           {studentExamSchedules.length > 0 
-                            ? `Active Online Test: ${studentExamSchedules[0].title}`
+                            ? `Active Test: ${studentExamSchedules[0].title}`
                             : 'Active Online Test: Mathematics Quiz (20 mins, 15 MCQs)'}
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {studentExamSchedules.length > 0
-                            ? `Subject: ${studentExamSchedules[0].subject} • Hall: ${studentExamSchedules[0].hall_name || 'Virtual Room'} • ${studentExamSchedules[0].exam_date} (${studentExamSchedules[0].start_time} - ${studentExamSchedules[0].end_time})`
+                            ? `Subject: ${studentExamSchedules[0].subject} • Hall: ${studentExamSchedules[0].hall_name || 'Virtual Room'} • ${studentExamSchedules[0].exam_date} (${studentExamSchedules[0].start_time} - ${studentExamSchedules[0].end_time}) • Chief Invigilator: ${studentExamSchedules[0].chief_invigilator_name || 'Assigned Faculty'}`
                             : 'Topic: Quadratic Equations & Polynomials • Window closes at 05:00 PM'}
                         </p>
                       </div>
                       <button
                         onClick={() => {
                           const active = studentExamSchedules[0];
+                          const targetMode = active?.exam_mode === 'MODE_CBT' ? 'MODE_CBT' : 'MODE_HYBRID_SCAN';
                           const prompt = active?.question_paper_title
-                            ? `Official CBSE Timetable Exam: ${active.title}. Blueprint Reference: ${active.question_paper_title}. Step-wise analytical reasoning required.`
-                            : undefined;
+                            ? `Official CBSE Board Timetable Exam: ${active.title}. Question Reference: ${active.question_paper_title}. Step-wise handwritten working required on physical paper booklet.`
+                            : 'Official CBSE Assessment: Solve questions on physical paper booklet under active webcam/YOLO proctoring. Verify and upload final scan with session token.';
                           handleLaunchExam(
                             active?.subject || 'Mathematics',
-                            active?.title || 'Quadratic Equations & Polynomials CBT Test',
-                            20,
+                            active?.title || 'Term 1 Hybrid Proctored Assessment',
+                            active?.duration_minutes || 180,
                             prompt,
-                            25
+                            100,
+                            targetMode
                           );
                         }}
-                        className="shrink-0 rounded-xl bg-[#7C3AED] hover:bg-purple-700 text-white font-bold text-xs px-5 py-2.5 shadow-md shadow-purple-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="shrink-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-5 py-3 shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
                       >
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                        </span>
                         <Play className="h-3.5 w-3.5 fill-current" />
-                        <span>Start Test</span>
+                        <span>Join Proctored Exam Room</span>
                       </button>
                     </div>
 
@@ -2936,13 +3015,25 @@ function StandardStudentDashboard() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {[
-                            { date: '19 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '041', subject: 'Mathematics (Theory)', room: 'Hall B, Desk #A-14', format: '100 Marks Descriptive', required: 'Verified ✓' },
-                            { date: '21 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '086', subject: 'Science (Physics, Chem, Bio)', room: 'Hall B, Desk #A-14', format: 'Theory & Practical Lab', required: 'Verified ✓' },
-                            { date: '23 Oct 2026 (Fri)', time: '09:30 AM – 12:30 PM', code: '184', subject: 'English Language & Literature', room: 'Hall B, Desk #A-14', format: 'Descriptive & Drama Essay', required: 'Verified ✓' },
-                            { date: '26 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '087', subject: 'Social Science (Hist/Civ/Geo)', room: 'Hall B, Desk #A-14', format: 'Theory & Map Pointing', required: 'Verified ✓' },
-                            { date: '28 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '085', subject: 'Second Language (Hindi)', room: 'Hall B, Desk #A-14', format: 'Grammar & Long Essay', required: 'Verified ✓' },
-                          ].map((row, idx) => (
+                          {(studentExamSchedules.length > 0
+                            ? studentExamSchedules.map((s, idx) => ({
+                                date: s.exam_date,
+                                time: `${s.start_time} – ${s.end_time}`,
+                                code: `SUB-${101 + idx}`,
+                                subject: s.title || `${s.subject} Examination`,
+                                room: s.hall_name || 'Virtual Room A',
+                                format: s.exam_mode === 'MODE_HYBRID_SCAN' ? '📝 Descriptive & Scan' : s.exam_mode === 'MODE_OFFLINE' ? '🏢 Physical Offline Hall' : '💻 CBT Online Test',
+                                required: 'Verified ✓',
+                                mode: s.exam_mode || 'MODE_CBT'
+                              }))
+                            : [
+                                { date: '19 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '041', subject: 'Mathematics (Theory)', room: 'Hall B, Desk #A-14', format: '100 Marks Descriptive', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                                { date: '21 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '086', subject: 'Science (Physics, Chem, Bio)', room: 'Hall B, Desk #A-14', format: 'Theory & Practical Lab', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                                { date: '23 Oct 2026 (Fri)', time: '09:30 AM – 12:30 PM', code: '184', subject: 'English Language & Literature', room: 'Hall B, Desk #A-14', format: 'Descriptive & Drama Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                                { date: '26 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '087', subject: 'Social Science (Hist/Civ/Geo)', room: 'Hall B, Desk #A-14', format: 'Theory & Map Pointing', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                                { date: '28 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '085', subject: 'Second Language (Hindi)', room: 'Hall B, Desk #A-14', format: 'Grammar & Long Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                              ]
+                          ).map((row, idx) => (
                             <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                               <td className="p-3.5 font-bold text-slate-900 dark:text-white">{row.date}</td>
                               <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{row.time}</td>
@@ -2968,17 +3059,80 @@ function StandardStudentDashboard() {
                     </div>
                   </div>
 
-                  {/* HALL PROTOCOL & CODE OF CONDUCT CARD */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                    <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block text-[10px]">
-                      CBSE Candidate Rules &amp; Hall Discipline Instructions:
-                    </span>
-                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-disc list-inside text-[11px]">
-                      <li>Candidates must be seated by 09:00 AM sharp. Late entry after 09:15 AM is prohibited.</li>
-                      <li>Physical Hall Ticket with official principal seal is mandatory at entry gate.</li>
-                      <li>Smartwatches, programmable calculators, and electronic gadgets are strictly banned.</li>
-                      <li>15-minute cool-off reading time is provided from 09:15 AM to 09:30 AM before writing.</li>
-                    </ul>
+                  {/* OFFICIAL CBSE CANDIDATE EXAMINATION PROTOCOL & HYBRID RULES */}
+                  <div className="p-5 rounded-3xl bg-gradient-to-r from-violet-50/70 via-indigo-50/40 to-purple-50/60 dark:from-slate-900 dark:via-slate-900/90 dark:to-indigo-950/30 border border-violet-200 dark:border-violet-900/60 text-xs text-slate-700 dark:text-slate-300 space-y-3.5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-violet-200/60 dark:border-violet-900/40 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="p-2 rounded-xl bg-violet-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                          <ShieldCheck className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-wider text-xs">
+                            Official Candidate Examination Rules &amp; Hybrid Proctoring Protocol
+                          </h4>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">CBSE Central Examination Cell Directives (Affiliation #830029)</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border border-violet-200 dark:border-violet-800 w-fit">
+                        Official Academic Code of Conduct
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-violet-700 dark:text-violet-300 text-xs block">
+                          ✍️ 1. Physical Paper Writing
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          Write all working on standard physical ruled answer sheets with blue/black pen. Write Roll Number (#14) on every sheet.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-violet-700 dark:text-violet-300 text-xs block">
+                          📷 2. Unbroken Camera Custody
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          Keep your web camera focused on your face, hands, and desk workspace. Head turns away from desk trigger AI proctor alerts.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-rose-600 dark:text-rose-400 text-xs block">
+                          🚫 3. Prohibited Devices &amp; Penalty
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          Smartphones, smartwatches, and second screens are banned. Repeated infractions incur an official 5-mark penalty or eviction.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-violet-700 dark:text-violet-300 text-xs block">
+                          🎙️ 4. Invigilator Voice Intercom
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          Chief Invigilator (Mrs. Ananya Verma) has live push-to-talk voice access. Listen and follow verbal instructions promptly.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-emerald-600 dark:text-emerald-400 text-xs block">
+                          🔐 5. Dynamic Submission Seal
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          A 6-digit seal code (#HYBRID-8492) pops when time finishes. Write this in ink on every sheet before scanning &amp; uploading.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 space-y-1 shadow-2xs">
+                        <span className="font-black text-violet-700 dark:text-violet-300 text-xs block">
+                          ⏱️ 6. 15-Min Scan Grace Window
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                          Writing must cease promptly when timer expires. A dedicated 15-minute window is provided exclusively for scanning pages.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -5256,94 +5410,29 @@ function StandardStudentDashboard() {
       {/* 4. MODALS & LIGHTBOXES */}
       {/* ========================================================= */}
 
-      {/* MODAL 1: LIVE CLASSROOM STREAM OVERLAY */}
-      {isLiveClassModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-5xl rounded-3xl bg-[#0F172A] border border-slate-700 text-white overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-0.5 text-xs font-bold">
-                  <span className="h-2 w-2 rounded-full bg-red-400 animate-pulse"></span>
-                  LIVE STREAM
-                </span>
-                <span className="text-sm font-bold text-white">
-                  Class 8-A Mathematics: Quadratic Equations &amp; Roots
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                  🟢 Auto-Attendance: Present (+06:18m)
-                </span>
-                <button
-                  onClick={() => setIsLiveClassModalOpen(false)}
-                  className="rounded-xl p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Video Simulation Canvas */}
-            <div className="relative flex-1 bg-black min-h-[420px] flex items-center justify-center overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1200"
-                alt="Live Classroom Feed"
-                className="h-full w-full object-cover opacity-75"
-              />
-
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-
-              <div className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold text-white">
-                Mrs. Ananya Verma (Teacher Cam)
-              </div>
-
-              {/* Student Self Picture-in-Picture */}
-              <div className="absolute bottom-4 right-4 h-28 w-44 rounded-2xl bg-slate-800 border-2 border-blue-500/80 overflow-hidden shadow-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200"
-                  alt="Aarav Sharma Self Cam"
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute bottom-1 left-2 bg-black/60 text-[9px] font-bold text-white px-1.5 py-0.2 rounded">
-                  Aarav (You)
-                </span>
-              </div>
-            </div>
-
-            {/* Control Bar */}
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-t border-slate-800 text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">Class Audio &amp; Video Connected</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => triggerToast('Microphone muted')}
-                  className="rounded-xl bg-slate-800 hover:bg-slate-700 px-3 py-2 text-xs font-bold"
-                >
-                  Mute Mic
-                </button>
-                <button
-                  onClick={() => triggerToast('Hand Raised! Mrs. Verma notified.')}
-                  className="rounded-xl bg-blue-600 hover:bg-blue-500 px-3.5 py-2 text-xs font-bold shadow-sm"
-                >
-                  ✋ Raise Hand
-                </button>
-                <button
-                  onClick={() => setIsLiveClassModalOpen(false)}
-                  className="rounded-xl bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-bold"
-                >
-                  Leave Class
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
+      {/* MODAL 1: REAL LIVEKIT VIDEO CONFERENCE ROOM */}
+      <EduVideoConferenceModal 
+        isOpen={isLiveClassModalOpen}
+        onClose={() => setIsLiveClassModalOpen(false)}
+        roomName="class-8b-mathematics"
+        roomTitle="Class 8-B Mathematics: Quadratic Equations & Roots"
+        userName="Aarav Sharma"
+        userRole="STUDENT"
+        studentContextName="Aarav Sharma"
+        onAttendanceVerified={(data?: { minutesElapsed?: number; status?: string }) => {
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setAttendanceTimestamp(nowStr);
+          setHasJoinedLive(true);
+          const elapsed = data?.minutesElapsed ?? 3.5;
+          const status = data?.status ?? (elapsed <= 10.0 ? 'Present' : 'Late');
+          if (status === 'Late') {
+            triggerToast(`⚠️ Joined +${elapsed.toFixed(1)}m into session: Flagged LATE (>10m stipulation). Pending Teacher Approval.`);
+          } else {
+            triggerToast(`🟢 LiveKit WebRTC Connected: Auto-Attendance Verified as PRESENT (joined +${elapsed.toFixed(1)}m on-time).`);
+          }
+          api.simulateJoin(1, 1, elapsed).catch(() => {});
+        }}
+      />
 
       {/* MODAL 2: TEACHER ANNOTATED HOMEWORK SHEET & REMARKS VIEWER */}
       {isAnnotationModalOpen && (
@@ -5895,6 +5984,7 @@ function StandardStudentDashboard() {
         durationMinutes={onlineExamDuration}
         questionPrompt={onlineExamPrompt}
         maxMarks={onlineExamMaxMarks}
+        examMode={onlineExamMode}
         studentName={user?.name || 'Aarav Sharma'}
         onSubmitted={({ wordsCount }) => {
           setIsOnlineExamOpen(false);

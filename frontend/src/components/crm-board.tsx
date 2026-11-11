@@ -36,6 +36,7 @@ export function CRMBoard({
   enquiries, 
   onStageChange, 
   onConvertToStudent,
+  onOpenIntakeModal
 }: CRMBoardProps) {
   const [selectedStage, setSelectedStage] = useState<StageFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,7 +116,7 @@ export function CRMBoard({
             })}
           </div>
 
-          {/* Target Grade Selector */}
+          {/* Target Grade Selector & Quick Register */}
           <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
             <span className="text-xs font-bold text-slate-400">Class:</span>
             <select
@@ -132,6 +133,7 @@ export function CRMBoard({
               <option value="Class 11">Class 11</option>
               <option value="Class 12">Class 12</option>
             </select>
+
           </div>
         </div>
 

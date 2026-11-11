@@ -1,62 +1,29 @@
-# 1. Update frontend/src/lib/types.ts
+# 1. Update types.ts to add duration_minutes
 with open('frontend/src/lib/types.ts', 'r', encoding='utf-8') as f:
-    types_code = f.read()
+    types_content = f.read()
 
-types_code = types_code.replace(
-    "status: 'Present' | 'Late' | 'Absent' | 'Leave';",
-    "status: 'Present' | 'Late' | 'Absent' | 'Leave' | 'Excused Leave';"
-)
-with open('frontend/src/lib/types.ts', 'w', encoding='utf-8') as f:
-    f.write(types_code)
-print("1. Updated types.ts")
+types_target = "  total_marks?: number;"
+types_repl = "  total_marks?: number;\n  duration_minutes?: number;"
 
-# 2. Update frontend/src/lib/api.ts to provide applyStudentLeave alias
-with open('frontend/src/lib/api.ts', 'r', encoding='utf-8') as f:
-    api_code = f.read()
-
-if 'applyStudentLeave:' not in api_code:
-    api_code = api_code.replace(
-        "  applyParentLeave: async (data: {",
-        "  applyStudentLeave: async (data: any) => { return await api.applyParentLeave(data); },\n  applyParentLeave: async (data: {"
-    )
-    with open('frontend/src/lib/api.ts', 'w', encoding='utf-8') as f:
-        f.write(api_code)
-    print("2. Added applyStudentLeave alias in api.ts")
+if types_target in types_content:
+    types_content = types_content.replace(types_target, types_repl, 1)
+    with open('frontend/src/lib/types.ts', 'w', encoding='utf-8') as f:
+        f.write(types_content)
+    print("Updated types.ts with duration_minutes!")
 else:
-    print("2. applyStudentLeave already exists in api.ts")
+    print("Warning: types_target not found")
 
-# 3. Update frontend/src/app/parent/page.tsx
-with open('frontend/src/app/parent/page.tsx', 'r', encoding='utf-8') as f:
-    parent_code = f.read()
+# 2. Add ShieldAlert to teacher/page.tsx
+with open('frontend/src/app/teacher/page.tsx', 'r', encoding='utf-8') as f:
+    teacher_content = f.read()
 
-parent_code = parent_code.replace(
-    "  pendingHomeworkCount: number;\n}",
-    "  pendingHomeworkCount: number;\n  guardianName?: string;\n}"
-)
-parent_code = parent_code.replace(
-    "await api.applyStudentLeave({",
-    "await api.applyParentLeave({"
-)
-with open('frontend/src/app/parent/page.tsx', 'w', encoding='utf-8') as f:
-    f.write(parent_code)
-print("3. Updated parent/page.tsx")
+teacher_target = "  ShieldCheck, \n"
+teacher_repl = "  ShieldCheck, \n  ShieldAlert,\n"
 
-# 4. Update frontend/src/components/attendance-simulator.tsx
-with open('frontend/src/components/attendance-simulator.tsx', 'r', encoding='utf-8') as f:
-    sim_code = f.read()
-
-sim_code = sim_code.replace(
-    "const leaveCount = records.filter(r => r.status === 'Leave' || r.status === 'Excused Leave').length;",
-    "const leaveCount = records.filter(r => (r.status as string) === 'Leave' || (r.status as string) === 'Excused Leave').length;"
-)
-sim_code = sim_code.replace(
-    "const absentCount = records.filter(r => r.status === 'Absent' && r.status !== 'Leave' && r.status !== 'Excused Leave').length;",
-    "const absentCount = records.filter(r => r.status === 'Absent').length;"
-)
-sim_code = sim_code.replace(
-    "const isLeave = rec.status === 'Leave' || rec.status === 'Excused Leave';",
-    "const isLeave = (rec.status as string) === 'Leave' || (rec.status as string) === 'Excused Leave';"
-)
-with open('frontend/src/components/attendance-simulator.tsx', 'w', encoding='utf-8') as f:
-    f.write(sim_code)
-print("4. Updated attendance-simulator.tsx")
+if teacher_target in teacher_content:
+    teacher_content = teacher_content.replace(teacher_target, teacher_repl, 1)
+    with open('frontend/src/app/teacher/page.tsx', 'w', encoding='utf-8') as f:
+        f.write(teacher_content)
+    print("Added ShieldAlert to teacher/page.tsx imports!")
+else:
+    print("Warning: teacher_target not found")

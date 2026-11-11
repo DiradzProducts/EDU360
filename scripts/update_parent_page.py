@@ -1,108 +1,109 @@
 with open('frontend/src/app/parent/page.tsx', 'r', encoding='utf-8') as f:
-    code = f.read()
+    c = f.read()
 
-# 1. Update loadData destructuring
-old_load = '''        const [ftRes, feesRes, subRes, exitsRes, hwRes] = await Promise.all([
-          api.getFocusTable(activeKidId),
-          api.getFees(activeKidId),
-          api.getSubmission(activeKidId),
-          api.getExitClearances(),
-          api.getTodayHomework(activeKidId),
-          api.getParentLeaveRequests(activeKidId)
-        ]);
-        setFocusTable(ftRes);
-        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(DEFAULT_PARENT_FEES); }
-        setSubmission(subRes);
-        if (exitsRes && exitsRes.length > 0) {
-          setExitClearance(exitsRes[0]);
-        }
-        setTodayHomework(hwRes);'''
+# 1. Add John Fernandes to SHARMA_CHILDREN
+old_children = """    remedialSubject: 'Reading & Phonics',
+    remedialDay: 'Day 1 of 5',
+    pendingHomeworkCount: 1
+  }
+];"""
 
-new_load = '''        const [ftRes, feesRes, subRes, exitsRes, hwRes, leaveRes] = await Promise.all([
-          api.getFocusTable(activeKidId),
-          api.getFees(activeKidId),
-          api.getSubmission(activeKidId),
-          api.getExitClearances(),
-          api.getTodayHomework(activeKidId),
-          api.getParentLeaveRequests(activeKidId)
-        ]);
-        setFocusTable(ftRes);
-        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(DEFAULT_PARENT_FEES); }
-        setSubmission(subRes);
-        if (exitsRes && exitsRes.length > 0) {
-          setExitClearance(exitsRes[0]);
-        }
-        setTodayHomework(hwRes);
-        if (leaveRes && leaveRes.length > 0) {
-          setLeaveHistory(leaveRes);
-        }'''
+new_children = """    remedialSubject: 'Reading & Phonics',
+    remedialDay: 'Day 1 of 5',
+    pendingHomeworkCount: 1
+  },
+  {
+    id: 12,
+    name: 'John Fernandes',
+    className: 'Class 10-A',
+    rollNo: 25,
+    initials: 'JF',
+    tier: 'secondary',
+    attendanceStatus: 'Present Today ✓ • Period 4 Computer Science (Lab 2)',
+    currentClass: 'Live Virtual Class: Period 4 Active',
+    homeroomFaculty: 'Fr. George Varghese',
+    remedialSubject: 'Computer Science',
+    remedialDay: 'Day 3 of 7',
+    pendingHomeworkCount: 0
+  }
+];"""
 
-if old_load in code:
-    code = code.replace(old_load, new_load, 1)
-    print("SUCCESS: Updated loadData in parent/page.tsx")
-else:
-    print("WARNING: old_load not found in parent/page.tsx")
+c_norm = c.replace('\r\n', '\n')
+old_ch_norm = old_children.replace('\r\n', '\n')
+new_ch_norm = new_children.replace('\r\n', '\n')
 
-# 2. Update handleApplyLeave
-old_apply = '''  const handleApplyLeave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!leaveReason) return;
-    setLeaveSubmitted(true);
-    setTimeout(() => {
-      setLeaveSubmitted(false);
-      const noteMsg = leaveDoctorNoteName ? ` with attached Doctor's Note (${leaveDoctorNoteName})` : '';
-      setLeaveReason('');
-      setLeaveFrom('');
-      setLeaveTo('');
-      setLeaveDoctorNote(null);
-      setLeaveDoctorNoteName('');
-      playStarCollect();
-      triggerToast(`✓ Leave application${noteMsg} for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}!`);
-    }, 1200);
-  };'''
+assert old_ch_norm in c_norm, "old_children not found"
+c_norm = c_norm.replace(old_ch_norm, new_ch_norm, 1)
 
-new_apply = '''  const handleApplyLeave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!leaveReason || !leaveFrom || !leaveTo) return;
-    setLeaveSubmitted(true);
-    try {
-      await api.applyStudentLeave({
-        student_id: activeKid.id,
-        student_name: activeKid.name,
-        parent_name: activeKid.guardianName || 'Mr. Rajesh Sharma',
-        from_date: leaveFrom,
-        to_date: leaveTo,
-        reason: leaveReason,
-        is_medical: isMedicalLeave,
-        attachment_name: leaveDoctorNoteName || undefined,
-        attachment_url: leaveDoctorNoteName ? `/uploads/${leaveDoctorNoteName}` : undefined
-      });
-      // Refresh real-time leave history from backend
-      const updatedHistory = await api.getParentLeaveRequests(activeKid.id);
-      if (updatedHistory) {
-        setLeaveHistory(updatedHistory);
-      }
-      const noteMsg = leaveDoctorNoteName ? ` with attached Doctor's Note (${leaveDoctorNoteName})` : '';
-      setLeaveReason('');
-      setLeaveFrom('');
-      setLeaveTo('');
-      setLeaveDoctorNote(null);
-      setLeaveDoctorNoteName('');
-      playStarCollect();
-      triggerToast(`✓ Leave application${noteMsg} for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}! Class Teacher notified.`);
-    } catch (err) {
-      console.error('Leave application submission error:', err);
-      triggerToast(`✓ Leave application submitted to ${activeKid.homeroomFaculty}.`);
-    } finally {
-      setLeaveSubmitted(false);
+# 2. Add DEFAULT_PARENT_FEES_JOHN
+old_fees = """const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;"""
+new_fees = """const DEFAULT_PARENT_FEES_JOHN: FeeMilestone[] = [
+  { id: 201, student_id: 12, title: "Milestone 1: Term 1 Grade 10 Board Fee & Tuition", amount: 42000, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-4011", paid_at: "10 Jul 2026, 10:00 AM", payment_method: "Net Banking (SBI)" },
+  { id: 202, student_id: 12, title: "Milestone 2: Term 2 Grade 10 Board Examination & Lab Clearance", amount: 42000, due_date: "15 Oct 2026", status: "Paid", receipt_no: "REC-2026-FEE-4012", paid_at: "12 Oct 2026, 02:30 PM", payment_method: "UPI (PhonePe)" }
+];
+
+const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;"""
+
+old_fees_norm = old_fees.replace('\r\n', '\n')
+new_fees_norm = new_fees.replace('\r\n', '\n')
+
+assert old_fees_norm in c_norm, "old_fees not found"
+c_norm = c_norm.replace(old_fees_norm, new_fees_norm, 1)
+
+# 3. Update exit clearance loading to only show if clearance matches activeKidId
+old_exit_load = """        if (exitsRes && exitsRes.length > 0) {
+          const kidClearance = exitsRes.find(e => e.student_id === activeKidId) || exitsRes.find(e => !e.physical_sign_verified || !e.digital_parent_approved) || exitsRes[0];
+          setExitClearance(kidClearance);
+        }"""
+
+new_exit_load = """        if (exitsRes && exitsRes.length > 0) {
+          const kidClearance = exitsRes.find(e => e.student_id === activeKidId);
+          setExitClearance(kidClearance || null);
+        } else {
+          setExitClearance(null);
+        }"""
+
+old_el_norm = old_exit_load.replace('\r\n', '\n')
+new_el_norm = new_exit_load.replace('\r\n', '\n')
+
+assert old_el_norm in c_norm, "old_exit_load not found"
+c_norm = c_norm.replace(old_el_norm, new_el_norm, 1)
+
+# 4. Update fees fallback check for John
+old_fee_check = """if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : DEFAULT_PARENT_FEES_AARAV); }"""
+new_fee_check = """if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : activeKidId === 12 ? DEFAULT_PARENT_FEES_JOHN : DEFAULT_PARENT_FEES_AARAV); }"""
+
+assert old_fee_check in c_norm, "old_fee_check not found"
+c_norm = c_norm.replace(old_fee_check, new_fee_check, 1)
+
+# 5. Update handleDigitalSignExit
+old_digital_sign = """  const handleDigitalSignExit = async () => {
+    await api.parentDigitalSignTC(activeKidId);
+    const updatedExits = await api.getExitClearances();
+    if (updatedExits && updatedExits.length > 0) {
+      const kidClearance = updatedExits.find(e => e.student_id === activeKidId) || updatedExits[0];
+      setExitClearance(kidClearance);
     }
-  };'''
+    triggerToast('In-app parent digital signature stamped with legal seal');
+  };"""
 
-if old_apply in code:
-    code = code.replace(old_apply, new_apply, 1)
-    print("SUCCESS: Updated handleApplyLeave in parent/page.tsx")
-else:
-    print("WARNING: old_apply not found in parent/page.tsx")
+new_digital_sign = """  const handleDigitalSignExit = async () => {
+    await api.parentDigitalSignTC(activeKidId);
+    const updatedExits = await api.getExitClearances();
+    if (updatedExits && updatedExits.length > 0) {
+      const kidClearance = updatedExits.find(e => e.student_id === activeKidId);
+      setExitClearance(kidClearance || null);
+    }
+    triggerToast('In-app parent digital signature stamped with legal seal');
+  };"""
+
+old_ds_norm = old_digital_sign.replace('\r\n', '\n')
+new_ds_norm = new_digital_sign.replace('\r\n', '\n')
+
+assert old_ds_norm in c_norm, "old_digital_sign not found"
+c_norm = c_norm.replace(old_ds_norm, new_digital_sign, 1)
 
 with open('frontend/src/app/parent/page.tsx', 'w', encoding='utf-8') as f:
-    f.write(code)
+    f.write(c_norm)
+
+print("parent/page.tsx updated successfully!")

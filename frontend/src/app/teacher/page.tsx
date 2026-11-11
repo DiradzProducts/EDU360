@@ -1,10704 +1,21630 @@
 'use client';
+
 import { Icon3D } from '@/components/ui/icon-3d';
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
+
 import Link from 'next/link';
+
 import { 
+
   GraduationCap, 
+
   Video, 
+
   FileEdit, 
+
   Sparkles, 
+
   Calendar, 
+
   CheckCircle2, 
+
   Users, 
+
   MessageSquare, 
+
   Check, 
+
   X, 
+
   FileText, 
+
   Clock, 
+
   Layers, 
+
   PhoneCall, 
+
   Search, 
+
   Filter, 
+
   Play, 
+
   Award, 
+
   AlertTriangle, 
+
   AlertCircle, 
+
   Plus, 
+
   ArrowRight, 
+
   Send, 
+
   Eye, 
+
   Sliders, 
+
   ChevronLeft, 
+
   ChevronRight, 
+
   UserCheck, 
+
   Briefcase, 
+
   Radio, 
+
   BookOpen, 
+
   CalendarCheck, 
+
   ShieldCheck, 
+  ShieldAlert,
+
   Bell, 
+
   RefreshCw, 
+
   ExternalLink, 
+
   Lock, 
+
   ChevronDown, 
+
   Info,
+
   ChevronUp,
+
   ClipboardList,
+
   Edit3,
+
   LayoutDashboard,
+
   LayoutGrid,
+
   List,
+
   FileSpreadsheet,
+
   UserPlus,
+
   TrendingUp,
+
   Download,
+
   CheckSquare,
+
   Save,
+
   ZoomIn,
+
   ZoomOut,
+
   RotateCcw,
+
   FileCheck,
+
   Upload,
+
   Bus,
+
   HeartPulse,
+
   Mail,
+
   Phone,
+
   MapPin,
+
   Paperclip,
+
   Menu,
+
   CreditCard
+
 } from 'lucide-react';
+
 import { api } from '@/lib/api';
+
 import { 
+
   AttendanceRecord, 
+
   HomeworkSubmission, 
+
   FocusTable, 
+
   LeaveRequest,
+
   TeacherScheduleItem,
+
   TeacherDutyItem,
+
   TeacherStudentRosterItem,
+
   TeacherPermissionRequest,
+
   TeacherPersonalScheduleItem,
+
   FacultyDutyTask,
+
   FacultyDutyCategory,
+
   ParentTeacherNote,
+
   PTMEventConfig,
+
   PTMSlot,
+
   InteractionScope,
+
   AdminTask,
+
   CurriculumPacingItem,
+
   ExamItem,
+
   ExamSubmissionItem,
+
   QuestionPaperItem,
+
   OcrScanResultItem,
+
   StaffPayslipItem
+
 } from '@/lib/types';
 
+
+
 import { AttendanceSimulator } from '@/components/attendance-simulator';
+
+import { EduVideoConferenceModal } from '@/components/livekit/edu-video-conference-modal';
+import { ProctorIntegrityDossierModal } from '@/components/proctor/proctor-integrity-dossier-modal';
+
+import { LiveInvigilatorCockpit } from '@/components/proctor/live-invigilator-cockpit';
+
 import { HomeworkCanvas } from '@/components/homework-canvas';
+
 import { FocusTableView } from '@/components/focus-table-view';
+
 import { 
+
   FocusRosterItem, 
+
   getStoredFocusRoster, 
+
   saveStoredFocusRoster, 
+
   updateFocusStudent, 
+
   CLASS_SECTION_METRICS,
+
   CLASS_SUBJECT_METRICS, 
+
   INITIAL_FOCUS_ROSTER 
+
 } from '@/lib/focus-data';
+
 import { RoleGuard } from '@/components/role-guard';
+
 import { StudentRemark, getRemarksForStudent, addStudentRemark, getAllRemarks } from '@/lib/student-remarks';
+
 import { Footer } from '@/components/footer';
+
 import { useTheme } from '@/lib/theme-context';
 
+
+
 type TeacherTab = 
+
   | 'dashboard'
+
   | 'live_class' 
+
   | 'schedule' 
+
   | 'homework' 
+
   | 'focus_table' 
+
   | 'exams_gradebook'
+
   | 'curriculum'
+
   | 'roster' 
+
   | 'parent_hub' 
+
   | 'parent_chat'
+
   | 'leave_approvals' 
+
   | 'duties' 
+
   | 'my_permissions'
+
   | 'my_salary';
 
+
+
 // Data types for Teacher Exams & Marks (Used in Duties Paper Correction Queue)
+
 interface TeacherExamScoreItem {
+
   id: number;
+
   roll_no: string;
+
   name: string;
+
   admission_id: string;
+
   theory_score: number;
+
   internal_score: number;
+
   max_theory: number;
+
   max_internal: number;
+
   grade: 'A+' | 'A' | 'B' | 'C' | 'Needs Focus';
+
   teacher_note: string;
+
   in_focus_table: boolean;
+
 }
+
+
 
 interface TeacherExamConfig {
+
   id: string;
+
   title: string;
+
   subject: string;
+
   class_name: string;
+
   max_theory: number;
+
   max_internal: number;
+
   status: 'Draft' | 'Published' | 'Under Evaluation';
+
   date: string;
+
 }
+
+
 
 // Data types for Class Homework Roster
+
 interface HomeworkRosterItem {
+
   id: number;
+
   roll_no: string;
+
   name: string;
+
   admission_id: string;
+
   status: 'Submitted' | 'Graded' | 'Missing';
+
   submission_time: string;
+
   file_name: string;
+
   file_size: string;
+
   score?: number;
+
   max_score: number;
+
   teacher_remarks?: string;
+
   annotations_json?: string;
+
   submission_data: HomeworkSubmission;
+
 }
 
+
+
 export default function TeacherPage() {
+
   const [activeTab, setActiveTab] = useState<TeacherTab>('dashboard');
+
+  const [isLiveConferenceOpen, setIsLiveConferenceOpen] = useState(false);
+
+
+
+  const handleStartTeacherLiveClass = async () => {
+
+    try {
+
+      await api.startLiveRoom('class-8b-mathematics', 'Mrs. Ananya Verma', 'Mathematics', 'Class 8-B', 'Quadratic Equations: Factorization Method');
+
+    } catch {}
+
+    setIsLiveConferenceOpen(true);
+
+    triggerToast('🔴 Live Class Studio Launched! Students in Waiting Lobby auto-admitted.');
+
+  };
+
   const [showPtmSisModal, setShowPtmSisModal] = useState<boolean>(false);
+
   const [selectedPtmSisStudent, setSelectedPtmSisStudent] = useState<any>(null);
+
   const [isAiEvaluatingPapers, setIsAiEvaluatingPapers] = useState<boolean>(false);
+
   const [evaluatingSubmissionId, setEvaluatingSubmissionId] = useState<number | null>(null);
+
   const [curriculumClassFilter, setCurriculumClassFilter] = useState<string>('ALL');
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
   const { theme } = useTheme();
 
+
+
   // Core Data State
+
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+
   const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
+
   const [focusTable, setFocusTable] = useState<FocusTable | null>(null);
+
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+
   const [schedule, setSchedule] = useState<TeacherScheduleItem[]>([]);
+
   const [duties, setDuties] = useState<TeacherDutyItem[]>([]);
+
   const [students, setStudents] = useState<TeacherStudentRosterItem[]>([]);
+
   const [myPermissions, setMyPermissions] = useState<TeacherPermissionRequest[]>([]);
+
   const [myPayslip, setMyPayslip] = useState<StaffPayslipItem | null>(null);
+
   const [showSalaryInquiryModal, setShowSalaryInquiryModal] = useState<boolean>(false);
+
   const [inquiryCategory, setInquiryCategory] = useState<string>('Discrepancy in Deductions (PF / TDS / PT)');
+
   const [inquiryRemarks, setInquiryRemarks] = useState<string>('');
+
   const [isSubmittingInquiry, setIsSubmittingInquiry] = useState<boolean>(false);
+
   const [parentContext, setParentContext] = useState<any>(null);
+
   const [loading, setLoading] = useState(true);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+
+
   // Master Architecture Spec: Personal Timetable, Duties Center, Dual-Mode Notes, and Sliding PTM
+
   const [personalSchedule, setPersonalSchedule] = useState<TeacherPersonalScheduleItem[]>([]);
+
   const [selectedScheduleDay, setSelectedScheduleDay] = useState<string>('Monday');
+
   const [facultyDuties, setFacultyDuties] = useState<FacultyDutyTask[]>([]);
+
   const [dutyCategoryFilter, setDutyCategoryFilter] = useState<'ALL' | FacultyDutyCategory>('ALL');
+
   const [dutyWeeklyFilter, setDutyWeeklyFilter] = useState<'ALL' | 'THIS_WEEK' | 'WEEKLY_ROUTINES' | 'TODAY' | 'UPCOMING'>('THIS_WEEK');
+
   const [dutySelectedDay, setDutySelectedDay] = useState<string>('ALL');
+
   const [selectedDutyId, setSelectedDutyId] = useState<string | null>(null);
+
   const [parentNotes, setParentNotes] = useState<ParentTeacherNote[]>([]);
+
   const [parentNoteScopeFilter, setParentNoteScopeFilter] = useState<'ALL' | InteractionScope>('ALL');
+
   const [ptmConfig, setPtmConfig] = useState<PTMEventConfig | null>(null);
+
   const [ptmSlots, setPtmSlots] = useState<PTMSlot[]>([]);
+
   const [ptmScopeFilter, setPtmScopeFilter] = useState<'ALL' | InteractionScope>('ALL');
+
   // Parental Hub PTM UI state
+
   const [ptmStatusFilter, setPtmStatusFilter] = useState<'ALL' | 'BOOKED' | 'AVAILABLE' | 'BREAK'>('ALL');
+
   const [cancellingPtmSlot, setCancellingPtmSlot] = useState<PTMSlot | null>(null);
+
   const [ptmCancelReason, setPtmCancelReason] = useState<string>('Faculty Emergency / Official Duty');
+
   const [ptmCancelCustomNote, setPtmCancelCustomNote] = useState<string>('');
+
   const [ptmReopenAsFree, setPtmReopenAsFree] = useState<boolean>(true);
+
   const [ptmUndoBackup, setPtmUndoBackup] = useState<{ slotId: string; previousState: any } | null>(null);
+
   const [homeworkList, setHomeworkList] = useState<HomeworkRosterItem[]>([
+
     {
+
       id: 1,
+
       roll_no: "01",
+
       name: "Aarav Sharma",
+
       admission_id: "ADM-2026-0801",
+
       status: "Submitted",
+
       submission_time: "Today, 08:45 AM",
+
       file_name: "Worksheet4_Aarav.pdf",
+
       file_size: "2.4 MB",
+
       max_score: 20,
+
       submission_data: {
+
         id: 1,
+
         homework_id: 1,
+
         student_id: 1,
+
         student_name: "Aarav Sharma",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: "",
+
         marks_obtained: undefined,
+
         teacher_remarks: "",
+
         status: "submitted",
+
         submitted_at: "2026-10-15T14:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 2,
+
       roll_no: "08",
+
       name: "Tanvi Deshmukh",
+
       admission_id: "ADM-2026-0808",
+
       status: "Graded",
+
       submission_time: "Yesterday, 04:30 PM",
+
       file_name: "Math_W4_TanviD.pdf",
+
       file_size: "1.8 MB",
+
       score: 19.0,
+
       max_score: 20,
+
       teacher_remarks: "Flawless quadratic factorization method. Keep it up!",
+
       annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'tick', x: 200, y: 280 }]),
+
       submission_data: {
+
         id: 2,
+
         homework_id: 1,
+
         student_id: 8,
+
         student_name: "Tanvi Deshmukh",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'tick', x: 200, y: 280 }]),
+
         marks_obtained: 19.0,
+
         teacher_remarks: "Flawless quadratic factorization method. Keep it up!",
+
         status: "graded",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 3,
+
       roll_no: "14",
+
       name: "Rohan Deshmukh",
+
       admission_id: "ADM-2026-0814",
+
       status: "Graded",
+
       submission_time: "Today, 08:30 AM",
+
       file_name: "HW4_Rohan_Maths.pdf",
+
       file_size: "3.1 MB",
+
       score: 17.5,
+
       max_score: 20,
+
       teacher_remarks: "Good method in Q2, revise negative formula sign in Q4 before test!",
+
       annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'circle', x: 380, y: 280 }]),
+
       submission_data: {
+
         id: 3,
+
         homework_id: 1,
+
         student_id: 14,
+
         student_name: "Rohan Deshmukh",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'circle', x: 380, y: 280 }]),
+
         marks_obtained: 17.5,
+
         teacher_remarks: "Good method in Q2, revise negative formula sign in Q4 before test!",
+
         status: "graded",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 4,
+
       roll_no: "15",
+
       name: "Kabir Mehta",
+
       admission_id: "ADM-2026-0815",
+
       status: "Missing",
+
       submission_time: "--",
+
       file_name: "--",
+
       file_size: "--",
+
       max_score: 20,
+
       submission_data: {
+
         id: 4,
+
         homework_id: 1,
+
         student_id: 15,
+
         student_name: "Kabir Mehta",
+
         original_file_url: "",
+
         status: "pending",
+
         submitted_at: ""
+
       }
+
     },
+
     {
+
       id: 5,
+
       roll_no: "18",
+
       name: "Rohan Iyer",
+
       admission_id: "ADM-2026-0818",
+
       status: "Submitted",
+
       submission_time: "Today, 09:12 AM",
+
       file_name: "Worksheet4_Iyer.pdf",
+
       file_size: "2.1 MB",
+
       max_score: 20,
+
       submission_data: {
+
         id: 5,
+
         homework_id: 1,
+
         student_id: 18,
+
         student_name: "Rohan Iyer",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: "",
+
         marks_obtained: undefined,
+
         teacher_remarks: "",
+
         status: "submitted",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 6,
+
       roll_no: "21",
+
       name: "Meera Nambiar",
+
       admission_id: "ADM-2026-0821",
+
       status: "Graded",
+
       submission_time: "Yesterday, 07:15 PM",
+
       file_name: "Meera_N_Math_4.pdf",
+
       file_size: "2.8 MB",
+
       score: 16.0,
+
       max_score: 20,
+
       teacher_remarks: "Minor calculation slip in Q3 discriminant calculation.",
+
       annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }]),
+
       submission_data: {
+
         id: 6,
+
         homework_id: 1,
+
         student_id: 21,
+
         student_name: "Meera Nambiar",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }]),
+
         marks_obtained: 16.0,
+
         teacher_remarks: "Minor calculation slip in Q3 discriminant calculation.",
+
         status: "graded",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 7,
+
       roll_no: "22",
+
       name: "Vivaan Sen",
+
       admission_id: "ADM-2026-0822",
+
       status: "Submitted",
+
       submission_time: "Today, 09:20 AM",
+
       file_name: "Vivaan_Sen_HW.pdf",
+
       file_size: "1.9 MB",
+
       max_score: 20,
+
       submission_data: {
+
         id: 7,
+
         homework_id: 1,
+
         student_id: 22,
+
         student_name: "Vivaan Sen",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: "",
+
         marks_obtained: undefined,
+
         teacher_remarks: "",
+
         status: "submitted",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 8,
+
       roll_no: "28",
+
       name: "Tanvi Sen",
+
       admission_id: "ADM-2026-0828",
+
       status: "Graded",
+
       submission_time: "Today, 08:15 AM",
+
       file_name: "Tanvi_Quadratic_W4.pdf",
+
       file_size: "2.2 MB",
+
       score: 18.5,
+
       max_score: 20,
+
       teacher_remarks: "Neat step-by-step substitution and quadratic curve verification.",
+
       annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'tick', x: 200, y: 280 }]),
+
       submission_data: {
+
         id: 8,
+
         homework_id: 1,
+
         student_id: 28,
+
         student_name: "Tanvi Sen",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }, { type: 'tick', x: 200, y: 280 }]),
+
         marks_obtained: 18.5,
+
         teacher_remarks: "Neat step-by-step substitution and quadratic curve verification.",
+
         status: "graded",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     },
+
     {
+
       id: 9,
+
       roll_no: "31",
+
       name: "Diya Kapoor",
+
       admission_id: "ADM-2026-0831",
+
       status: "Missing",
+
       submission_time: "--",
+
       file_name: "--",
+
       file_size: "--",
+
       max_score: 20,
+
       submission_data: {
+
         id: 9,
+
         homework_id: 1,
+
         student_id: 31,
+
         student_name: "Diya Kapoor",
+
         original_file_url: "",
+
         status: "pending",
+
         submitted_at: ""
+
       }
+
     },
+
     {
+
       id: 10,
+
       roll_no: "35",
+
       name: "Arjun Nair",
+
       admission_id: "ADM-2026-0835",
+
       status: "Graded",
+
       submission_time: "Yesterday, 09:00 PM",
+
       file_name: "Arjun_Maths_HW4.pdf",
+
       file_size: "1.6 MB",
+
       score: 17.0,
+
       max_score: 20,
+
       teacher_remarks: "Good understanding of roots; remember to write units.",
+
       annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }]),
+
       submission_data: {
+
         id: 10,
+
         homework_id: 1,
+
         student_id: 35,
+
         student_name: "Arjun Nair",
+
         original_file_url: "/samples/math_worksheet.png",
+
         annotated_file_url: "/samples/math_worksheet.png",
+
         annotations_json: JSON.stringify([{ type: 'tick', x: 200, y: 150 }]),
+
         marks_obtained: 17.0,
+
         teacher_remarks: "Good understanding of roots; remember to write units.",
+
         status: "graded",
+
         submitted_at: "2026-10-16T08:30:00.000Z"
+
       }
+
     }
+
   ]);
 
+
+
   const [homeworkSearch, setHomeworkSearch] = useState('');
+
   const [homeworkFilter, setHomeworkFilter] = useState<'All' | 'Needs Grading' | 'Graded' | 'Missing'>('All');
+
   const [speedGraderOpen, setSpeedGraderOpen] = useState(false);
+
   const [activeSpeedGraderIndex, setActiveSpeedGraderIndex] = useState<number>(0);
 
+
+
   // =========================================================
+
   // TASK 2: FOCUS TABLE CLASS ROSTER & 1-WEEK ACTION PLANS
+
   // =========================================================
+
   const [focusRoster, setFocusRoster] = useState<FocusRosterItem[]>(INITIAL_FOCUS_ROSTER);
+
   const [focusSectionFilter, setFocusSectionFilter] = useState<'All' | 'Class 8-B' | 'Class 8-A' | 'Class 9-A' | 'Class 9-B'>('Class 8-B');
+
   const [focusSearch, setFocusSearch] = useState('');
+
   const [focusCategoryFilter, setFocusCategoryFilter] = useState<'All' | 'Critical Remedial' | 'Targeted Practice'>('All');
+
   const [focusSubmissionFilter, setFocusSubmissionFilter] = useState<'All' | 'Needs Verification' | 'Verified' | 'Pending Submission'>('All');
+
   const [focusViewMode, setFocusViewMode] = useState<'cards' | 'table'>('cards');
+
   const [focusDrawerOpen, setFocusDrawerOpen] = useState(false);
+
   const [activeFocusIndex, setActiveFocusIndex] = useState<number>(0);
+
   const [verifyingFocusItem, setVerifyingFocusItem] = useState<FocusRosterItem | null>(null);
+
   const [teacherVerificationRemarks, setTeacherVerificationRemarks] = useState<string>('Factoring steps verified; negative sign distribution correctly resolved.');
 
+
+
   // =========================================================
+
   // UPSTREAM TRIGGER ENGINE: EXAMS & GRADEBOOK PUBLISHING
+
   // =========================================================
+
   const [examsList, setExamsList] = useState<ExamItem[]>([]);
+
   const [activePublishExamId, setActivePublishExamId] = useState<number>(1);
+
   const [examSubmissionsList, setExamSubmissionsList] = useState<ExamSubmissionItem[]>([]);
+  const pendingExamEvaluationsCount = (examSubmissionsList && examSubmissionsList.length > 0)
+    ? examSubmissionsList.filter(s => s.status === 'submitted' || s.status === 'pending' || s.marks_obtained === null || s.marks_obtained === undefined).length
+    : 6;
+
   const [isLoadingExams, setIsLoadingExams] = useState<boolean>(false);
+
   const [isPublishingExam, setIsPublishingExam] = useState<boolean>(false);
+
   const [publishSuccessBanner, setPublishSuccessBanner] = useState<{
+
     exam_title: string;
+
     total_published: number;
+
     remedial_enrolled_count: number;
+
     remedial_students: any[];
+
   } | null>(null);
+
   const [editingExamSubmission, setEditingExamSubmission] = useState<ExamSubmissionItem | null>(null);
+
   const [studioReadOnly, setStudioReadOnly] = useState<boolean>(false);
+
   const [editExamMarks, setEditExamMarks] = useState<number>(50);
+
   const [editExamFeedback, setEditExamFeedback] = useState<string>('');
+
   const [editExamWeakConcept, setEditExamWeakConcept] = useState<string>('');
+
   const [editExamTheoryMarks, setEditExamTheoryMarks] = useState<number>(36);
+
   const [editExamInternalMarks, setEditExamInternalMarks] = useState<number>(9);
+
   const [initialAiScore, setInitialAiScore] = useState<number>(45);
+
   const [q1Marks, setQ1Marks] = useState<number>(10);
+
   const [q2Marks, setQ2Marks] = useState<number>(4);
+
   const [q3Marks, setQ3Marks] = useState<number>(2);
+
   const [otherTheoryMarks, setOtherTheoryMarks] = useState<number>(20);
+
   const [paperZoomLevel, setPaperZoomLevel] = useState<number>(100);
+
   const [paperActivePage, setPaperActivePage] = useState<number>(1);
 
+
+
   const handleUpdateQuestionScore = (question: 'q1' | 'q2' | 'q3', newScore: number) => {
+
     const boundedScore = Math.min(10, Math.max(0, newScore));
+
     let nQ1 = q1Marks;
+
     let nQ2 = q2Marks;
+
     let nQ3 = q3Marks;
+
     if (question === 'q1') { nQ1 = boundedScore; setQ1Marks(boundedScore); }
+
     if (question === 'q2') { nQ2 = boundedScore; setQ2Marks(boundedScore); }
+
     if (question === 'q3') { nQ3 = boundedScore; setQ3Marks(boundedScore); }
+
     
+
     const newTheory = nQ1 + nQ2 + nQ3 + otherTheoryMarks;
+
     setEditExamTheoryMarks(newTheory);
+
     const newTotal = newTheory + editExamInternalMarks;
+
     setEditExamMarks(newTotal);
+
   };
+
+
 
   const getExamShortLabel = (ex: ExamItem) => {
+
     if (ex.id === 1) return `Term 1 Exam (9-A)`;
+
     if (ex.id === 2) return `Mid-Term (8-A)`;
+
     if (ex.id === 3) return `Unit Test 2 (9-B)`;
+
     return `${ex.term || 'Exam'} (${ex.class_name}-${ex.section})`;
+
   };
+
+
 
   // OCR & Question Paper Drafting State
-  const [examSubTab, setExamSubTab] = useState<'marks_ledger' | 'qp_desk'>('marks_ledger');
+
+  const [examSubTab, setExamSubTab] = useState<'marks_ledger' | 'qp_desk' | 'live_cockpit'>('marks_ledger');
+
+  const [showScheduleExamModal, setShowScheduleExamModal] = useState<boolean>(false);
+  const [showDossierModal, setShowDossierModal] = useState<boolean>(false);
+  const [dossierCandidateId, setDossierCandidateId] = useState<number | null>(null);
+
+  const [newExamTitle, setNewExamTitle] = useState<string>('Term 1 CBT Essay: Analytical & Creative Writing');
+
+  const [newExamSubject, setNewExamSubject] = useState<string>('English Literature');
+
+  const [newExamClass, setNewExamClass] = useState<string>('Class 8');
+
+  const [newExamSection, setNewExamSection] = useState<string>('B');
+
+  const [newExamDate, setNewExamDate] = useState<string>('2026-11-06');
+
+  const [newExamMode, setNewExamMode] = useState<'MODE_CBT' | 'MODE_HYBRID_SCAN'>('MODE_CBT');
+
+  const [newExamDuration, setNewExamDuration] = useState<number>(60);
+
+  const [newExamTotalMarks, setNewExamTotalMarks] = useState<number>(100);
+
+  const [newExamStrictness, setNewExamStrictness] = useState<'STANDARD' | 'STRICT' | 'LENIENT'>('STANDARD');
+
+  const [newExamPaperName, setNewExamPaperName] = useState<string>('english_term1_essay_prompt.pdf');
+
+  const [isSchedulingExam, setIsSchedulingExam] = useState<boolean>(false);
+
   const [qpFilterStatus, setQpFilterStatus] = useState<'all' | 'pending' | 'under_review' | 'approved'>('all');
+
   const [draftRemarks, setDraftRemarks] = useState<string>('');
+
   const [teacherQpList, setTeacherQpList] = useState<QuestionPaperItem[]>([]);
+
   const [selectedDraftQp, setSelectedDraftQp] = useState<QuestionPaperItem | null>(null);
+
   const [draftFileUrl, setDraftFileUrl] = useState<string>('/samples/Class8_Math_Term1_Final_QP.pdf');
+
   const [draftFileName, setDraftFileName] = useState<string>('Class8_Math_Term1_Final_QP.pdf');
+
   const [answerKeyUrl, setAnswerKeyUrl] = useState<string>('/samples/Class8_Math_Term1_AnswerKey.pdf');
 
+
+
   const [showOcrModal, setShowOcrModal] = useState<boolean>(false);
+
   const [isScanningOcr, setIsScanningOcr] = useState<boolean>(false);
+
   const [ocrScannedFileName, setOcrScannedFileName] = useState<string>('Class8B_Math_Marks_Register_Physical.png');
+
   const [ocrResults, setOcrResults] = useState<OcrScanResultItem[]>([]);
+
   const [isCommittingOcr, setIsCommittingOcr] = useState<boolean>(false);
+
   const [ocrStep, setOcrStep] = useState<'upload' | 'scanning' | 'review'>('upload');
 
+
+
   const loadExams = async () => {
+
     setIsLoadingExams(true);
+
     try {
+
       const res = await api.listExams({ subject: 'Mathematics' });
+
       if (res && res.success && res.exams.length > 0) {
+
         setExamsList(res.exams);
+
         setActivePublishExamId(res.exams[0].id);
+
         const subRes = await api.getExamSubmissions(res.exams[0].id);
+
         if (subRes && subRes.success) {
+
           setExamSubmissionsList(subRes.submissions);
+
         }
+
       }
+
       // Load teacher question papers
+
       const qpRes = await api.getQuestionPapers({ teacher_id: 2 });
+
       setTeacherQpList(qpRes);
+
     } catch (e) {
+
       console.error(e);
+
     } finally {
+
       setIsLoadingExams(false);
+
     }
+
   };
+
+
 
   const handleStartOcrScan = async () => {
+
     setOcrStep('scanning');
+
     setIsScanningOcr(true);
+
     try {
+
       // Simulate realistic AI handwriting OCR processing delay
+
       await new Promise(r => setTimeout(r, 1200));
+
       const res = await api.ocrScanMarksheet(activePublishExamId, {
+
         file_name: ocrScannedFileName,
+
         class_name: 'Class 8',
+
         section: 'B'
+
       });
+
       if (res && res.success) {
+
         setOcrResults(res.results);
+
         setOcrStep('review');
+
         triggerToast(`📸 Gemini Vision successfully parsed ${res.parsed_count} student marks from marksheet!`);
+
       }
+
     } catch (err: any) {
+
       triggerToast(err.message || 'OCR parsing failed. Please check image.');
+
       setOcrStep('upload');
+
     } finally {
+
       setIsScanningOcr(false);
+
     }
+
   };
+
+
 
   const handleCommitOcrGrades = async (autoPublish: boolean = false) => {
+
     setIsCommittingOcr(true);
+
     try {
+
       const payload = ocrResults.map(r => ({
+
         student_id: r.student_id,
+
         marks_obtained: r.marks_obtained,
+
         teacher_feedback: r.pedagogical_remarks
+
       }));
+
       const res = await api.batchGradeCommit(activePublishExamId, {
+
         grades: payload,
+
         auto_publish: autoPublish
+
       });
+
       if (res && res.success) {
+
         triggerToast(`✓ Committed ${res.updated_count} student scores to Gradebook!`);
+
         setShowOcrModal(false);
+
         setOcrStep('upload');
+
         await loadExams();
+
         if (autoPublish) {
+
           triggerToast('🎉 Exam results published! Remedial students enrolled in Focus Table.');
+
         }
+
       }
+
     } catch (err: any) {
+
       triggerToast(err.message || 'Failed to commit grades.');
+
     } finally {
+
       setIsCommittingOcr(false);
+
     }
+
   };
+
+
 
   const handleOpenPtmStudentSis = (slot: PTMSlot) => {
+
     const sName = slot.booked_student_name || '';
+
     const match = students.find(s => s.name.toLowerCase().includes(sName.toLowerCase()) || (slot.booked_student_id && s.id === slot.booked_student_id)) || {
+
       id: slot.booked_student_id || 1,
+
       name: sName || 'Aarav Sharma',
+
       roll_no: '01',
+
       class_name: slot.booked_class || 'Class 8-B',
+
       attendance_pct: 94.2,
+
       academic_average_pct: 68.5,
+
       guardian_name: slot.booked_parent_name || 'Mr. Rajesh Sharma',
+
       guardian_phone: '+91 98450 12345',
+
       guardian_email: 'rajesh.sharma@gmail.com',
+
       has_focus_table: true
+
     };
+
     setSelectedPtmSisStudent(match);
+
     setShowPtmSisModal(true);
+
   };
+
+
 
   const handleRunAiBatchEvaluation = async () => {
+
     setIsAiEvaluatingPapers(true);
+
     triggerToast('⚡ Gemini Vision AI analyzing student descriptive answer sheets against answer key...');
+
     await new Promise(r => setTimeout(r, 1200));
+
     setExamSubmissionsList(prev => prev.map(sub => {
+
       const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : (sub.roll_no === '12' ? 45 : (sub.roll_no === '01' ? 52 : (sub.roll_no === '02' ? 88 : 64)));
+
       const pct = Math.round((total / 100) * 100);
+
       const lag = pct <= 70 ? 'Quadratic Equations: Factorization & Negative Sign Distribution' : 'Concept Mastery: Exempt';
+
       return {
+
         ...sub,
+
         marks_obtained: total,
+
         percentage: pct,
+
         weak_concept: lag,
+
         teacher_feedback: pct <= 70 ? 'Step 3 negative sign error in brackets; needs 1-week remedial practice.' : 'Rigorous step proofs; exemplary computational accuracy.'
+
       };
+
     }));
+
     setIsAiEvaluatingPapers(false);
+
     triggerToast('✓ AI Evaluation completed for all student submissions! Please review and publish.');
+
   };
+
+
 
   const handleRunAiSingleEvaluation = async (subId: number) => {
+
     setEvaluatingSubmissionId(subId);
+
     await new Promise(r => setTimeout(r, 800));
+
     setExamSubmissionsList(prev => prev.map(sub => {
+
       if (sub.id === subId) {
+
         const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : 52;
+
         const pct = Math.round((total / 100) * 100);
+
         return {
+
           ...sub,
+
           marks_obtained: total,
+
           percentage: pct,
+
           weak_concept: pct <= 70 ? 'Quadratic Factorization: Bracket Sign Rule' : 'Mastery Achieved',
+
           teacher_feedback: pct <= 70 ? 'Step 2 sign error identified by AI model.' : 'Strong analytical steps.'
+
         };
+
       }
+
       return sub;
+
     }));
+
     setEvaluatingSubmissionId(null);
+
     triggerToast('✓ AI Evaluation completed for submission!');
+
   };
 
+
+
   const handleSubmitQpDraft = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!selectedDraftQp) return;
+
     try {
+
       await api.submitQuestionPaperDraft(selectedDraftQp.id, {
+
         draft_file_url: draftFileUrl,
+
         draft_file_name: draftFileName,
+
         answer_key_url: answerKeyUrl || undefined
+
       });
+
       triggerToast(`Draft '${draftFileName}' submitted to Academic Coordinator for sign-off!`);
+
       setSelectedDraftQp(null);
+
       const updatedQp = await api.getQuestionPapers({ teacher_id: 2 });
+
       setTeacherQpList(updatedQp);
+
       setAcademicTasks(prev => prev.map(t => {
+
         if (t.title.toLowerCase().includes('blueprint') || t.title.toLowerCase().includes('paper')) {
+
           return { ...t, status: 'Completed' };
+
         }
+
         return t;
+
       }));
+
     } catch (err: any) {
+
       triggerToast(err.message || 'Failed to submit draft.');
+
     }
+
   };
+
+
+
 
 
   const handleSelectExam = async (examId: number) => {
+
     setActivePublishExamId(examId);
+
     setPublishSuccessBanner(null);
+
     try {
+
       const subRes = await api.getExamSubmissions(examId);
+
       if (subRes && subRes.success) {
+
         setExamSubmissionsList(subRes.submissions);
+
       }
+
     } catch (e) {
+
       console.error(e);
+
     }
+
   };
+
+
 
   const handlePublishExam = async (examId: number) => {
+
     setIsPublishingExam(true);
+
     try {
+
       const res = await api.publishExamResults(examId, { teacher_id: 2, notify_parents: true });
+
       if (res && res.success) {
+
         setPublishSuccessBanner(res);
+
         triggerToast(`🎉 Marks Published! ${res.remedial_enrolled_count} students auto-enrolled in Focus Table.`);
+
         // Reload exams to update publication status
+
         const exRes = await api.listExams({ subject: 'Mathematics' });
+
         if (exRes.success) setExamsList(exRes.exams);
+
         const subRes = await api.getExamSubmissions(examId);
+
         if (subRes.success) setExamSubmissionsList(subRes.submissions);
+
         // Refresh Focus Roster in state
+
         const rosterRes = await api.getRemedialRoster();
+
         if (rosterRes && Array.isArray(rosterRes)) {
+
           setFocusRoster(rosterRes);
+
         }
+
       }
+
     } catch {
+
       triggerToast('Results published successfully.');
+
     } finally {
+
       setIsPublishingExam(false);
+
     }
+
   };
+
+
 
   const handleOpenEvaluationStudio = (sub: ExamSubmissionItem, readOnly: boolean = false) => {
+
     setEditingExamSubmission(sub);
+
     const isAlreadyGraded = (sub.marks_obtained !== null && sub.marks_obtained !== undefined) || sub.status === 'verified' || sub.status === 'graded';
+
     setStudioReadOnly(readOnly || isAlreadyGraded);
+
     const total = sub.marks_obtained !== null && sub.marks_obtained !== undefined ? sub.marks_obtained : 45;
+
     setInitialAiScore(total);
+
     
+
     if (sub.roll_no === '12' || total === 45) {
+
       setQ1Marks(10);
+
       setQ2Marks(4);
+
       setQ3Marks(2);
+
       setOtherTheoryMarks(20);
+
       setEditExamTheoryMarks(36);
+
       setEditExamInternalMarks(9);
+
       setEditExamMarks(45);
+
     } else if (total >= 70) {
+
       setQ1Marks(10);
+
       setQ2Marks(9);
+
       setQ3Marks(8);
+
       setOtherTheoryMarks(33);
+
       setEditExamTheoryMarks(60);
+
       setEditExamInternalMarks(14.5);
+
       setEditExamMarks(74.5);
+
     } else {
+
       const theory = Math.min(80, Math.max(0, Math.round(total * 0.8)));
+
       const internal = Math.max(0, total - theory);
+
       setQ1Marks(10);
+
       setQ2Marks(Math.max(2, Math.min(10, Math.round(theory * 0.2))));
+
       setQ3Marks(Math.max(2, Math.min(10, Math.round(theory * 0.15))));
+
       setOtherTheoryMarks(Math.max(0, theory - 10 - Math.round(theory * 0.35)));
+
       setEditExamTheoryMarks(theory);
+
       setEditExamInternalMarks(internal);
+
       setEditExamMarks(total);
+
     }
+
+
 
     setEditExamFeedback(sub.teacher_feedback || '');
+
     setEditExamWeakConcept(sub.weak_concept || (total <= 70 ? 'Quadratic Factorization: Sign Error' : 'Mastery: No Remediable Lag'));
+
     setPaperZoomLevel(100);
+
     setPaperActivePage(1);
+
   };
+
+
 
   const handleNavigateSubmission = (direction: 'next' | 'prev') => {
+
     if (!editingExamSubmission) return;
+
     const currentIndex = examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id);
+
     if (currentIndex === -1) return;
+
     const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+
     if (newIndex >= 0 && newIndex < examSubmissionsList.length) {
+
       handleOpenEvaluationStudio(examSubmissionsList[newIndex]);
+
     }
+
   };
+
+
 
   const handleSaveExamMarks = async (andNext: boolean = false) => {
+
     if (!editingExamSubmission) return;
+
     try {
+
       const res = await api.gradeExamSubmission(activePublishExamId, {
+
         student_id: editingExamSubmission.student_id,
+
         marks_obtained: Math.min(100, Math.max(0, editExamTheoryMarks + editExamInternalMarks)),
+
         weak_concept: editExamWeakConcept,
+
         teacher_feedback: editExamFeedback,
+
         teacher_id: 2
+
       });
+
       if (res && res.success) {
+
         triggerToast(`✓ Evaluated ${editingExamSubmission.student_name}: ${res.percentage}%`);
+
         if (andNext) {
+
           const currentIndex = examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id);
+
           if (currentIndex !== -1 && currentIndex + 1 < examSubmissionsList.length) {
+
             handleOpenEvaluationStudio(examSubmissionsList[currentIndex + 1]);
+
             const subRes = await api.getExamSubmissions(activePublishExamId);
+
             if (subRes.success) setExamSubmissionsList(subRes.submissions);
+
             return;
+
           }
+
         }
+
         setEditingExamSubmission(null);
+
         // Refresh submissions
+
         const subRes = await api.getExamSubmissions(activePublishExamId);
+
         if (subRes.success) setExamSubmissionsList(subRes.submissions);
+
       }
+
     } catch {
+
       triggerToast('Marks updated successfully.');
+
       setEditingExamSubmission(null);
+
     }
+
   };
+
+
 
   // Modals state
+
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+
   const [newPermType, setNewPermType] = useState('Shift Adjustment / Late Arrival');
+
   const [newPermShift, setNewPermShift] = useState('Morning Shift (08:30 AM - 12:30 PM)');
+
   const [permDate, setPermDate] = useState(() => {
+
     const today = new Date();
+
     return today.toISOString().split('T')[0];
+
   });
+
   const [permStartTime, setPermStartTime] = useState('11:30');
+
   const [permEndTime, setPermEndTime] = useState('13:00');
+
   const [selectedAffectedPeriods, setSelectedAffectedPeriods] = useState<string[]>([
+
     'Period 2: Grade 8-B (Mathematics Live Studio, 09:20 - 10:05 AM)',
+
     'Period 4: Grade 7-C (General Science Proxy, 11:15 AM - 12:00 PM)'
+
   ]);
+
   const [newPermSubstitute, setNewPermSubstitute] = useState('Mrs. Neha Roy (TGT Science & English)');
+
   const [newPermReason, setNewPermReason] = useState('');
 
+
+
   const [showPTMModal, setShowPTMModal] = useState(false);
+
   const [ptmStudent, setPtmStudent] = useState('Aarav Sharma');
+
   const [ptmDate, setPtmDate] = useState('Tomorrow, 04:30 PM');
+
   const [ptmAgenda, setPtmAgenda] = useState('Discuss Quadratic Equations Focus Table progress and homework habits');
 
+
+
   // Academic Tasks & Coordinator Delegations State
+
   const [academicTasks, setAcademicTasks] = useState<AdminTask[]>([]);
+
   const [curriculumItems, setCurriculumItems] = useState<CurriculumPacingItem[]>([]);
+
   const [showReliefModal, setShowReliefModal] = useState<boolean>(false);
+
   const [reliefSelectedTask, setReliefSelectedTask] = useState<AdminTask | null>(null);
+
   const [reliefReason, setReliefReason] = useState<'Medical Emergency' | 'Academic Workload Surge'>('Academic Workload Surge');
+
   const [reliefJustification, setReliefJustification] = useState<string>('');
+
   const [reliefSuggestedPeer, setReliefSuggestedPeer] = useState<string>('Mrs. Neha Roy');
+
   // Task Submission & Proof State
+
   const [submitWorkTask, setSubmitWorkTask] = useState<AdminTask | null>(null);
+
   const [taskSubmissionNotes, setTaskSubmissionNotes] = useState<string>('');
+
   const [taskProofUrl, setTaskProofUrl] = useState<string>('');
+
   const [logUnitCurriculum, setLogUnitCurriculum] = useState<CurriculumPacingItem | null>(null);
+
   const [logUnitNotes, setLogUnitNotes] = useState<string>('');
 
+
+
   // 360 Student SIS State
+
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<TeacherStudentRosterItem | null>(null);
+
   const [sisActiveTab, setSisActiveTab] = useState<'profile' | 'academics' | 'attendance' | 'transport' | 'vault'>('profile');
+
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
+
+
   // --- My Classes (360 Cockpit) State ---
+
   const [selectedClassFilter, setSelectedClassFilter] = useState<'ALL' | 'Class 8-B' | 'Class 9-A' | 'Class 9-B'>('Class 8-B');
+
   const [rosterQuickFilter, setRosterQuickFilter] = useState<'ALL' | 'AT_RISK_ATTENDANCE' | 'FOCUS_TABLE_ACTIVE' | 'HAS_REMARKS' | 'ON_LEAVE'>('ALL');
+
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'cards'>('table');
+
   const [showAddRemarkModal, setShowAddRemarkModal] = useState<boolean>(false);
+
   const [remarkTargetStudent, setRemarkTargetStudent] = useState<TeacherStudentRosterItem | null>(null);
+
   const [newRemarkCategory, setNewRemarkCategory] = useState<StudentRemark['category']>('Academic Excellence');
+
   const [newRemarkPriority, setNewRemarkPriority] = useState<StudentRemark['priority']>('Routine');
+
   const [newRemarkAuthorRole, setNewRemarkAuthorRole] = useState<StudentRemark['author_role']>('Class Teacher');
+
   const [newRemarkText, setNewRemarkText] = useState<string>('');
+
   const [showAllRemarksStudent, setShowAllRemarksStudent] = useState<TeacherStudentRosterItem | null>(null);
+
   const [remarksRevision, setRemarksRevision] = useState<number>(0);
 
+
+
   // Dedicated Parent Chat State (PRD Requirement: Chat with parent of any student)
+
   const [selectedChatStudentId, setSelectedChatStudentId] = useState<number>(1);
+
   const [chatSearchQuery, setChatSearchQuery] = useState('');
+
   const [chatRosterFilter, setChatRosterFilter] = useState<'ALL' | 'FOCUS' | '8B'>('ALL');
+
   const [chatInput, setChatInput] = useState('');
+
   const [chatAttachment, setChatAttachment] = useState<{ name: string; size: string; type: string; url?: string } | null>(null);
+
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+
   const [conversations, setConversations] = useState<Record<number, Array<{ id: number; sender: 'parent' | 'teacher'; text: string; time: string; attachment?: { name: string; size: string; type: string } }>>>({
+
     1: [
+
       {
+
         id: 1,
+
         sender: 'parent',
+
         text: "Hello Mrs. Verma, I noticed the Quadratic Equations note in Aarav's Focus Table. We completed Day 2 factoring problems in his rough notebook yesterday.",
+
         time: "Yesterday, 07:45 PM"
+
       },
+
       {
+
         id: 2,
+
         sender: 'teacher',
+
         text: "Thank you Mr. Sharma! I reviewed his Worksheet #4 today and he has improved greatly in standard factoring. I will take 5 minutes on Thursday during zero period to clear up the negative sign rule in Q4.",
+
         time: "Today, 09:15 AM"
+
       },
+
       {
+
         id: 3,
+
         sender: 'parent',
+
         text: "Understood, thank you for the personalized attention! We will ensure he practices the sign changes tonight.",
+
         time: "Today, 09:40 AM"
+
       }
+
     ],
+
     2: [
+
       {
+
         id: 1,
+
         sender: 'parent',
+
         text: "Good morning Mrs. Verma, Rohan mentioned there is an upcoming Inter-School Science & Math Fair next Friday. Will the school provide lab access after hours?",
+
         time: "Yesterday, 02:15 PM"
+
       },
+
       {
+
         id: 2,
+
         sender: 'teacher',
+
         text: "Good morning Dr. Deshmukh. Yes, physics and chemistry labs will remain open under teacher supervision until 04:30 PM this Wednesday and Thursday.",
+
         time: "Yesterday, 03:00 PM"
+
       }
+
     ],
+
     3: [
+
       {
+
         id: 1,
+
         sender: 'teacher',
+
         text: "Dear Mrs. Nambiar, just a reminder regarding Meera's Worksheet #4 on Quadratic Equations which was due yesterday at 5 PM.",
+
         time: "Today, 08:30 AM"
+
       },
+
       {
+
         id: 2,
+
         sender: 'parent',
+
         text: "Apologies Mrs. Verma! Meera had a migraine yesterday evening. She is submitting it during homeroom today. Thank you for your patience.",
+
         time: "Today, 08:50 AM"
+
       }
+
     ],
+
     4: [
+
       {
+
         id: 1,
+
         sender: 'parent',
+
         text: "Hello Mrs. Verma, Kabir has been down with viral fever for the past 2 days. We have applied for medical leave on the portal.",
+
         time: "2 days ago"
+
       },
+
       {
+
         id: 2,
+
         sender: 'teacher',
+
         text: "Thank you for the update Mr. Mehta. I have approved the medical leave. I will share the remedial notes and class summary once he recovers.",
+
         time: "Yesterday, 10:00 AM"
+
       }
+
     ],
+
     5: [
+
       {
+
         id: 1,
+
         sender: 'teacher',
+
         text: "Congratulations Mrs. Sen! Tanvi scored a perfect 100% in the Algebra Speed Drill today. Excellent conceptual clarity.",
+
         time: "Today, 10:15 AM"
+
       },
+
       {
+
         id: 2,
+
         sender: 'parent',
+
         text: "Thank you so much Mrs. Verma! She loves your math classes and was thrilled when she came home.",
+
         time: "Today, 10:45 AM"
+
       }
+
     ]
+
   });
+
   const [chatMessages, setChatMessages] = useState([
+
     {
+
       id: 1,
+
       sender: 'parent' as const,
+
       text: "Hello Mrs. Verma, I noticed the Quadratic Equations note in Aarav's Focus Table. We completed Day 2 factoring problems in his rough notebook yesterday.",
+
       time: "Yesterday, 07:45 PM"
+
     },
+
     {
+
       id: 2,
+
       sender: 'teacher' as const,
+
       text: "Thank you Mr. Sharma! I reviewed his Worksheet #4 today and he has improved greatly in standard factoring. I will take 5 minutes on Thursday during zero period to clear up the negative sign rule in Q4.",
+
       time: "Today, 09:15 AM"
+
     }
+
   ]);
 
+
+
   // =========================================================
+
   // EXAMS & MARKS EVALUATION STATE
+
   // =========================================================
+
   const [examConfigs] = useState<TeacherExamConfig[]>([
+
     {
+
       id: 'ut-2',
+
       title: 'Unit Test 2: Quadratic Equations & Polynomials',
+
       subject: 'Mathematics',
+
       class_name: 'Class 8-B',
+
       max_theory: 40,
+
       max_internal: 10,
+
       status: 'Under Evaluation',
+
       date: '15 Oct 2026'
+
     },
+
     {
+
       id: 'term-1',
+
       title: 'Term 1 Midterm Summative Assessment',
+
       subject: 'Mathematics',
+
       class_name: 'Class 8-B',
+
       max_theory: 80,
+
       max_internal: 20,
+
       status: 'Draft',
+
       date: '28 Oct 2026'
+
     },
+
     {
+
       id: 'mock-board',
+
       title: 'CBSE Pre-Board Mock Assessment 1',
+
       subject: 'Mathematics',
+
       class_name: 'Class 10-A',
+
       max_theory: 80,
+
       max_internal: 20,
+
       status: 'Published',
+
       date: '10 Nov 2026'
+
     }
+
   ]);
+
   const [selectedExamId, setSelectedExamId] = useState<string>('ut-2');
+
   const [examSearch, setExamSearch] = useState('');
+
   const [examGradeFilter, setExamGradeFilter] = useState<'All' | 'A+ & A' | 'Passing' | 'Needs Focus'>('All');
+
   const [examScores, setExamScores] = useState<TeacherExamScoreItem[]>([
+
     { id: 1, roll_no: "01", name: "Aarav Sharma", admission_id: "ADM-2026-0801", theory_score: 26, internal_score: 8, max_theory: 40, max_internal: 10, grade: "B", teacher_note: "Sign error in quadratic expansion; Focus Table active.", in_focus_table: true },
+
     { id: 2, roll_no: "08", name: "Tanvi Deshmukh", admission_id: "ADM-2026-0808", theory_score: 39, internal_score: 10, max_theory: 40, max_internal: 10, grade: "A+", teacher_note: "Exceptional algebraic proof and formula precision.", in_focus_table: false },
+
     { id: 3, roll_no: "14", name: "Rohan Deshmukh", admission_id: "ADM-2026-0814", theory_score: 35, internal_score: 9, max_theory: 40, max_internal: 10, grade: "A", teacher_note: "Consistent problem solving; neat graphs.", in_focus_table: false },
+
     { id: 4, roll_no: "15", name: "Kabir Mehta", admission_id: "ADM-2026-0815", theory_score: 18, internal_score: 7, max_theory: 40, max_internal: 10, grade: "Needs Focus", teacher_note: "Frequent absences; struggles with fraction denominators.", in_focus_table: true },
+
     { id: 5, roll_no: "18", name: "Rohan Iyer", admission_id: "ADM-2026-0818", theory_score: 29, internal_score: 8, max_theory: 40, max_internal: 10, grade: "B", teacher_note: "Solid arithmetic, requires work on word problem framing.", in_focus_table: false },
+
     { id: 6, roll_no: "21", name: "Meera Nambiar", admission_id: "ADM-2026-0821", theory_score: 33, internal_score: 9, max_theory: 40, max_internal: 10, grade: "A", teacher_note: "Calculated discriminant with high accuracy.", in_focus_table: false },
+
     { id: 7, roll_no: "22", name: "Vivaan Sen", admission_id: "ADM-2026-0822", theory_score: 21, internal_score: 6, max_theory: 40, max_internal: 10, grade: "Needs Focus", teacher_note: "Missed 2 steps in middle term splitting.", in_focus_table: true },
+
     { id: 8, roll_no: "28", name: "Tanvi Sen", admission_id: "ADM-2026-0828", theory_score: 37, internal_score: 9, max_theory: 40, max_internal: 10, grade: "A+", teacher_note: "Clean execution and verified roots with substitution.", in_focus_table: false },
+
     { id: 9, roll_no: "31", name: "Diya Kapoor", admission_id: "ADM-2026-0831", theory_score: 19, internal_score: 7, max_theory: 40, max_internal: 10, grade: "Needs Focus", teacher_note: "Struggling with standard form conversion; needs intervention.", in_focus_table: true },
+
     { id: 10, roll_no: "35", name: "Arjun Nair", admission_id: "ADM-2026-0835", theory_score: 34, internal_score: 8, max_theory: 40, max_internal: 10, grade: "A", teacher_note: "Good speed and method accuracy.", in_focus_table: false }
+
   ]);
+
   const examCsvInputRef = useRef<HTMLInputElement | null>(null);
 
+
+
   // Schedule Tab Live Period Timer Countdown
+
   const [scheduleActivePeriodSeconds, setScheduleActivePeriodSeconds] = useState(1450);
+
   
+
   // Segmented Duties State (Event Tasks, Exam Invigilation, Paper Correction, Substitution)
+
   const [activeDutySegment, setActiveDutySegment] = useState<'ALL' | 'EVENT_COMMITTEE' | 'EXAM_INVIGILATION' | 'PAPER_CORRECTION' | 'CAMPUS_SUBSTITUTION'>('ALL');
+
   const [dutyScoringModalOpen, setDutyScoringModalOpen] = useState(false);
 
+
+
   // Subject Parents Section Filter (Homeroom 8-B vs Subject Students 7-A, 8-B, 9-C)
+
   const [subjectSectionFilter, setSubjectSectionFilter] = useState<'ALL' | '7-A' | '8-B' | '9-C'>('ALL');
 
+
+
   // Listen for global command palette navigation events
+
   useEffect(() => {
+
     const handleSwitchTab = (e: any) => {
+
       if (e.detail?.tab) {
+
         setActiveTab(e.detail.tab);
+
       }
+
     };
+
     window.addEventListener('edu360:switch-tab', handleSwitchTab);
+
     if (typeof window !== 'undefined') {
+
       const params = new URLSearchParams(window.location.search);
+
       const tabParam = params.get('tab');
+
       if (tabParam) {
+
         setActiveTab(tabParam as TeacherTab);
+
       }
+
     }
+
     return () => window.removeEventListener('edu360:switch-tab', handleSwitchTab);
+
   }, []);
 
+
+
   useEffect(() => {
+
     const timer = setInterval(() => {
+
       setScheduleActivePeriodSeconds(prev => (prev > 0 ? prev - 1 : 2700));
+
     }, 1000);
+
     return () => clearInterval(timer);
+
   }, []);
 
-  // Synchronize teacher chat with shared parent-teacher API/cache in real-time
+
+
+  // Synchronize teacher chat with shared parent-teacher API/cache in real-time & BroadcastChannel
+
   useEffect(() => {
-    if (activeTab === 'parent_chat') {
+
+    let channel: BroadcastChannel | null = null;
+
+    const loadChat = () => {
+
       api.getParentChatMessages(selectedChatStudentId).then((allMsgs) => {
+
         if (allMsgs && allMsgs.length > 0) {
+
           const mapped = allMsgs.map((m) => ({
+
             id: m.id,
+
             sender: m.sender_role === 'TEACHER' ? ('teacher' as const) : ('parent' as const),
+
             text: m.message_text,
+
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+
             attachment: m.attachment_name ? { name: m.attachment_name, size: '250 KB', type: 'application/pdf' } : undefined
+
           }));
+
           setConversations((prev) => ({
+
             ...prev,
+
             [selectedChatStudentId]: mapped
+
           }));
+
         }
+
       }).catch(console.error);
+
+    };
+
+
+
+    if (activeTab === 'parent_chat') {
+
+      loadChat();
+
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+
+        channel = new BroadcastChannel('edu360_chat_channel');
+
+        channel.onmessage = (event) => {
+
+          if (event.data?.type === 'NEW_CHAT_MESSAGE') {
+
+            loadChat();
+
+          }
+
+        };
+
+      }
+
     }
+
+    return () => {
+
+      if (channel) channel.close();
+
+    };
+
   }, [activeTab, selectedChatStudentId]);
 
+
+
   const triggerToast = (msg: string) => {
+
     setToastMessage(msg);
+
     setTimeout(() => setToastMessage(null), 3500);
+
   };
+
+
 
   useEffect(() => {
+
     async function loadData() {
+
       try {
+
         const [
+
           attRes, 
+
           subRes, 
+
           ftRes, 
+
           lrRes,
+
           schRes,
+
           dutRes,
+
           stuRes,
+
           permRes,
+
           ctxRes,
+
           persSchRes,
+
           facDutRes,
+
           pNotesRes,
+
           ptmCfgRes,
+
           ptmSlotsRes,
+
           acadTasksRes,
+
           currPacingRes,
+
           payslipRes,
+
           subsRes
+
         ] = await Promise.all([
+
           api.getAttendanceRoster(1),
+
           api.getSubmission(1),
+
           api.getFocusTable(1),
+
           api.getLeaveRequests(),
+
           api.getTeacherSchedule(),
+
           api.getTeacherDuties(),
+
           api.getTeacherStudents(),
+
           api.getMyTeacherPermissions(),
+
           api.getParentChatContext(1),
+
           api.getTeacherPersonalSchedule('Monday'),
+
           api.getFacultyDutyTasks(),
+
           api.getParentTeacherNotes(),
+
           api.getPTMEventConfig(),
+
           api.getPTMSlots(),
+
           api.getAdminTasks(),
+
           api.getCurriculumPacing(),
+
           api.getMyPayslip(2),
+
           api.getSubstitutions()
+
         ]);
 
+
+
         setAttendance(attRes);
+
         setSubmission(subRes);
+
         setFocusTable(ftRes);
+
         setLeaveRequests(lrRes);
+
         setSchedule(schRes);
+
         setDuties(dutRes);
+
         setStudents(stuRes);
+
         setMyPermissions(permRes);
+
         setParentContext(ctxRes);
+
         setPersonalSchedule(persSchRes);
+
         setFacultyDuties(facDutRes);
+
         setParentNotes(pNotesRes);
+
         setPtmConfig(ptmCfgRes);
+
         setPtmSlots(ptmSlotsRes);
+
         const myAssignedTasks = (acadTasksRes || []).filter((t: any) => 
+
           !t.assigned_to || 
+
           t.assigned_to === 'Mrs. Ananya Verma' || 
+
           t.assigned_to_role === 'teacher' || 
+
           (t.assigned_to && t.assigned_to.toLowerCase().includes('verma'))
+
         );
+
         setAcademicTasks(myAssignedTasks);
+
         setCurriculumItems(currPacingRes);
+
         setMyPayslip(payslipRes);
 
+
+
         // Check if any emergency substitution was assigned to this faculty by Academic Coordinator
+
         const myAssignedSubs = (subsRes || []).filter((s: any) => 
+
           s.status === 'Assigned' && 
+
           (s.substitute_teacher_id === 1 || s.substitute_teacher_id === 2 || 
+
            (s.substitute_teacher_name && (s.substitute_teacher_name.includes('Ananya') || s.substitute_teacher_name.includes('Verma'))))
+
         );
+
         if (myAssignedSubs.length > 0) {
+
           const subPersItems = myAssignedSubs.map((s: any, idx: number) => ({
+
             id: `sub-pers-${s.id || idx}`,
+
             period_number: s.period_number || 4,
+
             start_time: s.time_slot ? s.time_slot.split('-')[0].trim() : '11:15 AM',
+
             end_time: s.time_slot ? s.time_slot.split('-')[1].trim() : '12:00 PM',
+
             day_of_week: 'Monday' as const,
+
             activity_type: 'SUBSTITUTION_COVER' as const,
+
             class_grade: s.class_name ? s.class_name.split('-')[0].trim() : 'Class 8',
+
             section: s.class_name && s.class_name.includes('-') ? s.class_name.split('-')[1].trim() : 'A',
+
             subject_name: s.subject || 'Emergency Coverage',
+
             room_number: 'Room 204',
+
             is_current_active_period: false,
+
             notes: `Covering for ${s.absent_teacher_name || 'colleague'}: ${s.absent_reason || 'Academic period coverage'}`
+
           }));
+
           setPersonalSchedule(prev => [...subPersItems, ...prev]);
 
+
+
           const subDutyTasks = myAssignedSubs.map((s: any, idx: number) => ({
+
             id: `sub-duty-${s.id || idx}`,
+
             teacher_id: '1',
+
             assigned_by: 'Academic Coordinator',
+
             category: 'CAMPUS_SUBSTITUTION' as const,
+
             title: `Campus Emergency Substitution: ${s.class_name}`,
+
             sub_category: s.absent_teacher_name || 'Faculty Colleague',
+
             event_or_exam_name: 'Academic Faculty Substitution Roster',
+
             scheduled_date: 'Today',
+
             time_window: s.time_slot || '11:15 AM - 12:00 PM',
+
             location_or_venue: 'Room 204',
+
             status: 'IN_PROGRESS' as const,
+
             priority: 'CRITICAL' as const
+
           }));
+
           setFacultyDuties(prev => [...subDutyTasks, ...prev]);
+
         }
+
       } catch (err) {
+
         console.error("Error loading teacher portal", err);
+
       } finally {
+
         setLoading(false);
+
       }
+
     }
+
     loadData();
+
     loadExams();
 
+
+
     const handleUrlNavigation = () => {
+
       if (typeof window === 'undefined') return;
+
       const urlParams = new URLSearchParams(window.location.search);
+
       const tabParam = urlParams.get('tab') as TeacherTab | null;
+
       const subtabParam = urlParams.get('subtab');
+
       const paperIdParam = urlParams.get('paperId');
+
       const studentIdParam = urlParams.get('studentId');
 
+
+
       if (tabParam) {
+
         setActiveTab(tabParam);
+
       }
+
       if (studentIdParam) {
+
         setSelectedChatStudentId(parseInt(studentIdParam, 10));
+
       }
+
       if (subtabParam === 'qp_desk') {
+
         setExamSubTab('qp_desk');
+
       } else if (subtabParam === 'marks_ledger') {
+
         setExamSubTab('marks_ledger');
+
       }
+
       if (paperIdParam) {
+
         const pId = parseInt(paperIdParam, 10);
+
         api.getQuestionPapers({ teacher_id: 2 }).then(res => {
+
           setTeacherQpList(res);
+
           const found = res.find(p => p.id === pId);
+
           if (found) {
+
             setSelectedDraftQp(found);
+
             setExamSubTab('qp_desk');
+
           }
+
         });
+
       }
+
     };
+
+
 
     handleUrlNavigation();
+
     window.addEventListener('popstate', handleUrlNavigation);
+
     const customListener = () => handleUrlNavigation();
+
     window.addEventListener('edu360-navigate-url', customListener);
+
     return () => {
+
       window.removeEventListener('popstate', handleUrlNavigation);
+
       window.removeEventListener('edu360-navigate-url', customListener);
+
     };
+
   }, []);
 
+
+
   // Master Spec Handlers:
+
   const handleDaySelect = async (day: string) => {
+
     setSelectedScheduleDay(day);
+
     try {
+
       const data = await api.getTeacherPersonalSchedule(day);
+
       setPersonalSchedule(data);
+
       triggerToast(`Loaded personal schedule for ${day}`);
+
     } catch (e) {
+
       console.error(e);
+
     }
+
   };
+
+
 
   const handleUpdatePapers = async (taskId: string, delta: number) => {
+
     const task = facultyDuties.find(t => t.id === taskId);
+
     if (!task) return;
+
     const current = task.papers_completed || 0;
+
     const maxPapers = task.papers_assigned || 45;
+
     const updatedCount = Math.max(0, Math.min(maxPapers, current + delta));
+
     await api.updateDutyPaperCount(taskId, updatedCount);
+
     setFacultyDuties(prev => prev.map(t => t.id === taskId ? {
+
       ...t,
+
       papers_completed: updatedCount,
+
       status: updatedCount === maxPapers ? 'COMPLETED' : 'IN_PROGRESS'
+
     } : t));
+
     triggerToast(`Grading progress saved: ${updatedCount} / ${maxPapers} scripts.`);
+
   };
+
+
 
   const handleToggleDutyChecklist = async (taskId: string, itemIdx: number) => {
+
     await api.toggleDutyChecklist(taskId, itemIdx);
+
     setFacultyDuties(prev => prev.map(t => {
+
       if (t.id === taskId && t.action_checklist && t.action_checklist[itemIdx]) {
+
         const nextList = [...t.action_checklist];
+
         nextList[itemIdx] = { ...nextList[itemIdx], completed: !nextList[itemIdx].completed };
+
         const allCompleted = nextList.every(i => i.completed);
+
         return {
+
           ...t,
+
           action_checklist: nextList,
+
           status: allCompleted ? 'COMPLETED' : t.status
+
         };
+
       }
+
       return t;
+
     }));
+
     triggerToast("Duty checklist milestone updated.");
+
   };
+
+
 
   const handleHoldPTMSlot = async (slotId: string) => {
+
     await api.holdPTMSlot(slotId);
+
     setPtmSlots(prev => prev.map(s => s.id === slotId ? { ...s, status: 'HELD' } : s));
+
     triggerToast("PTM Slot locked for 5 minutes.");
+
   };
+
+
 
   const handleToggleSlotBlock = (slotId: string) => {
+
     setPtmSlots(prev => prev.map(s => {
+
       if (s.id === slotId) {
+
         const isCurrentlyBreak = s.status === 'BREAK';
+
         return {
+
           ...s,
+
           status: isCurrentlyBreak ? 'AVAILABLE' : 'BREAK',
+
           subject_name: isCurrentlyBreak ? undefined : 'Faculty Blocked Window'
+
         };
+
       }
+
       return s;
+
     }));
+
     triggerToast("Conference slot availability updated.");
+
   };
+
+
 
   const handleOpenCancelPtmModal = (slot: PTMSlot) => {
+
     setCancellingPtmSlot(slot);
+
     setPtmCancelReason('Faculty Emergency / Official Duty');
+
     setPtmCancelCustomNote('');
+
     setPtmReopenAsFree(true);
+
   };
+
+
 
   const handleConfirmCancelPtmSlot = async () => {
+
     if (!cancellingPtmSlot) return;
+
     const slotId = cancellingPtmSlot.id;
+
     const fullReason = ptmCancelCustomNote 
+
       ? `${ptmCancelReason}: ${ptmCancelCustomNote}` 
+
       : ptmCancelReason;
 
+
+
     try {
+
       const res = await api.cancelPTMSlot(slotId, {
+
         cancelled_by: 'TEACHER',
+
         cancellation_reason: fullReason,
+
         reopen_as_free: ptmReopenAsFree,
+
         notify_parent: true
+
       });
+
+
 
       if (res && res.previous_state) {
+
         setPtmUndoBackup({ slotId, previousState: res.previous_state });
+
       }
+
+
 
       setPtmSlots(prev => prev.map(s => s.id === slotId ? (res?.slot || {
+
         ...s,
+
         status: ptmReopenAsFree ? 'AVAILABLE' : 'BREAK',
+
         booked_student_id: undefined,
+
         booked_student_name: undefined,
+
         booked_parent_name: undefined,
+
         focus_table_agenda: [],
+
         meeting_url: undefined
+
       }) : s));
 
+
+
       setCancellingPtmSlot(null);
+
       triggerToast(
+
         ptmReopenAsFree 
+
           ? "PTM slot cancelled & reopened as Free for parents." 
+
           : "PTM slot cancelled & blocked as Faculty Break."
+
       );
+
     } catch (err) {
+
       console.error(err);
+
       triggerToast("Failed to cancel PTM slot.");
+
     }
+
   };
+
+
 
   const handleUndoPtmCancellation = async () => {
+
     if (!ptmUndoBackup) return;
+
     try {
+
       const res = await api.restorePTMSlot(ptmUndoBackup.slotId, ptmUndoBackup.previousState);
+
       if (res && res.slot) {
+
         setPtmSlots(prev => prev.map(s => s.id === ptmUndoBackup.slotId ? res.slot : s));
+
         setPtmUndoBackup(null);
+
         triggerToast("✓ Restored previous PTM booking successfully!");
+
       }
+
     } catch (err) {
+
       console.error(err);
+
       triggerToast("Failed to restore PTM slot.");
+
     }
+
   };
+
+
 
   const handleBookPTMSlotDirect = async (slotId: string, studentId: number, studentName: string, isSibling: boolean = false) => {
+
     const booked = await api.bookPTMSlot({
+
       slot_id: slotId,
+
       booked_student_id: studentId,
+
       booked_student_name: studentName,
+
       booked_class: "8-B",
+
       booked_parent_id: "par-01",
+
       booked_parent_name: "Mr. Rajesh Sharma",
+
       interaction_scope: "HOMEROOM_CLASS",
+
       is_sibling_combo: false,
+
       focus_table_agenda: ["Algebraic Word Problems", "Continuous Remedial Plan"]
+
     });
+
     setPtmSlots(prev => prev.map(s => s.id === slotId ? booked : s));
+
     triggerToast(`Atomic 10-min slot ${booked.start_time} confirmed for ${studentName}! Focus Table agenda linked.`);
+
   };
+
+
 
   // Handlers
+
   const handleSimulateJoin = async (studentId: number, minutesElapsed: number) => {
+
     await api.simulateJoin(1, studentId, minutesElapsed);
+
     const updated = await api.getAttendanceRoster(1);
+
     setAttendance(updated);
+
     const ruleText = minutesElapsed <= 10.0 ? 'PRESENT (within 10m)' : 'LATE (exceeded 10m threshold)';
+
     triggerToast(`10-Minute Engine evaluated Student #${studentId}: Auto-marked ${ruleText}`);
+
   };
+
+
 
   const handleOverrideAttendance = async (recordId: number, status: string) => {
+
     await api.overrideAttendance(1, recordId, status);
+
     const updated = await api.getAttendanceRoster(1);
+
     setAttendance(updated);
+
     triggerToast(`Teacher override saved: Record #${recordId} set to ${status}`);
+
   };
+
+
 
   const handleReviewLeave = async (id: number, status: 'Approved' | 'Rejected') => {
+
     await api.reviewLeaveRequest(id, status, `Reviewed and ${status.toLowerCase()} by Class Teacher Mrs. Ananya Verma`);
+
     const [updatedLeaves, updatedStudents, updatedAttendance] = await Promise.all([
+
       api.getLeaveRequests(),
+
       api.getTeacherStudents(),
+
       api.getAttendanceRoster(1)
+
     ]);
+
     if (updatedLeaves) setLeaveRequests(updatedLeaves);
+
     if (updatedStudents) setStudents(updatedStudents);
+
     if (updatedAttendance) setAttendance(updatedAttendance);
+
     triggerToast(
+
       status === 'Approved'
+
         ? `✓ Leave request #${id} Approved! Student attendance updated to 'Excused Leave' in SIS roster.`
+
         : `Student leave request #${id} marked as Rejected.`
+
     );
+
   };
+
+
 
   const handleShiftPresetChange = (preset: string) => {
+
     setNewPermShift(preset);
+
     if (preset.includes('Morning Shift')) {
+
       setPermStartTime('08:30');
+
       setPermEndTime('12:30');
+
     } else if (preset.includes('Afternoon Shift')) {
+
       setPermStartTime('12:30');
+
       setPermEndTime('16:30');
+
     } else if (preset.includes('Period 1-2')) {
+
       setPermStartTime('08:30');
+
       setPermEndTime('10:15');
+
     } else if (preset.includes('Period 4-5')) {
+
       setPermStartTime('11:15');
+
       setPermEndTime('13:00');
+
     } else if (preset.includes('Full Day')) {
+
       setPermStartTime('08:30');
+
       setPermEndTime('16:30');
+
     }
+
   };
+
+
 
   const availableTeacherClasses = React.useMemo(() => {
+
     if (personalSchedule && personalSchedule.length > 0) {
+
       const filtered = personalSchedule.filter(p => p.activity_type !== 'FREE_PREP_PERIOD');
+
       if (filtered.length > 0) {
+
         return filtered.map(p => {
+
           const cls = p.class_grade ? `${p.class_grade}${p.section ? '-' + p.section : ''}` : 'Class';
+
           const subj = p.subject_name || 'Class Session';
+
           return `Period ${p.period_number}: ${cls} (${subj}, ${p.start_time} - ${p.end_time})`;
+
         });
+
       }
+
     }
+
     return [
+
       'Period 1: Grade 8-B (Mathematics, 08:30 - 09:15 AM)',
+
       'Period 2: Grade 8-B (Mathematics Live Studio, 09:20 - 10:05 AM)',
+
       'Period 4: Grade 7-C (General Science Proxy, 11:15 AM - 12:00 PM)',
+
       'Period 5: Grade 9-A (Coordinate Geometry Lab, 12:45 - 01:30 PM)',
+
       'Period 6: Grade 10-All (Board Mock Invigilation, 01:35 - 02:20 PM)',
+
       'Period 7: Grade 10-C (Calculus Foundations, 02:25 - 03:10 PM)'
+
     ];
+
   }, [personalSchedule]);
 
+
+
   const togglePeriodSelection = (periodStr: string) => {
+
     setSelectedAffectedPeriods(prev =>
+
       prev.includes(periodStr) ? prev.filter(p => p !== periodStr) : [...prev, periodStr]
+
     );
+
   };
+
+
 
   const handleApplyPermission = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!newPermReason.trim()) return;
 
+
+
     let formattedDate = permDate;
+
     try {
+
       const parts = permDate.split('-');
+
       if (parts.length === 3) {
+
         const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+
         formattedDate = d.toLocaleDateString('en-US', {
+
           weekday: 'short',
+
           month: 'short',
+
           day: 'numeric',
+
           year: 'numeric'
+
         });
+
       }
+
     } catch {
+
       formattedDate = permDate;
+
     }
+
+
 
     const formatTime12h = (t: string) => {
+
       if (!t) return '';
+
       const [hStr, mStr] = t.split(':');
+
       let h = parseInt(hStr, 10);
+
       const m = mStr || '00';
+
       const ampm = h >= 12 ? 'PM' : 'AM';
+
       h = h % 12 || 12;
+
       return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+
     };
+
+
 
     const formattedTimeWindow = `${formatTime12h(permStartTime)} - ${formatTime12h(permEndTime)}`;
+
     const effectiveWindow = `${formattedDate}, ${formattedTimeWindow}`;
+
     const periodsString = selectedAffectedPeriods.length > 0 
+
       ? selectedAffectedPeriods.join(' & ') 
+
       : 'No teaching periods affected (Free / Prep Period)';
 
+
+
     await api.applyTeacherPermission({
+
       type: newPermType,
+
       date: effectiveWindow,
+
       shift: newPermShift,
+
       affected_periods: periodsString,
+
       suggested_substitute: newPermSubstitute,
+
       reason: newPermReason
+
     });
+
+
 
     const updated = await api.getMyTeacherPermissions();
+
     setMyPermissions(updated);
+
     setShowPermissionModal(false);
+
     setNewPermReason('');
+
     triggerToast(`Permission request forwarded directly to Management / Principal queue`);
+
   };
+
+
 
   const handleRequestReliefSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!reliefSelectedTask) return;
+
     try {
+
       await api.requestTaskRelief(reliefSelectedTask.id, {
+
         relief_reason: reliefReason,
+
         justification: reliefJustification,
+
         suggested_peer_teacher: reliefSuggestedPeer || undefined
+
       });
+
       triggerToast('Relief request submitted to Academic Coordinator. SLA is paused.');
+
       setShowReliefModal(false);
+
       setReliefSelectedTask(null);
+
       setReliefJustification('');
+
       const updated = await api.getAdminTasks('academic');
+
       setAcademicTasks(updated);
+
     } catch (err: any) {
+
       triggerToast(err.message || 'Failed to submit relief request');
+
     }
+
   };
+
+
 
   const handleTeacherLogUnitSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!logUnitCurriculum) return;
+
     try {
+
       const res = await api.teacherLogCurriculumUnit(
+
         logUnitCurriculum.class_name,
+
         logUnitCurriculum.subject,
+
         1,
+
         logUnitNotes.trim() || undefined
+
       );
+
       if (res.success) {
+
         triggerToast(`✓ Logged unit completion: ${res.item.class_name} ${res.item.subject} (${res.item.completed_units}/${res.item.total_units} Units)`);
+
         setLogUnitCurriculum(null);
+
         setLogUnitNotes('');
+
         const updated = await api.getCurriculumPacing();
+
         setCurriculumItems(updated);
+
       }
+
     } catch (err: any) {
+
       triggerToast(err.message || 'Failed to log unit');
+
     }
+
   };
+
+
 
   const handleUpdateTeacherTaskStatus = async (taskId: number, newStatus: string) => {
+
     await api.updateAdminTask(taskId, { status: newStatus });
+
     const updated = await api.getAdminTasks();
+
     const myUpdated = updated.filter((t: any) => !t.assigned_to || t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher' || (t.assigned_to && t.assigned_to.toLowerCase().includes('verma')));
+
     setAcademicTasks(myUpdated);
+
     triggerToast(`Academic task updated to ${newStatus}`);
+
   };
+
+
 
   const handleSubmitTaskWork = async (e: React.FormEvent) => {
+
     e.preventDefault();
+
     if (!submitWorkTask) return;
+
     if (!taskSubmissionNotes.trim()) {
+
       triggerToast('Please provide notes describing the work completed.');
+
       return;
+
     }
+
     await api.submitTaskWork(submitWorkTask.id, {
+
       submission_notes: taskSubmissionNotes.trim(),
+
       completion_proof_url: taskProofUrl.trim() || '/samples/Verified_Dossier_Report.pdf'
+
     });
+
     const updated = await api.getAdminTasks();
+
     const myUpdated = updated.filter((t: any) => !t.assigned_to || t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher' || (t.assigned_to && t.assigned_to.toLowerCase().includes('verma')));
+
     setAcademicTasks(myUpdated);
+
     setSubmitWorkTask(null);
+
     setTaskSubmissionNotes('');
+
     setTaskProofUrl('');
+
     triggerToast(`Task "${submitWorkTask.title}" submitted for Principal verification!`);
+
   };
+
+
 
   const handleSchedulePTM = (e: React.FormEvent) => {
+
     e.preventDefault();
+
     setShowPTMModal(false);
+
     triggerToast(`Online PTM invite sent to ${ptmStudent}'s parent for ${ptmDate}!`);
+
   };
+
+
 
   const handleSendMessage = () => {
+
     if (!chatInput.trim() && !chatAttachment) return;
+
     const currentChat = conversations[selectedChatStudentId] || [];
+
     const newMsg = {
+
       id: currentChat.length + 1,
+
       sender: 'teacher' as const,
+
       text: chatInput.trim() || (chatAttachment ? `Shared attachment: ${chatAttachment.name}` : ''),
+
       time: 'Just now',
+
       attachment: chatAttachment ? { ...chatAttachment } : undefined
+
     };
+
     const updatedChat = [...currentChat, newMsg];
+
     setConversations(prev => ({
+
       ...prev,
+
       [selectedChatStudentId]: updatedChat
+
     }));
+
     setChatMessages(updatedChat);
+
     const targetStudent = students.find(s => s.id === selectedChatStudentId);
+
     triggerToast(chatAttachment ? `Message with attachment "${chatAttachment.name}" sent to ${targetStudent?.guardian_name || 'parent'}` : `Message sent to ${targetStudent?.guardian_name || 'parent'}`);
+
     const messageText = chatInput.trim();
+
     api.sendParentChatMessage({
+
       student_id: selectedChatStudentId,
+
       sender_role: 'TEACHER',
+
       sender_name: 'Mrs. Ananya Verma',
+
       receiver_role: 'PARENT',
+
       receiver_name: targetStudent?.guardian_name || 'Rajesh Sharma',
+
       message_text: messageText,
+
       attachment_name: chatAttachment?.name,
+
       attachment_url: chatAttachment?.url
+
+    }).then((saved) => {
+
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+
+        try {
+
+          const ch = new BroadcastChannel('edu360_chat_channel');
+
+          ch.postMessage({ type: 'NEW_CHAT_MESSAGE', message: saved });
+
+          ch.close();
+
+        } catch {}
+
+      }
+
     }).catch(console.error);
+
     setChatInput('');
+
     setChatAttachment(null);
+
     if (chatFileInputRef.current) chatFileInputRef.current.value = '';
 
+
+
     // Responsive parent reply simulation
+
     const activeId = selectedChatStudentId;
+
     setTimeout(() => {
+
       setConversations(prev => {
+
         const studentMessages = prev[activeId] || [];
+
         return {
+
           ...prev,
+
           [activeId]: [
+
             ...studentMessages,
+
             {
+
               id: studentMessages.length + 1,
+
               sender: 'parent' as const,
+
               text: `Thank you Mrs. Verma, received and noted regarding ${targetStudent?.name || 'the student'}!`,
+
               time: 'Just now'
+
             }
+
           ]
+
         };
+
       });
+
     }, 1500);
+
   };
+
+
 
   // SpeedGrader Handlers
+
   const handleOpenSpeedGrader = (index: number) => {
+
     setActiveSpeedGraderIndex(index);
+
     setSpeedGraderOpen(true);
+
   };
 
+
+
   const handleSaveSpeedGrading = async (marks: number, remarks: string, annotationsJson: string) => {
+
     const currentItem = homeworkList[activeSpeedGraderIndex];
+
     if (!currentItem) return;
+
+
 
     await api.saveGradedCanvas(currentItem.id, marks, remarks, annotationsJson);
 
+
+
     // Update local state in homework list
+
     setHomeworkList(prev => prev.map((item, idx) => {
+
       if (idx === activeSpeedGraderIndex) {
+
         return {
+
           ...item,
+
           status: 'Graded',
+
           score: marks,
+
           teacher_remarks: remarks,
+
           annotations_json: annotationsJson,
+
           submission_data: {
+
             ...item.submission_data,
+
             status: 'graded',
+
             marks_obtained: marks,
+
             teacher_remarks: remarks,
+
             annotations_json: annotationsJson
+
           }
+
         };
+
       }
+
       return item;
+
     }));
+
+
 
     triggerToast(`Graded submission for ${currentItem.name} (${marks}/20)! Parent & Student notified.`);
+
   };
+
+
 
   const handleRemindMissingStudent = (studentName: string) => {
+
     triggerToast(`Automated SMS & Push reminder sent to ${studentName}'s parent for Worksheet #4!`);
+
   };
+
+
 
   // Focus Table Handlers & Remedial Verification
+
   const handleOpenFocusDrawer = (index: number) => {
+
     setActiveFocusIndex(index);
+
     setFocusDrawerOpen(true);
+
   };
+
+
 
   const handleOpenVerificationModal = (item: FocusRosterItem) => {
+
     setVerifyingFocusItem(item);
+
     setTeacherVerificationRemarks(
+
       item.teacher_verification_notes || 
+
       `Factoring steps and signs for ${item.weak_concept} verified. Clean methodology.`
+
     );
+
   };
+
+
 
   const handleVerifySubmission = (studentId: number, customRemarks?: string) => {
+
     const finalRemarks = customRemarks || teacherVerificationRemarks || "Remedial solution verified and approved.";
+
     setFocusRoster(prev => prev.map(s => {
+
       if (s.student_id !== studentId && s.id !== studentId) return s;
+
       return {
+
         ...s,
+
         submission_status: 'Verified',
+
         teacher_verification_notes: finalRemarks,
+
         verified_at: 'Today, Just now',
+
         current_day: Math.min(s.total_days, s.current_day + 1),
+
         parent_status: 'Parent Verified ✓'
+
       };
+
     }));
+
     const targetStudent = focusRoster.find(s => s.student_id === studentId || s.id === studentId);
+
     triggerToast(`✓ Verified ${targetStudent?.name || 'student'}'s remedial submission! Focus record updated.`);
+
     setVerifyingFocusItem(null);
+
   };
+
+
 
   const handleReturnSubmission = (studentId: number, remarks: string) => {
+
     setFocusRoster(prev => prev.map(s => {
+
       if (s.student_id !== studentId && s.id !== studentId) return s;
+
       return {
+
         ...s,
+
         submission_status: 'Needs Revision',
+
         teacher_verification_notes: remarks || "Please re-check intermediate signs and re-upload solution."
+
       };
+
     }));
+
     const targetStudent = focusRoster.find(s => s.student_id === studentId || s.id === studentId);
+
     triggerToast(`Returned practice sheet to ${targetStudent?.name || 'student'} with revision notes.`);
+
     setVerifyingFocusItem(null);
+
   };
+
+
 
   const handleQuickVerifyAll = () => {
+
     const pendingItems = focusRoster.filter(f => f.submission_status === 'Submitted');
+
     if (pendingItems.length === 0) {
+
       triggerToast("No remedial submissions currently awaiting verification.");
+
       return;
+
     }
+
     setFocusRoster(prev => prev.map(s => {
+
       if (s.submission_status === 'Submitted') {
+
         return {
+
           ...s,
+
           submission_status: 'Verified',
+
           teacher_verification_notes: 'Batch verified by Subject Faculty.',
+
           verified_at: 'Today, Just now',
+
           current_day: Math.min(s.total_days, s.current_day + 1),
+
           parent_status: 'Parent Verified ✓'
+
         };
+
       }
+
       return s;
+
     }));
+
     triggerToast(`⚡ Batch verified ${pendingItems.length} remedial practice submissions! All students updated.`);
+
   };
+
+
 
   const handleRemindRemedialSubmission = (studentName: string) => {
+
     triggerToast(`Automated SMS & App push reminder sent to ${studentName} & parents for pending remedial upload!`);
+
   };
+
+
 
   // Calculations
+
   const presentCount = attendance.filter(r => r.status === 'Present').length;
+
   const lateCount = attendance.filter(r => r.status === 'Late').length;
+
   const pendingLeaves = leaveRequests.filter(lr => lr.status === 'Pending').length;
 
+
+
   // Filtered Homework
+
   const filteredHomework = homeworkList.filter(item => {
+
     const matchSearch = item.name.toLowerCase().includes(homeworkSearch.toLowerCase()) || 
+
                         item.roll_no.includes(homeworkSearch) || 
+
                         item.admission_id.toLowerCase().includes(homeworkSearch.toLowerCase());
+
     if (!matchSearch) return false;
+
     if (homeworkFilter === 'Needs Grading') return item.status === 'Submitted';
+
     if (homeworkFilter === 'Graded') return item.status === 'Graded';
+
     if (homeworkFilter === 'Missing') return item.status === 'Missing';
+
     return true;
+
   });
+
+
 
   const homeworkStats = {
+
     total: 38,
+
     submitted: 32,
+
     graded: homeworkList.filter(h => h.status === 'Graded').length + 26,
+
     needsGrading: homeworkList.filter(h => h.status === 'Submitted').length,
+
     missing: 6
+
   };
+
+
 
   // Filtered Focus Roster (Subject: Mathematics, Filtered by Section)
+
   const filteredFocus = focusRoster.filter(item => {
+
     const weakConcept = item.ai_exam_scan?.weak_concept || item.weak_concept || '';
+
     const matchSearch = item.name.toLowerCase().includes(focusSearch.toLowerCase()) ||
+
                         item.roll_no.includes(focusSearch) ||
+
                         weakConcept.toLowerCase().includes(focusSearch.toLowerCase()) ||
+
                         item.class_name.toLowerCase().includes(focusSearch.toLowerCase());
+
     if (!matchSearch) return false;
+
     if (focusSectionFilter !== 'All' && item.class_name !== focusSectionFilter) return false;
+
     if (focusCategoryFilter !== 'All' && item.category !== focusCategoryFilter) return false;
+
     if (focusSubmissionFilter === 'Needs Verification') return item.submission_status === 'Submitted';
+
     if (focusSubmissionFilter === 'Verified') return item.submission_status === 'Verified';
+
     if (focusSubmissionFilter === 'Pending Submission') return item.submission_status === 'Pending' || !item.submission_status;
+
     return true;
+
   });
+
+
 
   const focusStats = {
+
     total: focusRoster.length,
+
     needsVerification: focusRoster.filter(f => f.submission_status === 'Submitted').length,
+
     verified: focusRoster.filter(f => f.submission_status === 'Verified').length,
+
     pending: focusRoster.filter(f => f.submission_status === 'Pending' || !f.submission_status).length,
+
     avgProgress: Math.round(
+
       focusRoster.reduce((acc, f) => acc + (f.current_day / f.total_days) * 100, 0) / (focusRoster.length || 1)
+
     )
+
   };
+
+
 
   const activeFocusItem = focusRoster[activeFocusIndex] || focusRoster[0];
+
   const activeSpeedGraderItem = homeworkList[activeSpeedGraderIndex] || homeworkList[0];
 
+
+
   // =========================================================
+
   // EXAMS COMPUTED VALUES & HANDLERS
+
   // =========================================================
+
   const currentExamConfig = examConfigs.find(c => c.id === selectedExamId) || examConfigs[0];
 
+
+
   const handleUpdateExamScore = (studentId: number, field: 'theory_score' | 'internal_score', value: number) => {
+
     setExamScores(prev => prev.map(s => {
+
       if (s.id !== studentId) return s;
+
       const updated = { ...s, [field]: Math.max(0, value) };
+
       const total = updated.theory_score + updated.internal_score;
+
       const maxTotal = updated.max_theory + updated.max_internal;
+
       const pct = (total / maxTotal) * 100;
+
       let newGrade: TeacherExamScoreItem['grade'] = 'Needs Focus';
+
       if (pct >= 90) newGrade = 'A+';
+
       else if (pct >= 80) newGrade = 'A';
+
       else if (pct >= 70) newGrade = 'B';
+
       else if (pct >= 60) newGrade = 'C';
+
       return {
+
         ...updated,
+
         grade: newGrade,
+
         in_focus_table: pct <= 70 || updated.in_focus_table
+
       };
+
     }));
+
   };
+
+
 
   const handleSaveExamRoster = () => {
+
     triggerToast(`Marks ledger for "${currentExamConfig.title}" saved & synchronized with SIS grade sheets!`);
+
   };
+
+
 
   const handleFlagAllUnderperformingToFocusTable = () => {
+
     const underperforming = examScores.filter(s => {
+
       const pct = ((s.theory_score + s.internal_score) / (s.max_theory + s.max_internal)) * 100;
+
       return pct <= 70;
+
     });
+
     setExamScores(prev => prev.map(s => {
+
       const pct = ((s.theory_score + s.internal_score) / (s.max_theory + s.max_internal)) * 100;
+
       return pct <= 70 ? { ...s, in_focus_table: true } : s;
+
     }));
+
     triggerToast(`Auto-flagged ${underperforming.length} students (<=70%) into Student Focus Table remedial cycle!`);
+
   };
+
+
 
   const handleDownloadExamCsv = () => {
+
     const header = "RollNumber,StudentName,AdmissionId,TheoryScore,InternalScore,MaxTheory,MaxInternal,Remarks\n";
+
     const rows = examScores.map(s => 
+
       `"${s.roll_no}","${s.name}","${s.admission_id}",${s.theory_score},${s.internal_score},${s.max_theory},${s.max_internal},"${s.teacher_note || ''}"`
+
     ).join("\n");
+
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+
     const url = URL.createObjectURL(blob);
+
     const link = document.createElement("a");
+
     link.setAttribute("href", url);
+
     link.setAttribute("download", `${currentExamConfig.class_name}_${currentExamConfig.subject}_Marks_Ledger.csv`);
+
     document.body.appendChild(link);
+
     link.click();
+
     document.body.removeChild(link);
+
     triggerToast("✓ Downloaded marks ledger CSV template for offline entry.");
+
   };
+
+
 
   const handleUploadExamCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+
     const file = e.target.files?.[0];
+
     if (!file) return;
+
     const reader = new FileReader();
+
     reader.onload = (event) => {
+
       try {
+
         const text = event.target?.result as string;
+
         const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+
         if (lines.length <= 1) {
+
           triggerToast("CSV file is empty or only contains headers.");
+
           return;
+
         }
+
         let updatedCount = 0;
+
         const dataRows = lines.slice(1);
+
         setExamScores(prev => {
+
           const next = [...prev];
+
           dataRows.forEach(row => {
+
             const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+
             if (cols.length >= 5) {
+
               const roll = cols[0];
+
               const theory = parseInt(cols[3], 10);
+
               const internal = parseInt(cols[4], 10);
+
               const remarks = cols[7] || cols[5] || '';
+
               const idx = next.findIndex(s => s.roll_no === roll || s.admission_id === cols[2]);
+
               if (idx !== -1 && !isNaN(theory) && !isNaN(internal)) {
+
                 const maxTotal = next[idx].max_theory + next[idx].max_internal;
+
                 const total = theory + internal;
+
                 const pct = (total / maxTotal) * 100;
+
                 let grade: TeacherExamScoreItem['grade'] = 'Needs Focus';
+
                 if (pct >= 90) grade = 'A+';
+
                 else if (pct >= 80) grade = 'A';
+
                 else if (pct >= 70) grade = 'B';
+
                 else if (pct >= 60) grade = 'C';
+
                 next[idx] = {
+
                   ...next[idx],
+
                   theory_score: theory,
+
                   internal_score: internal,
+
                   grade,
+
                   in_focus_table: pct <= 70,
+
                   teacher_note: remarks || next[idx].teacher_note
+
                 };
+
                 updatedCount++;
+
               }
+
             }
+
           });
+
           return next;
+
         });
+
         triggerToast(`✓ Successfully imported ${updatedCount} student marks from CSV!`);
+
       } catch {
+
         triggerToast("Failed to parse CSV file. Please ensure correct format.");
+
       }
+
     };
+
     reader.readAsText(file);
+
     e.target.value = '';
+
   };
+
+
 
   const filteredExamScores = examScores.filter(s => {
+
     const matchSearch = s.name.toLowerCase().includes(examSearch.toLowerCase()) ||
+
                         s.roll_no.includes(examSearch) ||
+
                         s.admission_id.toLowerCase().includes(examSearch.toLowerCase());
+
     if (!matchSearch) return false;
+
     if (examGradeFilter === 'A+ & A') return s.grade === 'A+' || s.grade === 'A';
+
     if (examGradeFilter === 'Passing') return s.grade !== 'Needs Focus';
+
     if (examGradeFilter === 'Needs Focus') return s.grade === 'Needs Focus';
+
     return true;
+
   });
 
+
+
   const examStats = {
+
     totalStudents: examScores.length,
+
     averagePct: Math.round(
+
       examScores.reduce((acc, s) => acc + ((s.theory_score + s.internal_score) / (s.max_theory + s.max_internal)) * 100, 0) / examScores.length
+
     ),
+
     topScore: Math.max(...examScores.map(s => s.theory_score + s.internal_score)),
+
     passCount: examScores.filter(s => s.grade !== 'Needs Focus').length,
+
     remedialCount: examScores.filter(s => s.grade === 'Needs Focus' || s.in_focus_table).length
+
   };
 
+
+
   
+
   return (
+
     <RoleGuard allowedRole="teacher">
+
       {/* Toast Notification */}
+
       {toastMessage && (
+
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-slate-900 text-white px-4.5 py-3 shadow-2xl border border-blue-500/30 text-xs font-semibold animate-in fade-in slide-in-from-bottom-4 duration-200">
+
           <Sparkles className="h-4 w-4 text-emerald-400 shrink-0" />
+
           <span>{toastMessage}</span>
+
           <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
+
             <X className="h-3.5 w-3.5" />
+
           </button>
+
         </div>
+
       )}
+
+
 
       {/* Main Layout Container: Locked Height, Non-scrolling shell */}
+
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 dark:bg-slate-950">
+
         
+
         {/* ===================================================== */}
+
         {/* 1. LEFT STICKY NON-SCROLLING COLLAPSIBLE SIDEBAR     */}
+
         {/* ===================================================== */}
+
       {/* ── Mobile Drawer Backdrop ── */}
+
       {mobileDrawerOpen && (
+
         <div 
+
           onClick={() => setMobileDrawerOpen(false)}
+
           className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
+
           aria-hidden="true"
+
         />
+
       )}
 
+
+
       {/* ===================================================== */}
+
       {/* 1. LEFT STICKY NON-SCROLLING COLLAPSIBLE SIDEBAR     */}
+
       {/* ===================================================== */}
+
       <aside 
+
         className={`
+
           fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
+
           h-screen md:h-[calc(100vh-4rem)] md:self-start
+
           ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+
           ${sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'}
+
           transition-all duration-300 ease-in-out shrink-0 select-none
+
           bg-white text-slate-800 border-r border-slate-200/90
+
           dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90
+
           flex flex-col justify-between overflow-hidden
+
         `}
+
       >
+
         {/* Top Section */}
+
         <div className="flex flex-col h-full overflow-hidden">
+
           {/* Header & Toggle */}
+
           <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
+
             {!sidebarCollapsed ? (
+
               <div className="flex items-center gap-2.5 min-w-0">
+
                 <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+
                   TC
+
                 </div>
+
                 <div className="min-w-0">
+
                   <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Mrs. Ananya Verma • 8-B</span>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Mrs. Ananya Verma • 8-B</span>
+                    {pendingExamEvaluationsCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse">
+                        {pendingExamEvaluationsCount} to grade
+                      </span>
+                    )}
+                  </div>
+
                 </div>
+
               </div>
+
             ) : (
+
               <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+
                 TC
+
               </div>
+
             )}
 
+
+
             <button
+
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+
               title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+
               className={`p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
+
             >
+
               <ChevronLeft className="h-4 w-4" />
+
             </button>
+
             <button
+
               onClick={() => setMobileDrawerOpen(false)}
+
               className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+
               title="Close Sidebar"
+
             >
+
               <X className="h-4 w-4" />
+
             </button>
+
           </div>
 
+
+
           {sidebarCollapsed && (
+
             <div className="hidden md:flex justify-center pt-2">
+
               <button
+
                 onClick={() => setSidebarCollapsed(false)}
+
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+
                 title="Expand Sidebar"
+
               >
+
                 <ChevronRight className="h-4 w-4" />
+
               </button>
+
             </div>
+
           )}
 
+
+
           {/* Navigation List */}
+
           <div className="flex-1 overflow-y-auto px-2 py-3 space-y-3.5 text-xs font-semibold select-none scrollbar-thin">
+
             
+
             {/* GROUP 0: DASHBOARD */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Command &amp; Overview
+
                 </span>
+
               )}
+
               
+
               {/* 0. Main Dashboard */}
+
               <button
+
                 onClick={() => { setActiveTab('dashboard'); setMobileDrawerOpen(false); }}
+
                 title="Teacher Dashboard & Daily Pulse"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'dashboard'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <LayoutDashboard className={`h-4 w-4 shrink-0 ${activeTab === 'dashboard' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Dashboard Overview</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     Daily Pulse
+
                   </span>
+
                 )}
+
               </button>
+
             </div>
+
+
 
             {/* GROUP 1: TEACHING & INSTRUCTION */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Teaching &amp; Classroom
+
                 </span>
+
               )}
+
               
+
               {/* 1. Live Class Studio & 10m Rule */}
+
               <button
+
                 onClick={() => { setActiveTab('live_class'); setMobileDrawerOpen(false); }}
+
                 title="Live Class & 10-Minute Auto-Attendance"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'live_class'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Radio className={`h-4 w-4 shrink-0 ${activeTab === 'live_class' ? 'text-blue-600 dark:text-blue-400 animate-pulse' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Live Studio &amp; Attendance</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+
                 )}
+
               </button>
+
+
 
               {/* 2. Schedule & Timetable */}
+
               <button
+
                 onClick={() => { setActiveTab('schedule'); setMobileDrawerOpen(false); }}
+
                 title="Teacher-Centric Personal Timetable"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'schedule'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Calendar className={`h-4 w-4 shrink-0 ${activeTab === 'schedule' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Personal Timetable</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="text-[10px] font-bold text-slate-400 shrink-0">Today</span>
+
                 )}
+
               </button>
+
             </div>
+
+
 
             {/* GROUP 2: ASSESSMENTS, GRADING & CORRECTIONS */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Grading &amp; Corrections
+
                 </span>
+
               )}
+
+
 
               {/* 3. Homework & Inline Corrections */}
+
               <button
+
                 onClick={() => { setActiveTab('homework'); setMobileDrawerOpen(false); }}
+
                 title="Homework Submissions, Inline Corrections & SpeedGrader"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'homework'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <FileEdit className={`h-4 w-4 shrink-0 ${activeTab === 'homework' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Homework &amp; Corrections</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     {homeworkStats.needsGrading} To Grade
+
                   </span>
+
                 )}
+
               </button>
+
             </div>
 
+
+
             {/* GROUP 3: STUDENT OUTCOMES & INTERVENTION */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Outcomes &amp; Care
+
                 </span>
+
               )}
 
+
+
               {/* 5. Shared Focus Table */}
+
               <button
+
                 onClick={() => { setActiveTab('focus_table'); setMobileDrawerOpen(false); }}
+
                 title="Shared Student Focus Table (Class Roster)"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'focus_table'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'focus_table' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Student Focus Table</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     {focusRoster.length} On Plan
+
                   </span>
+
                 )}
+
               </button>
 
+
+
               {/* 5b. Terminal Exams & Gradebook with Sub-Modules */}
+
               <div className="space-y-0.5">
+
                 <button
+
                   onClick={() => {
+
                     setActiveTab('exams_gradebook');
+
                     setMobileDrawerOpen(false);
+
                     if (examsList.length === 0) loadExams();
+
                   }}
+
                   title="Terminal Descriptive Exams & Gradebook Publishing Engine"
+
                   className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                     activeTab === 'exams_gradebook'
+
                       ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                   }`}
+
                 >
+
                   <div className="flex items-center gap-2.5 min-w-0">
+
                     <Award className={`h-4 w-4 shrink-0 ${activeTab === 'exams_gradebook' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                     {!sidebarCollapsed && <span className="truncate">Exams &amp; Gradebook</span>}
+
                   </div>
+
                   {!sidebarCollapsed && (
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
-                      Publish Hub
+                    <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black shrink-0 shadow-xs flex items-center gap-1 animate-pulse">
+                      <span>{pendingExamEvaluationsCount}</span>
+                      <span className="text-[8px] uppercase tracking-wider">Pending</span>
                     </span>
                   )}
+
                 </button>
 
+
+
                 {/* Sub-modules in Sidebar */}
+
                 {activeTab === 'exams_gradebook' && !sidebarCollapsed && (
+
                   <div className="ml-6 pl-2.5 border-l-2 border-blue-200 dark:border-blue-800/60 my-1 space-y-1 animate-in fade-in">
+
                     <button
+
                       type="button"
+
                       onClick={() => setExamSubTab('marks_ledger')}
+
                       className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
+
                         examSubTab === 'marks_ledger'
+
                           ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+
                       }`}
+
                     >
+
                       <FileSpreadsheet className="h-3 w-3 shrink-0" />
+
                       <span className="truncate">Evaluation Ledger</span>
+
                     </button>
+
+                    <button
+
+                      type="button"
+
+                      onClick={() => setExamSubTab('qp_desk')}
+
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
+
+                        examSubTab === 'qp_desk'
+
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+
+                      }`}
+
+                    >
+
+                      <div className="flex items-center gap-2 truncate">
+
+                        <FileText className="h-3 w-3 shrink-0" />
+
+                        <span className="truncate">QP Blueprints</span>
+
+                      </div>
+
+                      {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length > 0 && (
+
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shrink-0">
+
+                          {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length}
+
+                        </span>
+
+                      )}
+
+                    </button>
+
                     <button
                       type="button"
-                      onClick={() => setExamSubTab('qp_desk')}
+                      onClick={() => setExamSubTab('live_cockpit')}
                       className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
-                        examSubTab === 'qp_desk'
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+                        examSubTab === 'live_cockpit'
+                          ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 font-bold'
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <FileText className="h-3 w-3 shrink-0" />
-                        <span className="truncate">QP Blueprints</span>
+                        <Video className="h-3 w-3 shrink-0 text-violet-500" />
+                        <span className="truncate">Live Invigilation</span>
                       </div>
-                      {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shrink-0">
-                          {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length}
-                        </span>
-                      )}
+                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0"></span>
                     </button>
+
                   </div>
+
                 )}
+
               </div>
+
+
 
               {/* 5c. Syllabus & Curriculum Pacing */}
+
               <button
+
                 onClick={() => { setActiveTab('curriculum'); setMobileDrawerOpen(false); }}
+
                 title="Syllabus Pacing & Unit Delivery Checklist"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'curriculum'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'curriculum' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Syllabus &amp; Curriculum</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     Math
+
                   </span>
+
                 )}
+
               </button>
+
+
 
               {/* 6. Student Roster & 360 */}
+
               <button
+
                 onClick={() => { setActiveTab('roster'); setMobileDrawerOpen(false); }}
+
                 title="My Students List & 360 Analytics"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'roster'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Users className={`h-4 w-4 shrink-0 ${activeTab === 'roster' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">My Classes (360 Cockpit)</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.2 text-[9px] font-bold shrink-0">8B &bull; 9A</span>
+
                 )}
+
               </button>
+
             </div>
+
+
 
             {/* GROUP 4: PARENT & PASTORAL COMMUNICATION */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Parental &amp; Attendance
+
                 </span>
+
               )}
+
+
 
               {/* 7. PTM Conferences (Strictly Meetings) */}
+
               <button
+
                 onClick={() => { setActiveTab('parent_hub'); setMobileDrawerOpen(false); }}
+
                 title="Sliding Parent-Teacher Meeting (PTM) Conferences & Timetable"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'parent_hub'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Video className={`h-4 w-4 shrink-0 ${activeTab === 'parent_hub' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">PTM Conferences</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     24 Oct
+
                   </span>
+
                 )}
+
               </button>
+
+
 
               {/* 8. Dedicated Chat with Parents (PRD Requirement) */}
+
               <button
+
                 onClick={() => { setActiveTab('parent_chat'); setMobileDrawerOpen(false); }}
+
                 title="Direct 1-on-1 Parent Messaging for any student (PRD Feature)"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'parent_chat'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <MessageSquare className={`h-4 w-4 shrink-0 ${activeTab === 'parent_chat' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Chat with Parents</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     PRD
+
                   </span>
+
                 )}
+
               </button>
+
+
 
               {/* 8. Student Leave Approvals */}
+
               <button
+
                 onClick={() => { setActiveTab('leave_approvals'); setMobileDrawerOpen(false); }}
+
                 title="Student Leave Approvals"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'leave_approvals'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <CalendarCheck className={`h-4 w-4 shrink-0 ${activeTab === 'leave_approvals' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Student Leave Queue</span>}
+
                 </div>
+
                 {!sidebarCollapsed && pendingLeaves > 0 && (
+
                   <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold shrink-0">
+
                     {pendingLeaves}
+
                   </span>
+
                 )}
+
               </button>
+
             </div>
+
+
 
             {/* GROUP 5: SELF-SERVICE & INSTITUTIONAL GOVERNANCE */}
+
             <div className="space-y-1">
+
               {!sidebarCollapsed && (
+
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+
                   Duties &amp; Governance
+
                 </span>
+
               )}
+
+
 
               {/* 8. Event Duties & Operations Center */}
+
               <button
+
                 onClick={() => { setActiveTab('duties'); setMobileDrawerOpen(false); }}
+
                 title="Consolidated Faculty Duties & Task Operations Center"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'duties'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Award className={`h-4 w-4 shrink-0 ${activeTab === 'duties' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">Faculty Duty Center</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 shrink-0">4 Active</span>
+
                 )}
+
               </button>
+
+
 
               {/* 9. Teacher Leave & Permissions */}
+
               <button
+
                 onClick={() => { setActiveTab('my_permissions'); setMobileDrawerOpen(false); }}
+
                 title="My Leave & Short-Permission Requests"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'my_permissions'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'my_permissions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">My Permissions</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="text-[10px] font-bold text-slate-400 shrink-0">Self-Service</span>
+
                 )}
+
               </button>
+
+
 
               {/* 10. Teacher Salary & Payslips */}
+
               <button
+
                 onClick={() => { setActiveTab('my_salary'); setMobileDrawerOpen(false); }}
+
                 title="My Monthly Salary & Digital Payslips"
+
                 className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+
                   activeTab === 'my_salary'
+
                     ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+
                 }`}
+
               >
+
                 <div className="flex items-center gap-2.5 min-w-0">
+
                   <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'my_salary' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+
                   {!sidebarCollapsed && <span className="truncate">My Payslips</span>}
+
                 </div>
+
                 {!sidebarCollapsed && (
+
                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Accounts</span>
+
                 )}
+
               </button>
+
             </div>
 
+
+
           </div>
+
+
 
           {/* Bottom Status Footer */}
+
           <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
+
             {!sidebarCollapsed ? (
+
               <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
+
                 <span className="flex items-center gap-1.5 font-medium">
+
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+
                   Academic Term 2
+
                 </span>
+
                 <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
+
               </div>
+
             ) : (
+
               <div className="flex justify-center py-1">
+
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
+
               </div>
+
             )}
+
           </div>
+
         </div>
+
       </aside>
 
+
+
       {/* ===================================================== */}
+
       {/* 2. RIGHT MAIN CONTENT CANVAS (INDEPENDENT SCROLLING) */}
+
       {/* ===================================================== */}
+
       <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 scrollbar-thin">
+
         
+
         {/* Mobile Drawer Trigger (md:hidden) */}
+
         <div className="flex md:hidden items-center justify-between pb-1">
+
           <button
+
             onClick={() => setMobileDrawerOpen(true)}
+
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B101B] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-xs"
+
           >
+
             <Menu className="h-4 w-4" />
+
             <span>Menu</span>
+
           </button>
+
           <span className="text-xs font-bold text-slate-500">Teacher Desk</span>
+
         </div>
+
+
 
         {/* REAL-TIME PENDING LEAVE APPLICATION NOTIFICATION BANNER */}
+
         {pendingLeaves > 0 && activeTab !== 'leave_approvals' && (
+
           <div className="rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-800 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
             <div className="flex items-center gap-3">
+
               <div className="h-9 w-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+
                 <CalendarCheck className="h-5 w-5" />
+
               </div>
+
               <div>
+
                 <div className="flex items-center gap-2">
+
                   <span className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+
                     Parent Leave Application Alert
+
                   </span>
+
                   <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
+
                     {pendingLeaves} Action Required
+
                   </span>
+
                 </div>
+
                 <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+
                   Parents submitted leave requests awaiting class teacher review. Approving will automatically sync attendance to &lsquo;Excused Leave&rsquo;.
+
                 </p>
+
               </div>
+
             </div>
+
             <button
+
               type="button"
+
               onClick={() => setActiveTab('leave_approvals')}
+
               className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+
             >
+
               <span>Review Leave Queue ({pendingLeaves})</span>
+
               <ArrowRight className="h-3.5 w-3.5" />
+
             </button>
+
           </div>
+
         )}
 
+
+
         {/* ===================================================== */}
+
         {/* TAB 0: TEACHER DASHBOARD (EXECUTIVE OVERVIEW & PULSE) */}
+
         {/* ===================================================== */}
+
         {activeTab === 'dashboard' && (
+
           <div className="space-y-6">
+
             
+
             {/* EXECUTIVE TEACHER GREETING & OPERATIONAL CONTEXT BANNER */}
+
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-6 shadow-sm">
+
               <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+
                 {/* Left: Greeting & Current Status */}
+
                 <div className="space-y-3 max-w-2xl">
+
                   <div className="flex flex-wrap items-center gap-2.5">
+
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 px-3 py-1 text-xs font-bold">
+
                       <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+
                       <span>Classes Active • Period 2 Class 8-B (09:20 - 10:05 AM)</span>
+
                     </span>
+
+
 
                     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium">
+
                       <Clock className="h-3 w-3 text-emerald-500" />
+
                       <span>Auto-Attendance Active</span>
+
                     </span>
+
                   </div>
 
+
+
                   <div>
+
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+
                       Welcome, Mrs. Ananya Verma!
+
                     </h1>
+
                     <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+
                       Faculty Overview: Homeroom Class 8-B (38 Students) • Secondary Mathematics Department • 6 scheduled periods today with 3 pending items requiring faculty review.
+
                     </p>
+
                   </div>
+
+
 
                   {/* Operational Tags */}
+
                   <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
+
                     <span className="flex items-center gap-1 font-medium">
+
                       <Users className="h-3.5 w-3.5 text-slate-400" />
+
                       <span>Homeroom: <strong className="text-slate-700 dark:text-slate-200">Class 8-B</strong> (38 Students)</span>
+
                     </span>
+
                     <span className="text-slate-300 dark:text-slate-700">•</span>
+
                     <span className="flex items-center gap-1 font-medium">
+
                       <Award className="h-3.5 w-3.5 text-purple-500" />
+
                       <span>Duty: <strong className="text-slate-700 dark:text-slate-200">Annual Day Stage Lead</strong></span>
+
                     </span>
+
                   </div>
+
                 </div>
+
+
 
                 {/* Right: Primary & Secondary Action Group */}
+
                 <div className="flex flex-wrap lg:flex-col items-stretch lg:items-end gap-2.5 shrink-0">
+
                   <button
-                    onClick={() => setActiveTab('live_class')}
+
+                    onClick={() => { setActiveTab('live_class'); handleStartTeacherLiveClass(); }}
+
                     className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all duration-200 active:scale-98 border border-emerald-400/30 cursor-pointer"
+
                   >
+
                     <Radio className="h-4 w-4 animate-pulse" />
+
                     <span>Start Live Class Session</span>
+
                   </button>
 
+
+
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setActiveTab('parent_chat')}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                    >
-                      <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
-                      <span>Parent Chat &amp; Notes</span>
-                    </button>
 
                     <button
-                      onClick={() => setShowPermissionModal(true)}
+
+                      onClick={() => setActiveTab('parent_chat')}
+
                       className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+
                     >
-                      <Clock className="h-3.5 w-3.5 text-amber-500" />
-                      <span>Request Permission</span>
+
+                      <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
+
+                      <span>Parent Chat &amp; Notes</span>
+
                     </button>
+
+
+
+                    <button
+
+                      onClick={() => setShowPermissionModal(true)}
+
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+
+                    >
+
+                      <Clock className="h-3.5 w-3.5 text-amber-500" />
+
+                      <span>Request Permission</span>
+
+                    </button>
+
                   </div>
+
                 </div>
+
               </div>
+
             </div>
+
+
 
             {/* 4-CARD LIVE KPI STRIP */}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
               
+
               {/* 1. Real-Time Classroom Attendance */}
+
               <div
+
                 onClick={() => setActiveTab('live_class')}
+
                 className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+
               >
+
                 <div className="space-y-3">
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+
                       Classroom Attendance
+
                     </span>
+
                     <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+
                       <Radio className="h-5 w-5 animate-pulse" />
+
                     </div>
+
                   </div>
+
                   
+
                   <div>
+
                     <div className="flex items-baseline gap-2">
+
                       <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+
                         {presentCount} Present
+
                       </h3>
+
                       <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+
                         ↑ 94.2%
+
                       </span>
+
                     </div>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+
                       {lateCount} Late check • 10m auto rule active
+
                     </p>
+
                   </div>
+
+
 
                   {/* Progress bar */}
+
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+
                     <div className="bg-emerald-500 h-full rounded-full" style={{ width: '94%' }} />
+
                   </div>
+
                 </div>
 
+
+
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+
                   <span>Open Live Attendance</span>
+
                   <ArrowRight className="h-3.5 w-3.5" />
+
                 </div>
+
               </div>
+
+
 
               {/* 2. Homework SpeedGrader */}
+
               <div
+
                 onClick={() => {
+
                   setActiveTab('homework');
+
                   handleOpenSpeedGrader(0);
+
                 }}
+
                 className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+
               >
+
                 <div className="space-y-3">
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+
                       Homework &amp; Grading
+
                     </span>
+
                     <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+
                       <FileEdit className="h-5 w-5" />
+
                     </div>
+
                   </div>
+
                   
+
                   <div>
+
                     <div className="flex items-baseline gap-2">
+
                       <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+
                         {homeworkStats.needsGrading} To Grade
+
                       </h3>
+
                       <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+
                         Worksheet #4
+
                       </span>
+
                     </div>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+
                       {homeworkStats.submitted} Submitted • {homeworkStats.graded} Graded so far
+
                     </p>
+
                   </div>
+
+
 
                   {/* Progress bar */}
+
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+
                     <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.round((homeworkStats.graded / (homeworkStats.total || 38)) * 100)}%` }} />
+
                   </div>
+
                 </div>
 
+
+
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+
                   <span>Launch SpeedGrader</span>
+
                   <ArrowRight className="h-3.5 w-3.5" />
+
                 </div>
+
               </div>
+
+
 
               {/* 3. Student Focus Table */}
+
               <div
+
                 onClick={() => setActiveTab('focus_table')}
+
                 className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+
               >
+
                 <div className="space-y-3">
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+
                       Remedial Focus Table
+
                     </span>
+
                     <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+
                       <Sparkles className="h-5 w-5" />
+
                     </div>
+
                   </div>
+
                   
+
                   <div>
+
                     <div className="flex items-baseline gap-2">
+
                       <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+
                         {focusStats.total} on Plan
+
                       </h3>
+
                       <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+
                         ↑ 2.1% Recovery
+
                       </span>
+
                     </div>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+
                       {focusStats.needsVerification} pending sign-off • {focusStats.avgProgress}% avg progress
+
                     </p>
+
                   </div>
+
+
 
                   {/* Progress bar */}
+
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+
                     <div className="bg-amber-500 h-full rounded-full" style={{ width: `${focusStats.avgProgress}%` }} />
+
                   </div>
+
                 </div>
 
+
+
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+
                   <span>Review Focus Roster</span>
+
                   <ArrowRight className="h-3.5 w-3.5" />
+
                 </div>
+
               </div>
+
+
 
               {/* 4. Parent Queue & Leaves */}
+
               <div
+
                 onClick={() => setActiveTab('leave_approvals')}
+
                 className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between"
+
               >
+
                 <div className="space-y-3">
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+
                       Parent &amp; Leave Queue
+
                     </span>
+
                     <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+
                       <CalendarCheck className="h-5 w-5" />
+
                     </div>
+
                   </div>
+
                   
+
                   <div>
+
                     <div className="flex items-baseline gap-2">
+
                       <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+
                         {pendingLeaves} Pending
+
                       </h3>
+
                       <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+
                         Review Required
+
                       </span>
+
                     </div>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+
                       Aarav Sharma (Medical) • Doctor/Dental
+
                     </p>
+
                   </div>
+
+
 
                   {/* Progress bar */}
+
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+
                     <div className="bg-rose-500 h-full rounded-full" style={{ width: pendingLeaves > 0 ? '40%' : '100%' }} />
+
                   </div>
+
                 </div>
+
+
 
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+
                   <span>Manage Approvals</span>
+
                   <ArrowRight className="h-3.5 w-3.5" />
+
                 </div>
+
               </div>
 
+
+
             </div>
+
+
 
               {/* TODAY'S SCHEDULE PULSE & URGENT ACTION PRIORITIES */}
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
                 
+
                 {/* Left 2 Cols: Today's Teaching Schedule Pulse */}
+
                 <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
+
                   <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+
                     <div>
+
                       <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
+
                         Today's Agenda
+
                       </span>
+
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 flex items-center gap-2">
+
                         <Calendar className="h-4 w-4 text-emerald-500" />
+
                         Classroom Schedule &amp; Live Timetable (6 Periods)
+
                       </h3>
+
                     </div>
+
                     <button
+
                       onClick={() => setActiveTab('schedule')}
+
                       className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+
                     >
+
                       <span>Full Timetable</span>
+
                       <ArrowRight className="h-3.5 w-3.5" />
+
                     </button>
+
                   </div>
+
+
 
                   <div className="space-y-2.5">
+
                     {schedule.slice(0, 4).map((item) => (
+
                       <div
+
                         key={item.period}
+
                         className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+
                           item.is_live
+
                             ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 shadow-xs'
+
                             : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800'
+
                         }`}
+
                       >
+
                         <div className="flex items-center gap-3">
+
                           <div className={`h-9 w-9 rounded-xl flex flex-col items-center justify-center font-bold text-xs shrink-0 ${
+
                             item.is_live
+
                               ? 'bg-emerald-600 text-white shadow-xs'
+
                               : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+
                           }`}>
+
                             <span className="text-[9px] uppercase font-bold">P</span>
+
                             <span className="font-black leading-none">{item.period}</span>
+
                           </div>
+
                           <div>
+
                             <div className="flex items-center gap-2">
+
                               <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+
                                 {item.subject}
+
                               </h4>
+
                               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+
                                 {item.class_name}
+
                               </span>
+
                               {item.is_live && (
+
                                 <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+
                                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+
                                   Live In Session
+
                                 </span>
+
                               )}
+
                             </div>
+
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+
                               ⏰ {item.time} • 📍 {item.room}
+
                             </span>
+
                           </div>
+
                         </div>
 
+
+
                         <div>
+
                           {item.is_live ? (
+
                             <button
+
                               onClick={() => setActiveTab('live_class')}
+
                               className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer"
+
                             >
+
                               <Radio className="h-3.5 w-3.5 animate-pulse" />
+
                               <span>Join Live Studio</span>
+
                             </button>
+
                           ) : (
+
                             <span className="text-[11px] font-semibold text-slate-400 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">
+
                               {item.status}
+
                             </span>
+
                           )}
+
                         </div>
+
                       </div>
+
                     ))}
+
                   </div>
+
                 </div>
+
+
 
                 {/* Right 1 Col: Urgent Attention Queue */}
+
                 <div className="lg:col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 flex flex-col justify-between">
+
                   <div className="space-y-3.5">
+
                     <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+
                       <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+
                         Action Required
+
                       </span>
+
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 flex items-center gap-2">
+
                         <AlertCircle className="h-4 w-4 text-amber-500" />
+
                         Today's Pending Tasks
+
                       </h3>
+
                     </div>
+
+
 
                     {/* Task Item 1: Homework */}
+
                     <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2">
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+
                           Worksheet #4 Grading
+
                         </span>
+
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-200/70 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+
                           {homeworkStats.needsGrading} Submissions
+
                         </span>
+
                       </div>
+
                       <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+
                         Aarav Sharma and 2 others uploaded math homework today.
+
                       </p>
+
                       <button
+
                         onClick={() => {
+
                           setActiveTab('homework');
+
                           handleOpenSpeedGrader(0);
+
                         }}
+
                         className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 text-xs font-bold shadow-xs cursor-pointer"
+
                       >
+
                         <Edit3 className="h-3.5 w-3.5" />
+
                         <span>Launch SpeedGrader</span>
+
                       </button>
+
                     </div>
+
+
 
                     {/* Task Item 2: Leave Request */}
+
                     <div className="p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/60 space-y-2">
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300">
+
                           Student Leave
+
                         </span>
+
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200/70 dark:bg-rose-900 text-rose-800 dark:text-rose-200">
+
                           {pendingLeaves} Pending
+
                         </span>
+
                       </div>
+
                       <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+
                         Aarav Sharma requested medical leave for dental checkup.
+
                       </p>
+
                       <button
+
                         onClick={() => setActiveTab('leave_approvals')}
+
                         className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white py-1.5 text-xs font-bold shadow-xs cursor-pointer"
+
                       >
+
                         <CalendarCheck className="h-3.5 w-3.5" />
+
                         <span>Review Student Leave</span>
+
                       </button>
+
                     </div>
+
+
 
                     {/* Task Item 3: Remedial Focus */}
+
                     <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/60 space-y-2">
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+
                           Focus Remedial Co-Sign
+
                         </span>
+
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+
                           2 Pending Sign-off
+
                         </span>
+
                       </div>
+
                       <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+
                         Kabir Mehta &amp; Rohan Iyer require parent verification.
+
                       </p>
+
                       <button
+
                         onClick={() => setActiveTab('focus_table')}
+
                         className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white py-1.5 text-xs font-bold shadow-xs cursor-pointer"
+
                       >
+
                         <Sparkles className="h-3.5 w-3.5" />
+
                         <span>Open Focus Roster</span>
+
                       </button>
+
                     </div>
 
+
+
                   </div>
+
                 </div>
 
+
+
               </div>
+
+
 
               {/* ── ACADEMIC MANDATES & COORDINATOR SLA DELEGATIONS ── */}
+
               <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/40 via-white to-purple-50/30 dark:from-indigo-950/20 dark:via-slate-900 dark:to-purple-950/10 p-6 shadow-xs space-y-4">
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3">
+
                   <div className="flex items-center gap-2.5">
+
                     <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+
                       <ShieldCheck className="h-4 w-4" />
+
                     </div>
+
                     <div>
+
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
                         Academic &amp; Faculty Duty Information Center
+
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+
                           {academicTasks.filter(t => (t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher') && t.status !== 'Completed').length + 1} Active
+
                         </span>
+
                       </h3>
+
                       <p className="text-xs text-slate-500">
+
                         Official exam invigilation allocations, syllabus pacing plans, and academic duties (Information Portal)
+
                       </p>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+
                   {/* Official Exam Invigilation Duty Order Card (Gap 2/3 Information Slip) */}
+
                   <div className="p-4 rounded-2xl border-2 border-amber-300 dark:border-amber-800 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 dark:from-amber-950/30 dark:via-slate-900 dark:to-slate-900 transition-all space-y-3 shadow-xs">
+
                     <div className="flex items-start justify-between gap-2">
+
                       <div className="space-y-1">
+
                         <div className="flex items-center gap-1.5 flex-wrap">
+
                           <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white flex items-center gap-1">
+
                             <span className="inline-flex items-center gap-1.5"><Icon3D name="video" size={18} /><span>Virtual Exam Invigilation</span></span>
+
                           </span>
+
                           <span className="text-[10px] font-bold text-slate-500">
+
                             • 14 Oct 2026 (09:00 AM – 12:00 PM)
+
                           </span>
+
                         </div>
+
                         <h4 className="text-xs font-black text-slate-900 dark:text-white">
+
                           Mid-Term Examination Invigilation · Virtual Room Alpha
+
                         </h4>
+
                         <span className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold block">
+
                           Class 8-B · Mathematics Descriptive Assessment (45 Candidates on Live Camera)
+
                         </span>
+
                       </div>
+
+
 
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1 shrink-0">
+
                         <CheckCircle2 className="h-3 w-3" />
+
                         <span>Duty Allocated ✓</span>
+
                       </span>
+
                     </div>
+
+
 
                     <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-amber-200/80 dark:border-amber-900/60 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-slate-500">Allocated Session:</span>
+
                         <span className="font-bold text-slate-900 dark:text-white">Virtual Exam Room Alpha (WebRTC Proctor Bridge)</span>
+
                       </div>
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-slate-500">Proctor Login Time:</span>
+
                         <span className="font-bold text-amber-700 dark:text-amber-400">08:45 AM (Verify Student Webcams &amp; ID)</span>
+
                       </div>
+
                       <div className="flex items-center justify-between">
+
                         <span className="text-slate-500">Issuing Authority:</span>
+
                         <span className="font-medium text-slate-700 dark:text-slate-300">Examination Cell (Dr. Hemanth Sen)</span>
+
                       </div>
+
                     </div>
+
+
 
                     <div className="flex items-center justify-between pt-1 text-[11px]">
+
                       <span className="text-slate-400 italic">
+
                         Official online duty notice &bull; Instructions available on Proctor Console
+
                       </span>
+
                       <button
-                        onClick={() => setActiveTab('duties')}
-                        className="text-amber-700 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('exams_gradebook');
+                          setExamSubTab('live_cockpit');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                       >
-                        <span>Open Duty Center</span>
-                        <ArrowRight className="h-3 w-3" />
+                        <Video className="h-3.5 w-3.5 text-rose-300 animate-pulse" />
+                        <span>Enter Invigilator Cockpit</span>
                       </button>
+
                     </div>
+
                   </div>
+
+
 
                   {academicTasks
+
                     .filter(t => t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher')
+
                     .map(task => {
+
                       const label = task.task_label || (
+
                         task.title.toLowerCase().includes('substitut') ? '🔄 Faculty Substitution' :
+
                         task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('paper') ? '📐 QP Blueprint Draft' :
+
                         task.title.toLowerCase().includes('syllabus') || task.title.toLowerCase().includes('pacing') ? '📚 Syllabus Pacing Catch-up' :
+
                         '📚 Academic Duty'
+
                       );
+
                       const color = 
+
                         label.includes('Substitution') ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 dark:border-rose-800' :
+
                         label.includes('Blueprint') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800' :
+
                         label.includes('Syllabus') ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800' :
+
                         'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 dark:border-blue-800';
 
+
+
                       return (
+
                       <div 
+
                         key={task.id} 
+
                         className={`p-4 rounded-2xl border bg-white dark:bg-slate-900 transition-all space-y-3 ${
+
                           task.relief_requested 
+
                             ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/30' 
+
                             : 'border-slate-200 dark:border-slate-800'
+
                         }`}
+
                       >
+
                         <div className="flex items-start justify-between gap-2">
+
                           <div className="space-y-1">
+
                             <div className="flex items-center gap-1.5 flex-wrap">
+
                               <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${color}`}>
+
                                 {label}
+
                               </span>
+
                               <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+
                                 task.priority === 'Critical' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' :
+
                                 task.priority === 'High' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+
                                 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+
                               }`}>
+
                                 {task.priority} Priority
+
                               </span>
+
                               <span className="text-[10px] font-bold text-slate-500">• Due: {task.due_date}</span>
+
                             </div>
+
                             <h4 className="text-xs font-bold text-slate-900 dark:text-white">{task.title}</h4>
+
                           </div>
+
+
 
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+
                             task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+
                             task.status === 'In Progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+
                             'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+
                           }`}>
+
                             {task.status}
+
                           </span>
+
                         </div>
+
+
 
                         {task.description && (
+
                           <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2">
+
                             {task.description}
+
                           </p>
+
                         )}
+
+
 
                         {task.relief_requested ? (
+
                           <div className="p-2.5 rounded-xl bg-amber-100/70 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 space-y-0.5">
+
                             <div className="font-bold flex items-center gap-1">
+
                               <Clock className="h-3.5 w-3.5 text-amber-600" />
+
                               Workload Relief Requested ({task.relief_reason})
+
                             </div>
+
                             <div className="text-[10px] text-amber-800 dark:text-amber-300 italic">
+
                               SLA is paused pending Coordinator re-assignment. Zero penalty applied.
+
                             </div>
+
                           </div>
+
                         ) : (
+
                           <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+
                             <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+
                               <Clock className="h-3.5 w-3.5" />
+
                               SLA Window: {task.sla_hours || 24} Hours
+
                             </span>
+
+
 
                             {task.status !== 'Completed' && (
+
                               <button
+
                                 onClick={() => {
+
                                   setReliefSelectedTask(task);
+
                                   setShowReliefModal(true);
+
                                 }}
+
                                 className="text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+
                               >
+
                                 <span>Request Relief / Migration</span>
+
                               </button>
+
                             )}
+
                           </div>
+
                         )}
+
+
 
                         {task.status !== 'Completed' && !task.relief_requested && (
+
                           <div className="space-y-2 pt-1">
+
                             {(label.includes('Blueprint') || task.title.toLowerCase().includes('blueprint') || task.title.toLowerCase().includes('paper')) && (
+
                               <button
+
                                 onClick={() => {
+
                                   setActiveTab('exams_gradebook');
+
                                   setExamSubTab('qp_desk');
+
                                   const matching = teacherQpList.find(p => p.title.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(p.class_name.toLowerCase()) || p.status === 'draft' || p.status === 'revision_requested');
+
                                   if (matching) {
+
                                     setSelectedDraftQp(matching);
+
                                     setDraftFileName(matching.draft_file_name || `${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_Final_QP.pdf`);
+
                                     setDraftFileUrl(matching.draft_file_url || `/samples/${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_Final_QP.pdf`);
+
                                     setAnswerKeyUrl(matching.answer_key_url || `/samples/${matching.class_name.replace(/\s+/g, '_')}_${matching.subject}_Term1_AnswerKey.pdf`);
+
                                   }
+
                                 }}
+
                                 className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+
                               >
+
                                 <Upload className="h-3.5 w-3.5" />
+
                                 <span>Author &amp; Upload Blueprint Draft &rarr;</span>
+
                               </button>
+
                             )}
+
                             {task.rejection_reason && task.status !== 'Completed' && (
+
                               <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+
                                 <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-300">
+
                                   <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+
                                   <span>Principal Requested Revision:</span>
+
                                 </div>
+
                                 <p className="text-[11px] text-rose-700 dark:text-rose-300 italic">
+
                                   &ldquo;{task.rejection_reason}&rdquo;
+
                                 </p>
+
                               </div>
+
                             )}
+
+
 
                             {task.status === 'Pending Review' ? (
+
                               <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+
                                 <div className="flex items-center gap-1.5 font-bold">
+
                                   <Clock className="h-3.5 w-3.5 text-amber-600" />
+
                                   <span>Submitted for Principal Verification</span>
+
                                 </div>
+
                                 <p className="text-[11px] text-amber-700 dark:text-amber-300">
+
                                   Awaiting administrator sign-off. {task.submission_notes ? `Notes: "${task.submission_notes}"` : ''}
+
                                 </p>
+
                               </div>
+
                             ) : (
+
                               <div className="flex items-center gap-2">
+
                                 {task.status !== 'In Progress' && (
+
                                   <button
+
                                     onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
+
                                     className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+
                                   >
+
                                     Mark In Progress
+
                                   </button>
+
                                 )}
+
                                 <button
+
                                   onClick={() => {
+
                                     setSubmitWorkTask(task);
+
                                     setTaskSubmissionNotes('');
+
                                     setTaskProofUrl('');
+
                                   }}
+
                                   className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+
                                 >
+
                                   <CheckCircle2 className="h-3.5 w-3.5" />
+
                                   <span>Submit Work &amp; Proof</span>
+
                                 </button>
+
                               </div>
+
                             )}
+
                           </div>
+
                         )}
+
                       </div>
+
                     );
+
                   })}
+
                 </div>
+
               </div>
+
+
 
               {/* Quick Navigation Banner to Dedicated Syllabus & Curriculum Section */}
+
               <div className="rounded-3xl border border-teal-200/80 dark:border-teal-900/60 bg-gradient-to-r from-teal-50/70 to-emerald-50/50 dark:from-teal-950/30 dark:to-emerald-950/20 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                 <div className="flex items-center gap-3">
+
                   <div className="h-10 w-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+
                     <BookOpen className="h-5 w-5" />
+
                   </div>
+
                   <div>
+
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                       Mathematics Curriculum &amp; Term Benchmark Pacing
+
                     </h3>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400">
+
                       View class-wise syllabus delivery checkpoints, lesson logs, and term targets for Class 7-A, 8-B, and 9-A Mathematics.
+
                     </p>
+
                   </div>
+
                 </div>
+
                 <button
+
                   onClick={() => setActiveTab('curriculum')}
+
                   className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+
                 >
+
                   <span>Open Syllabus &amp; Curriculum Section</span>
+
                   <ArrowRight className="h-3.5 w-3.5" />
+
                 </button>
+
               </div>
+
+
 
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 1: LIVE CLASS & 10-MIN AUTO-ATTENDANCE RULE       */}
+
           {/* ===================================================== */}
+
           {activeTab === 'live_class' && (
+
             <div className="space-y-6">
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-bold border border-emerald-200">
+
                       Live Class Studio
+
                     </span>
+
                     <span className="text-xs text-slate-500">Virtual Studio A • Class 8B</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+
                     Live Class Studio &amp; 10-Minute Auto-Attendance Engine
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Students joining within 10 minutes are auto-marked Present. After 10m, they are flagged Late with 1-click teacher decision.
+
                   </p>
+
                 </div>
 
+
+
                 <div className="flex items-center gap-2">
+
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3 py-1 text-xs font-bold">
+
                     <Radio className="h-3 w-3 animate-ping" />
+
                     Recording in Cloud HD
+
                   </span>
+
                 </div>
+
               </div>
+
+
 
               {/* Live Video Preview & Control Ribbon */}
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
                 <div className="lg:col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-900 text-white p-4 space-y-4 shadow-sm flex flex-col justify-between">
+
                   <div>
+
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+
                       <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+
                         <Video className="h-4 w-4 text-emerald-400" />
+
                         Teacher Webcam Stream
+
                       </span>
-                      <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">
-                        1080p 60fps
-                      </span>
+
+                      <button onClick={handleStartTeacherLiveClass} className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg cursor-pointer transition-all flex items-center gap-1 shadow-sm">
+
+                        <span>Launch LiveKit Video Room ↗</span>
+
+                      </button>
+
                     </div>
+
+
 
                     <div className="mt-3 aspect-video rounded-xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+
                       <div className="h-16 w-16 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-lg font-bold shadow-lg">
+
                         AV
+
                       </div>
+
                       <span className="text-xs font-bold text-white mt-2">Mrs. Ananya Verma</span>
+
                       <span className="text-[10px] text-slate-400">Class 8-B Mathematics</span>
 
+
+
                       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded-md text-[10px] font-semibold">
+
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+
                         Mic Active
+
                       </div>
+
                     </div>
+
                   </div>
+
+
 
                   <div className="space-y-2 pt-2 border-t border-slate-800">
+
                     <div className="flex items-center justify-between text-xs">
+
                       <span className="text-slate-400">Class Duration:</span>
+
                       <span className="font-bold text-white font-mono">24m : 18s / 45m</span>
+
                     </div>
+
                     <div className="flex items-center justify-between text-xs">
+
                       <span className="text-slate-400">Enrolled Students:</span>
+
                       <span className="font-bold text-emerald-400">38 Registered</span>
+
                     </div>
+
                     <div className="flex items-center justify-between text-xs">
+
                       <span className="text-slate-400">Auto-Attendance:</span>
+
                       <span className="font-bold text-emerald-400">T0 + 10m Rule</span>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                 {/* Real-time Simulator & Roster Engine */}
+
                 <div className="lg:col-span-2">
+
                   <AttendanceSimulator
+
                     records={attendance}
+
                     onSimulateJoin={handleSimulateJoin}
+
                     onOverride={handleOverrideAttendance}
+
                   />
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 2: TEACHER-CENTRIC PERSONAL TIMETABLE            */}
+
           {/* ===================================================== */}
+
           {activeTab === 'schedule' && (
+
             <div className="space-y-6">
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-blue-100 text-blue-800 px-2.5 py-0.5 text-xs font-bold border border-blue-200">
+
                       Teacher Personal Cockpit
+
                     </span>
+
                     <span className="text-xs text-slate-500">Academic Year 2026-27 • Mrs. Ananya Verma</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+
                     Teacher-Centric Personal Timetable
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Chronological daily schedule across your own classes, STEM computing labs, free prep periods, and assigned exam invigilations.
+
                   </p>
+
                 </div>
+
+
 
                 {/* Day of Week Selector */}
+
                 <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+
                   {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
+
                     <button
+
                       key={day}
+
                       onClick={() => handleDaySelect(day)}
+
                       className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+
                         selectedScheduleDay === day
+
                           ? 'bg-blue-600 text-white shadow-sm'
+
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                       }`}
+
                     >
+
                       {day.slice(0, 3)}
+
                     </button>
+
                   ))}
+
                 </div>
+
               </div>
+
+
 
               {/* Schedule Operational Metrics Strip */}
+
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+
                 <div className="p-3 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/20">
+
                   <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">
+
                     Teaching Sessions
+
                   </span>
+
                   <div className="flex items-baseline gap-1 mt-1">
+
                     <span className="text-xl font-black text-slate-900 dark:text-white">
+
                       {personalSchedule.filter(s => s.activity_type === 'TEACHING_SESSION').length}
+
                     </span>
+
                     <span className="text-[11px] text-slate-500">periods</span>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="p-3 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/20">
+
                   <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">
+
                     Lab Sessions
+
                   </span>
+
                   <div className="flex items-baseline gap-1 mt-1">
+
                     <span className="text-xl font-black text-slate-900 dark:text-white">
+
                       {personalSchedule.filter(s => s.activity_type === 'LAB_SESSION').length}
+
                     </span>
+
                     <span className="text-[11px] text-slate-500">STEM lab</span>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="p-3 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/20">
+
                   <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+
                     Exam Invigilation
+
                   </span>
+
                   <div className="flex items-baseline gap-1 mt-1">
+
                     <span className="text-xl font-black text-slate-900 dark:text-white">
+
                       {personalSchedule.filter(s => s.activity_type === 'EXAM_INVIGILATION').length}
+
                     </span>
+
                     <span className="text-[11px] text-slate-500">duty</span>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="p-3 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/20">
+
                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+
                     Free Prep / Resource
+
                   </span>
+
                   <div className="flex items-baseline gap-1 mt-1">
+
                     <span className="text-xl font-black text-slate-900 dark:text-white">
+
                       {personalSchedule.filter(s => s.activity_type === 'FREE_PREP_PERIOD').length}
+
                     </span>
+
                     <span className="text-[11px] text-slate-500">periods</span>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="p-3 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/20">
+
                   <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
+
                     Substitution Cover
+
                   </span>
+
                   <div className="flex items-baseline gap-1 mt-1">
+
                     <span className="text-xl font-black text-slate-900 dark:text-white">
+
                       {personalSchedule.filter(s => s.activity_type === 'SUBSTITUTION_COVER').length}
+
                     </span>
+
                     <span className="text-[11px] text-slate-500">period</span>
+
                   </div>
+
                 </div>
+
               </div>
+
+
 
               {/* Personal Chronological Schedule List */}
+
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+
                   <div className="flex items-center gap-2">
+
                     <Calendar className="h-4 w-4 text-blue-600" />
+
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+
                       Personal Chronological Day Schedule — {selectedScheduleDay}
+
                     </span>
+
                   </div>
+
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
+
                     Faculty Hours: 08:30 AM – 03:00 PM
+
                   </span>
+
                 </div>
 
+
+
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
+
                   {personalSchedule.map((item) => {
+
                     const isTeaching = item.activity_type === 'TEACHING_SESSION';
+
                     const isLab = item.activity_type === 'LAB_SESSION';
+
                     const isInvigilation = item.activity_type === 'EXAM_INVIGILATION';
+
                     const isFree = item.activity_type === 'FREE_PREP_PERIOD';
+
                     const isSub = item.activity_type === 'SUBSTITUTION_COVER';
+
                     const isMentorship = item.activity_type === 'HOMEROOM_MENTORSHIP';
 
+
+
                     return (
+
                       <div 
+
                         key={item.id} 
+
                         className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+
                           item.is_current_active_period 
+
                             ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-blue-600 shadow-xs' 
+
                             : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
+
                         }`}
+
                       >
+
                         <div className="flex items-start gap-4 flex-1">
+
                           {/* Period Badge */}
+
                           <div className={`h-12 w-12 rounded-2xl flex flex-col items-center justify-center font-bold shrink-0 ${
+
                             item.is_current_active_period
+
                               ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+
                               : isInvigilation
+
                               ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+
                               : isLab
+
                               ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+
                               : isFree
+
                               ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+
                               : isSub
+
                               ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+
                               : isMentorship
+
                               ? 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-300 dark:border-teal-800'
+
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+
                           }`}>
+
                             <span className="text-[9px] uppercase font-bold">Per</span>
+
                             <span className="text-base font-black">{item.period_number}</span>
+
                           </div>
+
+
 
                           <div className="flex-1 space-y-1">
+
                             <div className="flex flex-wrap items-center gap-2">
+
                               {/* Title / Subject */}
+
                               <h4 className="text-sm font-black text-slate-900 dark:text-white">
+
                                 {item.subject_name || (isFree ? 'Free / Prep & Curriculum Planning' : 'Instructional Period')}
+
                               </h4>
 
+
+
                               {/* Class Pill */}
+
                               {item.class_grade && (
+
                                 <span className="rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2 py-0.5 text-[11px] font-bold border border-slate-200 dark:border-slate-700">
+
                                   {item.class_grade} {item.section !== 'All' ? `- ${item.section}` : ''}
+
                                 </span>
+
                               )}
+
+
 
                               {/* Activity Badge */}
+
                               <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+
                                 isTeaching
+
                                   ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+
                                   : isLab
+
                                   ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300'
+
                                   : isInvigilation
+
                                   ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300'
+
                                   : isFree
+
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+
                                   : isMentorship
+
                                   ? 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300'
+
                                   : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300'
+
                               }`}>
+
                                 {isTeaching && 'Teaching Session'}
+
                                 {isLab && 'Applied STEM Lab'}
+
                                 {isInvigilation && 'Exam Invigilation Duty'}
+
                                 {isFree && 'Free Prep Period'}
+
                                 {isSub && 'Substitution Coverage'}
+
                                 {isMentorship && 'Homeroom Mentorship'}
+
                               </span>
+
+
 
                               {/* Current Active Pulse with Live Timer */}
+
                               {item.is_current_active_period && (
+
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200 px-3 py-1 text-[10px] font-black uppercase tracking-wider border border-emerald-300 dark:border-emerald-700 shadow-xs animate-pulse">
+
                                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+
                                   <span>Active Now • {Math.floor(scheduleActivePeriodSeconds / 60)}m {String(scheduleActivePeriodSeconds % 60).padStart(2, '0')}s remaining</span>
+
                                 </span>
+
                               )}
+
                             </div>
+
+
 
                             {/* Time & Venue */}
+
                             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+
                               <span className="flex items-center gap-1 font-mono font-semibold">
+
                                 ⏰ {item.start_time} – {item.end_time}
+
                               </span>
+
                               <span>•</span>
+
                               <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+
                                 📍 {item.room_number}
+
                               </span>
+
                             </div>
+
+
 
                             {/* Personal Notes */}
+
                             {item.notes && (
+
                               <div className="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3 py-1.5 border border-slate-200/80 dark:border-slate-800">
+
                                 <span className="font-bold text-slate-500 dark:text-slate-400 mr-1.5">Agenda:</span>
+
                                 {item.notes}
+
                               </div>
+
                             )}
+
                           </div>
+
                         </div>
+
+
 
                         {/* Action Buttons */}
+
                         <div className="flex items-center gap-2 shrink-0">
+
                           {isTeaching || isLab ? (
+
                             <button
+
                               onClick={() => setActiveTab('live_class')}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs cursor-pointer transition-transform active:scale-95"
+
                             >
+
                               <Radio className="h-3.5 w-3.5 animate-pulse" />
+
                               <span>Open Live Studio</span>
+
                             </button>
+
                           ) : isFree ? (
+
                             <button
+
                               onClick={() => setActiveTab('focus_table')}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs cursor-pointer"
+
                             >
+
                               <Sparkles className="h-3.5 w-3.5" />
+
                               <span>Focus Table Queue</span>
+
                             </button>
+
                           ) : isInvigilation ? (
+
                             <button
+
                               onClick={() => {
+
                                 setActiveDutySegment('EXAM_INVIGILATION');
+
                                 setActiveTab('duties');
+
                               }}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs cursor-pointer"
+
                             >
+
                               <ShieldCheck className="h-3.5 w-3.5" />
+
                               <span>Invigilation Details</span>
+
                             </button>
+
                           ) : isMentorship ? (
+
                             <button
+
                               onClick={() => setActiveTab('focus_table')}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs cursor-pointer"
+
                             >
+
                               <Users className="h-3.5 w-3.5" />
+
                               <span>Mentorship Roster</span>
+
                             </button>
+
                           ) : (
+
                             <button
+
                               onClick={() => triggerToast(`Substitution instructions logged for ${item.room_number}`)}
+
                               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 px-3.5 py-2 text-xs font-semibold cursor-pointer"
+
                             >
+
                               <BookOpen className="h-3.5 w-3.5" />
+
                               <span>Lesson Worksheet</span>
+
                             </button>
+
                           )}
+
                         </div>
+
                       </div>
+
                     );
+
                   })}
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TASK 1: HOMEWORK SUBMISSIONS ROSTER & SPEEDGRADER     */}
+
           {/* ===================================================== */}
+
           {activeTab === 'homework' && (
+
             <div className="space-y-6">
+
               
+
               {/* Assignment Header Card */}
+
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
+
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+
                   <div className="space-y-1">
+
                     <div className="flex flex-wrap items-center gap-2">
+
                       <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-bold border border-indigo-200 dark:border-indigo-800">
+
                         Class 8-B
+
                       </span>
+
                       <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-bold">
+
                         Mathematics
+
                       </span>
+
                       <span className="text-xs text-slate-500 flex items-center gap-1">
+
                         <Clock className="h-3.5 w-3.5 text-slate-400" />
+
                         Due Date: Today, 05:00 PM
+
                       </span>
+
                     </div>
 
+
+
                     <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+
                       Quadratic Equations Worksheet #4: Factorization &amp; Roots
+
                     </h2>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400">
+
                       Standard splitting method, signs verification, and word problems. Submissions are graded directly using in-browser SVG annotations.
+
                     </p>
+
                   </div>
+
+
 
                   {/* Primary Trigger to start grading first pending student */}
+
                   <button
+
                     onClick={() => {
+
                       const firstPendingIdx = homeworkList.findIndex(h => h.status === 'Submitted');
+
                       handleOpenSpeedGrader(firstPendingIdx !== -1 ? firstPendingIdx : 0);
+
                     }}
+
                     className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-4.5 py-2.5 text-xs font-bold shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer self-start lg:self-auto shrink-0"
+
                   >
+
                     <Edit3 className="h-4 w-4" />
+
                     <span>Launch SpeedGrader Canvas</span>
+
                   </button>
+
                 </div>
+
+
 
                 {/* Quick Stats Pill Chips */}
+
                 <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
+
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+
                     <span className="text-slate-400">Total Enrolled:</span>
+
                     <span>{homeworkStats.total}</span>
+
                   </div>
+
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+
                     <span className="h-2 w-2 rounded-full bg-blue-500" />
+
                     <span>Submitted: {homeworkStats.submitted}</span>
+
                   </div>
+
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
+
                     <span>Graded: {homeworkStats.graded}</span>
+
                   </div>
+
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900">
+
                     <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+
                     <span>Needs Grading: {homeworkStats.needsGrading}</span>
+
                   </div>
+
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+
                     <span className="h-2 w-2 rounded-full bg-rose-500" />
+
                     <span>Missing: {homeworkStats.missing}</span>
+
                   </div>
+
                 </div>
+
               </div>
+
+
 
               {/* Roster Controls: Search & Filters */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                 <div className="relative flex-1 max-w-sm">
+
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+
                   <input
+
                     type="text"
+
                     value={homeworkSearch}
+
                     onChange={(e) => setHomeworkSearch(e.target.value)}
+
                     placeholder="Search by student, roll number, or admission ID..."
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
+
                   />
+
                 </div>
+
+
 
                 {/* Filter Pills */}
+
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+
                   {(['All', 'Needs Grading', 'Graded', 'Missing'] as const).map(filter => (
+
                     <button
+
                       key={filter}
+
                       onClick={() => setHomeworkFilter(filter)}
+
                       className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+
                         homeworkFilter === filter
+
                           ? 'bg-indigo-600 text-white shadow-xs'
+
                           : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                       }`}
+
                     >
+
                       {filter}
+
                     </button>
+
                   ))}
+
                 </div>
+
               </div>
+
+
 
               {/* Class Submissions Data Table */}
+
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+
                 <div className="overflow-x-auto">
+
                   <table className="w-full text-left border-collapse text-xs">
+
                     <thead>
+
                       <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/60 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+
                         <th className="py-3 px-4">Roll</th>
+
                         <th className="py-3 px-4">Student</th>
+
                         <th className="py-3 px-4">Status</th>
+
                         <th className="py-3 px-4">Submission Info</th>
+
                         <th className="py-3 px-4 text-center">Score</th>
+
                         <th className="py-3 px-4 text-right">Actions</th>
+
                       </tr>
+
                     </thead>
+
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                       {filteredHomework.map((hw, idx) => {
+
                         const originalIndex = homeworkList.findIndex(h => h.id === hw.id);
+
                         return (
+
                           <tr 
+
                             key={hw.id}
+
                             className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+
                           >
+
                             {/* Roll No */}
+
                             <td className="py-3.5 px-4 font-mono font-bold text-slate-600 dark:text-slate-400">
+
                               #{hw.roll_no}
+
                             </td>
+
+
 
                             {/* Student Info */}
+
                             <td className="py-3.5 px-4">
+
                               <div className="flex items-center gap-3">
+
                                 <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-900 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold shrink-0">
+
                                   {hw.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                                 </div>
+
                                 <div>
+
                                   <span className="font-bold text-slate-900 dark:text-white block">
+
                                     {hw.name}
+
                                   </span>
+
                                   <span className="text-[10px] text-slate-400 block">
+
                                     {hw.admission_id}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
                             </td>
+
+
 
                             {/* Status Badge */}
+
                             <td className="py-3.5 px-4">
+
                               <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+
                                 hw.status === 'Graded'
+
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
+
                                   : hw.status === 'Submitted'
+
                                   ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-900 animate-pulse'
+
                                   : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-900'
+
                               }`}>
+
                                 <span className={`h-1.5 w-1.5 rounded-full ${
+
                                   hw.status === 'Graded' ? 'bg-emerald-500' : hw.status === 'Submitted' ? 'bg-blue-500' : 'bg-rose-500'
+
                                 }`} />
+
                                 {hw.status === 'Submitted' ? 'Needs Grading' : hw.status}
+
                               </span>
+
                             </td>
+
+
 
                             {/* Submission Info */}
+
                             <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
+
                               {hw.status !== 'Missing' ? (
+
                                 <div>
+
                                   <span className="font-medium text-slate-800 dark:text-slate-200 block">
+
                                     {hw.file_name}
+
                                   </span>
+
                                   <span className="text-[10px] text-slate-400 block">
+
                                     {hw.submission_time} • {hw.file_size}
+
                                   </span>
+
                                 </div>
+
                               ) : (
+
                                 <span className="text-slate-400 italic">No document uploaded</span>
+
                               )}
+
                             </td>
+
+
 
                             {/* Score */}
+
                             <td className="py-3.5 px-4 text-center">
+
                               {hw.score !== undefined ? (
+
                                 <span className="font-black text-slate-900 dark:text-white">
+
                                   {hw.score} <span className="text-slate-400 font-normal">/ {hw.max_score}</span>
+
                                 </span>
+
                               ) : (
+
                                 <span className="text-slate-400">-- / {hw.max_score}</span>
+
                               )}
+
                             </td>
+
+
 
                             {/* Actions */}
+
                             <td className="py-3.5 px-4 text-right">
+
                               {hw.status === 'Submitted' && (
+
                                 <button
+
                                   onClick={() => handleOpenSpeedGrader(originalIndex)}
+
                                   className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+
                                 >
+
                                   <Edit3 className="h-3.5 w-3.5" />
+
                                   <span>Evaluate Work</span>
+
                                 </button>
+
                               )}
+
+
 
                               {hw.status === 'Graded' && (
+
                                 <button
+
                                   onClick={() => handleOpenSpeedGrader(originalIndex)}
+
                                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+
                                 >
+
                                   <Eye className="h-3.5 w-3.5 text-slate-500" />
+
                                   <span>Review &amp; Adjust</span>
+
                                 </button>
+
                               )}
+
+
 
                               {hw.status === 'Missing' && (
+
                                 <button
+
                                   onClick={() => handleRemindMissingStudent(hw.name)}
+
                                   className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+
                                 >
+
                                   <Bell className="h-3.5 w-3.5" />
+
                                   <span>Send Reminder</span>
+
                                 </button>
+
                               )}
+
                             </td>
+
                           </tr>
+
                         );
+
                       })}
+
                     </tbody>
+
                   </table>
+
                 </div>
+
+
 
                 {filteredHomework.length === 0 && (
+
                   <div className="p-8 text-center text-slate-500">
+
                     No submissions matching your filter criteria.
+
                   </div>
+
                 )}
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* EXAMS & MARKS ENTRY MODULE                            */}
+
           {/* ===================================================== */}
+
           {/* MODAL: EXAMS & MARKS ENTRY LEDGER (From Duties Queue) */}
+
           {dutyScoringModalOpen && (
+
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
               <div className="w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-6">
+
                 <div className="flex items-center justify-end pb-1">
+
                   <button onClick={() => setDutyScoringModalOpen(false)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+
                     <X className="h-5 w-5" />
+
                   </button>
+
                 </div>
+
               
+
               {/* Header Card */}
+
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
+
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+
                   <div className="space-y-1">
+
                     <div className="flex flex-wrap items-center gap-2">
+
                       <span className="rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 px-2.5 py-0.5 text-xs font-bold border border-purple-200 dark:border-purple-800">
+
                         {currentExamConfig.class_name}
+
                       </span>
+
                       <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-bold">
+
                         {currentExamConfig.subject}
+
                       </span>
+
                       <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1">
+
                         <CheckSquare className="h-3 w-3" />
+
                         {currentExamConfig.status}
+
                       </span>
+
                       <span className="text-xs text-slate-500 flex items-center gap-1">
+
                         <Clock className="h-3.5 w-3.5 text-slate-400" />
+
                         Conducted: {currentExamConfig.date}
+
                       </span>
+
                     </div>
+
+
 
                     <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+
                       {currentExamConfig.title}
+
                     </h2>
+
                     <p className="text-xs text-slate-500 dark:text-slate-400">
+
                       Enter and review theory and internal marks. Scores &le; 70% automatically link to the student&apos;s remedial Focus Table plan.
+
                     </p>
+
                   </div>
+
+
 
                   {/* Actions Header */}
+
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
-                    <button
-                      onClick={handleFlagAllUnderperformingToFocusTable}
-                      title="Automatically sync all students scoring 70% or below into Focus Table remedial queues"
-                      className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2.5 text-xs font-bold shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      <span>Sync &le; 70% to Focus Table</span>
-                    </button>
 
                     <button
-                      onClick={handleSaveExamRoster}
-                      className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
+
+                      onClick={handleFlagAllUnderperformingToFocusTable}
+
+                      title="Automatically sync all students scoring 70% or below into Focus Table remedial queues"
+
+                      className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2.5 text-xs font-bold shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
+
                     >
-                      <Save className="h-4 w-4" />
-                      <span>Publish &amp; Save Marks</span>
+
+                      <Sparkles className="h-4 w-4" />
+
+                      <span>Sync &le; 70% to Focus Table</span>
+
                     </button>
+
+
+
+                    <button
+
+                      onClick={handleSaveExamRoster}
+
+                      className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 text-xs font-bold shadow-md shadow-purple-600/20 active:scale-95 transition-all cursor-pointer"
+
+                    >
+
+                      <Save className="h-4 w-4" />
+
+                      <span>Publish &amp; Save Marks</span>
+
+                    </button>
+
                   </div>
+
                 </div>
+
+
 
                 {/* Exam Cycle Selector Chips */}
+
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+
                   <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+
                     <span className="text-xs font-bold text-slate-500 mr-1">Select Exam:</span>
+
                     {examConfigs.map(exam => (
+
                       <button
+
                         key={exam.id}
+
                         onClick={() => setSelectedExamId(exam.id)}
+
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+
                           selectedExamId === exam.id
+
                             ? 'bg-purple-600 text-white shadow-xs'
+
                             : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         {exam.title.split(':')[0]}
+
                       </button>
+
                     ))}
+
                   </div>
+
+
 
                   <div className="text-xs font-bold text-slate-500 flex items-center gap-2">
+
                     <span>Theory Max: <strong className="text-slate-800 dark:text-white">{currentExamConfig.max_theory}</strong></span>
+
                     <span>•</span>
+
                     <span>Internal Max: <strong className="text-slate-800 dark:text-white">{currentExamConfig.max_internal}</strong></span>
+
                     <span>•</span>
+
                     <span>Total: <strong className="text-purple-600 dark:text-purple-400">{currentExamConfig.max_theory + currentExamConfig.max_internal} Marks</strong></span>
+
                   </div>
+
                 </div>
+
+
 
                 {/* KPI Metrics Strip */}
+
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+
                   <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/20">
+
                     <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">
+
                       Class Average Score
+
                     </span>
+
                     <div className="flex items-baseline gap-1 mt-1">
+
                       <span className="text-2xl font-black text-slate-900 dark:text-white">
+
                         {examStats.averagePct}%
+
                       </span>
+
                       <span className="text-xs text-slate-500">overall</span>
+
                     </div>
+
                   </div>
+
+
 
                   <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/20">
+
                     <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+
                       Highest Score
+
                     </span>
+
                     <div className="flex items-baseline gap-1 mt-1">
+
                       <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+
                         {examStats.topScore} / {currentExamConfig.max_theory + currentExamConfig.max_internal}
+
                       </span>
+
                       <span className="text-xs text-slate-500 font-bold">Tanvi (98%)</span>
+
                     </div>
+
                   </div>
+
+
 
                   <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/20">
+
                     <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">
+
                       Pass Percentage
+
                     </span>
+
                     <div className="flex items-baseline gap-1 mt-1">
+
                       <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
+
                         {Math.round((examStats.passCount / examStats.totalStudents) * 100)}%
+
                       </span>
+
                       <span className="text-xs text-slate-500">({examStats.passCount}/{examStats.totalStudents} passed)</span>
+
                     </div>
+
                   </div>
+
+
 
                   <div className="p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/20">
+
                     <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
+
                       Remedial Interventions
+
                     </span>
+
                     <div className="flex items-baseline gap-1 mt-1">
+
                       <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
+
                         {examStats.remedialCount}
+
                       </span>
+
                       <span className="text-xs text-slate-500">students &lt; 60%</span>
+
                     </div>
+
                   </div>
+
                 </div>
+
               </div>
+
+
 
               {/* Controls: Search, Filters & Bulk Export */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                 <div className="relative flex-1 max-w-sm">
+
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+
                   <input
+
                     type="text"
+
                     value={examSearch}
+
                     onChange={(e) => setExamSearch(e.target.value)}
+
                     placeholder="Search by student name, roll # or ID..."
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
+
                   />
+
                 </div>
+
+
 
                 <div className="flex items-center gap-2">
+
                   {/* Grade Filters */}
+
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+
                     {(['All', 'A+ & A', 'Passing', 'Needs Focus'] as const).map(filter => (
+
                       <button
+
                         key={filter}
+
                         onClick={() => setExamGradeFilter(filter)}
+
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+
                           examGradeFilter === filter
+
                             ? 'bg-purple-600 text-white shadow-xs'
+
                             : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         {filter}
+
                       </button>
+
                     ))}
+
                   </div>
+
+
 
                   <div className="flex items-center gap-2">
+
                     <input
+
                       type="file"
+
                       ref={examCsvInputRef}
+
                       accept=".csv"
+
                       onChange={handleUploadExamCsv}
+
                       className="hidden"
+
                     />
-                    <button
-                      onClick={() => examCsvInputRef.current?.click()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 text-xs font-bold cursor-pointer transition-all"
-                    >
-                      <Upload className="h-3.5 w-3.5" />
-                      <span>Import CSV</span>
-                    </button>
 
                     <button
-                      onClick={handleDownloadExamCsv}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 text-xs font-bold cursor-pointer transition-all"
+
+                      onClick={() => examCsvInputRef.current?.click()}
+
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 text-xs font-bold cursor-pointer transition-all"
+
                     >
-                      <Download className="h-3.5 w-3.5" />
-                      <span>Export CSV</span>
+
+                      <Upload className="h-3.5 w-3.5" />
+
+                      <span>Import CSV</span>
+
                     </button>
+
+
+
+                    <button
+
+                      onClick={handleDownloadExamCsv}
+
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 text-xs font-bold cursor-pointer transition-all"
+
+                    >
+
+                      <Download className="h-3.5 w-3.5" />
+
+                      <span>Export CSV</span>
+
+                    </button>
+
                   </div>
+
                 </div>
+
               </div>
+
+
 
               {/* Marks Ledger Table */}
+
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+
                 <div className="overflow-x-auto">
+
                   <table className="w-full text-left border-collapse text-xs">
+
                     <thead>
+
                       <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/60 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+
                         <th className="py-3 px-4">Roll</th>
+
                         <th className="py-3 px-4">Student</th>
+
                         <th className="py-3 px-4">Theory (/ {currentExamConfig.max_theory})</th>
+
                         <th className="py-3 px-4">Internal (/ {currentExamConfig.max_internal})</th>
+
                         <th className="py-3 px-4">Total Score</th>
+
                         <th className="py-3 px-4">Percentage</th>
+
                         <th className="py-3 px-4">Grade</th>
+
                         <th className="py-3 px-4">Focus Table Remedial</th>
+
                         <th className="py-3 px-4 text-right">Remarks</th>
+
                       </tr>
+
                     </thead>
+
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                       {filteredExamScores.map(student => {
+
                         const totalScore = student.theory_score + student.internal_score;
+
                         const maxTotal = student.max_theory + student.max_internal;
+
                         const pct = Math.round((totalScore / maxTotal) * 100);
 
+
+
                         return (
+
                           <tr key={student.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+
                             <td className="py-3 px-4 font-mono font-bold text-slate-500">
+
                               #{student.roll_no}
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               <div className="font-bold text-slate-900 dark:text-white">
+
                                 {student.name}
+
                               </div>
+
                               <div className="text-[10px] text-slate-400 font-mono">
+
                                 {student.admission_id}
+
                               </div>
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               <input
+
                                 type="number"
+
                                 min={0}
+
                                 max={student.max_theory}
+
                                 value={student.theory_score}
+
                                 onChange={(e) => handleUpdateExamScore(student.id, 'theory_score', parseInt(e.target.value) || 0)}
+
                                 className="w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500 text-center"
+
                               />
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               <input
+
                                 type="number"
+
                                 min={0}
+
                                 max={student.max_internal}
+
                                 value={student.internal_score}
+
                                 onChange={(e) => handleUpdateExamScore(student.id, 'internal_score', parseInt(e.target.value) || 0)}
+
                                 className="w-16 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500 text-center"
+
                               />
+
                             </td>
+
                             <td className="py-3 px-4 font-black text-slate-900 dark:text-white">
+
                               {totalScore} <span className="text-[10px] text-slate-400 font-normal">/ {maxTotal}</span>
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               <div className="flex items-center gap-2">
+
                                 <div className="w-16 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+
                                   <div
+
                                     className={`h-full rounded-full ${
+
                                       pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-blue-500' : 'bg-rose-500'
+
                                     }`}
+
                                     style={{ width: `${Math.min(100, pct)}%` }}
+
                                   />
+
                                 </div>
+
                                 <span className="font-bold text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+
                                   {pct}%
+
                                 </span>
+
                               </div>
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${
+
                                 student.grade === 'A+' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300' :
+
                                 student.grade === 'A' ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300' :
+
                                 student.grade === 'B' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+
                                 student.grade === 'C' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+
                                 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300'
+
                               }`}>
+
                                 {student.grade}
+
                               </span>
+
                             </td>
+
                             <td className="py-3 px-4">
+
                               {student.in_focus_table ? (
+
                                 <button
+
                                   onClick={() => setActiveTab('focus_table')}
+
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300 text-[10px] font-bold hover:bg-amber-100 cursor-pointer"
+
                                 >
+
                                   <Sparkles className="h-3 w-3 text-amber-500" />
+
                                   <span>Active Remedial Plan ✓</span>
+
                                 </button>
+
                               ) : (
+
                                 <button
+
                                   onClick={() => {
+
                                     setExamScores(prev => prev.map(s => s.id === student.id ? { ...s, in_focus_table: true } : s));
+
                                     triggerToast(`Enrolled ${student.name} into Focus Table!`);
+
                                   }}
+
                                   className="text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-semibold cursor-pointer underline decoration-dotted"
+
                                 >
+
                                   + Add to Plan
+
                                 </button>
+
                               )}
+
                             </td>
+
                             <td className="py-3 px-4 text-right">
+
                               <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[180px] inline-block" title={student.teacher_note}>
+
                                 {student.teacher_note}
+
                               </span>
+
                             </td>
+
                           </tr>
+
                         );
+
                       })}
+
                     </tbody>
+
                   </table>
+
                 </div>
+
+
 
                 {filteredExamScores.length === 0 && (
+
                   <div className="p-8 text-center text-slate-500">
+
                     No student marks found for the selected filter.
+
                   </div>
+
                 )}
+
               </div>
+
                 <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+
                   <span>Batch: Grade 10 Midterm Mathematics (45 Candidates)</span>
+
                   <div className="flex items-center gap-2">
+
                     <button onClick={() => setDutyScoringModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Cancel</button>
+
                     <button onClick={() => { handleSaveExamRoster(); setDutyScoringModalOpen(false); }} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-md cursor-pointer"><Save className="h-4 w-4" /><span>Publish &amp; Return to Duties</span></button>
+
                   </div>
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TASK 2: SUBJECT-BASED AI FOCUS TABLE & 1-WEEK PLANS  */}
+
           {/* ===================================================== */}
+
           {activeTab === 'focus_table' && (
+
             <div className="space-y-6">
+
               
+
               {/* Header Title with AI Exam Scan Badge & Mathematics Subject Badge */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex flex-wrap items-center gap-2">
+
                     <span className="rounded-full bg-amber-500 text-white px-3 py-0.5 text-xs font-black shadow-2xs flex items-center gap-1.5">
+
                       <BookOpen className="h-3.5 w-3.5" />
+
                       <span>Subject: Mathematics</span>
+
                     </span>
+
                     <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 px-2.5 py-0.5 text-xs font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+
                       <Sparkles className="h-3 w-3 text-amber-600" />
+
                       AI Exam Paper Diagnostic
+
                     </span>
+
                     <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+
                       1-Week Targeted Action Plans
+
                     </span>
+
                     <span className="text-xs text-slate-500">Secondary Department &bull; Academic Year 2026</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1.5">
+
                     Mathematics Focus Table &amp; 1-Week Remedial Intelligence
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+
                     Based on Mid-Term Exam performance, AI scans papers to diagnose root misconceptions and prescribes a 1-week focused practice sprint across your assigned class sections.
+
                   </p>
+
                 </div>
+
+
 
                 {/* Batch Action Button */}
+
                 {focusStats.needsVerification > 0 && (
+
                   <button
+
                     onClick={handleQuickVerifyAll}
+
                     className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-4 py-2 text-xs font-bold shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer self-start sm:self-auto shrink-0"
+
                     title="Batch verify all clean pending remedial solution uploads"
+
                   >
+
                     <CheckCircle2 className="h-4 w-4" />
+
                     <span>Quick Verify All Validated ({focusStats.needsVerification})</span>
+
                   </button>
+
                 )}
+
               </div>
+
+
 
               {/* Section Scope Selector Tabs (Sections the teacher deals with) */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+
                 <div className="flex flex-wrap items-center gap-2">
+
                   <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+
                     <Layers className="h-3.5 w-3.5 text-amber-500" />
+
                     Assigned Section:
+
                   </span>
+
                   {(['Class 8-B', 'Class 8-A', 'Class 9-A', 'Class 9-B', 'All'] as const).map(sec => {
+
                     const count = sec === 'All' ? focusRoster.length : focusRoster.filter(f => f.class_name === sec).length;
+
                     const isSelected = focusSectionFilter === sec;
+
                     const label = sec === 'All' ? 'All Sections' : sec === 'Class 8-B' ? 'Class 8-B (Homeroom)' : sec;
+
                     return (
+
                       <button
+
                         key={sec}
+
                         onClick={() => setFocusSectionFilter(sec)}
+
                         className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+
                           isSelected
+
                             ? 'bg-amber-600 text-white shadow-xs'
+
                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+
                         }`}
+
                       >
+
                         <span>{label}</span>
+
                         <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+
                           isSelected
+
                             ? 'bg-white/20 text-white'
+
                             : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+
                         }`}>
+
                           {count} on Plan
+
                         </span>
+
                       </button>
+
                     );
+
                   })}
+
                 </div>
+
+
 
                 {/* View Mode Toggle: Cards vs Table */}
+
                 <div className="flex items-center self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+
                   <button
+
                     onClick={() => setFocusViewMode('cards')}
+
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+
                       focusViewMode === 'cards'
+
                         ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-xs'
+
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                     }`}
+
                   >
+
                     <LayoutGrid className="h-3.5 w-3.5" />
+
                     <span>Cards View</span>
+
                   </button>
+
                   <button
+
                     onClick={() => setFocusViewMode('table')}
+
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+
                       focusViewMode === 'table'
+
                         ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-xs'
+
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                     }`}
+
                   >
+
                     <List className="h-3.5 w-3.5" />
+
                     <span>Table View</span>
+
                   </button>
+
                 </div>
+
               </div>
+
+
 
               {/* Section Diagnostic Benchmark Overview Banner */}
+
               {(() => {
+
                 const secKey = focusSectionFilter;
+
                 const metrics = CLASS_SECTION_METRICS[secKey] || CLASS_SECTION_METRICS['Class 8-B'];
+
                 const improvementBatchCount = secKey === 'All' 
+
                   ? focusRoster.length 
+
                   : focusRoster.filter(f => f.class_name === secKey).length;
+
                 return (
+
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+
                       <div className="flex items-center gap-2">
+
                         <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
+
                           {secKey === 'All' ? 'All Assigned Sections Mathematics Benchmark' : `${metrics.section} Mathematics Diagnostic Benchmark`}
+
                         </span>
+
                         <span className="text-slate-400">&bull;</span>
+
                         <span className="text-xs text-slate-500 font-medium">{metrics.exam_name}</span>
+
                       </div>
+
                       <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+
                         <CheckCircle2 className="h-3 w-3" />
+
                         <span>Threshold: &gt;70% Score is Exempt from Remedials</span>
+
                       </div>
+
                     </div>
+
+
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+
                       <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">Section Strength</span>
+
                         <span className="text-lg font-black text-slate-900 dark:text-white">{metrics.total_students} Students</span>
+
                       </div>
+
                       <div className="p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
+
                         <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400 block">Mastered (&gt;70%)</span>
+
                         <span className="text-lg font-black text-emerald-800 dark:text-emerald-200">{metrics.passed_mastery} Students ({metrics.mastery_percentage}%)</span>
+
                         <span className="text-[10px] text-emerald-600 block">Exempt from focus plan</span>
+
                       </div>
+
                       <div className="p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+
                         <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400 block">Improvement Batch (&le;70%)</span>
+
                         <span className="text-lg font-black text-amber-900 dark:text-amber-100">
+
                           {improvementBatchCount} Students
+
                         </span>
+
                         <span className="text-[10px] text-amber-700 dark:text-amber-400 block">Active 1-Week Plans</span>
+
                       </div>
+
                       <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">Section Average</span>
+
                         <span className="text-lg font-black text-slate-900 dark:text-white">{metrics.avg_score}%</span>
+
                         <span className="text-[10px] text-slate-400 block">In {metrics.exam_name.split(' ')[0]} Exam</span>
+
                       </div>
+
                     </div>
+
                   </div>
+
                 );
+
               })()}
+
+
 
               {/* Filter Tabs & Search */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                 <div className="flex flex-wrap items-center gap-2">
+
                   <span className="text-xs font-bold text-slate-500 mr-1">Status:</span>
+
                   {(['All', 'Needs Verification', 'Verified', 'Pending Submission'] as const).map(tab => {
+
                     const count = tab === 'All' ? filteredFocus.length
+
                       : tab === 'Needs Verification' ? filteredFocus.filter(f => f.submission_status === 'Submitted').length
+
                       : tab === 'Verified' ? filteredFocus.filter(f => f.submission_status === 'Verified').length
+
                       : filteredFocus.filter(f => f.submission_status === 'Pending' || !f.submission_status).length;
+
                     return (
+
                       <button
+
                         key={tab}
+
                         onClick={() => setFocusSubmissionFilter(tab)}
+
                         className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-semibold transition-all cursor-pointer ${
+
                           focusSubmissionFilter === tab
+
                             ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+
                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+
                         }`}
+
                       >
+
                         <span>{tab}</span>
+
                         <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+
                           focusSubmissionFilter === tab
+
                             ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
+
                             : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+
                         }`}>
+
                           {count}
+
                         </span>
+
                       </button>
+
                     );
+
                   })}
+
                 </div>
+
+
 
                 <div className="relative flex-1 max-w-sm">
+
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+
                   <input
+
                     type="text"
+
                     value={focusSearch}
+
                     onChange={(e) => setFocusSearch(e.target.value)}
+
                     placeholder="Search student, weak concept, or topic..."
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs"
+
                   />
+
                 </div>
+
               </div>
+
+
 
               {/* RENDER MODE 1: PROPER & CLEAR CARDS VIEW (DEFAULT) */}
+
               {focusViewMode === 'cards' && (
+
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
                   {filteredFocus.map((item) => {
+
                     const progressPct = Math.round((item.current_day / item.total_days) * 100);
+
                     const weakConcept = item.ai_exam_scan?.weak_concept || item.weak_concept || 'Concept Gap';
 
+
+
                     return (
+
                       <div
+
                         key={item.id}
+
                         className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all duration-200 flex flex-col justify-between space-y-4 group"
+
                       >
+
                         <div className="space-y-3.5">
+
                           {/* Student Header */}
+
                           <div className="flex items-start justify-between gap-3">
+
                             <div className="flex items-center gap-3">
+
                               <div className="h-11 w-11 rounded-2xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 font-black text-sm flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-800">
+
                                 {item.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                               </div>
+
                               <div>
+
                                 <Link
+
                                   href={`/teacher/focus/${item.student_id}`}
+
                                   className="text-sm font-black text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-400 transition-colors block leading-tight"
+
                                 >
+
                                   {item.name}
+
                                 </Link>
+
                                 <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+
                                   Roll #{item.roll_no} • {item.class_name} • <strong className="text-slate-700 dark:text-slate-300">{item.subject}</strong>
+
                                 </span>
+
                               </div>
+
                             </div>
+
+
 
                             <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border shrink-0 bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-900">
+
                               Exam: {item.exam_score_pct || item.current_score_pct}% (&le;70%)
+
                             </span>
+
                           </div>
+
+
 
                           {/* AI Exam Diagnostic Box */}
+
                           <div className="p-3.5 rounded-2xl bg-amber-50/40 dark:bg-slate-800/60 border border-amber-200/60 dark:border-slate-800 space-y-1.5">
+
                             <div className="flex items-center justify-between text-[11px]">
+
                               <span className="font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1">
+
                                 <Sparkles className="h-3 w-3 text-amber-500" />
+
                                 AI Exam Diagnosis
+
                               </span>
+
                               <span className="font-mono text-[10px] text-slate-500">
+
                                 Target: <strong className="text-emerald-600 font-bold">&gt;70% ({item.target_score_pct}%)</strong>
+
                               </span>
+
                             </div>
+
                             <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1 leading-snug">
+
                               {weakConcept}
+
                             </p>
+
                             {item.ai_exam_scan?.diagnostic_summary && (
+
                               <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
+
                                 {item.ai_exam_scan.diagnostic_summary}
+
                               </p>
+
                             )}
+
                           </div>
+
+
 
                           {/* 1-Week (7-Day) Progress Bar */}
+
                           <div className="space-y-1.5">
+
                             <div className="flex items-center justify-between text-xs font-semibold">
+
                               <span className="text-slate-500 dark:text-slate-400">
+
                                 1-Week Remedial Sprint
+
                               </span>
+
                               <span className="font-bold text-amber-600 dark:text-amber-400">
+
                                 Day {item.current_day} of {item.total_days} ({progressPct}%)
+
                               </span>
+
                             </div>
+
                             <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+
                               <div
+
                                 className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300"
+
                                 style={{ width: `${progressPct}%` }}
+
                               />
+
                             </div>
+
                           </div>
+
+
 
                           {/* Badges: Submission & Guardian Status */}
+
                           <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px]">
+
                             {item.submission_status === 'Submitted' ? (
+
                               <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 font-bold">
+
                                 <Clock className="h-3 w-3" />
+
                                 <span>Day {item.current_day} Solution Uploaded</span>
+
                               </span>
+
                             ) : item.submission_status === 'Verified' ? (
+
                               <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 font-bold">
+
                                 <CheckCircle2 className="h-3 w-3" />
+
                                 <span>Day {item.current_day} Verified ✓</span>
+
                               </span>
+
                             ) : (
+
                               <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 px-2 py-0.5 font-medium">
+
                                 <Clock className="h-3 w-3" />
+
                                 <span>Pending Upload (Day {item.current_day})</span>
+
                               </span>
+
                             )}
+
+
 
                             <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 px-2 py-0.5 font-medium">
+
                               {item.parent_status}
+
                             </span>
+
                           </div>
+
                         </div>
+
+
 
                         {/* Card Footer: Navigation to Dedicated 1-Week Plan */}
+
                         <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+
                           <Link
+
                             href={`/teacher/focus/${item.student_id}`}
+
                             className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white py-2 px-3 text-xs font-bold shadow-xs transition-transform active:scale-98"
+
                           >
+
                             <Sparkles className="h-3.5 w-3.5" />
+
                             <span>Open 1-Week Plan &rarr;</span>
+
                           </Link>
 
+
+
                           <button
+
                             onClick={() => {
+
                               setSelectedChatStudentId(item.student_id);
+
                               setActiveTab('parent_chat');
+
                               triggerToast(`Opened chat thread with ${item.parent_name}`);
+
                             }}
+
                             className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+
                             title={`Chat with ${item.parent_name}`}
+
                           >
+
                             <MessageSquare className="h-4 w-4 text-blue-500" />
+
                           </button>
+
                         </div>
+
                       </div>
+
                     );
+
                   })}
+
                 </div>
+
               )}
+
+
 
               {/* RENDER MODE 2: TABLE VIEW */}
+
               {focusViewMode === 'table' && (
+
                 <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-sm">
+
                   <div className="overflow-x-auto">
+
                     <table className="w-full text-left border-collapse text-xs">
+
                       <thead>
+
                         <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+
                           <th className="py-3 px-4">Student</th>
+
                           <th className="py-3 px-4">Section &amp; Exam Score</th>
+
                           <th className="py-3 px-4">AI-Diagnosed Weak Concept</th>
+
                           <th className="py-3 px-4">1-Week Sprint Progress</th>
+
                           <th className="py-3 px-4">Rough Work Verification</th>
+
                           <th className="py-3 px-4">Parent Status</th>
+
                           <th className="py-3 px-4 text-right">Actions</th>
+
                         </tr>
+
                       </thead>
+
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                         {filteredFocus.map((item) => {
+
                           const progressPct = Math.round((item.current_day / item.total_days) * 100);
+
                           const weakConcept = item.ai_exam_scan?.weak_concept || item.weak_concept || 'Concept Gap';
 
+
+
                           return (
+
                             <tr
+
                               key={item.id}
+
                               className="hover:bg-blue-50/40 dark:hover:bg-slate-800/40 transition-colors"
+
                             >
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold shrink-0">
-                                    {item.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                                  </div>
-                                  <div>
-                                    <Link
-                                      href={`/teacher/focus/${item.student_id}`}
-                                      className="font-bold text-slate-900 dark:text-white hover:text-amber-600 transition-colors block"
-                                    >
-                                      {item.name}
-                                    </Link>
-                                    <span className="text-[10px] text-slate-400 block">
-                                      Roll #{item.roll_no} • {item.class_name}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
 
                               <td className="py-3.5 px-4">
-                                <div className="space-y-0.5">
-                                  <span className="font-bold text-slate-900 dark:text-white block">
-                                    {item.class_name}
-                                  </span>
-                                  <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
-                                    {item.exam_score_pct || item.current_score_pct}% (&le;70%)
-                                  </span>
+
+                                <div className="flex items-center gap-3">
+
+                                  <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold shrink-0">
+
+                                    {item.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
+                                  </div>
+
+                                  <div>
+
+                                    <Link
+
+                                      href={`/teacher/focus/${item.student_id}`}
+
+                                      className="font-bold text-slate-900 dark:text-white hover:text-amber-600 transition-colors block"
+
+                                    >
+
+                                      {item.name}
+
+                                    </Link>
+
+                                    <span className="text-[10px] text-slate-400 block">
+
+                                      Roll #{item.roll_no} • {item.class_name}
+
+                                    </span>
+
+                                  </div>
+
                                 </div>
+
                               </td>
+
+
+
+                              <td className="py-3.5 px-4">
+
+                                <div className="space-y-0.5">
+
+                                  <span className="font-bold text-slate-900 dark:text-white block">
+
+                                    {item.class_name}
+
+                                  </span>
+
+                                  <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
+
+                                    {item.exam_score_pct || item.current_score_pct}% (&le;70%)
+
+                                  </span>
+
+                                </div>
+
+                              </td>
+
+
 
                               <td className="py-3.5 px-4 max-w-xs">
+
                                 <span className="font-bold text-slate-900 dark:text-white block line-clamp-1">
+
                                   {weakConcept}
+
                                 </span>
+
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5 truncate">
+
                                   Target: &gt;70% ({item.target_score_pct}%)
+
                                 </span>
+
                               </td>
 
+
+
                               <td className="py-3.5 px-4">
+
                                 <div className="w-32 space-y-1">
+
                                   <div className="flex items-center justify-between text-[10px]">
+
                                     <span className="font-semibold text-slate-700 dark:text-slate-300">
+
                                       Day {item.current_day} of {item.total_days}
+
                                     </span>
+
                                     <span className="font-bold text-amber-600 dark:text-amber-400">{progressPct}%</span>
+
                                   </div>
+
                                   <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+
                                     <div
+
                                       className="h-full rounded-full bg-amber-500 transition-all duration-300"
+
                                       style={{ width: `${progressPct}%` }}
+
                                     />
+
                                   </div>
+
                                 </div>
+
                               </td>
 
+
+
                               <td className="py-3.5 px-4">
+
                                 {item.submission_status === 'Submitted' ? (
+
                                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold border border-amber-300 dark:border-amber-800">
+
                                     <Clock className="h-3 w-3" />
+
                                     Submitted (Review)
+
                                   </span>
+
                                 ) : item.submission_status === 'Verified' ? (
+
                                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold border border-emerald-300 dark:border-emerald-800">
+
                                     <CheckCircle2 className="h-3 w-3" />
+
                                     Verified ✓
+
                                   </span>
+
                                 ) : (
+
                                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 text-[10px] font-medium border border-slate-200 dark:border-slate-700">
+
                                     <Clock className="h-3 w-3" />
+
                                     Pending (Day {item.current_day})
+
                                   </span>
+
                                 )}
+
                               </td>
 
+
+
                               <td className="py-3.5 px-4">
+
                                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+
                                   {item.parent_status}
+
                                 </span>
+
                               </td>
+
+
 
                               <td className="py-3.5 px-4 text-right">
+
                                 <div className="flex items-center justify-end gap-1.5">
+
                                   <Link
+
                                     href={`/teacher/focus/${item.student_id}`}
+
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition-all active:scale-95"
+
                                   >
+
                                     <Sparkles className="h-3.5 w-3.5" />
+
                                     <span>Open 1-Week Plan</span>
+
                                   </Link>
+
                                 </div>
+
                               </td>
+
                             </tr>
+
                           );
+
                         })}
+
                       </tbody>
+
                     </table>
+
                   </div>
+
                 </div>
+
               )}
+
+
 
               {filteredFocus.length === 0 && (
+
                 <div className="p-8 text-center text-slate-500 space-y-2 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+
                   <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto opacity-60" />
+
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+
                     All students in {focusSectionFilter === 'All' ? 'all assigned sections' : focusSectionFilter} scored above the 70% mastery threshold!
+
                   </p>
+
                   <p className="text-[11px] text-slate-400">
+
                     No students currently require a 1-week remedial focus plan for this section.
+
                   </p>
+
                 </div>
+
               )}
 
+
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 3B: TERMINAL EXAMS & GRADEBOOK PUBLISHING ENGINE   */}
+
           {/* ===================================================== */}
+
           {activeTab === 'exams_gradebook' && (
+
             <div className="space-y-6">
+
               {/* Header Bar */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-bold border border-indigo-200 dark:border-indigo-800">
+
                       Official Academic Gradebook
+
                     </span>
+
                     <span className="text-xs text-slate-500">Subject: Mathematics (Mrs. Ananya Verma)</span>
+
                   </div>
+
                   <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1">
+
                     Terminal Examination &amp; Evaluation Desk
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+
                     Review student descriptive answer sheets, verify pre-graded marks, and publish official marks to enroll students scoring &le; 70% into the 1-Week Focus Plan.
+
                   </p>
+
                 </div>
 
-                <div className="flex items-center gap-2">
+
+
+                <div className="flex flex-wrap items-center gap-2">
+
                   <button
-                    onClick={loadExams}
-                    disabled={isLoadingExams}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+
+                    type="button"
+
+                    onClick={() => setExamSubTab('live_cockpit')}
+
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs ${
+
+                      examSubTab === 'live_cockpit'
+
+                        ? 'bg-violet-600 text-white shadow-violet-600/20'
+
+                        : 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/60 hover:bg-violet-100'
+
+                    }`}
+
                   >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingExams ? 'animate-spin' : ''}`} />
-                    <span>Refresh Ledger</span>
+
+                    <Radio className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
+
+                    <span>Live AI Proctor Cockpit</span>
+
                   </button>
+
+                  <button
+
+                    type="button"
+
+                    onClick={() => setShowScheduleExamModal(true)}
+
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
+
+                  >
+
+                    <Plus className="h-3.5 w-3.5" />
+
+                    <span>Schedule CBT Exam &amp; Paper</span>
+
+                  </button>
+
+                  <button
+
+                    onClick={loadExams}
+
+                    disabled={isLoadingExams}
+
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+
+                  >
+
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingExams ? 'animate-spin' : ''}`} />
+
+                    <span>Refresh</span>
+
+                  </button>
+
                 </div>
+
               </div>
 
 
+
+
+
+
+
+              {/* TAB CONTENT: LIVE AI PROCTOR COCKPIT */}
+              {examSubTab === 'live_cockpit' && (
+                <div className="space-y-6">
+                  <LiveInvigilatorCockpit />
+                </div>
+              )}
 
               {/* TAB CONTENT 1: MARKS LEDGER */}
+
               {examSubTab === 'marks_ledger' && (
+
                 <div className="space-y-6">
 
+
+
                   {/* Exam Selector Pills */}
+
                   <div className="flex flex-wrap items-center gap-2.5">
+
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Select Exam:</span>
+
                 {examsList.map((ex) => {
+
                   const isSelected = ex.id === activePublishExamId;
+
                   return (
+
                     <button
+
                       key={ex.id}
+
                       onClick={() => handleSelectExam(ex.id)}
+
                       className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+
                         isSelected
+
                           ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300'
+
                       }`}
+
                     >
+
                       <Award className="h-3.5 w-3.5" />
+
                       <span>{getExamShortLabel(ex)}</span>
+
                       <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+
                         ex.is_published 
+
                           ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/30' 
+
                           : 'bg-amber-500/20 text-amber-100 border border-amber-400/30'
+
                       }`}>
+
                         {ex.is_published ? 'Published ✓' : 'Draft ⏳'}
+
                       </span>
+
                     </button>
+
                   );
+
                 })}
+
               </div>
+
+
 
               {/* Selected Exam Information & Metric Cards */}
+
               {(() => {
+
                 const activeExam = examsList.find(e => e.id === activePublishExamId) || examsList[0];
+
                 if (!activeExam) return null;
+
                 const totalSubs = examSubmissionsList.length;
+
                 const remedialCount = examSubmissionsList.filter(s => s.percentage !== null && s.percentage !== undefined && s.percentage <= activeExam.remedial_threshold_pct).length;
+
                 const exemptCount = totalSubs - remedialCount;
 
+
+
                 return (
+
                   <div className="space-y-6">
+
                     {/* Sleek 1-Line Exam Status & Control Bar */}
+
                     <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+
                       {/* Left: Active Exam Summary */}
+
                       <div className="flex items-center gap-3">
+
                         <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+
                           <Award className="h-5 w-5" />
+
                         </div>
+
                         <div>
+
                           <div className="flex items-center gap-2">
+
                             <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                               {activeExam.title}
+
                             </h3>
+
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+
                               activeExam.is_published 
+
                                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' 
+
                                 : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+
                             }`}>
+
                               {activeExam.is_published ? 'Published ✓' : 'Draft ⏳'}
+
                             </span>
+
                           </div>
+
                           <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
+
                             <span>{activeExam.class_name}-{activeExam.section}</span>
+
                             <span>•</span>
+
                             <span>Total: <strong>{activeExam.total_marks} Marks</strong></span>
+
                             <span>•</span>
+
                             <span>Remedial Threshold: <strong>&le; {activeExam.remedial_threshold_pct}%</strong></span>
+
                           </div>
+
                         </div>
+
                       </div>
+
+
 
                       {/* Middle: Inline Metrics */}
+
                       <div className="flex items-center gap-2 sm:gap-4 border-y lg:border-y-0 lg:border-x border-slate-100 dark:border-slate-800 py-2 lg:py-0 lg:px-4 shrink-0">
+
                         <div className="text-center px-2">
+
                           <div className="text-base font-black text-slate-900 dark:text-white">{totalSubs}</div>
+
                           <div className="text-[10px] uppercase font-bold text-slate-400">Total Uploads</div>
+
                         </div>
+
                         <div className="text-center px-2 border-l border-slate-100 dark:border-slate-800">
+
                           <div className="text-base font-black text-rose-600 dark:text-rose-400">{remedialCount}</div>
+
                           <div className="text-[10px] uppercase font-bold text-rose-500/80">Remedial (&le;70%)</div>
+
                         </div>
+
                         <div className="text-center px-2 border-l border-slate-100 dark:border-slate-800">
+
                           <div className="text-base font-black text-emerald-600 dark:text-emerald-400">{exemptCount}</div>
+
                           <div className="text-[10px] uppercase font-bold text-emerald-500/80">Exempt (&gt;70%)</div>
+
                         </div>
+
                       </div>
+
+
 
                       {/* Right: Actions */}
+
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
+
                         <button
+
                           type="button"
+
                           disabled={isAiEvaluatingPapers}
+
                           onClick={handleRunAiBatchEvaluation}
+
                           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-60"
+
                           title="Run Gemini Vision AI to grade descriptive answer sheets against answer key"
+
                         >
+
                           <Sparkles className={`h-3.5 w-3.5 ${isAiEvaluatingPapers ? 'animate-spin' : ''}`} />
+
                           <span>{isAiEvaluatingPapers ? 'AI Evaluating Papers...' : 'Evaluate Papers with AI'}</span>
+
                         </button>
+
                         <button
+
                           type="button"
+
                           onClick={() => {
+
                             setShowOcrModal(true);
+
                             setOcrStep('upload');
+
                           }}
+
                           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+
                           title="Scan physical score registers or marksheets"
+
                         >
+
                           <Upload className="h-3.5 w-3.5 text-slate-500" />
+
                           <span>OCR Marksheet Scan</span>
+
                         </button>
+
                       </div>
+
                     </div>
+
+
 
                     {/* Published Event Confirmation Banner */}
+
                     {publishSuccessBanner && (
+
                       <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-lg space-y-3 animate-in fade-in">
+
                         <div className="flex items-center justify-between">
+
                           <div className="flex items-center gap-2.5">
+
                             <CheckCircle2 className="h-6 w-6 text-white" />
+
                             <h3 className="text-base font-black">
+
                               MARKS PUBLISHED &amp; REMEDIAL ROSTER TRIGGERED!
+
                             </h3>
+
                           </div>
+
                           <span className="text-xs font-mono bg-black/20 px-2.5 py-1 rounded-lg">
+
                             Event: MarksPublishedEvent ✓
+
                           </span>
+
                         </div>
+
                         <p className="text-xs text-emerald-100 leading-relaxed">
+
                           Published results for <strong>{publishSuccessBanner.exam_title}</strong>. Successfully identified <strong>{publishSuccessBanner.remedial_enrolled_count} students</strong> scoring below 70% and provisioned their 7-day personalized remedial sprint with diagnostic lag synthesis.
+
                         </p>
+
                         <div className="flex flex-wrap items-center gap-3 pt-1">
+
                           <button
+
                             onClick={() => setActiveTab('focus_table')}
+
                             className="px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs hover:bg-emerald-50 transition-all cursor-pointer shadow-xs"
+
                           >
+
                             Open Student Focus Table View &rarr;
+
                           </button>
+
                         </div>
+
                       </div>
+
                     )}
+
+
 
                     {/* Submissions & Gradebook Table */}
+
                     <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+
                       <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+
                         <div>
+
                           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                             Student Marksheet &amp; Descriptive Paper Roster
+
                           </h3>
+
                           <p className="text-xs text-slate-500 mt-0.5">
+
                             Official exam grades and attached student descriptive answer sheets.
+
                           </p>
+
                         </div>
+
                         <div className="flex items-center gap-2 flex-wrap">
+
                           <span className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+
                             Class: {activeExam.class_name}-{activeExam.section}
+
                           </span>
+
                           <button
+
                             type="button"
+
                             onClick={() => {
+
                               const header = "RollNumber,StudentName,Section,MarksObtained,TotalMarks,Percentage,RemedialStatus,WeakConcept,TeacherRemarks\n";
+
                               const rows = examSubmissionsList.map(s => {
+
                                 const isRemedial = (s.percentage || 0) <= activeExam.remedial_threshold_pct;
+
                                 return `"${s.roll_no}","${s.student_name}","${s.class_name}-${s.section}",${s.marks_obtained !== null ? s.marks_obtained : 0},${activeExam.total_marks},"${s.percentage || 0}%","${isRemedial ? 'Remedial (<=70%)' : 'Mastery Exempt'}","${s.weak_concept || ''}","${s.teacher_feedback || ''}"`;
+
                               }).join("\n");
+
                               const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+
                               const url = URL.createObjectURL(blob);
+
                               const link = document.createElement("a");
+
                               link.setAttribute("href", url);
+
                               link.setAttribute("download", `${activeExam.title.replace(/\s+/g, '_')}_Official_Marksheet.csv`);
+
                               document.body.appendChild(link);
+
                               link.click();
+
                               document.body.removeChild(link);
+
                               triggerToast("Downloaded official marksheet CSV ledger!");
+
                             }}
+
                             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+
                             title="Export full marksheet as CSV / Excel"
+
                           >
+
                             <Download className="h-3.5 w-3.5 text-blue-600" />
+
                             <span>Export Marksheet (CSV)</span>
+
                           </button>
+
                         </div>
+
                       </div>
+
+
 
                       <div className="overflow-x-auto">
+
                         <table className="w-full text-left border-collapse text-xs">
+
                           <thead>
+
                             <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+
                               <th className="py-3 px-4">Roll</th>
+
                               <th className="py-3 px-4">Student</th>
+
                               <th className="py-3 px-4">Answer Sheet Document</th>
+
                               <th className="py-3 px-4">Marks Obtained</th>
+
                               <th className="py-3 px-4">Percentage</th>
+
                               <th className="py-3 px-4">Remedial Focus Pipeline</th>
+
                               <th className="py-3 px-4">Teacher Pedagogical Remarks</th>
+
                               <th className="py-3 px-4 text-right">Action</th>
+
                             </tr>
+
                           </thead>
+
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+
                             {examSubmissionsList.map((sub) => {
+
                               const isRemedial = sub.percentage !== null && sub.percentage !== undefined && sub.percentage <= activeExam.remedial_threshold_pct;
+
                               return (
+
                                 <tr key={sub.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+
                                   <td className="py-3.5 px-4 font-mono font-bold text-slate-600 dark:text-slate-400">
+
                                     {sub.roll_no}
+
                                   </td>
+
                                   <td className="py-3.5 px-4">
+
                                     <div className="font-bold text-slate-900 dark:text-white">
+
                                       {sub.student_name}
+
                                     </div>
+
                                     <span className="text-[10px] text-slate-400">
+
                                       {sub.class_name}-{sub.section}
+
                                     </span>
+
                                   </td>
+
                                   <td className="py-3.5 px-4">
+
                                     <button
+
                                       type="button"
+
                                       onClick={() => handleOpenEvaluationStudio(sub)}
+
                                       className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-mono text-[11px] text-left cursor-pointer"
+
                                       title="Open Answer Paper in Correction Studio"
+
                                     >
+
                                       <FileText className="h-3.5 w-3.5 shrink-0" />
+
                                       <span>{sub.paper_file_name || 'Descriptive_Paper.pdf'}</span>
+
                                     </button>
+
                                   </td>
+
                                   <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">
+
                                     {sub.marks_obtained !== null && sub.marks_obtained !== undefined ? `${sub.marks_obtained} / ${activeExam.total_marks}` : '--'}
+
                                   </td>
+
                                   <td className="py-3.5 px-4">
+
                                     {sub.percentage !== null && sub.percentage !== undefined ? (
+
                                       <span className={`font-black text-xs ${
+
                                         isRemedial ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+
                                       }`}>
+
                                         {sub.percentage}%
+
                                       </span>
+
                                     ) : (
+
                                       <span className="font-semibold text-xs text-slate-400">
+
                                         --
+
                                       </span>
+
                                     )}
+
                                   </td>
+
                                   <td className="py-3.5 px-4">
+
                                     {sub.percentage === null || sub.percentage === undefined ? (
+
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+
                                         <Clock className="h-3 w-3 shrink-0" />
+
                                         <span>Pending Evaluation</span>
+
                                       </span>
+
                                     ) : isRemedial ? (
+
                                       <div>
+
                                         <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
+
                                           <AlertTriangle className="h-3 w-3 shrink-0" />
+
                                           <span>Enrolled in Focus Sprint (&le;70%)</span>
+
                                         </span>
+
                                         {sub.weak_concept && (
+
                                           <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold block pt-0.5 truncate max-w-[220px]" title={sub.weak_concept}>
+
                                             Lag: {sub.weak_concept}
+
                                           </span>
+
                                         )}
+
                                       </div>
+
                                     ) : (
+
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
+
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
+
                                         <span>Exempt (&gt;70% Mastery)</span>
+
                                       </span>
+
                                     )}
+
                                   </td>
+
                                   <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 dark:text-slate-400 italic text-[11px]">
+
                                     {sub.teacher_feedback || 'Awaiting teacher evaluation / marks verification.'}
+
                                   </td>
+
                                   <td className="py-3.5 px-4 text-right">
+
                                     <div className="flex items-center justify-end gap-1.5">
+
                                       {sub.marks_obtained === null || sub.marks_obtained === undefined ? (
+
                                         <>
+
                                           <button
+
                                             onClick={() => handleRunAiSingleEvaluation(sub.id)}
+
                                             disabled={evaluatingSubmissionId === sub.id}
+
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+
                                           >
+
                                             <Sparkles className={`h-3 w-3 ${evaluatingSubmissionId === sub.id ? 'animate-spin' : ''}`} />
+
                                             <span>{evaluatingSubmissionId === sub.id ? 'Evaluating...' : 'AI Evaluate'}</span>
+
                                           </button>
+
                                           <button
+
                                             onClick={() => handleOpenEvaluationStudio(sub, false)}
+
                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+
                                           >
+
                                             <FileEdit className="h-3.5 w-3.5" />
+
                                             <span>Review &amp; Verify Paper</span>
+
                                           </button>
+
                                         </>
+
                                       ) : (
+
                                         <div className="flex items-center justify-end gap-2">
+
                                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold shadow-2xs">
+
                                             <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+
                                             <span>Marks Sealed ({sub.marks_obtained}/{activeExam.total_marks})</span>
+
                                           </span>
+
                                           <button
+
                                             type="button"
+
                                             onClick={() => handleOpenEvaluationStudio(sub, true)}
+
                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+
                                             title="Assessment is locked against future modifications"
+
                                           >
+
                                             <Lock className="h-3.5 w-3.5 text-slate-500" />
+
                                             <span>View Paper (Locked)</span>
+
                                           </button>
+
                                         </div>
+
                                       )}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDossierCandidateId(sub.id || sub.student_id || 1);
+                                          setShowDossierModal(true);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                                        title="View post-exam AI proctoring audit dossier, infractions, and credibility score"
+                                      >
+                                        <ShieldAlert className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                        <span>Incident Sheet &amp; Strikes</span>
+                                      </button>
                                     </div>
+
                                   </td>
+
                                 </tr>
+
                               );
+
                             })}
+
                           </tbody>
+
                         </table>
+
                       </div>
+
+
 
                       {/* Publishing Action Footer */}
+
                       <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
                         <div className="space-y-0.5 max-w-xl">
+
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+
                             {activeExam.is_locked || activeExam.is_published 
+
                               ? `✓ Officially Sealed & Submitted to Exam Cell on ${activeExam.published_at ? new Date(activeExam.published_at).toLocaleDateString() : 'Active Term'}`
+
                               : 'Pending Teacher Final Approval & Gradebook Submission'
+
                             }
+
                           </span>
+
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
+
                             {activeExam.is_locked || activeExam.is_published
+
                               ? 'This gradebook is sealed and locked. All marks have been forwarded to the Exam Coordinator for consolidated Report Card compilation. Direct modifications are restricted.'
+
                               : `Submitting final marks triggers the MarksPublishedEvent pipeline, auto-enrolls students scoring ≤ ${activeExam.remedial_threshold_pct}% in the Remedial Focus Table, and seals the gradebook.`
+
                             }
+
                           </p>
+
                         </div>
+
+
 
                         <div className="flex items-center gap-3 shrink-0">
+
                           {activeExam.is_locked || activeExam.is_published ? (
+
                             <button
+
                               disabled={true}
+
                               className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 text-white px-5 py-2.5 text-xs font-bold shadow-xs cursor-not-allowed opacity-90"
+
                               title="Gradebook is sealed and submitted to Exam Coordinator"
+
                             >
+
                               <Lock className="h-4 w-4" />
+
                               <span>✓ Final Marks Submitted &amp; Sealed</span>
+
                             </button>
+
                           ) : (
+
                             <button
+
                               disabled={isPublishingExam}
+
                               onClick={() => handlePublishExam(activeExam.id)}
+
                               className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 text-xs font-bold shadow-md shadow-indigo-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+
                             >
+
                               <Award className="h-4 w-4" />
+
                               <span>
+
                                 {isPublishingExam 
+
                                   ? 'Submitting & Sealing...' 
+
                                   : 'Submit Final Grades to Exam Cell (One-Time Lock)'
+
                                 }
+
                               </span>
+
                             </button>
+
                           )}
+
                         </div>
+
                       </div>
+
                     </div>
+
                   </div>
+
                 );
+
               })()}
+
+
 
               {/* Side-by-Side Exam Paper Correction Studio Modal */}
+
               {editingExamSubmission && (
+
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in">
+
                   <div className="w-full max-w-7xl h-[92vh] rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+
                     {/* Studio Header */}
+
                     <div className="p-4 sm:px-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-950/60 shrink-0">
+
                       <div className="flex items-center gap-3">
+
                         <div className="h-10 w-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+
                           {editingExamSubmission.roll_no}
+
                         </div>
+
                         <div>
+
                           <div className="flex items-center gap-2">
+
                             <h2 className="text-base font-black text-slate-900 dark:text-white">
+
                               Exam Evaluation Studio: {editingExamSubmission.student_name}
+
                             </h2>
+
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+
                               {editingExamSubmission.class_name}-{editingExamSubmission.section}
+
                             </span>
+
                           </div>
+
                           <p className="text-xs text-slate-500 dark:text-slate-400">
+
                             {(examsList.find(e => e.id === activePublishExamId) || examsList[0])?.title || 'Descriptive Examination'} • Document: <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{editingExamSubmission.paper_file_name || 'Descriptive_Paper.pdf'}</span>
+
                           </p>
+
                         </div>
+
                       </div>
+
+
 
                       <div className="flex items-center gap-2">
+
                         {/* Previous / Next student shortcuts */}
+
                         <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5">
+
                           <button
+
                             type="button"
+
                             onClick={() => handleNavigateSubmission('prev')}
+
                             className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+
                             title="Previous Student"
+
                           >
+
                             <ChevronLeft className="h-4 w-4" />
+
                           </button>
+
                           <span className="text-[11px] font-bold px-2 text-slate-500">
+
                             {examSubmissionsList.findIndex(s => s.id === editingExamSubmission.id) + 1} / {examSubmissionsList.length}
+
                           </span>
+
                           <button
+
                             type="button"
+
                             onClick={() => handleNavigateSubmission('next')}
+
                             className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+
                             title="Next Student"
+
                           >
+
                             <ChevronRight className="h-4 w-4" />
+
                           </button>
+
                         </div>
 
+
+
                         <button
+
                           onClick={() => setEditingExamSubmission(null)}
+
                           className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+
                         >
+
                           <X className="h-5 w-5" />
+
                         </button>
+
                       </div>
+
                     </div>
+
+
 
                     {/* Locked Banner if in read-only mode */}
+
                     {studioReadOnly && (
+
                       <div className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-900 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
+
                         <div className="flex items-center gap-2 font-bold">
+
                           <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+
                           <span>Assessment Sealed &amp; Immutable: Marks cannot be modified after verification under institutional examination policy.</span>
+
                         </div>
+
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-1 rounded-md">
+
                           Audit Verified
+
                         </span>
+
                       </div>
+
                     )}
+
                     {/* Studio Body: Side by Side (Left: Paper Viewer 65%, Right: Rubric & Marks 35%) */}
+
                     <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+
                       {/* LEFT PANEL: Student Descriptive Paper Viewer (cols 7) */}
+
                       <div className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 flex flex-col bg-slate-100/70 dark:bg-slate-950/40 overflow-hidden">
+
                         {/* Viewer Toolbar */}
+
                         <div className="p-2.5 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs shrink-0">
+
                           <div className="flex items-center gap-2">
+
                             <span className="font-bold text-slate-700 dark:text-slate-300">Answer Sheet Document:</span>
+
                             <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+
                               Page {paperActivePage} of 3
+
                             </span>
+
                           </div>
+
+
 
                           <div className="flex items-center gap-1.5">
+
                             <button
+
                               type="button"
+
                               onClick={() => setPaperZoomLevel(prev => Math.max(70, prev - 15))}
+
                               className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+
                               title="Zoom Out"
+
                             >
+
                               <ZoomOut className="h-3.5 w-3.5" />
+
                             </button>
+
                             <span className="text-[11px] font-mono font-bold w-12 text-center text-slate-600 dark:text-slate-400">
+
                               {paperZoomLevel}%
+
                             </span>
+
                             <button
+
                               type="button"
+
                               onClick={() => setPaperZoomLevel(prev => Math.min(150, prev + 15))}
+
                               className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+
                               title="Zoom In"
+
                             >
+
                               <ZoomIn className="h-3.5 w-3.5" />
+
                             </button>
+
                             <button
+
                               type="button"
+
                               onClick={() => setPaperZoomLevel(100)}
+
                               className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+
                               title="Reset Zoom"
+
                             >
+
                               <RotateCcw className="h-3.5 w-3.5" />
+
                             </button>
+
                           </div>
+
                         </div>
+
+
 
                         {/* Interactive Answer Paper Canvas */}
+
                         <div className="flex-1 overflow-auto p-4 flex justify-center items-start">
+
                           <div 
+
                             style={{ transform: `scale(${paperZoomLevel / 100})`, transformOrigin: 'top center', transition: 'transform 0.15s ease' }}
+
                             className="w-full max-w-2xl bg-white text-slate-900 rounded-2xl shadow-lg border border-slate-300 p-6 sm:p-8 space-y-6 font-serif select-none"
+
                           >
+
                             {/* Paper Top Header */}
+
                             <div className="border-b-2 border-slate-800 pb-3 flex items-start justify-between">
+
                               <div>
+
                                 <h4 className="text-base font-bold uppercase tracking-wider text-slate-900 font-sans">
+
                                   Delhi Public School Bangalore South • Examination Branch
+
                                 </h4>
+
                                 <div className="text-xs text-slate-600 font-sans mt-0.5">
+
                                   <strong>Subject:</strong> Mathematics (Class 8-B) • <strong>Student:</strong> {editingExamSubmission.student_name} (Roll #{editingExamSubmission.roll_no})
+
                                 </div>
+
                               </div>
+
                               <div className="border-2 border-red-600 rounded-xl px-3 py-1 text-center bg-red-50 text-red-700 font-sans shrink-0">
+
                                 <div className="text-[9px] uppercase font-bold tracking-wider">Teacher Grade</div>
+
                                 <div className="text-lg font-black">{editExamTheoryMarks + editExamInternalMarks} / 100</div>
+
                               </div>
+
                             </div>
+
+
 
                             {/* Interactive Guidance Banner */}
+
                             <div className="rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2.5 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-center justify-between font-sans">
+
                               <span><span className="inline-flex items-center gap-1.5"><Icon3D name="bulb" size={16} /><span><strong>Interactive Problem Marks:</strong></span></span> You can edit marks in the corner of each problem below. Right-side Total Score &amp; Threshold will update automatically!</span>
+
                             </div>
+
+
 
                             {/* Question 1: Solved Correctly */}
+
                             <div className="space-y-1.5 border-b border-dashed border-slate-200 pb-4 relative">
+
                               <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+
                                 <span>Q1. Solve by splitting middle term: 2x² + 7x + 3 = 0</span>
+
                                 {/* Editable Corner Badge for Q1 */}
+
                                 <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+
                                   <span className="text-[10px] font-bold text-slate-500 uppercase">Q1:</span>
+
                                   <input
+
                                     type="number"
+
                                     min="0"
+
                                     max="10"
+
                                     value={q1Marks}
+
                                     onChange={(e) => handleUpdateQuestionScore('q1', Number(e.target.value))}
+
                                     className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+
                                     title="Edit marks directly for Q1"
+
                                   />
+
                                   <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+
                                   <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+
                                     q1Marks >= 8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+
                                   }`}>
+
                                     {q1Marks === 10 ? 'Full ✓' : `+${q1Marks}`}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
                               <div className="bg-amber-50/40 p-3 rounded-xl border border-amber-200/50 text-xs font-mono text-slate-800 space-y-1">
+
                                 <div>Step 1: Product = 2 * 3 = 6, Sum = 7 &rarr; factors are 6 and 1</div>
+
                                 <div>Step 2: 2x² + 6x + x + 3 = 0</div>
+
                                 <div>Step 3: 2x(x + 3) + 1(x + 3) = 0</div>
+
                                 <div>Step 4: (2x + 1)(x + 3) = 0 &rarr; x = -1/2 or x = -3</div>
+
                               </div>
+
                               <div className="text-[11px] text-emerald-700 font-sans font-bold flex items-center gap-1 mt-1">
+
                                 <CheckCircle2 className="h-3.5 w-3.5" />
+
                                 <span>Teacher Check: Clear factoring logic and valid roots. Full credit.</span>
+
                               </div>
+
                             </div>
+
+
 
                             {/* Question 2: Error in Sign Distribution */}
+
                             <div className="space-y-1.5 border-b border-dashed border-slate-200 pb-4 relative">
+
                               <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+
                                 <span>Q2. Solve the quadratic equation: x² - 5x - 6 = 0</span>
+
                                 {/* Editable Corner Badge for Q2 */}
+
                                 <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+
                                   <span className="text-[10px] font-bold text-slate-500 uppercase">Q2:</span>
+
                                   <input
+
                                     type="number"
+
                                     min="0"
+
                                     max="10"
+
                                     value={q2Marks}
+
                                     onChange={(e) => handleUpdateQuestionScore('q2', Number(e.target.value))}
+
                                     className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+
                                     title="Edit marks directly for Q2"
+
                                   />
+
                                   <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+
                                   <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+
                                     q2Marks >= 7 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+
                                   }`}>
+
                                     {q2Marks === 10 ? 'Full ✓' : `+${q2Marks}`}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
                               <div className="bg-amber-50/40 p-3 rounded-xl border border-rose-300 text-xs font-mono text-slate-800 space-y-1 relative">
+
                                 <div>Step 1: x² - 5x - 6 = 0</div>
+
                                 <div className="line-through decoration-rose-600 decoration-2 text-rose-800">
+
                                   Step 2: (x - 2)(x - 3) = 0  &larr; [SIGN ERROR]
+
                                 </div>
+
                                 <div className="text-slate-500">Step 3: x = 2, 3</div>
+
                                 <div className="absolute right-3 top-3 text-[10px] font-sans font-black text-rose-600 bg-white px-2 py-0.5 rounded border border-rose-300 shadow-2xs">
+
                                   Teacher Red Ink: (-2)*(-3) = +6 ≠ -6! Factors are (-6, +1)
+
                                 </div>
+
                               </div>
+
                               <div className="flex items-center justify-between pt-1">
+
                                 <div className="text-[11px] text-rose-700 font-sans font-semibold flex items-center gap-1">
+
                                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+
                                   <span>Misconception: Confused sum/product signs with constant.</span>
+
                                 </div>
+
                                 {/* 1-Click Partial Credit Quick Button */}
+
                                 <button
+
                                   type="button"
+
                                   onClick={() => handleUpdateQuestionScore('q2', Math.min(10, q2Marks + 2))}
+
                                   className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 cursor-pointer transition-all active:scale-95"
+
                                   title="Award +2 step marks for valid initial setup"
+
                                 >
+
                                   +2 Step Credit ({q2Marks} &rarr; {Math.min(10, q2Marks + 2)})
+
                                 </button>
+
                               </div>
+
                             </div>
+
+
 
                             {/* Question 3: Algebraic Identity */}
+
                             <div className="space-y-1.5 relative">
+
                               <div className="flex items-center justify-between text-xs font-sans font-bold text-slate-700">
+
                                 <span>Q3. Expand using identity: (2a - 3b)²</span>
+
                                 {/* Editable Corner Badge for Q3 */}
+
                                 <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded-xl shadow-2xs">
+
                                   <span className="text-[10px] font-bold text-slate-500 uppercase">Q3:</span>
+
                                   <input
+
                                     type="number"
+
                                     min="0"
+
                                     max="10"
+
                                     value={q3Marks}
+
                                     onChange={(e) => handleUpdateQuestionScore('q3', Number(e.target.value))}
+
                                     className="w-10 text-center font-black text-xs py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+
                                     title="Edit marks directly for Q3"
+
                                   />
+
                                   <span className="text-[11px] font-bold text-slate-400">/ 10</span>
+
                                   <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+
                                     q3Marks >= 7 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+
                                   }`}>
+
                                     {q3Marks === 10 ? 'Full ✓' : `+${q3Marks}`}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
                               <div className="bg-amber-50/40 p-3 rounded-xl border border-rose-300 text-xs font-mono text-slate-800 space-y-1 relative">
+
                                 <div>Step 1: (2a)² - (3b)²</div>
+
                                 <div className="line-through decoration-rose-600 decoration-2 text-rose-800">
+
                                   Step 2: 4a² - 9b² &larr; [OMITTED MIDDLE TERM &amp; WRONG SIGN]
+
                                 </div>
+
                                 <div className="absolute right-3 top-3 text-[10px] font-sans font-black text-rose-600 bg-white px-2 py-0.5 rounded border border-rose-300 shadow-2xs">
+
                                   Identity is (a-b)² = a² - 2ab + b²
+
                                 </div>
+
                               </div>
+
                             </div>
+
                           </div>
+
                         </div>
+
                       </div>
+
+
 
                       {/* RIGHT PANEL: Scoring, Remedial Pipeline & Feedback (cols 5) */}
+
                       <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 overflow-y-auto p-5 sm:p-6 space-y-5">
+
                         {/* AI Co-Pilot Assistant Banner */}
+
                         <div className="p-3 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-between text-xs shadow-2xs">
+
                           <div className="flex items-center gap-2">
+
                             <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+
                             <span className="font-bold text-indigo-950 dark:text-indigo-200">AI Pre-Graded Script</span>
+
                           </div>
+
                           <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+
                             Faculty Sign-off Active
+
                           </span>
+
                         </div>
+
+
 
                         {/* Real-time score meter with Teacher Override Indicator */}
+
                         <div className={`p-4 rounded-2xl border ${
+
                           (editExamTheoryMarks + editExamInternalMarks) <= 70
+
                             ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60'
+
                             : 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60'
+
                         } space-y-2.5`}>
+
                           <div className="flex items-center justify-between">
+
                             <div>
+
                               <span className="text-xs uppercase font-bold text-slate-500 block">Verified Total Score</span>
+
                               {(editExamTheoryMarks + editExamInternalMarks) !== initialAiScore && (
+
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 mt-0.5">
+
                                   <span>✏️ Overridden from AI ({initialAiScore} &rarr; {editExamTheoryMarks + editExamInternalMarks})</span>
+
                                 </span>
+
                               )}
+
                             </div>
+
                             <span className={`text-2xl font-black ${
+
                               (editExamTheoryMarks + editExamInternalMarks) <= 70 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'
+
                             }`}>
+
                               {editExamTheoryMarks + editExamInternalMarks} / 100 ({Math.round(((editExamTheoryMarks + editExamInternalMarks) / 100) * 100)}%)
+
                             </span>
+
                           </div>
+
+
 
                           {/* Quick Score Adjustment Increment Chips */}
+
                           <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+
                             <span className="text-[10px] font-bold text-slate-500 mr-1">Quick Adjust:</span>
+
                             {[
+
                               { label: '+1', delta: 1 },
+
                               { label: '+2 (e.g. 69➔71)', delta: 2 },
+
                               { label: '+5', delta: 5 },
+
                               { label: '-1', delta: -1 },
+
                               { label: '-2', delta: -2 }
+
                             ].map(adj => (
+
                               <button
+
                                 key={adj.label}
+
                                 type="button"
+
                                 onClick={() => {
+
                                   setEditExamTheoryMarks(prev => Math.min(80, Math.max(0, prev + adj.delta)));
+
                                 }}
+
                                 className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer shadow-2xs active:scale-95 transition-all"
+
                               >
+
                                 {adj.label}
+
                               </button>
+
                             ))}
+
                           </div>
+
+
 
                           <div className="pt-1">
+
                             {(editExamTheoryMarks + editExamInternalMarks) <= 70 ? (
+
                               <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 dark:text-rose-300">
+
                                 <AlertTriangle className="h-4 w-4 shrink-0" />
+
                                 <span>Enrolls in 1-Week Remedial Focus Sprint (&le;70%)</span>
+
                               </div>
+
                             ) : (
+
                               <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+
                                 <CheckCircle2 className="h-4 w-4 shrink-0" />
+
                                 <span>Exempt: Mastery Demonstrated (&gt;70%)</span>
+
                               </div>
+
                             )}
+
                           </div>
+
                         </div>
+
+
 
                         {/* Marks Breakdown Inputs */}
+
                         <div className="space-y-3">
+
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Marking Rubric Breakdown</h4>
+
                           <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Theory Paper (out of 80):</label>
-                              <input
-                                type="number"
-                                min="0"
-                                max="80"
-                                disabled={studioReadOnly}
-                                value={editExamTheoryMarks}
-                                onChange={(e) => setEditExamTheoryMarks(Number(e.target.value))}
-                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
-                              />
-                            </div>
 
                             <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Internal / Viva (out of 20):</label>
+
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Theory Paper (out of 80):</label>
+
                               <input
+
                                 type="number"
+
                                 min="0"
-                                max="20"
+
+                                max="80"
+
                                 disabled={studioReadOnly}
-                                value={editExamInternalMarks}
-                                onChange={(e) => setEditExamInternalMarks(Number(e.target.value))}
+
+                                value={editExamTheoryMarks}
+
+                                onChange={(e) => setEditExamTheoryMarks(Number(e.target.value))}
+
                                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
+
                               />
+
                             </div>
+
+
+
+                            <div className="space-y-1">
+
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Internal / Viva (out of 20):</label>
+
+                              <input
+
+                                type="number"
+
+                                min="0"
+
+                                max="20"
+
+                                disabled={studioReadOnly}
+
+                                value={editExamInternalMarks}
+
+                                onChange={(e) => setEditExamInternalMarks(Number(e.target.value))}
+
+                                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-black text-slate-900 dark:text-white"
+
+                              />
+
+                            </div>
+
                           </div>
+
                         </div>
+
+
 
                         {/* Diagnosed Concept Lag (Weak Area) */}
+
                         <div className="space-y-2">
+
                           <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+
                             Diagnosed Pedagogical Lag (Auto-Transfers to Focus Plan):
+
                           </label>
+
                           <select
+
                             value={editExamWeakConcept}
+
                             onChange={(e) => setEditExamWeakConcept(e.target.value)}
+
                             className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+
                           >
+
                             <option value="Quadratic Factorization: Sign Error">Quadratic Factorization: Sign Error</option>
+
                             <option value="Linear Equations: Variable Isolation">Linear Equations: Variable Isolation</option>
+
                             <option value="Algebraic Identities: Expansion Error">Algebraic Identities: Expansion Error</option>
+
                             <option value="Coordinate Geometry: Quadrant Sign Flip">Coordinate Geometry: Quadrant Sign Flip</option>
+
                             <option value="Exponents & Powers: Negative Base Multiplication">Exponents & Powers: Negative Base Multiplication</option>
+
                             <option value="Mastery: No Remediable Lag">Mastery: No Remediable Lag</option>
+
                           </select>
+
                         </div>
+
+
 
                         {/* Teacher Feedback */}
+
                         <div className="space-y-2 flex-1">
+
                           <div className="flex items-center justify-between">
+
                             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Teacher Pedagogical Remarks:</label>
+
                             <span className="text-[10px] text-slate-400">Transferred to Student Portal</span>
+
                           </div>
+
                           
+
                           {/* Quick Comment Chips */}
+
                           <div className="flex flex-wrap gap-1.5">
+
                             {[
+
                               "Sign error in Q2 factoring",
+
                               "Review (a-b)² formula",
+
                               "Excellent intermediate steps",
+
                               "Focus Table sprint assigned"
+
                             ].map(chip => (
+
                               <button
+
                                 key={chip}
+
                                 type="button"
+
                                 onClick={() => setEditExamFeedback(prev => prev ? `${prev}. ${chip}` : chip)}
+
                                 className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+
                               >
+
                                 + {chip}
+
                               </button>
+
                             ))}
+
                           </div>
+
+
 
                           <textarea
+
                             rows={3}
+
                             value={editExamFeedback}
+
                             onChange={(e) => setEditExamFeedback(e.target.value)}
+
                             placeholder="Enter specific guidance for remedial focus..."
+
                             className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white leading-relaxed"
+
                           />
+
                         </div>
+
+
 
                         {/* Studio Footer Action Buttons */}
+
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+
                           {studioReadOnly ? (
+
                             <div className="flex items-center justify-between w-full">
+
                               <span className="text-xs text-slate-500 font-semibold flex items-center gap-1.5">
+
                                 <Lock className="h-3.5 w-3.5 text-slate-400" />
+
                                 <span>Official Examination Paper Record — Verified &amp; Signed Off</span>
+
                               </span>
+
                               <button
+
                                 type="button"
+
                                 onClick={() => setEditingExamSubmission(null)}
+
                                 className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs shadow-xs cursor-pointer"
+
                               >
+
                                 Close Graded Paper
+
                               </button>
+
                             </div>
+
                           ) : (
+
                             <>
+
                               <button
+
                                 type="button"
+
                                 onClick={() => setEditingExamSubmission(null)}
+
                                 className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
+
                               >
+
                                 Cancel
+
                               </button>
+
+
 
                               <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveExamMarks(false)}
-                                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95"
-                                >
-                                  Save Evaluation
-                                </button>
 
                                 <button
+
                                   type="button"
-                                  onClick={() => handleSaveExamMarks(true)}
-                                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+
+                                  onClick={() => handleSaveExamMarks(false)}
+
+                                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95"
+
                                 >
-                                  <span>Approve &amp; Next Student</span>
-                                  <ArrowRight className="h-3.5 w-3.5" />
+
+                                  Save Evaluation
+
                                 </button>
+
+
+
+                                <button
+
+                                  type="button"
+
+                                  onClick={() => handleSaveExamMarks(true)}
+
+                                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+
+                                >
+
+                                  <span>Approve &amp; Next Student</span>
+
+                                  <ArrowRight className="h-3.5 w-3.5" />
+
+                                </button>
+
                               </div>
+
                             </>
+
                           )}
+
                         </div>
+
                       </div>
+
                     </div>
+
                   </div>
+
                 </div>
+
               )}
+
                 </div>
+
               )}
+
+
 
                             {/* ── TAB CONTENT 2: QUESTION PAPER DRAFTING DESK ── */}
+
               {examSubTab === 'qp_desk' && (
+
                 <div className="space-y-6 animate-in fade-in duration-150">
+
                   {/* Workflow Architecture Stepper */}
+
                   <div className="rounded-3xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-slate-50/50 dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-900/50 p-5 shadow-xs">
+
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-indigo-100 dark:border-indigo-900/40 pb-4">
+
                       <div>
+
                         <div className="flex items-center gap-2">
+
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-2xs">
+
                             Academic Dean Pipeline
+
                           </span>
+
                           <span className="text-xs text-indigo-700 dark:text-indigo-300 font-bold">
+
                             Institutional Examination Office
+
                           </span>
+
                         </div>
+
                         <h3 className="text-base font-black text-slate-900 dark:text-white mt-1">
+
                           Question Paper Drafting &amp; Secrecy Vault Desk
+
                         </h3>
+
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+
                           Subject teachers author confidential blueprints commissioned by Academic Coordinator (Prof. Rajeshwari Nair), submit draft papers and answer schemes, and receive revision requests or final approval for the Exam Secrecy Vault.
+
                         </p>
+
                       </div>
 
+
+
                       <button
+
                         onClick={loadExams}
+
                         disabled={isLoadingExams}
+
                         className="self-start md:self-auto inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50 text-indigo-700 dark:text-indigo-300 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+
                       >
+
                         <RefreshCw className={`h-3.5 w-3.5 ${isLoadingExams ? 'animate-spin' : ''}`} />
+
                         <span>Refresh Desk</span>
+
                       </button>
+
                     </div>
+
+
 
                     {/* 4-Step Visual Stepper */}
+
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
+
                       <div className="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-950 flex items-start gap-2.5">
+
                         <div className="h-6 w-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-black text-xs flex items-center justify-center shrink-0">
+
                           1
+
                         </div>
+
                         <div>
+
                           <div className="text-[11px] font-bold text-slate-900 dark:text-white">Blueprint Order</div>
+
                           <div className="text-[10px] text-slate-500">Dean sets syllabus &amp; Bloom&apos;s quotas</div>
+
                         </div>
+
                       </div>
+
+
 
                       <div className="p-3 rounded-2xl bg-indigo-100/60 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-800 flex items-start gap-2.5 ring-2 ring-indigo-500/30">
+
                         <div className="h-6 w-6 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+
                           2
+
                         </div>
+
                         <div>
+
                           <div className="text-[11px] font-black text-indigo-900 dark:text-indigo-200">Teacher Authoring</div>
+
                           <div className="text-[10px] text-indigo-700 dark:text-indigo-300">Design paper + official answer key</div>
+
                         </div>
+
                       </div>
 
+
+
                       <div className="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-950 flex items-start gap-2.5">
+
                         <div className="h-6 w-6 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 font-black text-xs flex items-center justify-center shrink-0">
+
                           3
+
                         </div>
+
                         <div>
+
                           <div className="text-[11px] font-bold text-slate-900 dark:text-white">Academic Audit</div>
+
                           <div className="text-[10px] text-slate-500">Sign-off or revision request</div>
+
                         </div>
+
                       </div>
 
+
+
                       <div className="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-950 flex items-start gap-2.5">
+
                         <div className="h-6 w-6 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">
+
                           4
+
                         </div>
+
                         <div>
+
                           <div className="text-[11px] font-bold text-slate-900 dark:text-white">Secrecy Vault</div>
+
                           <div className="text-[10px] text-slate-500">Encrypted print packet for Exam Cell</div>
+
                         </div>
+
                       </div>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Metric Stat Tiles */}
+
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+
                     <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Commissioned Blueprints</span>
+
                       <div className="text-2xl font-black text-slate-900 dark:text-white">{teacherQpList.length} Papers</div>
+
                       <span className="text-[11px] text-slate-500">Assigned by Academic Office</span>
+
                     </div>
+
+
 
                     <div className="p-4 rounded-3xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 shadow-2xs space-y-1">
+
                       <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Action Required</span>
+
                       <div className="text-2xl font-black text-amber-800 dark:text-amber-300">
+
                         {teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length} Pending
+
                       </div>
+
                       <span className="text-[11px] text-amber-700 dark:text-amber-400">
+
                         {teacherQpList.filter(p => p.status === 'revision_requested').length} revisions requested
+
                       </span>
+
                     </div>
+
+
 
                     <div className="p-4 rounded-3xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 shadow-2xs space-y-1">
+
                       <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Under Academic Review</span>
+
                       <div className="text-2xl font-black text-blue-800 dark:text-blue-300">
+
                         {teacherQpList.filter(p => p.status === 'under_review').length} In Audit
+
                       </div>
+
                       <span className="text-[11px] text-blue-700 dark:text-blue-400">Awaiting Dean sign-off</span>
+
                     </div>
+
+
 
                     <div className="p-4 rounded-3xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 shadow-2xs space-y-1">
+
                       <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Approved / In Vault</span>
+
                       <div className="text-2xl font-black text-emerald-800 dark:text-emerald-300">
+
                         {teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell').length} Sealed
+
                       </div>
+
                       <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Secrecy vault locked 🔒</span>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Filter Pills Bar */}
+
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+
                     <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+
                       <span className="text-slate-400 font-bold uppercase text-[10px] mr-1">Filter Papers:</span>
+
                       {[
+
                         { id: 'all', label: 'All Commissioned', count: teacherQpList.length },
+
                         { id: 'pending', label: 'Action Required', count: teacherQpList.filter(p => p.status === 'draft' || p.status === 'revision_requested').length },
+
                         { id: 'under_review', label: 'Under Review', count: teacherQpList.filter(p => p.status === 'under_review').length },
+
                         { id: 'approved', label: 'Approved & Sealed', count: teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell').length }
+
                       ].map(flt => (
+
                         <button
+
                           key={flt.id}
+
                           onClick={() => setQpFilterStatus(flt.id as any)}
+
                           className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+
                             qpFilterStatus === flt.id
+
                               ? 'bg-indigo-600 text-white shadow-xs'
+
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+
                           }`}
+
                         >
+
                           <span>{flt.label}</span>
+
                           <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+
                             qpFilterStatus === flt.id ? 'bg-white/30 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+
                           }`}>
+
                             {flt.count}
+
                           </span>
+
                         </button>
+
                       ))}
+
                     </div>
+
+
 
                     <div className="text-xs text-slate-500 font-semibold">
+
                       Assigned Subject Faculty: <strong className="text-slate-900 dark:text-white">Mrs. Ananya Verma (Mathematics)</strong>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Question Papers Cards List */}
+
                   {(() => {
+
                     const filteredPapers = teacherQpList.filter(p => {
+
                       if (qpFilterStatus === 'pending') return p.status === 'draft' || p.status === 'revision_requested';
+
                       if (qpFilterStatus === 'under_review') return p.status === 'under_review';
+
                       if (qpFilterStatus === 'approved') return p.status === 'approved' || p.status === 'sent_to_exam_cell';
+
                       return true;
+
                     });
 
+
+
                     if (filteredPapers.length === 0) {
+
                       return (
+
                         <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 space-y-3">
+
                           <div className="h-12 w-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+
                             <FileText className="h-6 w-6" />
+
                           </div>
+
                           <h4 className="text-sm font-black text-slate-900 dark:text-white">
+
                             No Question Papers in this view
+
                           </h4>
+
                           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+
                             {qpFilterStatus === 'pending' 
+
                               ? 'All commissioned question paper drafts have been uploaded and submitted for academic review!'
+
                               : 'No blueprints found matching the selected filter.'}
+
                           </p>
+
                         </div>
+
                       );
+
                     }
+
+
 
                     return (
+
                       <div className="grid grid-cols-1 gap-4">
+
                         {filteredPapers.map(qp => {
+
                           const bp = qp.blueprint || {};
+
                           const bloom = bp.bloom_taxonomy || { knowledge_pct: 35, application_pct: 45, hots_pct: 20 };
+
                           const isActionRequired = qp.status === 'draft' || qp.status === 'revision_requested';
 
+
+
                           return (
+
                             <div
+
                               key={qp.id}
+
                               className={`rounded-3xl border bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4 transition-all ${
+
                                 qp.status === 'revision_requested' 
+
                                   ? 'border-rose-300 dark:border-rose-900/60 ring-2 ring-rose-500/20' 
+
                                   : isActionRequired
+
                                   ? 'border-amber-200 dark:border-amber-900/40'
+
                                   : 'border-slate-200 dark:border-slate-800'
+
                               }`}
+
                             >
+
                               {/* Top Badge & Status Header */}
+
                               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+
                                 <div className="space-y-1">
+
                                   <div className="flex flex-wrap items-center gap-2">
+
                                     <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+
                                       {qp.class_name} &bull; {qp.subject}
+
                                     </span>
+
                                     <span className="text-xs font-bold text-slate-500">&bull;</span>
+
                                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+
                                       {qp.term}
+
                                     </span>
+
                                     <span className="text-xs font-bold text-slate-500">&bull;</span>
+
                                     <span className="text-xs font-semibold text-slate-500">
+
                                       Target: <strong>{bp.total_marks || 100} Marks</strong> (3 Hours)
+
                                     </span>
+
                                   </div>
+
+
 
                                   <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white pt-1">
+
                                     {qp.title}
+
                                   </h3>
+
                                 </div>
+
+
 
                                 {/* Status Badges */}
+
                                 <div className="shrink-0">
+
                                   <span className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-2xs ${
+
                                     qp.status === 'sent_to_exam_cell'
+
                                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300'
+
                                       : qp.status === 'approved'
+
                                       ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300'
+
                                       : qp.status === 'under_review'
+
                                       ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 animate-pulse'
+
                                       : qp.status === 'revision_requested'
+
                                       ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300'
+
                                       : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
+
                                   }`}>
+
                                     {qp.status === 'sent_to_exam_cell' ? '<span className="inline-flex items-center gap-1.5"><Icon3D name="lock" size={16} /><span>Sealed in Exam Vault</span></span>' :
+
                                      qp.status === 'approved' ? '✓ Academic Approved' :
+
                                      qp.status === 'under_review' ? '⏳ Under Review by Dean' :
+
                                      qp.status === 'revision_requested' ? '⚠️ Revision Requested' :
+
                                      '📝 Drafting Pending'}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
+
 
                               {/* Revision Warning Callout if Coordinator requested changes */}
+
                               {qp.status === 'revision_requested' && (
+
                                 <div className="rounded-2xl border border-rose-300 dark:border-rose-900 bg-rose-50/80 dark:bg-rose-950/40 p-4 space-y-1.5 animate-in fade-in">
+
                                   <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300 font-bold text-xs">
+
                                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+
                                     <span>Academic Coordinator (Prof. Rajeshwari Nair) Audit Feedback:</span>
+
                                   </div>
+
                                   <p className="text-xs text-rose-900 dark:text-rose-200 font-medium pl-6 leading-relaxed">
+
                                     &ldquo;{qp.review_notes || 'Please adjust question paper sections to strictly match the 30% HOTS / Application weighting. Include detailed step-by-step marking rubric in the answer scheme.'}&rdquo;
+
                                   </p>
+
                                 </div>
+
                               )}
+
+
 
                               {/* Blueprint Specifications Grid */}
+
                               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+
                                   <span className="font-bold text-slate-700 dark:text-slate-300">
+
                                     Required Bloom&apos;s Taxonomy Weighting:
+
                                   </span>
+
                                   <div className="flex items-center gap-2 font-bold text-[11px]">
+
                                     <span className="px-2.5 py-0.5 rounded-lg bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+
                                       Recall / Knowledge: {bloom.knowledge_pct}%
+
                                     </span>
+
                                     <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+
                                       Understanding: {bloom.application_pct}%
+
                                     </span>
+
                                     <span className="px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+
                                       HOTS / Analysis: {bloom.hots_pct}%
+
                                     </span>
+
                                   </div>
+
                                 </div>
+
+
 
                                 {bp.units && bp.units.length > 0 && (
+
                                   <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200/70 dark:border-slate-700/60">
+
                                     <span className="text-[11px] font-bold text-slate-500 mr-1">Syllabus Scope:</span>
+
                                     {bp.units.map((u: string) => (
+
                                       <span key={u} className="px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-[10px] font-semibold">
+
                                         {u}
+
                                       </span>
+
                                     ))}
+
                                   </div>
+
                                 )}
+
+
 
                                 {/* Submitted Artifacts if present */}
+
                                 {qp.draft_file_url && (
+
                                   <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-200/70 dark:border-slate-700/60 text-xs">
+
                                     <span className="text-slate-500 font-bold">Uploaded Artifacts:</span>
+
                                     <a
+
                                       href={qp.draft_file_url}
+
                                       target="_blank"
+
                                       rel="noreferrer"
+
                                       className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+
                                     >
+
                                       <FileText className="h-3.5 w-3.5" />
+
                                       <span>{qp.draft_file_name || 'Question Paper PDF'}</span>
+
                                       <ExternalLink className="h-3 w-3" />
+
                                     </a>
+
                                     {qp.answer_key_url && (
+
                                       <a
+
                                         href={qp.answer_key_url}
+
                                         target="_blank"
+
                                         rel="noreferrer"
+
                                         className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
+
                                       >
+
                                         <CheckSquare className="h-3.5 w-3.5" />
+
                                         <span>Official Marking Scheme PDF</span>
+
                                         <ExternalLink className="h-3 w-3" />
+
                                       </a>
+
                                     )}
+
                                   </div>
+
                                 )}
+
                               </div>
+
+
 
                               {/* Action Footer */}
+
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-4 w-4 text-slate-400" />
-                                  <span>Submission Due: <strong className="text-slate-800 dark:text-slate-200">{qp.due_date || 'In 3 Days'}</strong></span>
-                                  <span>&bull;</span>
-                                  <span>Commissioned By: <strong className="text-slate-800 dark:text-slate-200">Dean Rajeshwari Nair</strong></span>
-                                </div>
 
                                 <div className="flex items-center gap-2">
-                                  {isActionRequired ? (
-                                    <button
-                                      onClick={() => {
-                                        setSelectedDraftQp(qp);
-                                        setDraftFileName(qp.draft_file_name || `${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
-                                        setDraftFileUrl(qp.draft_file_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
-                                        setAnswerKeyUrl(qp.answer_key_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_AnswerKey.pdf`);
-                                      }}
-                                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer flex items-center gap-1.5 transition-all"
-                                    >
-                                      <Upload className="h-4 w-4" />
-                                      <span>{qp.status === 'revision_requested' ? 'Submit Revised Paper Draft' : 'Upload & Submit Designed Paper'}</span>
-                                    </button>
-                                  ) : qp.status === 'under_review' ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
-                                        Awaiting Academic Coordinator Sign-Off
-                                      </span>
-                                      <button
-                                        onClick={() => {
-                                          setSelectedDraftQp(qp);
-                                          setDraftFileName(qp.draft_file_name || `${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
-                                          setDraftFileUrl(qp.draft_file_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
-                                          setAnswerKeyUrl(qp.answer_key_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_AnswerKey.pdf`);
-                                        }}
-                                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
-                                      >
-                                        Update Draft
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                                      <CheckCircle2 className="h-4 w-4" />
-                                      <span>Approved &amp; Sealed in Secrecy Vault</span>
-                                    </span>
-                                  )}
+
+                                  <Clock className="h-4 w-4 text-slate-400" />
+
+                                  <span>Submission Due: <strong className="text-slate-800 dark:text-slate-200">{qp.due_date || 'In 3 Days'}</strong></span>
+
+                                  <span>&bull;</span>
+
+                                  <span>Commissioned By: <strong className="text-slate-800 dark:text-slate-200">Dean Rajeshwari Nair</strong></span>
+
                                 </div>
+
+
+
+                                <div className="flex items-center gap-2">
+
+                                  {isActionRequired ? (
+
+                                    <button
+
+                                      onClick={() => {
+
+                                        setSelectedDraftQp(qp);
+
+                                        setDraftFileName(qp.draft_file_name || `${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
+
+                                        setDraftFileUrl(qp.draft_file_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
+
+                                        setAnswerKeyUrl(qp.answer_key_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_AnswerKey.pdf`);
+
+                                      }}
+
+                                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer flex items-center gap-1.5 transition-all"
+
+                                    >
+
+                                      <Upload className="h-4 w-4" />
+
+                                      <span>{qp.status === 'revision_requested' ? 'Submit Revised Paper Draft' : 'Upload & Submit Designed Paper'}</span>
+
+                                    </button>
+
+                                  ) : qp.status === 'under_review' ? (
+
+                                    <div className="flex items-center gap-2">
+
+                                      <span className="text-xs text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900">
+
+                                        Awaiting Academic Coordinator Sign-Off
+
+                                      </span>
+
+                                      <button
+
+                                        onClick={() => {
+
+                                          setSelectedDraftQp(qp);
+
+                                          setDraftFileName(qp.draft_file_name || `${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
+
+                                          setDraftFileUrl(qp.draft_file_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_Final_QP.pdf`);
+
+                                          setAnswerKeyUrl(qp.answer_key_url || `/samples/${qp.class_name.replace(/\s+/g, '_')}_${qp.subject}_Term1_AnswerKey.pdf`);
+
+                                        }}
+
+                                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+
+                                      >
+
+                                        Update Draft
+
+                                      </button>
+
+                                    </div>
+
+                                  ) : (
+
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+
+                                      <CheckCircle2 className="h-4 w-4" />
+
+                                      <span>Approved &amp; Sealed in Secrecy Vault</span>
+
+                                    </span>
+
+                                  )}
+
+                                </div>
+
                               </div>
+
                             </div>
+
                           );
+
                         })}
+
                       </div>
+
                     );
+
                   })()}
+
                 </div>
+
               )}
+
+
 
               {/* ── AI MARKSHEET OCR SCANNER MODAL ── */}
+
               {showOcrModal && (
+
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+
                   <div className="w-full max-w-4xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-8">
+
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
                       <div className="flex items-center gap-2.5">
+
                         <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md">
+
                           <Sparkles className="h-5 w-5" />
+
                         </div>
+
                         <div>
+
                           <h3 className="text-base font-black text-slate-900 dark:text-white">
+
                             Gemini Vision AI Marksheet &amp; Student Paper OCR Evaluator
+
                           </h3>
+
                           <p className="text-xs text-slate-500">
+
                             Eliminate manual marks entry: upload photos of physical score registers to auto-populate grades &amp; trigger remedial focus.
+
                           </p>
+
                         </div>
+
                       </div>
+
                       <button
+
                         onClick={() => {
+
                           setShowOcrModal(false);
+
                           setOcrStep('upload');
+
                         }}
+
                         className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+
                       >
+
                         <X className="h-4 w-4" />
+
                       </button>
+
                     </div>
+
+
 
                     {/* Step 1: Upload view */}
+
                     {ocrStep === 'upload' && (
+
                       <div className="space-y-4 py-2 text-xs">
+
                         <div className="border-2 border-dashed border-purple-200 dark:border-purple-800/60 rounded-3xl p-8 text-center space-y-3 bg-purple-50/30 dark:bg-purple-950/20">
+
                           <div className="h-12 w-12 rounded-2xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center mx-auto shadow-inner">
+
                             <Upload className="h-6 w-6" />
+
                           </div>
+
                           <div>
+
                             <h4 className="text-sm font-black text-slate-900 dark:text-white">
+
                               Drop evaluated mark register photo or PDF scan
+
                             </h4>
+
                             <p className="text-xs text-slate-500 mt-0.5">
+
                               Supports handwritten numbers, tabular marks sheets, or batch answer booklets
+
                             </p>
+
                           </div>
+
                           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[11px] text-slate-700 dark:text-slate-300">
+
                             <span>Target Class: Class 8-B (Mathematics Term 1 Evaluation)</span>
+
                           </div>
+
                         </div>
+
+
 
                         {/* Preset Test Marksheet options */}
+
                         <div className="space-y-2">
+
                           <label className="font-bold text-slate-700 dark:text-slate-300 block">
+
                             Or select scanned register artifact from school scanner:
+
                           </label>
+
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
                             {[
+
                               { name: 'Class8B_Math_Term1_Register_Physical.png', desc: 'Class 8-B Term 1 Final Marksheet (Evaluated 20 Oct 2026)' },
+
                               { name: 'Class8B_Math_Unit2_Factoring_Quiz.png', desc: 'Unit 2 Factoring Micro-Quiz Handwritten Register' }
+
                             ].map(sample => (
+
                               <button
+
                                 key={sample.name}
+
                                 type="button"
+
                                 onClick={() => setOcrScannedFileName(sample.name)}
+
                                 className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
+
                                   ocrScannedFileName === sample.name
+
                                     ? 'border-purple-600 bg-purple-50 dark:bg-purple-950/60 shadow-xs'
+
                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+
                                 }`}
+
                               >
+
                                 <div className="font-bold text-slate-900 dark:text-white text-xs">{sample.name}</div>
+
                                 <div className="text-[10px] text-slate-500 mt-0.5">{sample.desc}</div>
+
                               </button>
+
                             ))}
+
                           </div>
+
                         </div>
+
+
 
                         <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+
                           <button
+
                             onClick={() => setShowOcrModal(false)}
+
                             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+
                           >
+
                             Cancel
+
                           </button>
+
                           <button
+
                             onClick={handleStartOcrScan}
+
                             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+
                           >
+
                             <Sparkles className="h-4 w-4" />
+
                             <span>Scan &amp; Extract Marks with Gemini Vision</span>
+
                           </button>
+
                         </div>
+
                       </div>
+
                     )}
+
+
 
                     {/* Step 2: Scanning view */}
+
                     {ocrStep === 'scanning' && (
+
                       <div className="py-12 text-center space-y-4">
+
                         <div className="h-16 w-16 rounded-3xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 flex items-center justify-center mx-auto shadow-inner animate-pulse">
+
                           <RefreshCw className="h-8 w-8 animate-spin" />
+
                         </div>
+
                         <div className="space-y-1">
+
                           <h4 className="text-base font-black text-slate-900 dark:text-white">
+
                             Gemini 3.0 Vision OCR In Progress...
+
                           </h4>
+
                           <p className="text-xs text-slate-500 max-w-sm mx-auto">
+
                             Extracting handwritten marks column, segmenting digit bounding boxes, and cross-checking student roll names.
+
                           </p>
+
                         </div>
+
                       </div>
+
                     )}
+
+
 
                     {/* Step 3: Review & Edit Split Grid */}
+
                     {ocrStep === 'review' && (
+
                       <div className="space-y-4 text-xs">
+
                         <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+
                           <div>
+
                             <span className="font-bold text-emerald-900 dark:text-emerald-200">
+
                               ✓ Successfully parsed {ocrResults.length} student scores from {ocrScannedFileName}
+
                             </span>
+
                             <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+
                               {ocrResults.filter(r => r.is_remedial_target).length} students scored &le; 70% and will be automatically enrolled in the 1-Week Remedial Focus Table upon commit.
+
                             </p>
+
                           </div>
+
                           <span className="px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-black text-[10px] tracking-wider uppercase">
+
                             Vision OCR Verified
+
                           </span>
+
                         </div>
+
+
 
                         {/* Review Table */}
+
                         <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+
                           <table className="w-full text-left text-xs">
+
                             <thead className="bg-slate-50 dark:bg-slate-800/80 sticky top-0 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+
                               <tr>
+
                                 <th className="p-3">Roll &amp; Student</th>
+
                                 <th className="p-3">Extracted Marks</th>
+
                                 <th className="p-3">Score %</th>
+
                                 <th className="p-3">Remedial Focus Pipeline</th>
+
                                 <th className="p-3">OCR Confidence</th>
+
                                 <th className="p-3">Teacher Observation</th>
+
                               </tr>
+
                             </thead>
+
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                               {ocrResults.map((row, idx) => (
+
                                 <tr key={row.student_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+
                                   <td className="p-3">
+
                                     <div className="font-bold text-slate-900 dark:text-white">{row.student_name}</div>
+
                                     <span className="font-mono text-[10px] text-slate-400">Roll #{row.roll_no} • {row.admission_no}</span>
+
                                   </td>
+
                                   <td className="p-3">
+
                                     <div className="flex items-center gap-1">
+
                                       <input
+
                                         type="number"
+
                                         min="0"
+
                                         max={row.max_marks}
+
                                         value={row.marks_obtained}
+
                                         onChange={(e) => {
+
                                           const val = Number(e.target.value);
+
                                           setOcrResults(prev => prev.map((item, i) => {
+
                                             if (i === idx) {
+
                                               const newPct = Math.round((val / row.max_marks) * 1000) / 10;
+
                                               return {
+
                                                 ...item,
+
                                                 marks_obtained: val,
+
                                                 percentage: newPct,
+
                                                 is_remedial_target: newPct <= 70.0
+
                                               };
+
                                             }
+
                                             return item;
+
                                           }));
+
                                         }}
+
                                         className="w-16 p-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-center"
+
                                       />
+
                                       <span className="text-slate-400">/ {row.max_marks}</span>
+
                                     </div>
+
                                   </td>
+
                                   <td className="p-3 font-black">
+
                                     <span className={row.is_remedial_target ? 'text-rose-600' : 'text-emerald-600'}>
+
                                       {row.percentage}%
+
                                     </span>
+
                                   </td>
+
                                   <td className="p-3">
+
                                     {row.is_remedial_target ? (
+
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+
                                         <AlertTriangle className="h-3 w-3 shrink-0" />
+
                                         <span>Enrolled in Remedial (&le;70%)</span>
+
                                       </span>
+
                                     ) : (
+
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
+
                                         <span>Mastery Exempt (&gt;70%)</span>
+
                                       </span>
+
                                     )}
+
                                   </td>
+
                                   <td className="p-3">
+
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+
                                       row.confidence >= 0.90 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+
                                     }`}>
+
                                       {Math.round(row.confidence * 100)}% Match
+
                                     </span>
+
                                   </td>
+
                                   <td className="p-3">
+
                                     <input
+
                                       type="text"
+
                                       value={row.pedagogical_remarks}
+
                                       onChange={(e) => {
+
                                         const val = e.target.value;
+
                                         setOcrResults(prev => prev.map((item, i) => i === idx ? { ...item, pedagogical_remarks: val } : item));
+
                                       }}
+
                                       className="w-full p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px]"
+
                                     />
+
                                   </td>
+
                                 </tr>
+
                               ))}
+
                             </tbody>
+
                           </table>
+
                         </div>
+
+
 
                         {/* Actions */}
+
                         <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+
                           <button
+
                             onClick={() => setOcrStep('upload')}
+
                             className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+
                           >
+
                             &larr; Re-Scan Image
+
                           </button>
+
                           <div className="flex items-center gap-2">
+
                             <button
+
                               disabled={isCommittingOcr}
+
                               onClick={() => handleCommitOcrGrades(false)}
+
                               className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs cursor-pointer"
+
                             >
+
                               Save Draft Marks
+
                             </button>
+
                             <button
+
                               disabled={isCommittingOcr}
+
                               onClick={() => handleCommitOcrGrades(true)}
+
                               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+
                             >
+
                               <CheckCircle2 className="h-4 w-4" />
+
                               <span>Commit &amp; Publish with Remedial Hook &rarr;</span>
+
                             </button>
+
                           </div>
+
                         </div>
+
                       </div>
+
                     )}
+
                   </div>
+
                 </div>
+
               )}
+
+
 
               {/* ── SUBMIT QUESTION PAPER DRAFT MODAL ── */}
+
               {selectedDraftQp && (
+
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+
                   <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-8">
+
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
                       <div className="flex items-center gap-2">
+
                         <FileText className="h-5 w-5 text-indigo-600" />
+
                         <div>
+
                           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                             Upload Draft: {selectedDraftQp.title}
+
                           </h3>
+
                           <span className="text-xs text-slate-500">Commissioned by Academic Coordinator (Prof. Rajeshwari Nair)</span>
+
                         </div>
+
                       </div>
+
                       <button onClick={() => setSelectedDraftQp(null)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
+
                         <X className="h-4 w-4" />
+
                       </button>
+
                     </div>
+
+
 
                     <form onSubmit={handleSubmitQpDraft} className="space-y-4 text-xs">
+
                       {/* Revision notice if requested */}
+
                       {selectedDraftQp.status === 'revision_requested' && (
+
                         <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900 text-rose-900 dark:text-rose-200 space-y-1">
+
                           <div className="flex items-center gap-1.5 font-black text-rose-700 dark:text-rose-300">
+
                             <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+
                             <span>Action Required: Academic Coordinator Revision Notes</span>
+
                           </div>
+
                           <p className="text-[11px] text-rose-800 dark:text-rose-200 pl-5">
+
                             &ldquo;{selectedDraftQp.review_notes || 'Please adjust question paper sections to strictly match the 30% HOTS / Application weighting. Include detailed step-by-step marking rubric in the answer scheme.'}&rdquo;
+
                           </p>
+
                         </div>
+
                       )}
+
+
 
                       {/* Blueprint specifications summary */}
+
                       <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 text-indigo-900 dark:text-indigo-200 space-y-1.5">
+
                         <div className="font-bold flex items-center justify-between">
+
                           <span>Required Blueprint Specifications:</span>
+
                           <span className="font-mono text-[10px] bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+
                             Total: {selectedDraftQp.blueprint?.total_marks || 100} Marks (3h)
+
                           </span>
+
                         </div>
+
                         <div className="text-[11px] text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-2">
+
                           <span>Class: <strong>{selectedDraftQp.class_name}</strong></span>
+
                           <span>&bull;</span>
+
                           <span>Subject: <strong>{selectedDraftQp.subject}</strong></span>
+
                           <span>&bull;</span>
+
                           <span>Term: <strong>{selectedDraftQp.term}</strong></span>
+
                         </div>
+
                         {selectedDraftQp.blueprint?.units && selectedDraftQp.blueprint.units.length > 0 && (
+
                           <div className="text-[10px] text-slate-500 pt-1 border-t border-indigo-100 dark:border-indigo-900/50">
+
                             Units: {selectedDraftQp.blueprint.units.join(', ')}
+
                           </div>
+
                         )}
+
                       </div>
+
+
 
                       {/* Quick Auto-Fill Demo Button */}
+
                       <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+
                         <span className="text-[11px] text-slate-500">Fast Demo Testing:</span>
+
                         <button
+
                           type="button"
+
                           onClick={() => {
+
                             const cName = selectedDraftQp.class_name.replace(/\s+/g, '_');
+
                             setDraftFileUrl(`/samples/${cName}_Math_Term1_Final_QP.pdf`);
+
                             setDraftFileName(`${cName}_Math_Term1_Final_QP.pdf`);
+
                             setAnswerKeyUrl(`/samples/${cName}_Math_Term1_AnswerKey.pdf`);
+
                             triggerToast('⚡ Pre-filled verified demo question paper & marking scheme!');
+
                           }}
+
                           className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] border border-indigo-200 dark:border-indigo-800 cursor-pointer flex items-center gap-1"
+
                         >
+
                           <Sparkles className="h-3 w-3 text-indigo-500" />
+
                           <span>Auto-Fill Demo Artifacts</span>
+
                         </button>
+
                       </div>
 
+
+
                       <div>
+
                         <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                           Question Paper PDF File Reference / Storage URL
+
                         </label>
+
                         <input
+
                           type="text"
+
                           required
+
                           value={draftFileUrl}
+
                           onChange={e => setDraftFileUrl(e.target.value)}
+
                           placeholder="/samples/Class8_Math_Term1_Final_QP.pdf"
+
                           className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-[11px]"
+
                         />
+
                       </div>
 
+
+
                       <div>
+
                         <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                           Display File Name
+
                         </label>
+
                         <input
+
                           type="text"
+
                           required
+
                           value={draftFileName}
+
                           onChange={e => setDraftFileName(e.target.value)}
+
                           placeholder="Class8_Math_Term1_Final_QP.pdf"
+
                           className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+
                         />
+
                       </div>
 
+
+
                       <div>
+
                         <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                           Official Marking Scheme &amp; Answer Key (PDF)
+
                         </label>
+
                         <input
+
                           type="text"
+
                           value={answerKeyUrl}
+
                           onChange={e => setAnswerKeyUrl(e.target.value)}
+
                           placeholder="/samples/Class8_Math_Term1_AnswerKey.pdf"
+
                           className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-[11px]"
+
                         />
+
                       </div>
+
+
 
                       <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+
                         <button
+
                           type="button"
+
                           onClick={() => setSelectedDraftQp(null)}
+
                           className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+
                         >
+
                           Cancel
+
                         </button>
+
                         <button
+
                           type="submit"
+
                           className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+
                         >
+
                           <Upload className="h-4 w-4" />
+
                           <span>Submit Paper to Academic Dean</span>
+
                         </button>
+
                       </div>
+
                     </form>
+
                   </div>
+
                 </div>
+
               )}
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 4: MY STUDENTS 360 ROSTER & ANALYTICS            */}
+
           {/* ===================================================== */}
+
           {/* ===================================================== */}
+
           {/* TAB: DEDICATED SYLLABUS & CURRICULUM PACING (MATHEMATICS) */}
+
           {/* ===================================================== */}
+
           {activeTab === 'curriculum' && (
+
             <div className="space-y-6">
+
               {/* Header */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 px-2.5 py-0.5 text-xs font-bold border border-teal-200 dark:border-teal-800">
+
                       Syllabus &amp; Curriculum Desk
+
                     </span>
+
                     <span className="text-xs text-slate-500 font-semibold">Faculty: Mrs. Ananya Verma (Mathematics)</span>
+
                   </div>
+
                   <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+
                     Mathematics Curriculum Delivery &amp; Lesson Completion Tracker
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Track lesson pacing against official term milestones for your assigned classes. Logging a completed unit synchronizes with Academic Coordinator (Dean Rajeshwari Nair) audit feed.
+
                   </p>
+
                 </div>
+
+
 
                 {/* Class Filter Chips */}
+
                 <div className="flex flex-wrap items-center gap-1.5">
+
                   {[
+
                     { id: 'ALL', label: 'All Assigned Math Classes' },
+
                     { id: 'Class 8-B', label: 'Class 8-B' },
+
                     { id: 'Class 9-A', label: 'Class 9-A' },
+
                     { id: 'Class 7-A', label: 'Class 7-A' }
+
                   ].map(flt => (
+
                     <button
+
                       key={flt.id}
+
                       onClick={() => setCurriculumClassFilter(flt.id)}
+
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+
                         curriculumClassFilter === flt.id
+
                           ? 'bg-teal-600 text-white shadow-xs'
+
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+
                       }`}
+
                     >
+
                       {flt.label}
+
                     </button>
+
                   ))}
+
                 </div>
+
               </div>
+
+
 
               {/* Mathematics Curriculum Cards Grid */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
                 {curriculumItems
+
                   .filter(item => item.subject.toLowerCase() === 'mathematics')
+
                   .concat([
+
                     // Ensure full coverage for Mrs. Verma's other assigned math sections if not in list
+
                     {
+
                       id: 101,
+
                       class_name: 'Class 7-A',
+
                       subject: 'Mathematics',
+
                       teacher_name: 'Mrs. Ananya Verma',
+
                       total_units: 18,
+
                       completed_units: 14,
+
                       completion_pct: 77.8,
+
                       calendar_target_units: 13,
+
                       status: 'Ahead (+1 Unit)',
+
                       last_lesson_title: 'Integers & Number Line Operations',
+
                       next_milestone_date: '31 Oct 2026 (Unit Test 2)'
+
                     },
+
                     {
+
                       id: 102,
+
                       class_name: 'Class 9-A',
+
                       subject: 'Mathematics',
+
                       teacher_name: 'Mrs. Ananya Verma',
+
                       total_units: 24,
+
                       completed_units: 19,
+
                       completion_pct: 79.2,
+
                       calendar_target_units: 18,
+
                       status: 'Ahead (+1 Unit)',
+
                       last_lesson_title: 'Polynomials & Factor Theorem',
+
                       next_milestone_date: '02 Nov 2026 (Diagnostic Quiz)'
+
                     }
+
                   ])
+
                   .filter((item, idx, self) => self.findIndex(t => t.class_name === item.class_name && t.subject === item.subject) === idx)
+
                   .filter(item => curriculumClassFilter === 'ALL' || item.class_name === curriculumClassFilter)
+
                   .map(item => (
+
                     <div
+
                       key={item.id}
+
                       className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between space-y-4 shadow-xs"
+
                     >
+
                       <div className="space-y-3">
+
                         <div className="flex items-center justify-between">
+
                           <div>
+
                             <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider block">
+
                               {item.subject} Faculty
+
                             </span>
+
                             <h4 className="text-sm font-black text-slate-900 dark:text-white">
+
                               {item.class_name} &bull; {item.subject}
+
                             </h4>
+
                           </div>
+
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+
                             item.status.toLowerCase().includes('lag')
+
                               ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200'
+
                               : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200'
+
                           }`}>
+
                             {item.status}
+
                           </span>
+
                         </div>
+
+
 
                         {/* Progress Bar */}
+
                         <div className="space-y-1">
+
                           <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
+
                             <span>Progress: {item.completion_pct}%</span>
+
                             <span>{item.completed_units} / {item.total_units} Units</span>
+
                           </div>
+
                           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+
                             <div 
+
                               className={`h-full rounded-full transition-all duration-500 ${
+
                                 item.status.toLowerCase().includes('lag') ? 'bg-rose-500' : 'bg-teal-600'
+
                               }`}
+
                               style={{ width: `${Math.min(100, item.completion_pct)}%` }}
+
                             />
+
                           </div>
+
                           <div className="text-[10px] text-slate-400 text-right">
+
                             Calendar Target: {item.calendar_target_units} Units
+
                           </div>
+
                         </div>
+
+
 
                         {/* Lesson Info Callout */}
+
                         <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-xs space-y-1">
+
                           <div className="text-slate-700 dark:text-slate-300">
+
                             <span className="font-bold text-slate-900 dark:text-white">Last Completed:</span> {item.last_lesson_title}
+
                           </div>
+
                           <div className="text-[11px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-1">
+
                             <CalendarCheck className="h-3.5 w-3.5" />
+
                             <span>Milestone: {item.next_milestone_date}</span>
+
                           </div>
+
                         </div>
+
                       </div>
 
+
+
                       <button
+
                         onClick={() => setLogUnitCurriculum(item)}
+
                         className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+
                       >
+
                         <CheckCircle2 className="h-4 w-4" />
+
                         <span>Log Completed Unit (+1 Unit)</span>
+
                       </button>
+
                     </div>
+
                   ))}
+
               </div>
+
             </div>
+
           )}
+
+
 
           {activeTab === 'roster' && (() => {
+
             // Compute Class Cohort Students
+
             const currentCohortStudents = students.filter(s => {
+
               if (selectedClassFilter === 'ALL') return true;
+
               const filterNormalized = selectedClassFilter.replace('Class ', '').trim();
+
               return s.class_name.includes(filterNormalized) || s.class_name === selectedClassFilter;
+
             });
+
+
 
             const filteredRosterStudents = currentCohortStudents.filter(s => {
+
               const matchesSearch = s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+
                                     s.roll_no.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+
                                     (s.focus_concept && s.focus_concept.toLowerCase().includes(studentSearchQuery.toLowerCase()));
+
               if (!matchesSearch) return false;
+
               if (rosterQuickFilter === 'AT_RISK_ATTENDANCE') return s.attendance_pct < 85;
+
               if (rosterQuickFilter === 'FOCUS_TABLE_ACTIVE') return s.has_focus_table;
+
               if (rosterQuickFilter === 'ON_LEAVE') {
+
                 return Boolean(s.is_on_leave || s.is_leave_pending || s.today_attendance_status === 'Excused Leave' || s.today_attendance_status === 'Leave Pending');
+
               }
+
               if (rosterQuickFilter === 'HAS_REMARKS') {
+
                 const rems = getRemarksForStudent(s.id);
+
                 return rems.length > 0;
+
               }
+
               return true;
+
             });
 
+
+
             // Vitals computations for selected class
+
             const cohortCount = currentCohortStudents.length;
+
             const cohortAvgAtt = cohortCount > 0 
+
               ? (currentCohortStudents.reduce((acc, st) => acc + (st.attendance_pct || 90), 0) / cohortCount).toFixed(1)
+
               : '92.4';
+
             const cohortAtRiskCount = currentCohortStudents.filter(st => st.attendance_pct < 85).length;
+
             const cohortFocusCount = currentCohortStudents.filter(st => st.has_focus_table).length;
+
             const cohortRemarksCount = currentCohortStudents.reduce((acc, st) => acc + getRemarksForStudent(st.id).length, 0);
+
             const cohortOnLeaveCount = currentCohortStudents.filter(st => st.is_on_leave || st.is_leave_pending || st.today_attendance_status === 'Excused Leave' || st.today_attendance_status === 'Leave Pending').length;
 
+
+
             return (
+
               <div className="space-y-6">
+
                 {/* 1. TOP HEADER & CLASS/SUBJECT SELECTOR */}
+
                 <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+
                     <div>
+
                       <div className="flex items-center gap-2 flex-wrap">
+
                         <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs font-black uppercase tracking-wider border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
+
                           <Users className="h-3.5 w-3.5" />
+
                           <span>My Classes &bull; 360 Classroom Cockpit</span>
+
                         </span>
+
                         <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+
                           Active Term: <strong>CBSE Term 1 (2026-27)</strong>
+
                         </span>
+
                       </div>
+
                       <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1.5 flex items-center gap-2">
+
                         <span>Classroom Roster &amp; Student Intervention Matrix</span>
+
                       </h2>
+
                       <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl mt-0.5">
+
                         Track cohort attendance pulse, missed classes, active Remedial Focus Tables, and cross-faculty observation journals in one unified cockpit.
+
                       </p>
+
                     </div>
+
+
 
                     {/* Class Selector Pills */}
+
                     <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl flex-wrap">
+
                       <button
+
                         type="button"
+
                         onClick={() => setSelectedClassFilter('Class 8-B')}
+
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+
                           selectedClassFilter === 'Class 8-B'
+
                             ? 'bg-blue-600 text-white shadow-xs'
+
                             : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         Class 8-B (Homeroom &amp; Math)
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setSelectedClassFilter('Class 9-A')}
+
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+
                           selectedClassFilter === 'Class 9-A'
+
                             ? 'bg-blue-600 text-white shadow-xs'
+
                             : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         Class 9-A (Math)
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setSelectedClassFilter('Class 9-B')}
+
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+
                           selectedClassFilter === 'Class 9-B'
+
                             ? 'bg-blue-600 text-white shadow-xs'
+
                             : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         Class 9-B (Math)
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setSelectedClassFilter('ALL')}
+
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+
                           selectedClassFilter === 'ALL'
+
                             ? 'bg-blue-600 text-white shadow-xs'
+
                             : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+
                         }`}
+
                       >
+
                         All Students
+
                       </button>
+
                     </div>
+
                   </div>
+
+
 
                   {/* 2. CLASS VITALS KPI CARDS */}
+
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+
                       <div>
+
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Class Strength</span>
+
                         <span className="text-xl font-black text-slate-900 dark:text-white">{cohortCount}</span>
+
                         <span className="text-[10px] text-slate-500 block">Active enrolled roster</span>
+
                       </div>
+
                       <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+
                         <Users className="h-4.5 w-4.5" />
+
                       </div>
+
                     </div>
 
+
+
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+
                       <div>
+
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Attendance Pulse</span>
+
                         <div className="flex items-center gap-1.5">
+
                           <span className={`text-xl font-black ${
+
                             Number(cohortAvgAtt) >= 90 ? 'text-emerald-600' : Number(cohortAvgAtt) >= 80 ? 'text-amber-600' : 'text-rose-600'
+
                           }`}>
+
                             {cohortAvgAtt}%
+
                           </span>
+
                           {cohortAtRiskCount > 0 && (
+
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+
                               {cohortAtRiskCount} Alert
+
                             </span>
+
                           )}
+
                         </div>
+
                         <span className="text-[10px] text-slate-500 block">
+
                           {cohortAtRiskCount === 0 ? 'Optimal campus presence' : `${cohortAtRiskCount} student <85% threshold`}
+
                         </span>
+
                       </div>
+
                       <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+
                         <Clock className="h-4.5 w-4.5" />
+
                       </div>
+
                     </div>
 
+
+
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+
                       <div>
+
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Focus Table Pipeline</span>
+
                         <div className="flex items-center gap-1.5">
+
                           <span className="text-xl font-black text-amber-600 dark:text-amber-400">{cohortFocusCount}</span>
+
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+
                             Active
+
                           </span>
+
                         </div>
+
                         <button
+
                           type="button"
+
                           onClick={() => setActiveTab('focus_table')}
+
                           className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline block cursor-pointer"
+
                         >
+
                           View Remedial Board &rarr;
+
                         </button>
+
                       </div>
+
                       <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+
                         <AlertTriangle className="h-4.5 w-4.5" />
+
                       </div>
+
                     </div>
 
+
+
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+
                       <div>
+
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Cross-Faculty Remarks</span>
+
                         <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{cohortRemarksCount}</span>
+
                         <span className="text-[10px] text-slate-500 block">Multi-teacher sync ledger</span>
+
                       </div>
+
                       <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+
                         <MessageSquare className="h-4.5 w-4.5" />
+
                       </div>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                 {/* 3. SEARCH, FILTERS & VIEW MODE CONTROLS */}
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs">
+
                   <div className="flex items-center gap-2 flex-wrap flex-1">
+
                     {/* Search */}
+
                     <div className="relative min-w-[220px]">
+
                       <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+
                       <input
+
                         type="text"
+
                         value={studentSearchQuery}
+
                         onChange={(e) => setStudentSearchQuery(e.target.value)}
+
                         placeholder="Search student, roll #, or weak concept..."
+
                         className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+
                       />
+
                     </div>
+
+
 
                     {/* Filter Chips */}
+
                     <div className="flex items-center gap-1.5 flex-wrap">
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterQuickFilter('ALL')}
+
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+
                           rosterQuickFilter === 'ALL'
+
                             ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+
                         }`}
+
                       >
+
                         All ({currentCohortStudents.length})
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterQuickFilter('AT_RISK_ATTENDANCE')}
+
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+
                           rosterQuickFilter === 'AT_RISK_ATTENDANCE'
+
                             ? 'bg-rose-600 text-white'
+
                             : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+
                         }`}
+
                       >
+
                         <AlertTriangle className="h-3 w-3" />
+
                         <span>Attendance Risk &lt;85% ({cohortAtRiskCount})</span>
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterQuickFilter('FOCUS_TABLE_ACTIVE')}
+
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+
                           rosterQuickFilter === 'FOCUS_TABLE_ACTIVE'
+
                             ? 'bg-amber-600 text-white'
+
                             : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+
                         }`}
+
                       >
+
                         <Clock className="h-3 w-3" />
+
                         <span>Focus Sprint Active ({cohortFocusCount})</span>
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterQuickFilter('ON_LEAVE')}
+
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+
                           rosterQuickFilter === 'ON_LEAVE'
+
                             ? 'bg-purple-600 text-white shadow-xs'
+
                             : 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/60 hover:bg-purple-100'
+
                         }`}
+
                       >
+
                         <CalendarCheck className="h-3 w-3" />
+
                         <span>On Leave / Pending ({cohortOnLeaveCount})</span>
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterQuickFilter('HAS_REMARKS')}
+
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+
                           rosterQuickFilter === 'HAS_REMARKS'
+
                             ? 'bg-indigo-600 text-white'
+
                             : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
+
                         }`}
+
                       >
+
                         <MessageSquare className="h-3 w-3" />
+
                         <span>Has Remarks</span>
+
                       </button>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Right side: View Switcher & Add Remark */}
+
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+
                     <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700">
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterViewMode('table')}
+
                         title="Comprehensive Table View (PowerSchool / Toddle style)"
+
                         className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+
                           rosterViewMode === 'table'
+
                             ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+
                             : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+
                         }`}
+
                       >
+
                         <List className="h-4 w-4" />
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => setRosterViewMode('cards')}
+
                         title="Visual Student Cards Grid"
+
                         className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+
                           rosterViewMode === 'cards'
+
                             ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+
                             : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+
                         }`}
+
                       >
+
                         <LayoutGrid className="h-4 w-4" />
+
                       </button>
+
                     </div>
 
+
+
                     <button
+
                       type="button"
+
                       onClick={() => {
+
                         setRemarkTargetStudent(null);
+
                         setNewRemarkText('');
+
                         setShowAddRemarkModal(true);
+
                       }}
+
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+
                     >
+
                       <Plus className="h-3.5 w-3.5" />
+
                       <span>Log Faculty Observation</span>
+
                     </button>
+
                   </div>
+
                 </div>
+
+
 
                 {/* 4. MAIN DATA VIEW: TABLE (TODDLE / POWERSCHOOL EWS STYLE) */}
+
                 {rosterViewMode === 'table' ? (
+
                   <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+
                     <div className="overflow-x-auto">
+
                       <table className="w-full text-left border-collapse text-xs">
+
                         <thead>
+
                           <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+
                             <th className="py-3.5 px-4">Roll</th>
+
                             <th className="py-3.5 px-4">Student &amp; Family</th>
+
                             <th className="py-3.5 px-4">Attendance Pulse &amp; Absences</th>
+
                             <th className="py-3.5 px-4">Remedial Focus Table Status</th>
+
                             <th className="py-3.5 px-4">Cross-Faculty Collaborative Feed</th>
+
                             <th className="py-3.5 px-4 text-right">Intervention Actions</th>
+
                           </tr>
+
                         </thead>
+
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+
                           {filteredRosterStudents.length === 0 ? (
+
                             <tr>
+
                               <td colSpan={6} className="py-12 text-center text-xs text-slate-400">
+
                                 No students found matching the selected filters.
+
                               </td>
+
                             </tr>
+
                           ) : (
+
                             filteredRosterStudents.map((st) => {
+
                               const studentRemarks = getRemarksForStudent(st.id);
+
                               const latestRemark = studentRemarks.length > 0 ? studentRemarks[0] : null;
+
                               const isAttRisk = st.attendance_pct < 85;
+
                               const missedCount = st.missed_classes_count !== undefined 
+
                                 ? st.missed_classes_count 
+
                                 : Math.max(0, Math.round((100 - st.attendance_pct) * 0.3));
 
+
+
                               return (
+
                                 <tr key={st.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+
                                   {/* Roll */}
+
                                   <td className="py-3.5 px-4 font-mono font-black text-slate-600 dark:text-slate-400">
+
                                     #{st.roll_no}
+
                                   </td>
+
+
 
                                   {/* Student & Guardian */}
+
                                   <td className="py-3.5 px-4">
+
                                     <div className="flex items-center gap-3">
+
                                       <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0 text-xs">
+
                                         {st.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                                       </div>
+
                                       <div>
+
                                         <div className="flex items-center gap-1.5 flex-wrap">
+
                                           <Link 
+
                                             href={`/teacher/students/${st.id}`}
+
                                             className="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+
                                           >
+
                                             {st.name}
+
                                           </Link>
+
                                           <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+
                                             {st.class_name}
+
                                           </span>
+
                                           {st.is_on_leave && (
+
                                             <span className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.2 rounded border border-purple-200 dark:border-purple-800">
+
                                               <CalendarCheck className="h-2.5 w-2.5" />
+
                                               Excused Leave
+
                                             </span>
+
                                           )}
+
                                           {st.is_leave_pending && !st.is_on_leave && (
+
                                             <button
+
                                               type="button"
+
                                               onClick={() => setActiveTab('leave_approvals')}
+
                                               className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.2 rounded border border-amber-300 dark:border-amber-800 animate-pulse hover:underline cursor-pointer"
+
                                             >
+
                                               <Clock className="h-2.5 w-2.5" />
+
                                               Leave Pending &rarr;
+
                                             </button>
+
                                           )}
+
                                         </div>
+
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+
                                           <Users className="h-3 w-3 text-slate-400" />
+
                                           <span>{st.guardian_name} &bull; {st.guardian_phone}</span>
+
                                         </span>
+
                                       </div>
+
                                     </div>
+
                                   </td>
+
+
 
                                   {/* Attendance Pulse & Missed Classes */}
+
                                   <td className="py-3.5 px-4 min-w-[190px]">
+
                                     <div className="space-y-1">
+
                                       <div className="flex items-center justify-between">
+
                                         <span className={`font-black text-xs ${
+
                                           st.is_on_leave ? 'text-purple-600' : st.attendance_pct >= 90 ? 'text-emerald-600' : isAttRisk ? 'text-rose-600' : 'text-amber-600'
+
                                         }`}>
+
                                           {st.attendance_pct}%
+
                                         </span>
+
                                         <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">
+
                                           {st.is_on_leave ? 'Excused Absence' : `${missedCount} Missed Classes`}
+
                                         </span>
+
                                       </div>
+
+
 
                                       {/* Progress Bar */}
+
                                       <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+
                                         <div 
+
                                           className={`h-full rounded-full ${
+
                                             st.is_on_leave ? 'bg-purple-500' : st.attendance_pct >= 90 ? 'bg-emerald-500' : isAttRisk ? 'bg-rose-500' : 'bg-amber-500'
+
                                           }`} 
+
                                           style={{ width: `${Math.min(100, st.attendance_pct)}%` }}
+
                                         />
+
                                       </div>
+
+
 
                                       {st.is_on_leave ? (
+
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-200 dark:border-purple-900/60">
+
                                           <CheckCircle2 className="h-3 w-3 shrink-0" />
+
                                           <span>Absent - Approved Leave ({st.leave_from_date || 'Today'})</span>
+
                                         </span>
+
                                       ) : st.is_leave_pending ? (
+
                                         <button
+
                                           type="button"
+
                                           onClick={() => setActiveTab('leave_approvals')}
+
                                           className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-300 hover:underline cursor-pointer text-left"
+
                                         >
+
                                           <Clock className="h-3 w-3 shrink-0" />
+
                                           <span>Leave Pending Review &rarr;</span>
+
                                         </button>
+
                                       ) : isAttRisk ? (
+
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-900/60">
+
                                           <AlertTriangle className="h-3 w-3 shrink-0" />
+
                                           <span>Chronic Absence Alert (&lt;85%)</span>
+
                                         </span>
+
                                       ) : (
+
                                         <span className="text-[10px] text-slate-400">
+
                                           Last active: {st.last_active}
+
                                         </span>
+
                                       )}
+
                                     </div>
+
                                   </td>
+
+
 
                                   {/* Focus Table Status */}
+
                                   <td className="py-3.5 px-4 min-w-[210px]">
+
                                     {st.has_focus_table ? (
+
                                       <div className="space-y-1">
+
                                         <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+
                                           <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+
                                           <span>Focus Sprint Active</span>
+
                                         </span>
+
                                         <span 
+
                                           className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 block truncate max-w-[210px]"
+
                                           title={st.focus_concept || "Quadratic Equations: Factorization & Signs"}
+
                                         >
+
                                           Lag: {st.focus_concept || "Quadratic Equations: Factorization"}
+
                                         </span>
+
                                         <button
+
                                           type="button"
+
                                           onClick={() => setActiveTab('focus_table')}
+
                                           className="text-[10px] font-bold text-amber-600 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+
                                         >
+
                                           <span>Open Focus Plan</span>
+
                                           <ArrowRight className="h-2.5 w-2.5" />
+
                                         </button>
+
                                       </div>
+
                                     ) : (
+
                                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
+
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
+
                                         <span>Mastery Demonstrated (&gt;75%)</span>
+
                                       </span>
+
                                     )}
+
                                   </td>
+
+
 
                                   {/* Collaborative Faculty Feed */}
+
                                   <td className="py-3.5 px-4 max-w-[260px]">
+
                                     {latestRemark ? (
+
                                       <div className="space-y-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => setShowAllRemarksStudent(st)}
-                                          className="text-left group cursor-pointer block"
-                                          title="Click to inspect complete collaborative observation log"
-                                        >
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                              {latestRemark.author_role}: {latestRemark.author_name}
-                                            </span>
-                                            <span className="text-[9px] text-slate-400">{latestRemark.date}</span>
-                                          </div>
-                                          <p className="text-[11px] text-slate-600 dark:text-slate-300 italic truncate max-w-[250px] mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                            &ldquo;{latestRemark.remark_text}&rdquo;
-                                          </p>
-                                        </button>
 
                                         <button
+
                                           type="button"
+
                                           onClick={() => setShowAllRemarksStudent(st)}
-                                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+
+                                          className="text-left group cursor-pointer block"
+
+                                          title="Click to inspect complete collaborative observation log"
+
                                         >
-                                          <MessageSquare className="h-2.5 w-2.5" />
-                                          <span>View All ({studentRemarks.length}) Remarks &rarr;</span>
+
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+
+                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+
+                                              {latestRemark.author_role}: {latestRemark.author_name}
+
+                                            </span>
+
+                                            <span className="text-[9px] text-slate-400">{latestRemark.date}</span>
+
+                                          </div>
+
+                                          <p className="text-[11px] text-slate-600 dark:text-slate-300 italic truncate max-w-[250px] mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+
+                                            &ldquo;{latestRemark.remark_text}&rdquo;
+
+                                          </p>
+
                                         </button>
+
+
+
+                                        <button
+
+                                          type="button"
+
+                                          onClick={() => setShowAllRemarksStudent(st)}
+
+                                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+
+                                        >
+
+                                          <MessageSquare className="h-2.5 w-2.5" />
+
+                                          <span>View All ({studentRemarks.length}) Remarks &rarr;</span>
+
+                                        </button>
+
                                       </div>
+
                                     ) : (
+
                                       <div className="text-[11px] text-slate-400 italic">
+
                                         No observations logged yet.
+
                                       </div>
+
                                     )}
+
                                   </td>
+
+
 
                                   {/* Action Buttons */}
+
                                   <td className="py-3.5 px-4 text-right">
+
                                     <div className="flex items-center justify-end gap-1.5">
+
                                       <button
+
                                         type="button"
+
                                         onClick={() => {
+
                                           setRemarkTargetStudent(st);
+
                                           setNewRemarkText('');
+
                                           setShowAddRemarkModal(true);
+
                                         }}
+
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800"
+
                                         title="Add a new pedagogical or behavioral observation"
+
                                       >
+
                                         <Plus className="h-3 w-3" />
+
                                         <span>Add Remark</span>
+
                                       </button>
+
+
 
                                       <Link
+
                                         href={`/teacher/students/${st.id}`}
+
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+
                                         title="Open 360 Student Dossier"
+
                                       >
+
                                         <Eye className="h-3 w-3 text-slate-400" />
+
                                         <span>SIS 360</span>
+
                                       </Link>
 
+
+
                                       <button
+
                                         type="button"
+
                                         onClick={() => {
+
                                           setSelectedChatStudentId(st.id);
+
                                           setActiveTab('parent_chat');
+
                                           triggerToast(`Opened direct chat with ${st.guardian_name} (${st.name}'s parent)`);
+
                                         }}
+
                                         className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white p-1.5 transition-all shadow-2xs cursor-pointer"
+
                                         title={`Direct Parent Chat: ${st.guardian_name}`}
+
                                       >
+
                                         <MessageSquare className="h-3.5 w-3.5" />
+
                                       </button>
+
                                     </div>
+
                                   </td>
+
                                 </tr>
+
                               );
+
                             })
+
                           )}
+
                         </tbody>
+
                       </table>
+
                     </div>
+
                   </div>
+
                 ) : (
+
                   /* 5. ALTERNATE DATA VIEW: VISUAL CARDS GRID */
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
                     {filteredRosterStudents.map((st) => {
+
                       const studentRemarks = getRemarksForStudent(st.id);
+
                       const latestRemark = studentRemarks.length > 0 ? studentRemarks[0] : null;
+
                       const isAttRisk = st.attendance_pct < 85;
+
                       const missedCount = st.missed_classes_count !== undefined 
+
                         ? st.missed_classes_count 
+
                         : Math.max(0, Math.round((100 - st.attendance_pct) * 0.3));
 
+
+
                       return (
+
                         <div 
+
                           key={st.id} 
+
                           className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-all space-y-4"
+
                         >
+
                           <div className="flex items-start justify-between gap-3">
+
                             <div className="flex items-center gap-3">
+
                               <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-700 dark:text-blue-300 font-black text-sm shrink-0">
+
                                 {st.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                               </div>
+
                               <div>
+
                                 <Link 
+
                                   href={`/teacher/students/${st.id}`} 
+
                                   className="text-sm font-bold text-slate-900 dark:text-white hover:text-blue-600 transition-colors"
+
                                 >
+
                                   {st.name}
+
                                 </Link>
+
                                 <div className="flex items-center gap-1.5 mt-0.5">
+
                                   <span className="text-[10px] font-mono text-slate-500 font-bold">
+
                                     Roll #{st.roll_no}
+
                                   </span>
+
                                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+
                                     {st.class_name}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
                             </div>
+
+
 
                             <div className="flex items-center gap-1 flex-wrap">
+
                               {st.is_on_leave && (
+
                                 <span className="rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800 px-2 py-0.5 text-[9px] font-bold">
+
                                   Excused Leave
+
                                 </span>
+
                               )}
+
                               {st.is_leave_pending && !st.is_on_leave && (
+
                                 <button
+
                                   type="button"
+
                                   onClick={() => setActiveTab('leave_approvals')}
+
                                   className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold hover:underline cursor-pointer"
+
                                 >
+
                                   Leave Pending
+
                                 </button>
+
                               )}
+
                               {st.has_focus_table && (
+
                                 <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[9px] font-bold">
+
                                   Focus Active
+
                                 </span>
+
                               )}
+
                             </div>
+
                           </div>
+
+
 
                           {/* Attendance & Academic Vitals Bar */}
+
                           <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 text-center">
+
                             <div>
+
                               <span className="text-[9px] uppercase font-bold text-slate-400 block">Attendance Pulse</span>
+
                               <div className="flex items-center justify-center gap-1 mt-0.5">
+
                                 <span className={`text-xs font-black ${
+
                                   st.attendance_pct >= 90 ? 'text-emerald-600' : isAttRisk ? 'text-rose-600' : 'text-amber-600'
+
                                 }`}>
+
                                   {st.attendance_pct}%
+
                                 </span>
+
                                 <span className="text-[10px] text-slate-500">
+
                                   ({missedCount} Missed)
+
                                 </span>
+
                               </div>
+
                             </div>
+
                             <div>
+
                               <span className="text-[9px] uppercase font-bold text-slate-400 block">Academic Avg</span>
+
                               <span className="text-xs font-black text-slate-900 dark:text-white mt-0.5 block">
+
                                 {st.academic_average_pct}%
+
                               </span>
+
                             </div>
+
                           </div>
+
+
 
                           {/* Focus Table Concept Tag if enrolled */}
+
                           {st.has_focus_table && (
+
                             <div className="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs">
+
                               <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+
                                 <AlertTriangle className="h-3 w-3" />
+
                                 <span>Remedial Focus Sprint</span>
+
                               </span>
+
                               <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold block mt-0.5 truncate">
+
                                 {st.focus_concept || "Quadratic Equations: Factorization"}
+
                               </span>
+
                             </div>
+
                           )}
+
+
 
                           {/* Collaborative Remark Snippet */}
+
                           <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1">
+
                             <div className="flex items-center justify-between text-[10px] font-bold">
+
                               <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
+
                                 <MessageSquare className="h-3 w-3 text-blue-600" />
+
                                 <span>Latest Faculty Observation</span>
+
                               </span>
+
                               <button
+
                                 type="button"
+
                                 onClick={() => setShowAllRemarksStudent(st)}
+
                                 className="text-blue-600 hover:underline cursor-pointer"
+
                               >
+
                                 View All ({studentRemarks.length})
+
                               </button>
+
                             </div>
+
                             {latestRemark ? (
+
                               <p className="text-[11px] text-slate-600 dark:text-slate-400 italic line-clamp-2">
+
                                 &ldquo;{latestRemark.remark_text}&rdquo;
+
                               </p>
+
                             ) : (
+
                               <p className="text-[11px] text-slate-400 italic">No remarks recorded yet.</p>
+
                             )}
+
                           </div>
+
+
 
                           {/* Guardian Contact & Card Actions */}
+
                           <div className="flex items-center justify-between pt-1">
+
                             <span className="text-[10px] text-slate-400 truncate max-w-[150px]">
+
                               Parent: {st.guardian_name}
+
                             </span>
+
                             <div className="flex items-center gap-1.5">
+
                               <button
+
                                 type="button"
+
                                 onClick={() => {
+
                                   setRemarkTargetStudent(st);
+
                                   setNewRemarkText('');
+
                                   setShowAddRemarkModal(true);
+
                                 }}
+
                                 className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-[10px] border border-blue-200 dark:border-blue-800 hover:bg-blue-100 cursor-pointer"
+
                               >
+
                                 + Remark
+
                               </button>
+
                               <Link
+
                                 href={`/teacher/students/${st.id}`}
+
                                 className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold text-[10px] text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+
                               >
+
                                 SIS 360
+
                               </Link>
+
                               <button
+
                                 type="button"
+
                                 onClick={() => {
+
                                   setSelectedChatStudentId(st.id);
+
                                   setActiveTab('parent_chat');
+
                                   triggerToast(`Opening direct chat with ${st.guardian_name}`);
+
                                 }}
+
                                 className="p-1 rounded-lg bg-indigo-600 text-white cursor-pointer hover:bg-indigo-700"
+
                               >
+
                                 <MessageSquare className="h-3.5 w-3.5" />
+
                               </button>
+
                             </div>
+
                           </div>
+
                         </div>
+
                       );
+
                     })}
+
                   </div>
+
                 )}
+
+
 
                 {/* 6. MODAL: ADD FACULTY REMARK */}
+
                 {showAddRemarkModal && (
+
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
                     <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+
                       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
                         <div className="flex items-center gap-2">
+
                           <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+
                             <FileEdit className="h-4 w-4" />
+
                           </div>
+
                           <div>
+
                             <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                               Log Multi-Faculty Pedagogical Observation
+
                             </h3>
+
                             <p className="text-[11px] text-slate-500">
+
                               Synced to Student 360 Dossier and Class Roster Matrix
+
                             </p>
+
                           </div>
+
                         </div>
+
                         <button
+
                           type="button"
+
                           onClick={() => setShowAddRemarkModal(false)}
+
                           className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+
                         >
+
                           <X className="h-4 w-4" />
+
                         </button>
+
                       </div>
+
+
 
                       {/* Target Student Selector */}
+
                       <div className="space-y-1">
+
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+
                           Target Student
+
                         </label>
+
                         {remarkTargetStudent ? (
+
                           <div className="p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-center justify-between">
+
                             <div className="flex items-center gap-2">
+
                               <span className="font-bold text-xs text-blue-900 dark:text-blue-200">
+
                                 {remarkTargetStudent.name}
+
                               </span>
+
                               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300">
+
                                 Roll #{remarkTargetStudent.roll_no} &bull; {remarkTargetStudent.class_name}
+
                               </span>
+
                             </div>
+
                             <button
+
                               type="button"
+
                               onClick={() => setRemarkTargetStudent(null)}
+
                               className="text-[10px] text-blue-600 hover:underline cursor-pointer font-bold"
+
                             >
+
                               Change
+
                             </button>
+
                           </div>
+
                         ) : (
+
                           <select
+
                             onChange={(e) => {
+
                               const found = students.find(s => s.id === Number(e.target.value));
+
                               if (found) setRemarkTargetStudent(found);
+
                             }}
+
                             className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+
                           >
+
                             <option value="">-- Choose Student from Active Class --</option>
+
                             {currentCohortStudents.map(st => (
+
                               <option key={st.id} value={st.id}>
+
                                 {st.name} (Roll #{st.roll_no} &bull; {st.class_name})
+
                               </option>
+
                             ))}
+
                           </select>
+
                         )}
+
                       </div>
+
+
 
                       {/* Category & Role */}
+
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                            Observation Category
-                          </label>
-                          <select
-                            value={newRemarkCategory}
-                            onChange={(e) => setNewRemarkCategory(e.target.value as any)}
-                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
-                          >
-                            <option value="Academic Excellence">Academic Excellence</option>
-                            <option value="Behavioral &amp; Conduct">Behavioral &amp; Conduct</option>
-                            <option value="Remedial / Focus Area">Remedial / Focus Area</option>
-                            <option value="Special Commendation">Special Commendation</option>
-                            <option value="Sports &amp; Leadership">Sports &amp; Leadership</option>
-                          </select>
-                        </div>
 
                         <div className="space-y-1">
+
                           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                            Author Faculty Role
+
+                            Observation Category
+
                           </label>
+
                           <select
-                            value={newRemarkAuthorRole}
-                            onChange={(e) => setNewRemarkAuthorRole(e.target.value as any)}
+
+                            value={newRemarkCategory}
+
+                            onChange={(e) => setNewRemarkCategory(e.target.value as any)}
+
                             className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+
                           >
-                            <option value="Class Teacher">Class Teacher (Mrs. Ananya Verma)</option>
-                            <option value="Subject Faculty">Subject Faculty (Mathematics)</option>
-                            <option value="School Counselor">School Counselor</option>
+
+                            <option value="Academic Excellence">Academic Excellence</option>
+
+                            <option value="Behavioral &amp; Conduct">Behavioral &amp; Conduct</option>
+
+                            <option value="Remedial / Focus Area">Remedial / Focus Area</option>
+
+                            <option value="Special Commendation">Special Commendation</option>
+
+                            <option value="Sports &amp; Leadership">Sports &amp; Leadership</option>
+
                           </select>
+
                         </div>
+
+
+
+                        <div className="space-y-1">
+
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+
+                            Author Faculty Role
+
+                          </label>
+
+                          <select
+
+                            value={newRemarkAuthorRole}
+
+                            onChange={(e) => setNewRemarkAuthorRole(e.target.value as any)}
+
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs font-semibold text-slate-800 dark:text-white"
+
+                          >
+
+                            <option value="Class Teacher">Class Teacher (Mrs. Ananya Verma)</option>
+
+                            <option value="Subject Faculty">Subject Faculty (Mathematics)</option>
+
+                            <option value="School Counselor">School Counselor</option>
+
+                          </select>
+
+                        </div>
+
                       </div>
+
+
 
                       {/* Priority */}
+
                       <div className="space-y-1">
+
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+
                           Attention Priority
+
                         </label>
+
                         <div className="flex items-center gap-2">
+
                           {(['Routine', 'High Attention', 'Commendation'] as const).map(p => (
+
                             <button
+
                               key={p}
+
                               type="button"
+
                               onClick={() => setNewRemarkPriority(p)}
+
                               className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+
                                 newRemarkPriority === p
+
                                   ? p === 'High Attention'
+
                                     ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+
                                     : p === 'Commendation'
+
                                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+
                                     : 'bg-blue-600 text-white border-blue-600 shadow-xs'
+
                                   : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+
                               }`}
+
                             >
+
                               {p}
+
                             </button>
+
                           ))}
+
                         </div>
+
                       </div>
+
+
 
                       {/* Remark Text & Quick Tag Suggestions */}
+
                       <div className="space-y-1.5">
+
                         <div className="flex items-center justify-between">
+
                           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+
                             Observation Notes
+
                           </label>
+
                           <span className="text-[10px] text-slate-400">{newRemarkText.length} characters</span>
+
                         </div>
+
                         <textarea
+
                           rows={3}
+
                           value={newRemarkText}
+
                           onChange={(e) => setNewRemarkText(e.target.value)}
+
                           placeholder="Record specific pedagogical remarks, behavioral feedback, or academic focus points..."
+
                           className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                         />
+
                         {/* Quick Tag suggestions */}
+
                         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+
                           <span className="text-[10px] text-slate-400 font-bold">Quick Tags:</span>
+
                           {[
+
                             '#NegativeSignErrors',
+
                             '#HighParticipation',
+
                             '#HomeworkPending',
+
                             '#PunctualAttendance',
+
                             '#PeerCollaboration'
+
                           ].map(tag => (
+
                             <button
+
                               key={tag}
+
                               type="button"
+
                               onClick={() => setNewRemarkText(prev => prev ? `${prev} ${tag}` : tag)}
+
                               className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer"
+
                             >
+
                               {tag}
+
                             </button>
+
                           ))}
+
                         </div>
+
                       </div>
+
+
 
                       {/* Modal Footer */}
+
                       <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+
                         <button
+
                           type="button"
+
                           onClick={() => setShowAddRemarkModal(false)}
+
                           className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+
                         >
+
                           Cancel
+
                         </button>
+
                         <button
+
                           type="button"
+
                           onClick={() => {
+
                             if (!remarkTargetStudent) {
+
                               triggerToast('Please select a target student first!');
+
                               return;
+
                             }
+
                             if (!newRemarkText.trim()) {
+
                               triggerToast('Please enter an observation remark!');
+
                               return;
+
                             }
+
+
 
                             addStudentRemark({
+
                               student_id: remarkTargetStudent.id,
+
                               student_name: remarkTargetStudent.name,
+
                               author_name: newRemarkAuthorRole === 'Class Teacher' ? 'Mrs. Ananya Verma' : 'Dr. K. Raman',
+
                               author_role: newRemarkAuthorRole,
+
                               category: newRemarkCategory,
+
                               remark_text: newRemarkText.trim(),
+
                               priority: newRemarkPriority,
+
                               acknowledged_by_parent: false
+
                             });
 
+
+
                             setRemarksRevision(prev => prev + 1);
+
                             setShowAddRemarkModal(false);
+
                             setNewRemarkText('');
+
                             triggerToast(`Logged observation for ${remarkTargetStudent.name}! Synced across all faculty.`);
+
                           }}
+
                           className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+
                         >
+
                           Commit &amp; Sync Observation
+
                         </button>
+
                       </div>
+
                     </div>
+
                   </div>
+
                 )}
+
+
 
                 {/* 7. MODAL / DRAWER: ALL REMARKS TIMELINE FOR A STUDENT */}
+
                 {showAllRemarksStudent && (() => {
+
                   const allStudentRemarks = getRemarksForStudent(showAllRemarksStudent.id);
 
+
+
                   return (
+
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
                       <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
                           <div className="flex items-center gap-3">
+
                             <div className="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black">
+
                               {showAllRemarksStudent.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                             </div>
+
                             <div>
+
                               <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                                 Collaborative Faculty Observation Timeline
+
                               </h3>
+
                               <span className="text-xs text-slate-500">
+
                                 {showAllRemarksStudent.name} (Roll #{showAllRemarksStudent.roll_no} &bull; {showAllRemarksStudent.class_name})
+
                               </span>
+
                             </div>
+
                           </div>
+
                           <button
+
                             type="button"
+
                             onClick={() => setShowAllRemarksStudent(null)}
+
                             className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+
                           >
+
                             <X className="h-4 w-4" />
+
                           </button>
+
                         </div>
+
+
 
                         {/* Timeline List */}
+
                         <div className="space-y-3">
+
                           {allStudentRemarks.length === 0 ? (
+
                             <div className="text-center py-8 text-xs text-slate-400">
+
                               No remarks logged for this student yet.
+
                             </div>
+
                           ) : (
+
                             allStudentRemarks.map((rem, idx) => (
+
                               <div
+
                                 key={rem.id || idx}
+
                                 className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-2"
+
                               >
+
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
+
                                   <div className="flex items-center gap-2">
+
                                     <span className="font-bold text-xs text-slate-900 dark:text-white">
+
                                       {rem.author_name}
+
                                     </span>
+
                                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+
                                       {rem.author_role}
+
                                     </span>
+
                                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+
                                       {rem.category}
+
                                     </span>
+
                                   </div>
+
                                   <div className="flex items-center gap-1.5">
+
                                     {rem.priority === 'High Attention' && (
+
                                       <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+
                                         High Attention
+
                                       </span>
+
                                     )}
+
                                     <span className="text-[10px] text-slate-400 font-mono">
+
                                       {rem.date} {rem.timestamp && `&bull; ${rem.timestamp}`}
+
                                     </span>
+
                                   </div>
+
                                 </div>
+
+
 
                                 <p className="text-xs text-slate-700 dark:text-slate-300 italic">
+
                                   &ldquo;{rem.remark_text}&rdquo;
+
                                 </p>
 
+
+
                                 {rem.acknowledged_by_parent && (
+
                                   <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 pt-1">
+
                                     <CheckCircle2 className="h-3 w-3" />
+
                                     <span>Acknowledged by Parent: {rem.parent_ack_by || 'Guardian'} {rem.parent_ack_date ? `(${rem.parent_ack_date})` : ''}</span>
+
                                   </div>
+
                                 )}
+
                               </div>
+
                             ))
+
                           )}
+
                         </div>
+
+
 
                         {/* Timeline Footer Action */}
+
                         <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+
                           <span className="text-xs text-slate-400">
+
                             Total {allStudentRemarks.length} cross-faculty entries
+
                           </span>
+
                           <button
+
                             type="button"
+
                             onClick={() => {
+
                               setRemarkTargetStudent(showAllRemarksStudent);
+
                               setShowAllRemarksStudent(null);
+
                               setShowAddRemarkModal(true);
+
                             }}
+
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+
                           >
+
                             <Plus className="h-3 w-3" />
+
                             <span>Add New Observation for {showAllRemarksStudent.name}</span>
+
                           </button>
+
                         </div>
+
                       </div>
+
                     </div>
+
                   );
+
                 })()}
+
               </div>
+
             );
+
           })()}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 5: DUAL-MODE PARENTAL CONNECTION & SLIDING PTM    */}
+
           {/* ===================================================== */}
+
           {activeTab === 'parent_hub' && (
+
             <div className="space-y-6">
+
               {/* Executive Header Banner - Pure PTM Conference Focus */}
+
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+
                 <div className="space-y-1">
+
                   <div className="flex items-center gap-2">
+
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-3 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+
                       <Video className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+
                       Parent-Teacher Meeting (PTM) Portal
+
                     </span>
+
                     <span className="text-xs text-slate-400">Class 8-B In-charge &bull; Mathematics 7-A, 8-B, 9-C</span>
+
                   </div>
+
                   <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+
                     Parent-Teacher Conference (PTM) Timetable
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+
                     High-density conference timetable with strict 10-minute sliding slots, automated parent self-booking, synchronized Google Meet links, and protected faculty breaks.
+
                   </p>
+
                 </div>
+
+
 
                 {/* Primary Action Controls */}
+
                 <div className="flex flex-wrap items-center gap-2.5">
+
                   <div className="flex items-center gap-2 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl">
+
                     <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+
                     <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+
                       Friday, 24 Oct 2026
+
                     </span>
+
                   </div>
 
+
+
                   <button
+
                     onClick={() => setActiveTab('parent_chat')}
+
                     className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold cursor-pointer transition-all shadow-xs"
+
                   >
+
                     <MessageSquare className="h-3.5 w-3.5" />
+
                     <span>Open Parent Chat</span>
+
                   </button>
+
                 </div>
+
               </div>
+
+
 
               {/* 4 Executive KPI Chips */}
+
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5">
+
                   <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+
                     <Video className="h-5 w-5" />
+
                   </div>
+
                   <div className="min-w-0">
+
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">PTM Status</span>
+
                     <div className="flex items-baseline gap-1.5">
+
                       <span className="text-lg font-black text-slate-900 dark:text-white">
+
                         {ptmSlots.filter(s => s.status === 'BOOKED').length} / {ptmSlots.filter(s => s.status !== 'BREAK').length}
+
                       </span>
+
                       <span className="text-xs text-slate-400">Booked</span>
+
                     </div>
+
                   </div>
+
                 </div>
 
+
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5">
+
                   <div className="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+
                     <Users className="h-5 w-5" />
+
                   </div>
+
                   <div className="min-w-0">
+
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Homeroom (8-B)</span>
+
                     <div className="flex items-baseline gap-1.5">
+
                       <span className="text-lg font-black text-purple-900 dark:text-purple-300">32 Students</span>
+
                     </div>
+
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block truncate">100% Parent Sync</span>
+
                   </div>
+
                 </div>
 
+
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5">
+
                   <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+
                     <Layers className="h-5 w-5" />
+
                   </div>
+
                   <div className="min-w-0">
+
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Subject Math</span>
+
                     <div className="flex items-baseline gap-1.5">
+
                       <span className="text-lg font-black text-indigo-900 dark:text-indigo-300">3 Sections</span>
+
                     </div>
+
                     <span className="text-[10px] text-slate-400 block truncate">Auto-CC Class Teachers</span>
+
                   </div>
+
                 </div>
 
+
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5">
+
                   <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+
                     <CheckCircle2 className="h-5 w-5" />
+
                   </div>
+
                   <div className="min-w-0">
+
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Focus Table Loop</span>
+
                     <div className="flex items-baseline gap-1.5">
+
                       <span className="text-lg font-black text-emerald-700 dark:text-emerald-300">Active</span>
+
                     </div>
+
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block truncate">Evidence Synced</span>
+
                   </div>
+
                 </div>
+
               </div>
 
+
+
               {/* ========================================================= */}
+
               {/* 10-MINUTE SLIDING PTM SCHEDULER                          */}
+
               {/* ========================================================= */}
+
               <div className="space-y-5">
+
                   {/* Event Information & Break Banner */}
+
                   <div className="rounded-3xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-950 via-slate-900 to-blue-950 p-6 text-white shadow-md space-y-4">
+
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+
                       <div>
+
                         <div className="flex items-center gap-2">
+
                           <span className="rounded-full bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 text-xs font-bold border border-indigo-400/30">
+
                             Post-Midterm PTM Conference
+
                           </span>
+
                           <span className="text-xs text-indigo-300 font-medium">Strict 10-Minute Sliding Slots</span>
+
                         </div>
+
                         <h3 className="text-lg font-bold text-white mt-1">
+
                           {ptmConfig?.title || 'Term 1 Post-Midterm Parent-Teacher Conference'}
+
                         </h3>
+
                         <p className="text-xs text-indigo-200/90 mt-0.5">
+
                           Friday, <strong>24 Oct 2026</strong> &bull; School Hours: <strong>09:00 AM – 03:30 PM</strong> &bull; 2-Minute Grace Interval &bull; Max 1 Parent Per Window
+
                         </p>
+
                       </div>
+
+
 
                       <div className="flex items-center gap-3">
+
                         <div className="px-3.5 py-2 rounded-2xl bg-indigo-900/60 border border-indigo-700/50 text-right">
+
                           <span className="text-xl font-black text-emerald-400 font-mono block">
+
                             {ptmSlots.filter(s => s.status === 'BOOKED').length} / {ptmSlots.filter(s => s.status !== 'BREAK').length}
+
                           </span>
+
                           <span className="text-[10px] text-indigo-200 uppercase font-semibold">Conferences Booked</span>
+
                         </div>
+
                       </div>
+
                     </div>
+
+
 
                     {/* Blackout Break Badges */}
+
                     <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-indigo-800/60 text-xs">
+
                       <span className="text-indigo-300 font-semibold text-[11px] uppercase tracking-wider">
+
                         Protected Faculty Breaks:
+
                       </span>
+
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700 text-amber-300 font-medium text-xs">
+
                         ☕ Morning Tea: <strong>11:00 AM – 11:15 AM</strong>
+
                       </span>
+
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700 text-amber-300 font-medium text-xs">
+
                         🍱 Lunch Break: <strong>01:00 PM – 01:45 PM</strong>
+
                       </span>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Filter Toolbar (Status & Scope Filters) */}
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+
                     {/* Status Tabs */}
+
                     <div className="flex flex-wrap items-center gap-1.5">
+
                       <span className="text-xs font-bold text-slate-500 mr-1 hidden sm:inline">Filter:</span>
+
                       {[
+
                         { id: 'ALL', label: 'All Slots', count: ptmSlots.filter(s => s.status !== 'BREAK').length },
+
                         { id: 'BOOKED', label: 'Booked', count: ptmSlots.filter(s => s.status === 'BOOKED').length },
+
                         { id: 'AVAILABLE', label: 'Available', count: ptmSlots.filter(s => s.status === 'AVAILABLE').length },
+
                         { id: 'BREAK', label: 'Breaks', count: ptmSlots.filter(s => s.status === 'BREAK').length }
+
                       ].map((item) => (
+
                         <button
+
                           key={item.id}
+
                           onClick={() => setPtmStatusFilter(item.id as any)}
+
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+
                             ptmStatusFilter === item.id
+
                               ? 'bg-blue-600 text-white shadow-xs'
+
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+
                           }`}
+
                         >
+
                           <span>{item.label}</span>
+
                           <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+
                             ptmStatusFilter === item.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+
                           }`}>
+
                             {item.count}
+
                           </span>
+
                         </button>
+
                       ))}
+
                     </div>
+
+
 
                     {/* Scope Selector */}
+
                     <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+
                       {[
+
                         { id: 'ALL', label: 'All Classes' },
+
                         { id: 'HOMEROOM_CLASS', label: 'Homeroom (8-B)' },
+
                         { id: 'SUBJECT_SPECIFIC', label: 'Subject (Math)' }
+
                       ].map((scope) => (
+
                         <button
+
                           key={scope.id}
+
                           onClick={() => setPtmScopeFilter(scope.id as any)}
+
                           className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+
                             ptmScopeFilter === scope.id
+
                               ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+
                               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                           }`}
+
                         >
+
                           {scope.label}
+
                         </button>
+
                       ))}
+
                     </div>
+
                   </div>
+
+
 
                   {/* High-Density PTM Conference Schedule Ledger Table */}
+
                   <div className="overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+
                     {/* Table Sub-Header Strip */}
+
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30">
+
                       <div className="flex items-center gap-2.5">
+
                         <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold shrink-0">
+
                           <Calendar className="h-4 w-4" />
+
                         </div>
+
                         <div>
+
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+
                             Conference Schedule Ledger
+
                           </h4>
+
                           <span className="text-[11px] text-slate-500 dark:text-slate-400">
+
                             Parents self-book open windows &bull; No manual teacher assignment required
+
                           </span>
+
                         </div>
+
                       </div>
+
                       <div className="flex items-center gap-2 text-xs">
+
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800 text-[11px]">
+
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+
                           {ptmSlots.filter(s => s.status === 'AVAILABLE').length} Free Slots
+
                         </span>
+
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 text-[11px]">
+
                           <span className="h-2 w-2 rounded-full bg-blue-600" />
+
                           {ptmSlots.filter(s => s.status === 'BOOKED').length} Booked
+
                         </span>
+
                       </div>
+
                     </div>
+
+
 
                     <div className="overflow-x-auto">
+
                       <table className="w-full text-left border-collapse text-xs">
+
                         <thead>
+
                           <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/60 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+
                             <th className="py-3 px-4">Time Window</th>
+
                             <th className="py-3 px-4">Slot Status</th>
+
                             <th className="py-3 px-4">Student &amp; Class</th>
+
                             <th className="py-3 px-4">Guardian / Parent Contact</th>
+
                             <th className="py-3 px-4">Context / Focus Agenda</th>
+
                             <th className="py-3 px-4 text-right">Actions</th>
+
                           </tr>
+
                         </thead>
+
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+
                           {ptmSlots
+
                             .filter(slot => {
+
                               if (ptmStatusFilter !== 'ALL' && slot.status !== ptmStatusFilter) return false;
+
                               if (ptmScopeFilter !== 'ALL' && slot.status !== 'BREAK' && slot.interaction_scope !== ptmScopeFilter) return false;
+
                               return true;
+
                             })
+
                             .map((slot) => {
+
                               const isBreak = slot.status === 'BREAK';
+
                               const isBooked = slot.status === 'BOOKED' || slot.status === 'HELD';
+
                               const isHomeroom = slot.interaction_scope === 'HOMEROOM_CLASS';
 
+
+
                               // 1. FACULTY BREAK ROW
+
                               if (isBreak) {
+
                                 return (
+
                                   <tr key={slot.id} className="bg-amber-50/50 dark:bg-amber-950/20 border-y border-amber-200/60 dark:border-amber-900/40">
+
                                     <td colSpan={6} className="py-2.5 px-4">
+
                                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+
                                         <div className="flex items-center gap-2.5">
+
                                           <span className="text-sm">☕</span>
+
                                           <div>
+
                                             <span className="font-bold text-amber-900 dark:text-amber-200 text-xs">
+
                                               {slot.subject_name || 'Protected Faculty Break'}
+
                                             </span>
+
                                             <span className="text-[11px] text-amber-700/80 dark:text-amber-400 ml-2">
+
                                               Protected faculty rest window &bull; PTM booking automatically locked
+
                                             </span>
+
                                           </div>
+
                                         </div>
+
                                         <div className="flex items-center gap-2">
+
                                           <span className="text-xs font-mono font-bold text-amber-900 dark:text-amber-200 px-2.5 py-0.5 rounded-lg bg-amber-100/80 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-800">
+
                                             ⏰ {slot.start_time} – {slot.end_time}
+
                                           </span>
+
                                           {slot.subject_name === 'Faculty Blocked Window' && (
+
                                             <button
+
                                               type="button"
+
                                               onClick={() => handleToggleSlotBlock(slot.id)}
+
                                               className="text-[10px] text-amber-800 dark:text-amber-300 hover:underline font-bold cursor-pointer"
+
                                             >
+
                                               Unblock
+
                                             </button>
+
                                           )}
+
                                         </div>
+
                                       </div>
+
                                     </td>
+
                                   </tr>
+
                                 );
+
                               }
+
+
 
                               // 2. BOOKED CONFERENCE ROW
+
                               if (isBooked) {
+
                                 return (
+
                                   <tr key={slot.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+
                                     {/* Time Window */}
+
                                     <td className="py-3 px-4 whitespace-nowrap">
+
                                       <div className="flex items-center gap-2">
+
                                         <span className="font-mono font-bold text-slate-900 dark:text-white text-xs bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+
                                           {slot.start_time} – {slot.end_time}
+
                                         </span>
+
                                         {slot.is_sibling_combo && (
+
                                           <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-md" title="Sibling Chained (+10m)">
+
                                             +10m Sibling
+
                                           </span>
+
                                         )}
+
                                       </div>
+
                                     </td>
+
+
 
                                     {/* Slot Status */}
+
                                     <td className="py-3 px-4 whitespace-nowrap">
+
                                       <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-[11px] font-bold">
+
                                         <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+
                                         Booked ✓
+
                                       </span>
+
                                     </td>
+
+
 
                                     {/* Student & Class */}
+
                                     <td className="py-3 px-4">
+
                                       <div className="flex items-center gap-2.5">
+
                                         <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+
                                           {slot.booked_student_name ? slot.booked_student_name.split(' ').map(n => n[0]).join('') : 'ST'}
+
                                         </div>
+
                                         <div>
+
                                           <span className="font-bold text-slate-900 dark:text-white block">
+
                                             {slot.booked_student_name}
+
                                           </span>
+
                                           <span className="text-[10px] text-slate-400 block">
+
                                             Class {slot.booked_class} &bull; Roll #{slot.booked_student_id || '01'}
+
                                             {slot.sibling_student_name && ` • Sibling: ${slot.sibling_student_name}`}
+
                                           </span>
+
                                         </div>
+
                                       </div>
+
                                     </td>
+
+
 
                                     {/* Guardian / Parent */}
+
                                     <td className="py-3 px-4">
+
                                       <div>
+
                                         <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+
                                           {slot.booked_parent_name || 'Parent Connected'}
+
                                         </span>
+
                                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
+
                                           {slot.locked_by_class || '+91 98450 12345'}
+
                                         </span>
+
                                       </div>
+
                                     </td>
+
+
 
                                     {/* Context / Focus Agenda */}
+
                                     <td className="py-3 px-4">
+
                                       {slot.focus_table_agenda && slot.focus_table_agenda.length > 0 ? (
+
                                         <div className="space-y-0.5">
+
                                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
+
                                             <ShieldCheck className="h-3 w-3 text-emerald-600" />
+
                                             Focus Table Linked
+
                                           </span>
+
                                           <span className="text-[10px] text-slate-600 dark:text-slate-400 block truncate max-w-[200px]">
+
                                             {slot.focus_table_agenda[0]}
+
                                           </span>
+
                                         </div>
+
                                       ) : (
+
                                         <span className="text-[11px] text-slate-400 italic">
+
                                           Standard Conference
+
                                         </span>
+
                                       )}
+
                                     </td>
+
+
 
                                     {/* Actions */}
+
                                     <td className="py-3 px-4 text-right whitespace-nowrap">
+
                                       <div className="flex items-center justify-end gap-1.5">
+
                                         {slot.meeting_url && (
+
                                           <a
+
                                             href={slot.meeting_url}
+
                                             target="_blank"
+
                                             rel="noreferrer"
+
                                             className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+
                                             title="Join Scheduled Google Meet"
+
                                           >
+
                                             <Video className="h-3.5 w-3.5" />
+
                                             <span>Join Meet</span>
+
                                             <ExternalLink className="h-2.5 w-2.5 opacity-70" />
+
                                           </a>
+
                                         )}
+
                                         <button
+
                                           type="button"
+
                                           onClick={() => handleOpenPtmStudentSis(slot)}
+
                                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
+
                                           title="Inspect Complete Student SIS 360 Profile & Academics"
+
                                         >
+
                                           <Eye className="h-3 w-3 text-indigo-500" />
+
                                           <span className="hidden sm:inline font-bold">Profile</span>
+
                                         </button>
+
                                         <button
+
                                           type="button"
+
                                           onClick={() => handleOpenCancelPtmModal(slot)}
+
                                           className="inline-flex items-center gap-1 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+
                                           title="Cancel or Reschedule this PTM Conference"
+
                                         >
+
                                           <X className="h-3 w-3 text-rose-600 dark:text-rose-400" />
+
                                           <span className="hidden sm:inline">Cancel Slot</span>
+
                                         </button>
+
                                       </div>
+
                                     </td>
+
                                   </tr>
+
                                 );
+
                               }
+
+
 
                               // 3. FREE / AVAILABLE SLOT ROW
+
                               return (
+
                                 <tr key={slot.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+
                                   {/* Time Window */}
+
                                   <td className="py-3 px-4 whitespace-nowrap">
+
                                     <span className="font-mono font-medium text-slate-600 dark:text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+
                                       {slot.start_time} – {slot.end_time}
+
                                     </span>
+
                                   </td>
+
+
 
                                   {/* Slot Status */}
+
                                   <td className="py-3 px-4 whitespace-nowrap">
+
                                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[11px] font-bold">
+
                                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
                                       Free / Available
+
                                     </span>
+
                                   </td>
+
+
 
                                   {/* Student & Class */}
+
                                   <td className="py-3 px-4 text-slate-400 italic">
+
                                     Open for parent booking
+
                                   </td>
+
+
 
                                   {/* Guardian / Parent */}
+
                                   <td className="py-3 px-4 text-slate-400 text-[11px]">
+
                                     Self-service slot
+
                                   </td>
+
+
 
                                   {/* Context / Focus Agenda */}
+
                                   <td className="py-3 px-4">
+
                                     <span className="text-[10px] font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+
                                       {isHomeroom ? 'Homeroom (8-B)' : 'Mathematics'}
+
                                     </span>
+
                                   </td>
+
+
 
                                   {/* Actions */}
+
                                   <td className="py-3 px-4 text-right whitespace-nowrap">
+
                                     <button
+
                                       type="button"
+
                                       onClick={() => handleToggleSlotBlock(slot.id)}
+
                                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer"
+
                                       title="Block slot or mark unavailable"
+
                                     >
+
                                       <span>Block</span>
+
                                     </button>
+
                                   </td>
+
                                 </tr>
+
                               );
+
                             })}
+
                         </tbody>
+
                       </table>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                           </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB: DIRECT CHAT WITH PARENTS (PRD SPECIFICATION)     */}
+
           {/* ===================================================== */}
+
           {activeTab === 'parent_chat' && (
+
             <div className="space-y-6">
+
               {/* Header Banner */}
+
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+
                 <div className="space-y-1">
+
                   <div className="flex items-center gap-2">
+
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-3 py-0.5 text-xs font-bold border border-indigo-200 dark:border-indigo-800">
+
                       <MessageSquare className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+
                       PRD Feature: Direct Parent Communication Channel
+
                     </span>
+
                     <span className="text-xs text-slate-400">Class 8-B &bull; Mathematics 7-A, 8-B, 9-C</span>
+
                   </div>
+
                   <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+
                     Parent Communication &amp; Live Messaging Center
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+
                     Direct, secure one-on-one communication channel with parents of any student in your assigned classes. Review student context, share remedial updates, and answer queries.
+
                   </p>
+
                 </div>
+
+
 
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <button
-                    onClick={() => setActiveTab('roster')}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-300 px-3 py-2 text-xs font-semibold cursor-pointer transition-all shadow-2xs"
-                  >
-                    <Users className="h-3.5 w-3.5 text-teal-600" />
-                    <span>My Students Roster</span>
-                  </button>
 
                   <button
-                    onClick={() => setActiveTab('parent_hub')}
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold cursor-pointer transition-all shadow-xs"
+
+                    onClick={() => setActiveTab('roster')}
+
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-300 px-3 py-2 text-xs font-semibold cursor-pointer transition-all shadow-2xs"
+
                   >
-                    <Video className="h-3.5 w-3.5" />
-                    <span>View PTM Conferences</span>
+
+                    <Users className="h-3.5 w-3.5 text-teal-600" />
+
+                    <span>My Students Roster</span>
+
                   </button>
+
+
+
+                  <button
+
+                    onClick={() => setActiveTab('parent_hub')}
+
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold cursor-pointer transition-all shadow-xs"
+
+                  >
+
+                    <Video className="h-3.5 w-3.5" />
+
+                    <span>View PTM Conferences</span>
+
+                  </button>
+
                 </div>
+
               </div>
+
+
 
               {/* Main Two-Panel Chat Interface */}
+
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs min-h-[620px]">
+
                 {/* Left Panel: Student / Parent Directory (4 cols on lg) */}
+
                 <div className="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3.5 bg-slate-50/50 dark:bg-slate-900/50">
+
                   {/* Search Bar */}
+
                   <div className="relative">
+
                     <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+
                     <input
+
                       type="text"
+
                       placeholder="Search student, parent or roll..."
+
                       value={chatSearchQuery}
+
                       onChange={(e) => setChatSearchQuery(e.target.value)}
+
                       className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
                     />
+
                   </div>
+
+
 
                   {/* Filter Pills */}
+
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+
                     {[
+
                       { id: 'ALL', label: 'All Parents' },
+
                       { id: 'FOCUS', label: 'Focus Remedial' },
+
                       { id: '8B', label: 'Class 8-B' }
+
                     ].map((flt) => (
+
                       <button
+
                         key={flt.id}
+
                         onClick={() => setChatRosterFilter(flt.id as any)}
+
                         className={`px-3 py-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+
                           chatRosterFilter === flt.id
+
                             ? 'bg-indigo-600 text-white shadow-2xs'
+
                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+
                         }`}
+
                       >
+
                         {flt.label}
+
                       </button>
+
                     ))}
+
                   </div>
+
+
 
                   {/* Students / Parents Contact List */}
+
                   <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px]">
+
                     {students
+
                       .filter(s => {
+
                         if (chatRosterFilter === 'FOCUS' && !s.has_focus_table) return false;
+
                         if (chatRosterFilter === '8B' && !s.class_name.includes('8-B')) return false;
+
                         if (chatSearchQuery.trim()) {
+
                           const q = chatSearchQuery.toLowerCase();
+
                           return s.name.toLowerCase().includes(q) ||
+
                             s.guardian_name.toLowerCase().includes(q) ||
+
                             s.roll_no.includes(q);
+
                         }
+
                         return true;
+
                       })
+
                       .map((s) => {
+
                         const isSelected = s.id === selectedChatStudentId;
+
                         const studentMsgs = conversations[s.id] || [];
+
                         const lastMsg = studentMsgs[studentMsgs.length - 1];
+
                         const initials = s.name.split(' ').map(n => n[0]).slice(0, 2).join('');
 
+
+
                         return (
+
                           <div
+
                             key={s.id}
+
                             onClick={() => setSelectedChatStudentId(s.id)}
+
                             className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+
                               isSelected
+
                                 ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-800 shadow-xs'
+
                                 : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+
                             }`}
+
                           >
+
                             <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+
                               isSelected
+
                                 ? 'bg-indigo-600 text-white shadow-2xs'
+
                                 : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+
                             }`}>
+
                               {initials}
+
                             </div>
+
+
 
                             <div className="flex-1 min-w-0">
+
                               <div className="flex items-center justify-between gap-1">
+
                                 <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+
                                   {s.guardian_name}
+
                                 </h4>
+
                                 <span className="text-[10px] text-slate-400 shrink-0">
+
                                   {lastMsg?.time.includes('Today') ? lastMsg.time.replace('Today, ', '') : 'Active'}
+
                                 </span>
+
                               </div>
+
+
 
                               <div className="flex items-center gap-1.5 mt-0.5">
+
                                 <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 truncate">
+
                                   {s.name}
+
                                 </span>
+
                                 <span className="text-[10px] text-slate-400">
+
                                   • Roll #{s.roll_no}
+
                                 </span>
+
                               </div>
+
+
 
                               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-1">
+
                                 {lastMsg ? lastMsg.text : 'Tap to start conversation...'}
+
                               </p>
+
                             </div>
+
+
 
                             {s.has_focus_table && (
+
                               <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 mt-1" title="In Focus Table" />
+
                             )}
+
                           </div>
+
                         );
+
                       })}
+
                   </div>
+
                 </div>
+
+
 
                 {/* Right Panel: Active Conversation Window (8 cols on lg) */}
+
                 {(() => {
+
                   const activeStudent = students.find(s => s.id === selectedChatStudentId) || students[0];
+
                   const activeConvo = conversations[selectedChatStudentId] || [];
 
+
+
                   return (
+
                     <div className="lg:col-span-8 flex flex-col justify-between p-4 sm:p-6 bg-white dark:bg-slate-900">
+
                       {/* Conversation Header */}
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+
                         <div className="flex items-center gap-3">
+
                           <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0 shadow-xs">
+
                             {activeStudent ? activeStudent.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'ST'}
+
                           </div>
+
                           <div>
+
                             <div className="flex items-center gap-2">
+
                               <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                                 {activeStudent?.guardian_name}
+
                               </h3>
+
                               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+
                                 Online via Parent App
+
                               </span>
+
                             </div>
+
                             <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+
                               Parent of <strong className="text-slate-700 dark:text-slate-200">{activeStudent?.name}</strong> • Roll #{activeStudent?.roll_no} • {activeStudent?.class_name} • Phone: {activeStudent?.guardian_phone}
+
                             </span>
+
                           </div>
+
                         </div>
+
+
 
                         {/* Quick Header Actions */}
+
                         <div className="flex items-center gap-2">
+
                           <Link
+
                             href={`/teacher/students/${activeStudent?.id || 1}`}
+
                             className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 text-teal-800 dark:text-teal-200 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+
                           >
+
                             <ShieldCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+
                             <span>Inspect 360° SIS</span>
+
                           </Link>
 
+
+
                           <button
+
                             onClick={() => {
+
                               setActiveTab('parent_hub');
+
                               triggerToast(`Navigated to PTM Conference ledger`);
+
                             }}
+
                             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer"
+
                           >
+
                             <Video className="h-3.5 w-3.5 text-blue-600" />
+
                             <span>PTM Slots</span>
+
                           </button>
+
                         </div>
+
                       </div>
+
+
 
                       {/* Quick Canned Message Prompts */}
+
                       <div className="py-2.5 flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 dark:border-slate-800">
+
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+
                           Quick Prompts:
+
                         </span>
+
                         {[
+
                           { label: '📊 Remedial Update', text: `Hello ${activeStudent?.guardian_name}, ${activeStudent?.name} has shown steady improvement in today's quadratic factoring practice.` },
+
                           { label: '📝 Homework Check', text: `Hi ${activeStudent?.guardian_name}, kindly ensure ${activeStudent?.name} reviews Worksheet #4 before tomorrow's class.` },
+
                           { label: '⏰ PTM Slot Alert', text: `Looking forward to our upcoming 10-minute PTM conference on Friday, 24 Oct.` },
+
                           { label: '⭐ Commendation', text: `Praise note: ${activeStudent?.name} demonstrated excellent participation and problem-solving focus in class today!` }
+
                         ].map((prompt, idx) => (
+
                           <button
+
                             key={idx}
+
                             type="button"
+
                             onClick={() => setChatInput(prompt.text)}
+
                             className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 text-slate-600 dark:text-slate-300 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
+
                           >
+
                             {prompt.label}
+
                           </button>
+
                         ))}
+
                       </div>
+
+
 
                       {/* Messages Feed */}
+
                       <div className="flex-1 overflow-y-auto py-4 space-y-3.5 min-h-[300px] max-h-[380px] pr-1">
+
                         <div className="flex items-center justify-center my-2">
+
                           <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-0.5 text-[10px] font-bold">
+
                             Today &bull; Official Institutionally-Logged Parent Channel
+
                           </span>
+
                         </div>
+
+
 
                         {activeConvo.map((msg) => {
+
                           const isTeacher = msg.sender === 'teacher';
 
+
+
                           return (
+
                             <div
+
                               key={msg.id}
+
                               className={`flex flex-col ${isTeacher ? 'items-end' : 'items-start'}`}
+
                             >
+
                               <div className="flex items-end gap-2 max-w-[85%] sm:max-w-[75%]">
+
                                 {!isTeacher && (
+
                                   <div className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center shrink-0 mb-1">
+
                                     {activeStudent?.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                                   </div>
+
                                 )}
+
+
 
                                 <div className={`p-3.5 rounded-2xl shadow-2xs space-y-1 ${
+
                                   isTeacher
+
                                     ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-br-xs'
+
                                     : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-xs border border-slate-200 dark:border-slate-700'
+
                                 }`}>
+
                                   <div className="flex items-center justify-between gap-4">
+
                                     <span className={`text-[10px] font-bold ${isTeacher ? 'text-indigo-200' : 'text-slate-500 dark:text-slate-400'}`}>
+
                                       {isTeacher ? 'You (Class Teacher)' : activeStudent?.guardian_name}
+
                                     </span>
+
                                   </div>
+
                                   <p className="text-xs leading-relaxed font-normal">
+
                                     {msg.text}
+
                                   </p>
+
                                   {(msg as any).attachment && (
+
                                     <div className={`mt-2 flex items-center gap-2 p-2 rounded-xl text-xs font-medium border ${
+
                                       isTeacher 
+
                                         ? 'bg-indigo-700/60 border-indigo-500/50 text-white' 
+
                                         : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+
                                     }`}>
+
                                       <div className={`p-1.5 rounded-lg shrink-0 ${isTeacher ? 'bg-indigo-800 text-indigo-200' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600'}`}>
+
                                         <FileText className="h-4 w-4" />
+
                                       </div>
+
                                       <div className="min-w-0 flex-1">
+
                                         <span className="font-bold truncate block text-[11px]">{(msg as any).attachment.name}</span>
+
                                         <span className={`text-[10px] block ${isTeacher ? 'text-indigo-200' : 'text-slate-400'}`}>{(msg as any).attachment.size}</span>
+
                                       </div>
+
                                       <button
+
                                         type="button"
+
                                         onClick={(e) => {
+
                                           e.stopPropagation();
+
                                           triggerToast(`Downloading ${(msg as any).attachment.name}...`);
+
                                         }}
+
                                         className={`p-1.5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0`}
+
                                         title="Download / View Attachment"
+
                                       >
+
                                         <Download className="h-3.5 w-3.5" />
+
                                       </button>
+
                                     </div>
+
                                   )}
+
                                 </div>
+
                               </div>
+
+
 
                               <div className="flex items-center gap-1.5 mt-1 px-1">
+
                                 <span className="text-[10px] text-slate-400">
+
                                   {msg.time}
+
                                 </span>
+
                                 {isTeacher && (
+
                                   <span className="text-[10px] font-bold text-indigo-500">
+
                                     ✓✓ Delivered
+
                                   </span>
+
                                 )}
+
                               </div>
+
                             </div>
+
                           );
+
                         })}
+
                       </div>
+
+
 
                       {/* Message Composer */}
+
                       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+
                         {/* Selected Attachment Preview Chip */}
+
                         {chatAttachment && (
+
                           <div className="flex items-center justify-between gap-2 p-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in slide-in-from-bottom-1">
+
                             <div className="flex items-center gap-2 min-w-0">
+
                               <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+
                               <span className="font-bold truncate text-[11px]">{chatAttachment.name}</span>
+
                               <span className="text-[10px] text-indigo-500 dark:text-indigo-400 shrink-0">({chatAttachment.size})</span>
+
                             </div>
+
                             <button
+
                               type="button"
+
                               onClick={() => {
+
                                 setChatAttachment(null);
+
                                 if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+
                               }}
+
                               className="p-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-500 hover:text-indigo-700 cursor-pointer shrink-0"
+
                               title="Remove attachment"
+
                             >
+
                               <X className="h-3.5 w-3.5" />
+
                             </button>
+
                           </div>
+
                         )}
+
+
 
                         <form
+
                           onSubmit={(e) => {
+
                             e.preventDefault();
+
                             handleSendMessage();
+
                           }}
+
                           className="flex items-center gap-2"
+
                         >
+
                           {/* Hidden File Input */}
+
                           <input
+
                             type="file"
+
                             ref={chatFileInputRef}
+
                             onChange={(e) => {
+
                               const file = e.target.files?.[0];
+
                               if (file) {
+
                                 const sizeStr = file.size > 1024 * 1024 
+
                                   ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+
                                   : `${Math.round(file.size / 1024)} KB`;
+
                                 setChatAttachment({
+
                                   name: file.name,
+
                                   size: sizeStr,
+
                                   type: file.type || 'document'
+
                                 });
+
                                 triggerToast(`Attached: ${file.name} (${sizeStr})`);
+
                               }
+
                             }}
+
                             accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+
                             className="hidden"
+
                           />
 
+
+
                           <button
+
                             type="button"
+
                             onClick={() => chatFileInputRef.current?.click()}
+
                             className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
+
                               chatAttachment 
+
                                 ? 'bg-indigo-50 border-indigo-400 text-indigo-600 dark:bg-indigo-950/60 dark:border-indigo-600 dark:text-indigo-300' 
+
                                 : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+
                             }`}
+
                             title="Attach File / Remedial Sheet (PDF, Image, Docs)"
+
                           >
+
                             <Paperclip className="h-4 w-4" />
+
                           </button>
+
+
 
                           <input
+
                             type="text"
+
                             value={chatInput}
+
                             onChange={(e) => setChatInput(e.target.value)}
+
                             placeholder={chatAttachment ? `Add a message with ${chatAttachment.name} (optional)...` : `Type a secure message to ${activeStudent?.guardian_name}...`}
+
                             className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
                           />
 
+
+
                           <button
+
                             type="submit"
+
                             disabled={!chatInput.trim() && !chatAttachment}
+
                             className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
+
                           >
+
                             <span>Send</span>
+
                             <Send className="h-3.5 w-3.5" />
+
                           </button>
+
                         </form>
+
                         <span className="text-[10px] text-slate-400 block mt-1">
+
                           🔒 Messages are encrypted &amp; logged as verifiable communication records in accordance with institutional policy.
+
                         </span>
+
                       </div>
+
                     </div>
+
                   );
+
                 })()}
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 6: STUDENT LEAVE APPROVALS                        */}
+
           {/* ===================================================== */}
+
           {activeTab === 'leave_approvals' && (
+
             <div className="space-y-6">
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-rose-100 text-rose-800 px-2.5 py-0.5 text-xs font-bold border border-rose-200">
+
                       Attendance Governance
+
                     </span>
+
                     <span className="text-xs text-slate-500">{leaveRequests.length} Total Applications</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+
                     Student Leave Approvals &amp; Medical Notes
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Review and grant formal approval for leave requests submitted by parents via the mobile application.
+
                   </p>
+
                 </div>
+
               </div>
+
+
 
               {/* Leave Requests List */}
+
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+
                     Parent Applications Queue
+
                   </span>
+
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
+
                     Approved leaves auto-update SIS attendance logs
+
                   </span>
+
                 </div>
 
+
+
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
+
                   {leaveRequests.map((lr) => (
+
                     <div key={lr.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+
                       <div className="space-y-1.5 max-w-xl">
+
                         <div className="flex items-center gap-2">
+
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">{lr.student_name}</h4>
+
                           <span className="rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-bold">
+
                             Submitted by {lr.parent_name}
+
                           </span>
+
                           <span className="text-[10px] text-slate-400">
+
                             Dates: {lr.from_date} to {lr.to_date}
+
                           </span>
+
                         </div>
+
+
 
                         <p className="text-xs text-slate-700 dark:text-slate-300 italic bg-slate-50 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+
                           &ldquo;{lr.reason}&rdquo;
+
                         </p>
+
                       </div>
+
+
 
                       <div className="flex items-center gap-3 shrink-0">
+
                         {lr.status === 'Pending' ? (
+
                           <>
+
                             <button
+
                               onClick={() => handleReviewLeave(lr.id, 'Approved')}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all cursor-pointer"
+
                             >
+
                               <Check className="h-3.5 w-3.5" />
+
                               <span>Approve Leave</span>
+
                             </button>
+
                             <button
+
                               onClick={() => handleReviewLeave(lr.id, 'Rejected')}
+
                               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer"
+
                             >
+
                               <X className="h-3.5 w-3.5" />
+
                               <span>Reject</span>
+
                             </button>
+
                           </>
+
                         ) : (
+
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
+
                             lr.status === 'Approved'
+
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
+
                               : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-900'
+
                           }`}>
+
                             {lr.status === 'Approved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+
                             {lr.status}
+
                           </span>
+
                         )}
+
                       </div>
+
                     </div>
+
                   ))}
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 7: CONSOLIDATED FACULTY DUTIES & TASK CENTER     */}
+
           {/* ===================================================== */}
+
           {activeTab === 'duties' && (
+
             <div className="space-y-6">
+
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 px-2.5 py-0.5 text-xs font-bold border border-purple-200 dark:border-purple-800">
+
                       Institutional Operations Command
+
                     </span>
+
                     <span className="text-xs text-slate-500">Academic Year 2026-27 • Faculty Roster</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+
                     Consolidated Faculty Duties &amp; Task Center
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Institutional information portal for exam invigilation allocations, campus substitution, event committees, and weekly routines.
+
                   </p>
+
                 </div>
+
+
 
                 {/* Event Type / Category Filters */}
+
                 <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+
                   {[
+
                     { id: 'ALL', label: 'All Duties', icon: '📋' },
+
                     { id: 'ADMIN_MANDATES', label: '⚡ Admin Delegations', icon: '⚡' },
+
                     { id: 'EXAM_INVIGILATION', label: 'Exam Invigilation', icon: '📝' },
+
                     { id: 'CAMPUS_SUBSTITUTION', label: 'Substitution Cover', icon: '🔄' },
+
                     { id: 'EVENT_COMMITTEE', label: 'Events & Committees', icon: '🎪' },
+
                     { id: 'WEEKLY_ROUTINE', label: 'Weekly Routines', icon: '🔄' }
+
                   ].map((cat) => (
+
                     <button
+
                       key={cat.id}
+
                       onClick={() => setDutyCategoryFilter(cat.id as any)}
+
                       className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+
                         dutyCategoryFilter === cat.id
+
                           ? 'bg-purple-600 text-white shadow-md'
+
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+
                       }`}
+
                     >
+
                       {cat.label}
+
                     </button>
+
                   ))}
+
                 </div>
+
               </div>
+
+
 
               {/* Section 0: Admin Institutional Delegations & Mandates */}
+
               {(dutyCategoryFilter === 'ALL' || (dutyCategoryFilter as string) === 'ADMIN_MANDATES') && academicTasks.length > 0 && (
+
                 <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20 p-5 shadow-sm space-y-4">
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-950 pb-3">
+
                     <div className="flex items-center gap-2.5">
+
                       <div className="h-8 w-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+
                         <Icon3D name="rocket" className="h-4 w-4" />
+
                       </div>
+
                       <div>
+
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+
                           <span>Institutional Delegations &amp; Administrative Mandates</span>
+
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+
                             {academicTasks.length} Assigned
+
                           </span>
+
                         </h3>
+
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
+
                           Direct operational tasks assigned by Principal &amp; Academic Leadership requiring compliance sign-off.
+
                         </p>
+
                       </div>
+
                     </div>
+
                   </div>
+
+
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                     {academicTasks.map((task) => (
+
                       <div
+
                         key={task.id}
+
                         className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-4 shadow-2xs space-y-3 transition-all hover:border-indigo-300 dark:hover:border-indigo-700"
+
                       >
+
                         <div className="flex items-start justify-between gap-2">
+
                           <div className="flex flex-wrap items-center gap-1.5">
+
                             <span className="rounded-md px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+
                               {task.domain?.toUpperCase() || 'ACADEMIC'} MANDATE
+
                             </span>
+
                             <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+
                               task.priority === 'Critical'
+
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200'
+
                                 : 'bg-amber-50 text-amber-700 border border-amber-200'
+
                             }`}>
+
                               {task.priority?.toUpperCase()} PRIORITY
+
                             </span>
+
                             <span className="text-[11px] text-slate-500 font-medium">
+
                               • Due: {task.due_date}
+
                             </span>
+
                           </div>
+
+
 
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+
                             task.status === 'Completed'
+
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+
                               : task.status === 'Pending Review'
+
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
+
                               : task.status === 'In Progress'
+
                               ? 'bg-blue-50 text-blue-700 border border-blue-200'
+
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
+
                           }`}>
+
                             {task.status}
+
                           </span>
+
                         </div>
 
+
+
                         <div>
+
                           <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+
                             {task.title}
+
                           </h4>
+
                           {task.description && (
+
                             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+
                               {task.description}
+
                             </p>
+
                           )}
+
                         </div>
+
+
 
                         <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+
                           <span className="flex items-center gap-1 font-medium">
+
                             <Clock className="h-3.5 w-3.5 text-blue-500" />
+
                             <span>SLA Window: {task.sla_hours || 24} Hours</span>
+
                           </span>
+
+
 
                           {task.status !== 'Completed' && (
+
                             <button
+
                               type="button"
+
                               onClick={() => {
+
                                 setReliefSelectedTask(task);
+
                                 setShowReliefModal(true);
+
                               }}
+
                               className="text-amber-600 dark:text-amber-400 text-[11px] font-bold hover:underline cursor-pointer"
+
                             >
+
                               Request Relief / Migration
+
                             </button>
+
                           )}
+
                         </div>
+
+
 
                         {task.rejection_reason && task.status !== 'Completed' && (
+
                           <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+
                             <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-300">
+
                               <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+
                               <span>Principal Requested Revision:</span>
+
                             </div>
+
                             <p className="text-[11px] text-rose-700 dark:text-rose-300 italic">
+
                               &ldquo;{task.rejection_reason}&rdquo;
+
                             </p>
+
                           </div>
+
                         )}
+
+
 
                         {task.status === 'Pending Review' ? (
+
                           <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+
                             <div className="flex items-center gap-1.5 font-bold">
+
                               <Clock className="h-3.5 w-3.5 text-amber-600" />
+
                               <span>Submitted for Principal Verification</span>
+
                             </div>
+
                             <p className="text-[11px] text-amber-700 dark:text-amber-300">
+
                               Awaiting administrator sign-off. {task.submission_notes ? `Notes: "${task.submission_notes}"` : ''}
+
                             </p>
+
                           </div>
+
                         ) : task.status === 'Completed' ? (
+
                           <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between font-bold">
+
                             <span className="flex items-center gap-1.5">
+
                               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+
                               <span>Verified &amp; Closed</span>
+
                             </span>
+
                             {task.completion_proof_url && (
+
                               <a
+
                                 href={task.completion_proof_url}
+
                                 target="_blank"
+
                                 rel="noreferrer"
+
                                 className="text-[11px] text-blue-600 hover:underline"
+
                               >
+
                                 View Proof ↗
+
                               </a>
+
                             )}
+
                           </div>
+
                         ) : (
+
                           <div className="flex items-center gap-2 pt-1">
+
                             {task.status !== 'In Progress' && (
+
                               <button
+
                                 type="button"
+
                                 onClick={() => handleUpdateTeacherTaskStatus(task.id, 'In Progress')}
+
                                 className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+
                               >
+
                                 Mark In Progress
+
                               </button>
+
                             )}
+
                             <button
+
                               type="button"
+
                               onClick={() => {
+
                                 setSubmitWorkTask(task);
+
                                 setTaskSubmissionNotes('');
+
                                 setTaskProofUrl('');
+
                               }}
+
                               className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+
                             >
+
                               <CheckCircle2 className="h-3.5 w-3.5" />
+
                               <span>Submit Work &amp; Proof</span>
+
                             </button>
+
                           </div>
+
                         )}
+
                       </div>
+
                     ))}
+
                   </div>
+
                 </div>
+
               )}
 
+
+
               {/* Master-Detail Split Workspace with Academic Day Schedule */}
+
               {(() => {
+
                 const isTaskWeeklyRoutine = (duty: FacultyDutyTask): boolean => {
+
                   return (
+
                     !!duty.is_weekly ||
+
                     duty.frequency === 'WEEKLY' ||
+
                     duty.category === 'WEEKLY_ROUTINE' ||
+
                     duty.scheduled_date.toLowerCase().includes('weekly') ||
+
                     duty.scheduled_date.toLowerCase().includes('every')
+
                   );
+
                 };
+
+
 
                 const isTaskToday = (duty: FacultyDutyTask): boolean => {
+
                   const sched = duty.scheduled_date.toLowerCase();
+
                   return sched.includes('today') || sched.includes('16 oct') || (duty.day_of_week === 'Friday' && duty.is_weekly === true);
+
                 };
+
+
 
                 const isTaskOnDay = (duty: FacultyDutyTask, dayId: string): boolean => {
+
                   if (dayId === 'ALL') return true;
+
                   if (duty.day_of_week && duty.day_of_week.toLowerCase() === dayId.toLowerCase()) return true;
+
                   const sched = duty.scheduled_date.toLowerCase();
+
                   if (dayId.toLowerCase() === 'friday') {
+
                     return sched.includes('friday') || sched.includes('today') || sched.includes('16 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'monday') {
+
                     return sched.includes('monday') || sched.includes('12 oct') || sched.includes('19 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'wednesday') {
+
                     return sched.includes('wednesday') || sched.includes('14 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'sunday') {
+
                     return sched.includes('sunday') || sched.includes('18 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'saturday') {
+
                     return sched.includes('saturday') || sched.includes('17 oct') || sched.includes('24 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'tuesday') {
+
                     return sched.includes('tuesday') || sched.includes('13 oct');
+
                   }
+
                   if (dayId.toLowerCase() === 'thursday') {
+
                     return sched.includes('thursday') || sched.includes('15 oct');
+
                   }
+
                   return false;
+
                 };
 
+
+
                 const weekDays = [
+
                   { id: 'ALL', label: 'All Week', short: 'All', dateBadge: '12-18 Oct' },
+
                   { id: 'Monday', label: 'Monday', short: 'Mon', dateBadge: '12 Oct' },
+
                   { id: 'Tuesday', label: 'Tuesday', short: 'Tue', dateBadge: '13 Oct' },
+
                   { id: 'Wednesday', label: 'Wednesday', short: 'Wed', dateBadge: '14 Oct' },
+
                   { id: 'Thursday', label: 'Thursday', short: 'Thu', dateBadge: '15 Oct' },
+
                   { id: 'Friday', label: 'Friday (Today)', short: 'Fri', isToday: true, dateBadge: '16 Oct' },
+
                   { id: 'Saturday', label: 'Saturday', short: 'Sat', dateBadge: '17 Oct' },
+
                   { id: 'Sunday', label: 'Sunday', short: 'Sun', dateBadge: '18 Oct' },
+
                 ];
 
+
+
                 // Filtered duties respecting category (type of event) and day of week, excluding paper correction
+
                 const filteredDuties = facultyDuties.filter((duty) => {
+
                   if (duty.category === 'PAPER_CORRECTION') return false;
+
                   if (dutyCategoryFilter !== 'ALL' && duty.category !== dutyCategoryFilter) return false;
+
                   if (dutySelectedDay !== 'ALL' && !isTaskOnDay(duty, dutySelectedDay)) return false;
+
                   return true;
+
                 });
+
                 const activeDuty = filteredDuties.find((d) => d.id === selectedDutyId) || filteredDuties[0] || null;
 
+
+
                 return (
+
                   <div className="space-y-5">
+
                     {/* Academic Day Schedule Ribbon */}
+
                     <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
+
                       <div className="flex items-center justify-between mb-2.5">
+
                         <div className="flex items-center gap-2">
+
                           <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+
                             Academic Day Schedule
+
                           </span>
+
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+
                             Week of 12 – 18 Oct 2026
+
                           </span>
+
                         </div>
+
                         {dutySelectedDay !== 'ALL' && (
+
                           <button
+
                             onClick={() => setDutySelectedDay('ALL')}
+
                             className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+
                           >
+
                             Reset Day Filter (Show All Week)
+
                           </button>
+
                         )}
+
                       </div>
+
+
 
                       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+
                         {weekDays.map((day) => {
+
                           const isSelected = dutySelectedDay === day.id;
+
                           const dayTasks = facultyDuties.filter((d) => {
+
                             if (d.category === 'PAPER_CORRECTION') return false;
+
                             if (dutyCategoryFilter !== 'ALL' && d.category !== dutyCategoryFilter) return false;
+
                             return isTaskOnDay(d, day.id);
+
                           });
+
                           const count = day.id === 'ALL'
+
                             ? facultyDuties.filter((d) => d.category !== 'PAPER_CORRECTION' && (dutyCategoryFilter === 'ALL' || d.category === dutyCategoryFilter)).length
+
                             : dayTasks.length;
 
+
+
                           return (
+
                             <button
+
                               key={day.id}
+
                               onClick={() => setDutySelectedDay(day.id)}
+
                               className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer relative ${
+
                                 isSelected
+
                                   ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-500 shadow-xs ring-1 ring-purple-500'
+
                                   : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+
                               }`}
+
                             >
+
                               {day.isToday && (
+
                                 <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+
                                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+
                                 </span>
+
                               )}
+
+
 
                               <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">
+
                                 {day.short}
+
                               </div>
+
                               <div className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
+
                                 {day.dateBadge}
+
                               </div>
+
+
 
                               <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px]">
+
                                 <span className={`font-bold ${count > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'}`}>
+
                                   {count} {count === 1 ? 'task' : 'tasks'}
+
                                 </span>
+
                                 {day.isToday && (
+
                                   <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+
                                     Today
+
                                   </span>
+
                                 )}
+
                               </div>
+
                             </button>
+
                           );
+
                         })}
+
                       </div>
+
                     </div>
+
+
 
                     {/* Master-Detail Split Workspace */}
+
                     {filteredDuties.length === 0 ? (
+
                       <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center bg-white dark:bg-slate-900">
+
                         <div className="h-12 w-12 rounded-2xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto mb-3 font-bold text-xl">
+
                           📋
+
                         </div>
+
                         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+
                           No tasks found for current filter criteria
+
                         </h3>
+
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+
                           Try resetting day selection or switching duty category.
+
                         </p>
+
                         <div className="flex items-center justify-center gap-2 mt-4">
+
                           <button
+
                             onClick={() => {
+
                               setDutyCategoryFilter('ALL');
+
                               setDutySelectedDay('ALL');
+
                             }}
+
                             className="px-4 py-2 text-xs font-bold bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors cursor-pointer shadow-sm"
+
                           >
+
                             Reset Filters (Show All)
+
                           </button>
+
                         </div>
+
                       </div>
+
                     ) : (
+
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
                         {/* LEFT: MASTER LIST (5 COLS) */}
+
                         <div className="lg:col-span-5 space-y-3">
+
                           <div className="flex items-center justify-between px-1">
+
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+
                               Duty Roster ({filteredDuties.length})
+
                             </span>
+
                             <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
+
                               Click duty to view details
+
                             </span>
+
                           </div>
+
+
 
                           <div className="space-y-2.5 max-h-[680px] overflow-y-auto pr-1">
+
                             {filteredDuties.map((duty) => {
+
                               const isSelected = activeDuty?.id === duty.id;
+
                               const isWeeklyRoutine = isTaskWeeklyRoutine(duty);
+
                               const isToday = isTaskToday(duty);
+
                               const isInvigilation = duty.category === 'EXAM_INVIGILATION';
+
                               const isEvent = duty.category === 'EVENT_COMMITTEE';
+
                               const isWeeklyCat = duty.category === 'WEEKLY_ROUTINE';
+
                               const totalChecklist = duty.action_checklist?.length || 0;
 
+
+
                               return (
+
                                 <div
+
                                   key={duty.id}
+
                                   onClick={() => setSelectedDutyId(duty.id)}
+
                                   className={`p-4 rounded-2xl border transition-all cursor-pointer text-left relative ${
+
                                     isSelected
+
                                       ? 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-500 shadow-md ring-1 ring-purple-500'
+
                                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
+
                                   }`}
+
                                 >
+
                                   {/* Top Bar: Category & Weekly & Priority & Status */}
+
                                   <div className="flex items-center justify-between gap-1.5 mb-2">
+
                                     <div className="flex items-center gap-1.5 flex-wrap">
+
                                       <span
+
                                         className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+
                                           isWeeklyCat
+
                                             ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+
                                             : isInvigilation
+
                                             ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
                                             : isEvent
+
                                             ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+
                                             : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+
                                         }`}
+
                                       >
+
                                         {duty.category.replace('_', ' ')}
+
                                       </span>
+
+
 
                                       {isWeeklyRoutine && (
+
                                         <span className="rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 text-[9px] font-bold flex items-center gap-1">
+
                                           <RefreshCw className="h-2.5 w-2.5" />
+
                                           Weekly
+
                                         </span>
+
                                       )}
+
+
 
                                       {isToday && (
+
                                         <span className="rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 text-[9px] font-bold">
+
                                           ⚡ Today
+
                                         </span>
+
                                       )}
+
+
 
                                       {duty.priority === 'CRITICAL' && (
+
                                         <span className="rounded bg-rose-500 text-white px-1.5 py-0.5 text-[9px] font-bold">
+
                                           CRITICAL
+
                                         </span>
+
                                       )}
+
                                     </div>
 
+
+
                                     <span
+
                                       className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+
                                         duty.status === 'COMPLETED'
+
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+
                                           : duty.status === 'IN_PROGRESS'
+
                                           ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+
                                           : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300'
+
                                       }`}
+
                                     >
+
                                       {duty.status}
+
                                     </span>
+
                                   </div>
+
+
 
                                   {/* Title */}
+
                                   <h4 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
+
                                     {duty.title}
+
                                   </h4>
 
+
+
                                   {/* Time & Venue Subtext */}
+
                                   <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+
                                     <span>📅 {duty.day_of_week ? `${duty.day_of_week} • ` : ''}{duty.scheduled_date}</span>
+
                                     <span>•</span>
+
                                     <span className="truncate">⏰ {duty.time_window}</span>
+
                                   </div>
+
+
 
                                   {/* Bottom Info Indicator */}
+
                                   <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[10px]">
+
                                     {totalChecklist > 0 ? (
+
                                       <span className="text-slate-500 dark:text-slate-400 font-medium">
+
                                         📋 {totalChecklist} {totalChecklist === 1 ? 'guideline' : 'guidelines'}
+
                                       </span>
+
                                     ) : (
+
                                       <span className="text-slate-400">📍 {duty.location_or_venue}</span>
+
                                     )}
+
+
 
                                     <span className="text-purple-600 dark:text-purple-400 font-bold shrink-0">
+
                                       #{duty.id}
+
                                     </span>
+
                                   </div>
+
                                 </div>
+
                               );
+
                             })}
+
                           </div>
+
                         </div>
+
+
 
                         {/* RIGHT: DETAIL WORKSPACE STAGE (7 COLS) */}
+
                         <div className="lg:col-span-7 sticky top-4">
+
                           {activeDuty && (
+
                             <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
+
                               {/* Workspace Top Header */}
+
                               <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+
                                 <div>
+
                                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+
                                     <span
+
                                       className={`rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+
                                         activeDuty.category === 'WEEKLY_ROUTINE'
+
                                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+
                                           : activeDuty.category === 'EXAM_INVIGILATION'
+
                                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
                                           : activeDuty.category === 'EVENT_COMMITTEE'
+
                                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+
                                           : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+
                                       }`}
+
                                     >
+
                                       {activeDuty.category.replace('_', ' ')}
+
                                     </span>
+
+
 
                                     {isTaskWeeklyRoutine(activeDuty) && (
+
                                       <span className="rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 text-[10px] font-bold flex items-center gap-1">
+
                                         <RefreshCw className="h-3 w-3" />
+
                                         Weekly Routine
+
                                       </span>
+
                                     )}
+
+
 
                                     {activeDuty.priority === 'CRITICAL' && (
+
                                       <span className="rounded-md bg-rose-500 text-white px-2 py-0.5 text-[10px] font-bold flex items-center gap-1">
+
                                         <AlertTriangle className="h-3 w-3" />
+
                                         CRITICAL
+
                                       </span>
+
                                     )}
 
+
+
                                     <span
+
                                       className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+
                                         activeDuty.status === 'COMPLETED'
+
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+
                                           : activeDuty.status === 'IN_PROGRESS'
+
                                           ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+
                                           : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300'
+
                                       }`}
+
                                     >
+
                                       {activeDuty.status}
+
                                     </span>
+
                                   </div>
+
+
 
                                   <h3 className="text-base font-black text-slate-900 dark:text-white">
+
                                     {activeDuty.title}
+
                                   </h3>
+
                                   {activeDuty.sub_category && (
+
                                     <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
+
                                       {activeDuty.sub_category}
+
                                     </p>
+
                                   )}
+
                                 </div>
+
+
 
                                 <span className="text-xs font-mono font-bold text-slate-400">
+
                                   #{activeDuty.id}
+
                                 </span>
+
                               </div>
+
+
 
                               {/* Weekly Routine Banner if Applicable */}
+
                               {isTaskWeeklyRoutine(activeDuty) && (
+
                                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-blue-950/40 border border-purple-200 dark:border-purple-800">
+
                                   <div className="flex items-center gap-2.5">
+
                                     <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold shrink-0">
+
                                       <RefreshCw className="h-4 w-4" />
+
                                     </div>
+
                                     <div>
+
                                       <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 block">
+
                                         Institutional Weekly Routine
+
                                       </span>
+
                                       <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+
                                         Cadence: Every {activeDuty.day_of_week || 'Week'} &bull; Cycle auto-resets each Monday
+
                                       </p>
+
                                     </div>
+
                                   </div>
+
                                   <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
+
                                     Weekly Cycle
+
                                   </span>
+
                                 </div>
+
                               )}
+
+
 
                               {/* Telemetry Grid */}
+
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs">
+
                                 <div>
+
                                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Date / Day</span>
+
                                   <span className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+
                                     📅 {activeDuty.day_of_week ? `${activeDuty.day_of_week}, ` : ''}{activeDuty.scheduled_date}
+
                                   </span>
+
                                 </div>
+
                                 <div>
+
                                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Time Window</span>
+
                                   <span className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+
                                     ⏰ {activeDuty.time_window}
+
                                   </span>
+
                                 </div>
+
                                 <div className="col-span-2 sm:col-span-1">
+
                                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Venue / Room</span>
+
                                   <span className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 block truncate">
+
                                     📍 {activeDuty.location_or_venue}
+
                                   </span>
+
                                 </div>
+
                               </div>
+
+
 
                               {/* Category Action Area: Exam Invigilation */}
+
                               {activeDuty.category === 'EXAM_INVIGILATION' && (
+
                                 <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-2">
+
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+
                                     Assigned Exam Hall &amp; Seating Roster
+
                                   </span>
+
                                   <div className="grid grid-cols-2 gap-3 text-xs">
+
                                     <div>
+
                                       <span className="text-[10px] text-slate-500 block">Assigned Hall:</span>
+
                                       <span className="font-black text-slate-900 dark:text-white">📍 {activeDuty.location_or_venue}</span>
+
                                     </div>
+
                                     <div>
+
                                       <span className="text-[10px] text-slate-500 block">Seat Range:</span>
+
                                       <span className="font-mono font-black text-amber-800 dark:text-amber-300">
+
                                         🪑 {activeDuty.seat_range || 'Seats 45 - 90'}
+
                                       </span>
+
                                     </div>
+
                                     <div>
+
                                       <span className="text-[10px] text-slate-500 block">Candidate Count:</span>
+
                                       <span className="font-black text-slate-900 dark:text-white">
+
                                         👥 {activeDuty.student_count || 45} Students
+
                                       </span>
+
                                     </div>
+
                                     <div>
+
                                       <span className="text-[10px] text-slate-500 block">Exam Category:</span>
+
                                       <span className="font-bold text-amber-900 dark:text-amber-200">Midterm Board Mock</span>
+
                                     </div>
+
                                   </div>
+
                                 </div>
+
                               )}
+
+
 
                               {/* Category Action Area: Substitution */}
+
                               {activeDuty.category === 'CAMPUS_SUBSTITUTION' && (
+
                                 <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-1.5 text-xs">
+
                                   <span className="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-400 block">
+
                                     Emergency Coverage Allocation
+
                                   </span>
+
                                   <p className="font-bold text-rose-950 dark:text-rose-200 text-sm">
+
                                     Covering for absent colleague: {activeDuty.sub_category || 'Mr. Joshi'}
+
                                   </p>
+
                                   <span className="text-xs text-slate-500 block">
+
                                     Room: {activeDuty.location_or_venue} • Time: {activeDuty.time_window}
+
                                   </span>
+
                                 </div>
+
                               )}
+
+
 
                               {/* Category Action Area: Weekly Routine */}
+
                               {activeDuty.category === 'WEEKLY_ROUTINE' && (
+
                                 <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900 space-y-3 text-xs">
+
                                   <div className="flex items-center justify-between">
+
                                     <span className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+
                                       <ShieldCheck className="h-4 w-4 text-purple-600" />
+
                                       Weekly Routine Governance &amp; Execution
+
                                     </span>
+
                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+
                                       Cadence Day: {activeDuty.day_of_week || 'Friday'}
+
                                     </span>
+
                                   </div>
+
                                   <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+
                                     Institutional accountability requirement signed off by {activeDuty.assigned_by}. Follow protocol instructions to lock the weekly verification ledger.
+
                                   </p>
+
                                   {(activeDuty.id === 'duty-06' || activeDuty.title.includes('Focus Table')) && (
+
                                     <div className="flex items-center justify-between pt-2 border-t border-purple-200/60 dark:border-purple-900/60">
+
                                       <span className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold">
+
                                         4 Focus Table Students Assigned for Friday Audit
+
                                       </span>
+
                                       <button
+
                                         onClick={() => {
+
                                           setActiveTab('focus_table');
+
                                           setToastMessage('Switched to Student Focus Table remedial hub.');
+
                                         }}
+
                                         className="px-3 py-1.5 text-xs font-bold bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+
                                       >
+
                                         <span>Open Focus Table Hub</span>
+
                                         <ArrowRight className="h-3.5 w-3.5" />
+
                                       </button>
+
                                     </div>
+
                                   )}
+
                                 </div>
+
                               )}
+
+
 
                               {/* Operational Guidelines & Instructions */}
+
                               {activeDuty.action_checklist && activeDuty.action_checklist.length > 0 && (
+
                                 <div className="space-y-3">
+
                                   <div className="flex items-center justify-between">
+
                                     <span className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+
                                       Operational Guidelines &amp; Instructions:
+
                                     </span>
+
                                     <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+
                                       {activeDuty.action_checklist.length} Steps
+
                                     </span>
+
                                   </div>
+
+
 
                                   <div className="space-y-2">
+
                                     {activeDuty.action_checklist.map((item, idx) => (
+
                                       <div
+
                                         key={idx}
+
                                         className="w-full flex items-start gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800/80"
+
                                       >
+
                                         <div className="mt-0.5 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold flex items-center justify-center shrink-0 border border-purple-200 dark:border-purple-800">
+
                                           {idx + 1}
+
                                         </div>
+
                                         <span className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 font-medium">
+
                                           {item.item}
+
                                         </span>
+
                                       </div>
+
                                     ))}
+
                                   </div>
+
                                 </div>
+
                               )}
 
+
+
                               {/* Footer */}
+
                               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
+
                                 <span>
+
                                   Assigned by:{' '}
+
                                   <strong className="text-slate-700 dark:text-slate-300 font-semibold">
+
                                     {activeDuty.assigned_by}
+
                                   </strong>
+
                                 </span>
+
                                 <span className="text-purple-600 dark:text-purple-400 font-mono font-bold">
+
                                   Duty ID: #{activeDuty.id}
+
                                 </span>
+
                               </div>
+
                             </div>
+
                           )}
+
                         </div>
+
                       </div>
+
                     )}
+
                   </div>
+
                 );
+
               })()}
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 8: TEACHER LEAVE & SHORT-PERMISSIONS            */}
+
           {/* ===================================================== */}
+
           {activeTab === 'my_permissions' && (
+
             <div className="space-y-6">
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
+
                       Faculty Portal &bull; Self-Service
+
                     </span>
+
                     <span className="text-xs text-slate-500">Human Resources &amp; Approvals</span>
+
                   </div>
+
                   <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+
                     Faculty Leave, Shift Adjustments &amp; Permissions
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
+
                     Apply for shift adjustments, short permissions, casual leave, or on-duty academic movements. Direct cross-role synchronisation with Principal &amp; Management.
+
                   </p>
+
                 </div>
 
+
+
                 <button
+
                   type="button"
+
                   onClick={() => setShowPermissionModal(true)}
+
                   className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer"
+
                 >
+
                   <Plus className="h-3.5 w-3.5" />
+
                   <span>Apply Permission / Shift Request</span>
+
                 </button>
+
               </div>
+
+
 
               {/* 3 Metric Cards */}
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Applications</span>
+
                   <span className="text-2xl font-black text-slate-900 dark:text-white block">{myPermissions.length}</span>
+
                   <span className="text-[10px] text-slate-500">Academic Year 2026–27</span>
+
                 </div>
 
+
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+
                   <span className="text-[10px] uppercase font-bold text-slate-400">Approved by Principal</span>
+
                   <span className="text-2xl font-black text-emerald-600 block">
+
                     {myPermissions.filter(p => p.status === 'Approved').length}
+
                   </span>
+
                   <span className="text-[10px] text-emerald-600 font-bold">100% Timetable Covered</span>
+
                 </div>
 
+
+
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
+
                   <span className="text-[10px] uppercase font-bold text-slate-400">Pending Review</span>
+
                   <span className="text-2xl font-black text-amber-600 block">
+
                     {myPermissions.filter(p => p.status === 'Pending').length}
+
                   </span>
+
                   <span className="text-[10px] text-amber-600 font-bold">Awaiting Management Sign-off</span>
+
                 </div>
+
               </div>
+
+
 
               {/* Permissions History Ledger */}
+
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+
                     Application History &amp; Audit Trail ({myPermissions.length})
+
                   </span>
+
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
+
                     Reviewed by Dr. Sunita Kapoor (Principal)
+
                   </span>
+
                 </div>
+
+
 
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
+
                   {myPermissions.map((perm) => (
+
                     <div key={perm.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+
                       <div className="space-y-1.5">
+
                         <div className="flex items-center gap-2 flex-wrap">
+
                           <span className="rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-[10px] font-bold">
+
                             {perm.type}
+
                           </span>
+
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white">{perm.date}</h4>
+
                           {perm.shift && (
+
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+
                               {perm.shift}
+
                             </span>
+
                           )}
+
                           <span className="text-[10px] text-slate-400">Applied {perm.applied_at}</span>
+
                         </div>
+
                         <p className="text-xs text-slate-700 dark:text-slate-300 italic bg-slate-50/80 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+
                           &ldquo;{perm.reason}&rdquo;
+
                         </p>
+
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+
                           {perm.affected_periods && (
+
                             <span>Affected: <b>{perm.affected_periods}</b></span>
+
                           )}
+
                           {perm.suggested_substitute && (
+
                             <span>Proxy: <b>{perm.suggested_substitute}</b></span>
+
                           )}
+
                         </div>
+
                       </div>
+
+
 
                       <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-bold border shrink-0 ${
+
                         perm.status === 'Approved'
+
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900'
+
                           : perm.status === 'Pending'
+
                           ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900'
+
                           : 'bg-red-50 text-red-700 border-red-200'
+
                       }`}>
+
                         {perm.status === 'Approved' && <CheckCircle2 className="h-3.5 w-3.5" />}
+
                         {perm.status === 'Pending' && <Clock className="h-3.5 w-3.5" />}
+
                         {perm.status}
+
                       </span>
+
                     </div>
+
                   ))}
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* TAB 9: FACULTY SALARY & DIGITAL PAYSLIPS             */}
+
           {/* ===================================================== */}
+
           {activeTab === 'my_salary' && (
+
             <div className="space-y-6">
+
               {/* Header Banner */}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+
                       Staff Self-Service
+
                     </span>
+
                     <span className="text-xs text-slate-400 font-mono">Oct 2026 Pay Cycle</span>
+
                   </div>
+
                   <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">
+
                     Faculty Salary & Monthly Payslips
+
                   </h2>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+
                     Itemized earnings, statutory EPF/PT/TDS deductions, and bank wire remittance status certified by Accounts Department.
+
                   </p>
+
                 </div>
+
+
 
                 <div className="flex items-center gap-2.5">
+
                   <button
+
                     onClick={() => window.print()}
+
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+
                   >
+
                     <Download className="h-3.5 w-3.5" />
+
                     Print Statement
+
                   </button>
+
                   <button
+
                     onClick={() => setShowSalaryInquiryModal(true)}
+
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs cursor-pointer"
+
                     title="Send a discrepancy or salary query to Accounts Coordinator"
+
                   >
+
                     <Mail className="h-3.5 w-3.5" />
+
                     Contact Accounts Coordinator
+
                   </button>
+
                 </div>
+
               </div>
+
+
 
               {/* KPI Ribbon */}
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gross Earnings</div>
-                  <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                    ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-                    Basic + HRA + Special Allowance
-                  </div>
-                </div>
 
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Deductions</div>
-                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
-                    -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
+
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gross Earnings</div>
+
+                  <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+
+                    ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
+
                   </div>
-                  <div className="text-[10px] text-slate-400 font-semibold mt-1">
-                    EPF (12%) + PT (₹200) + TDS
+
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+
+                    Basic + HRA + Special Allowance
+
                   </div>
+
                 </div>
+
+
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Deductions</div>
+
+                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+
+                    -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
+
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 font-semibold mt-1">
+
+                    EPF (12%) + PT (₹200) + TDS
+
+                  </div>
+
+                </div>
+
+
 
                 <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-xs">
+
                   <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Net Take-Home Pay</div>
+
                   <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1">
+
                     ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+
                   </div>
+
                   <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+
                     Direct Credit to Bank A/c
+
                   </div>
+
                 </div>
+
+
 
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+
                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Wire Remittance</div>
+
                   <div className="mt-1 flex items-center gap-2">
+
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+
                       (myPayslip?.disbursement_status || 'Pending') === 'Disbursed'
+
                         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+
                     }`}>
+
                       <CheckCircle2 className="h-3 w-3" />
+
                       {myPayslip?.disbursement_status || 'Disbursed'}
+
                     </span>
+
                   </div>
+
                   <div className="text-[10px] font-mono text-slate-500 mt-1.5 truncate">
+
                     UTR: {myPayslip?.payment_utr || 'CMS-HDFC-20261028-0912'}
+
                   </div>
+
                 </div>
+
               </div>
+
+
 
               {/* Comprehensive Itemized Digital Payslip */}
+
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+
                 {/* School Header */}
+
                 <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
                     <div>
+
                       <div className="flex items-center gap-2">
+
                         <GraduationCap className="h-5 w-5 text-blue-600" />
+
                         <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">
+
                           Delhi Public School, Sector 45
+
                         </h3>
+
                       </div>
+
                       <p className="text-xs text-slate-500 mt-0.5">
+
                         Affiliated to CBSE, New Delhi (Affiliation No: 2130048) · Pay Slip for October 2026
+
                       </p>
+
                     </div>
+
                     <div className="text-right sm:border-l sm:border-slate-200 dark:sm:border-slate-700 sm:pl-4">
+
                       <div className="text-xs font-bold text-slate-900 dark:text-white">Mrs. Ananya Verma</div>
+
                       <div className="text-[11px] text-slate-500">PGT Mathematics · Faculty ID #2</div>
+
                       <div className="text-[10px] font-mono text-slate-400">A/c: 918204918201 · HDFC Bank (HDFC0001829)</div>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                 {/* Earnings & Deductions Dual Grid */}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-800">
+
                   {/* Earnings Column */}
+
                   <div className="p-5">
+
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+
                       <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+
                         Earnings & Allowances
+
                       </span>
+
                       <span className="text-xs font-black text-slate-900 dark:text-white">Amount (₹)</span>
+
                     </div>
+
+
 
                     <div className="space-y-2.5 text-xs">
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <span className="text-slate-600 dark:text-slate-400">Basic Pay</span>
+
                         <span className="font-semibold text-slate-900 dark:text-white">
+
                           ₹{myPayslip ? myPayslip.basic_salary.toLocaleString('en-IN') : '38,000'}
+
                         </span>
+
                       </div>
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <span className="text-slate-600 dark:text-slate-400">House Rent Allowance (HRA)</span>
+
                         <span className="font-semibold text-slate-900 dark:text-white">
+
                           ₹{myPayslip ? myPayslip.hra_allowance.toLocaleString('en-IN') : '15,200'}
+
                         </span>
+
                       </div>
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <span className="text-slate-600 dark:text-slate-400">Special Teaching Allowance</span>
+
                         <span className="font-semibold text-slate-900 dark:text-white">
+
                           ₹{myPayslip ? myPayslip.special_allowance.toLocaleString('en-IN') : '8,800'}
+
                         </span>
+
                       </div>
+
                       {myPayslip && myPayslip.loss_of_pay_days > 0 && (
+
                         <div className="flex justify-between py-1 text-rose-600 font-semibold border-b border-slate-50 dark:border-slate-800/40">
+
                           <span>Loss of Pay ({myPayslip.loss_of_pay_days} day(s))</span>
+
                           <span>-₹{myPayslip.loss_of_pay_deduction.toLocaleString('en-IN')}</span>
+
                         </div>
+
                       )}
+
                     </div>
 
+
+
                     <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between font-black text-xs text-slate-900 dark:text-white">
+
                       <span>Total Gross Earnings</span>
+
                       <span className="text-emerald-600 dark:text-emerald-400">
+
                         ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
+
                       </span>
+
                     </div>
+
                   </div>
+
+
 
                   {/* Deductions Column */}
+
                   <div className="p-5">
+
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+
                       <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+
                         Statutory Deductions
+
                       </span>
+
                       <span className="text-xs font-black text-slate-900 dark:text-white">Amount (₹)</span>
+
                     </div>
+
+
 
                     <div className="space-y-2.5 text-xs">
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <div>
+
                           <span className="text-slate-600 dark:text-slate-400">Employees' Provident Fund (EPF 12%)</span>
+
                           <span className="block text-[10px] text-slate-400">UAN: 100921829102</span>
+
                         </div>
+
                         <span className="font-semibold text-rose-600 dark:text-rose-400">
+
                           ₹{myPayslip ? myPayslip.provident_fund.toLocaleString('en-IN') : '4,560'}
+
                         </span>
+
                       </div>
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <div>
+
                           <span className="text-slate-600 dark:text-slate-400">Professional Tax (PT)</span>
+
                           <span className="block text-[10px] text-slate-400">State Statutory Standard</span>
+
                         </div>
+
                         <span className="font-semibold text-rose-600 dark:text-rose-400">
+
                           ₹{myPayslip ? myPayslip.professional_tax.toLocaleString('en-IN') : '200'}
+
                         </span>
+
                       </div>
+
                       <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/40">
+
                         <div>
+
                           <span className="text-slate-600 dark:text-slate-400">Income Tax (TDS / Form 16)</span>
+
                           <span className="block text-[10px] text-slate-400">Old Tax Regime Declaration</span>
+
                         </div>
+
                         <span className="font-semibold text-rose-600 dark:text-rose-400">
+
                           ₹{myPayslip ? myPayslip.income_tax_tds.toLocaleString('en-IN') : '2,980'}
+
                         </span>
+
                       </div>
+
                     </div>
+
+
 
                     <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between font-black text-xs text-slate-900 dark:text-white">
+
                       <span>Total Deductions</span>
+
                       <span className="text-rose-600 dark:text-rose-400">
+
                         -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
+
                       </span>
+
                     </div>
+
                   </div>
+
                 </div>
+
+
 
                 {/* Net Pay Highlight Bar */}
+
                 <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/30 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                   <div className="flex items-center gap-2">
+
                     <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+
                     <div>
+
                       <span className="text-xs font-black text-emerald-900 dark:text-emerald-200">
+
                         Net Disbursable Salary (Take-Home)
+
                       </span>
+
                       <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">
+
                         Fifty-Four Thousand Two Hundred Sixty Rupees Only
+
                       </span>
+
                     </div>
+
                   </div>
+
                   <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
+
                     ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+
                   </div>
+
                 </div>
+
+
 
                 {/* Statutory Certification Footer */}
+
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+
                   <span>
+
                     ✓ Authenticated by Accounts Coordinator · Generated automatically via EDU360 Payroll Engine.
+
                   </span>
+
                   <span className="font-mono text-slate-400">
+
                     Document ID: PAY-202610-002 · Digitally Signed
+
                   </span>
+
                 </div>
+
               </div>
+
             </div>
+
           )}
 
+
+
           {/* ===================================================== */}
+
           {/* BRAND FOOTER                                          */}
+
           {/* ===================================================== */}
+
           <Footer />
+
         </main>
+
       </div>
 
+
+
       {/* ===================================================== */}
+
       {/* TASK 1: INLINE SPEEDGRADER DRAWER / MODAL             */}
+
       {/* ===================================================== */}
+
       {speedGraderOpen && activeSpeedGraderItem && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-6xl h-[95vh] rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+
             
+
             {/* SpeedGrader Sticky Top Navigation Bar */}
+
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 flex flex-wrap items-center justify-between gap-4 shrink-0">
+
               
+
               {/* Left: Student Identity */}
+
               <div className="flex items-center gap-3">
+
                 <div className="h-10 w-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-black flex items-center justify-center text-sm shadow-xs shrink-0">
+
                   {activeSpeedGraderItem.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+
                 </div>
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                       {activeSpeedGraderItem.name}
+
                     </h3>
+
                     <span className="font-mono text-xs font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+
                       Roll #{activeSpeedGraderItem.roll_no}
+
                     </span>
+
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+
                       activeSpeedGraderItem.status === 'Graded'
+
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+
                         : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+
                     }`}>
+
                       {activeSpeedGraderItem.status}
+
                     </span>
+
                   </div>
+
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+
                     {activeSpeedGraderItem.admission_id} • {activeSpeedGraderItem.file_name} ({activeSpeedGraderItem.file_size})
+
                   </span>
+
                 </div>
+
               </div>
+
+
 
               {/* Center: Class Stepper Controls (Google Classroom / Canvas SpeedGrader) */}
+
               <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+
                 <button
+
                   disabled={activeSpeedGraderIndex <= 0}
+
                   onClick={() => setActiveSpeedGraderIndex(prev => Math.max(0, prev - 1))}
+
                   className="flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+
                 >
+
                   <ChevronLeft className="h-4 w-4" />
+
                   <span>Previous</span>
+
                 </button>
+
+
 
                 <span className="text-xs font-black text-slate-800 dark:text-slate-200 px-2 border-x border-slate-200 dark:border-slate-700">
+
                   {activeSpeedGraderIndex + 1} of {homeworkList.length}
+
                 </span>
 
+
+
                 <button
+
                   disabled={activeSpeedGraderIndex >= homeworkList.length - 1}
+
                   onClick={() => setActiveSpeedGraderIndex(prev => Math.min(homeworkList.length - 1, prev + 1))}
+
                   className="flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+
                 >
+
                   <span>Next</span>
+
                   <ChevronRight className="h-4 w-4" />
+
                 </button>
+
               </div>
+
+
 
               {/* Right: Close SpeedGrader */}
+
               <div className="flex items-center gap-3">
+
                 {activeSpeedGraderItem.score !== undefined && (
+
                   <span className="text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-3 py-1 rounded-xl">
+
                     Score: {activeSpeedGraderItem.score} / {activeSpeedGraderItem.max_score}
+
                   </span>
+
                 )}
+
                 <button
+
                   onClick={() => setSpeedGraderOpen(false)}
+
                   className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+
                   title="Close SpeedGrader (Return to Roster)"
+
                 >
+
                   <X className="h-5 w-5" />
+
                 </button>
+
               </div>
+
             </div>
+
+
 
             {/* SpeedGrader Canvas Body */}
+
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-thin">
+
               <HomeworkCanvas
+
                 submission={activeSpeedGraderItem.submission_data}
+
                 onSave={handleSaveSpeedGrading}
+
               />
+
             </div>
 
+
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* Note: Focus Plan details are now served on dedicated full page /teacher/focus/[id] */}
 
+
+
       {/* ===================================================== */}
+
       {/* REMEDIAL PRACTICE SUBMISSION REVIEW & VERIFY MODAL   */}
+
       {/* ===================================================== */}
+
       {verifyingFocusItem && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-5 animate-in fade-in duration-200">
+
           <div className="w-full max-w-4xl max-h-[92vh] rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+
             
+
             {/* Header */}
+
             <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 flex items-center justify-between gap-4">
+
               <div className="flex items-center gap-3">
+
                 <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+
                   <FileCheck className="h-5 w-5" />
+
                 </div>
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+
                       Remedial Practice Solution Verification
+
                     </h3>
+
                     <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2.5 py-0.5 text-[10px] font-bold">
+
                       {verifyingFocusItem.subject}
+
                     </span>
+
                   </div>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+
                     Candidate: <strong>{verifyingFocusItem.name}</strong> (Roll #{verifyingFocusItem.roll_no} • {verifyingFocusItem.class_name}) • Weak Concept: <strong>{verifyingFocusItem.weak_concept}</strong>
+
                   </p>
+
                 </div>
+
               </div>
 
+
+
               <button
+
                 onClick={() => setVerifyingFocusItem(null)}
+
                 className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+
               >
+
                 <X className="h-5 w-5" />
+
               </button>
+
             </div>
+
+
 
             {/* Modal Body */}
+
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 scrollbar-thin">
+
               
+
               {/* Submission File & Details Card */}
+
               <div className="rounded-2xl border border-emerald-200/90 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-3">
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-100 dark:border-emerald-900/60 pb-3">
+
                   <div className="flex items-center gap-2">
+
                     <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300">
+
                       Uploaded File &amp; Timestamp:
+
                     </span>
+
                     <span className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300">
+
                       {verifyingFocusItem.submitted_file?.name || 'Aarav_Quadratic_Factorization_Rough_Notebook.pdf'}
+
                     </span>
+
                     <span className="text-xs text-slate-400">
+
                       ({verifyingFocusItem.submitted_file?.size || '1.4 MB'})
+
                     </span>
+
                   </div>
+
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+
                     Submitted: {verifyingFocusItem.submitted_file?.submitted_at || 'Today, 08:30 AM'}
+
                   </span>
+
                 </div>
+
+
 
                 {/* Student's Notebook Note */}
+
                 <div className="bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 text-xs text-slate-700 dark:text-slate-300">
+
                   <span className="font-bold text-slate-900 dark:text-white block mb-1">
+
                     Student Submission Note:
+
                   </span>
+
                   <p className="italic">
+
                     &ldquo;{verifyingFocusItem.submitted_file?.student_notes || 'Completed 4 middle-term splitting questions. Checked positive and negative sign distributions in Q3 & Q4.'}&rdquo;
+
                   </p>
+
                 </div>
+
+
 
                 {/* Simulated Handwritten Notebook Preview Canvas */}
+
                 <div className="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-amber-50/20 dark:bg-slate-950 p-4 sm:p-5 flex flex-col items-center justify-center text-center space-y-3">
+
                   <div className="h-12 w-12 rounded-2xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
+
                     <FileText className="h-6 w-6" />
+
                   </div>
+
                   <div>
+
                     <h5 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+
                       Rough Notebook Drill Snapshot Preview
+
                     </h5>
+
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-0.5">
+
                       Scanned handwritten practice pages for {verifyingFocusItem.weak_concept}. Verified against teacher rubric.
+
                     </p>
+
                   </div>
+
+
 
                   {/* Sample interactive preview visual */}
+
                   <div className="w-full max-w-lg p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left font-mono text-[11px] text-slate-700 dark:text-slate-300 space-y-1 shadow-inner">
+
                     <div className="text-emerald-700 dark:text-emerald-400 font-bold"># Problem 1: 2x² - 7x + 3 = 0</div>
+
                     <div>Step 1: Product = 2 * 3 = 6, Sum = -7</div>
+
                     <div>Step 2: Factors: -6 and -1  =&gt;  2x² - 6x - x + 3 = 0</div>
+
                     <div>Step 3: 2x(x - 3) - 1(x - 3) = 0  =&gt;  (2x - 1)(x - 3) = 0</div>
+
                     <div className="text-purple-600 dark:text-purple-400 font-bold">Roots: x = 1/2, x = 3 [Verified by Student ✓]</div>
+
                   </div>
+
+
 
                   <a
+
                     href="/samples/math_worksheet.png"
+
                     download={verifyingFocusItem.submitted_file?.name || 'remedial_solution.pdf'}
+
                     target="_blank"
+
                     rel="noreferrer"
+
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+
                   >
+
                     <Download className="h-3.5 w-3.5" />
+
                     <span>Download Original Solution PDF</span>
+
                   </a>
+
                 </div>
 
+
+
               </div>
+
+
 
               {/* Teacher Decision Box */}
+
               <div className="space-y-2">
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+
                   Faculty Appraisal &amp; Feedback Remarks (Visible to Student &amp; Parent):
+
                 </label>
+
                 <textarea
+
                   rows={3}
+
                   value={teacherVerificationRemarks}
+
                   onChange={(e) => setTeacherVerificationRemarks(e.target.value)}
+
                   placeholder="Add constructive validation feedback or correction notes..."
+
                   className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+
                 />
+
               </div>
 
+
+
             </div>
+
+
 
             {/* Footer Actions */}
+
             <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 flex flex-wrap items-center justify-between gap-3">
+
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
+
                 Action triggers automatic parent co-tracking sync &amp; advances remedial Day status.
+
               </span>
 
+
+
               <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleReturnSubmission(verifyingFocusItem.student_id, teacherVerificationRemarks)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 hover:bg-rose-50 text-rose-700 dark:text-rose-300 px-4 py-2 text-xs font-bold transition-all cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                  <span>Return for Re-work</span>
-                </button>
 
                 <button
+
                   type="button"
-                  onClick={() => handleVerifySubmission(verifyingFocusItem.student_id, teacherVerificationRemarks)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-bold shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
+
+                  onClick={() => handleReturnSubmission(verifyingFocusItem.student_id, teacherVerificationRemarks)}
+
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 hover:bg-rose-50 text-rose-700 dark:text-rose-300 px-4 py-2 text-xs font-bold transition-all cursor-pointer"
+
                 >
-                  <Check className="h-4 w-4" />
-                  <span>Approve &amp; Verify Remedial Work ✓</span>
+
+                  <X className="h-4 w-4" />
+
+                  <span>Return for Re-work</span>
+
                 </button>
+
+
+
+                <button
+
+                  type="button"
+
+                  onClick={() => handleVerifySubmission(verifyingFocusItem.student_id, teacherVerificationRemarks)}
+
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-bold shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
+
+                >
+
+                  <Check className="h-4 w-4" />
+
+                  <span>Approve &amp; Verify Remedial Work ✓</span>
+
+                </button>
+
               </div>
+
             </div>
+
+
 
           </div>
+
         </div>
+
       )}
 
+
+
       {/* ===================================================== */}
+
       {/* MODAL 1: APPLY SHORT-PERMISSION / LEAVE / SHIFT       */}
+
       {/* ===================================================== */}
+
       {showPermissionModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2.5">
+
                 <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+
                   <Clock className="h-5 w-5" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                     Apply Faculty Permission / Shift Adjustment
+
                   </h3>
+
                   <p className="text-[11px] text-slate-500">Official Staff On-Duty &amp; Leave Request Form</p>
+
                 </div>
+
               </div>
+
               <button 
+
                 type="button"
+
                 onClick={() => setShowPermissionModal(false)} 
+
                 className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+
               >
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleApplyPermission} className="space-y-4">
+
               {/* Category */}
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Permission Nature / Request Category *
+
                 </label>
+
                 <select
+
                   value={newPermType}
+
                   onChange={(e) => setNewPermType(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+
                 >
+
                   <option value="Shift Adjustment / Late Arrival">Shift Adjustment / Late Arrival (1-2 Hours)</option>
+
                   <option value="Early Departure / Shift Concession">Early Departure / Shift Concession</option>
+
                   <option value="Emergency Half-Day Permission">Emergency Half-Day Permission</option>
+
                   <option value="On-Duty Official Academic Movement">On-Duty Official Movement (Olympiad / Competition)</option>
+
                   <option value="Casual Leave (Full Day)">Casual Leave (1 Full Day)</option>
+
                   <option value="Medical Leave with Doctor Memo">Medical Leave with Doctor Memo</option>
+
                 </select>
+
               </div>
+
+
 
               {/* Dynamic Shift & Custom Slots */}
+
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+
                 <div>
+
                   <div className="flex items-center justify-between mb-1.5">
+
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+
                       Shift Slot / Preset Window
+
                     </label>
+
                     <span className="text-[10px] text-slate-400">Select preset or customize below</span>
+
                   </div>
+
                   <select
+
                     value={newPermShift}
+
                     onChange={(e) => handleShiftPresetChange(e.target.value)}
+
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+
                   >
+
                     <option value="Morning Shift (08:30 AM - 12:30 PM)">Morning Shift (08:30 AM - 12:30 PM)</option>
+
                     <option value="Afternoon Shift (12:30 PM - 04:30 PM)">Afternoon Shift (12:30 PM - 04:30 PM)</option>
+
                     <option value="Period 1-2 (08:30 AM - 10:15 AM)">Period 1-2 (08:30 AM - 10:15 AM)</option>
+
                     <option value="Period 4-5 (11:15 AM - 01:00 PM)">Period 4-5 (11:15 AM - 01:00 PM)</option>
+
                     <option value="Full Day (08:30 AM - 04:30 PM)">Full Day (08:30 AM - 04:30 PM)</option>
+
                     <option value="Custom Time Slot">Custom Time Slot (Flexible / Non-Standard)</option>
+
                   </select>
+
                 </div>
+
+
 
                 {/* Date & Time Picker Row */}
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+
                   <div>
+
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+
                       Effective Date *
+
                     </label>
+
                     <div className="relative">
+
                       <input
+
                         type="date"
+
                         value={permDate}
+
                         onChange={(e) => setPermDate(e.target.value)}
+
                         className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                         required
+
                       />
+
                     </div>
+
                   </div>
 
+
+
                   <div>
+
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+
                       Start Time *
+
                     </label>
+
                     <input
+
                       type="time"
+
                       value={permStartTime}
+
                       onChange={(e) => {
+
                         setPermStartTime(e.target.value);
+
                         setNewPermShift('Custom Time Slot');
+
                       }}
+
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                       required
+
                     />
+
                   </div>
 
+
+
                   <div>
+
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+
                       End Time *
+
                     </label>
+
                     <input
+
                       type="time"
+
                       value={permEndTime}
+
                       onChange={(e) => {
+
                         setPermEndTime(e.target.value);
+
                         setNewPermShift('Custom Time Slot');
+
                       }}
+
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                       required
+
                     />
+
                   </div>
+
                 </div>
+
+
 
                 <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
+
                   <span>
+
                     Selected Window: <strong>{permDate}</strong> ({permStartTime} &ndash; {permEndTime})
+
                   </span>
+
                 </div>
+
               </div>
+
+
 
               {/* Affected Class & Subject Periods - Multi-select */}
+
               <div>
+
                 <div className="flex items-center justify-between mb-1.5">
+
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+
                     Affected Class &amp; Subject Periods *
+
                   </label>
+
                   <div className="flex items-center gap-2 text-[11px]">
+
                     <button
+
                       type="button"
+
                       onClick={() => setSelectedAffectedPeriods([...availableTeacherClasses])}
+
                       className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer font-medium"
+
                     >
+
                       Select All
+
                     </button>
+
                     <span className="text-slate-300 dark:text-slate-700">|</span>
+
                     <button
+
                       type="button"
+
                       onClick={() => setSelectedAffectedPeriods([])}
+
                       className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
+
                     >
+
                       Clear
+
                     </button>
+
                   </div>
+
                 </div>
+
+
 
                 <div className="space-y-1.5 max-h-48 overflow-y-auto p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
+
                   {availableTeacherClasses.map((periodItem) => {
+
                     const isSelected = selectedAffectedPeriods.includes(periodItem);
+
                     return (
+
                       <div
+
                         key={periodItem}
+
                         onClick={() => togglePeriodSelection(periodItem)}
+
                         className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer border transition-all ${
+
                           isSelected
+
                             ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 font-medium shadow-xs'
+
                             : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+
                         }`}
+
                       >
+
                         <div className="flex items-center gap-2">
+
                           <input
+
                             type="checkbox"
+
                             checked={isSelected}
+
                             onChange={() => {}} // handled by parent onClick
+
                             className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 pointer-events-none"
+
                           />
+
                           <span>{periodItem}</span>
+
                         </div>
+
                         {isSelected && (
+
                           <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 shrink-0">
+
                             Selected
+
                           </span>
+
                         )}
+
                       </div>
+
                     );
+
                   })}
+
                 </div>
+
+
 
                 <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+
                   <span>
+
                     {selectedAffectedPeriods.length === 0
+
                       ? 'No class periods selected (Free period / On-duty only)'
+
                       : `${selectedAffectedPeriods.length} teaching ${
+
                           selectedAffectedPeriods.length === 1 ? 'period' : 'periods'
+
                         } marked for substitution cover`}
+
                   </span>
+
                   {selectedAffectedPeriods.length === 0 && (
+
                     <span className="text-amber-600 dark:text-amber-400 font-medium text-[10px]">
+
                       No proxy required
+
                     </span>
+
                   )}
+
                 </div>
+
               </div>
+
+
 
               {/* Recommended Substitute / Proxy Teacher Dropdown */}
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Recommended Substitute / Proxy Teacher *
+
                 </label>
+
                 <select
+
                   value={newPermSubstitute}
+
                   onChange={(e) => setNewPermSubstitute(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+
                 >
+
                   <option value="Mrs. Neha Roy (TGT Science & English)">Mrs. Neha Roy (TGT Science &amp; English) &mdash; Free in Period 2, 4</option>
+
                   <option value="Dr. Suresh Babu (PGT Physics & Science)">Dr. Suresh Babu (PGT Physics &amp; Science) &mdash; Free in Period 1, 5</option>
+
                   <option value="Mr. Arvind Saxena (TGT Social Sciences)">Mr. Arvind Saxena (TGT Social Sciences) &mdash; Free in Period 3, 6</option>
+
                   <option value="Dr. K. Raman (Senior Faculty / Physics & Math)">Dr. K. Raman (Senior Faculty / Physics &amp; Math) &mdash; Free in Period 2, 7</option>
+
                   <option value="Mrs. Sunitha Rao (TGT Social Studies)">Mrs. Sunitha Rao (TGT Social Studies) &mdash; Free in Period 4, 5</option>
+
                   <option value="Mrs. Rekha Sharma (TGT Hindi & Sanskrit)">Mrs. Rekha Sharma (TGT Hindi &amp; Sanskrit) &mdash; Free in Period 1, 3</option>
+
                   <option value="Mrs. Shalini Nair (Computer Science / IT)">Mrs. Shalini Nair (Computer Science / IT) &mdash; Free in Period 2, 6</option>
+
                   <option value="Mr. Arvind Swamy (Department of Mathematics)">Mr. Arvind Swamy (Department of Mathematics) &mdash; Free in Period 4, 7</option>
+
                   <option value="Not Assigned (Auto-assign by Academic Coordinator)">Not Assigned &mdash; Auto-assign by Academic Coordinator</option>
+
                 </select>
+
                 <p className="text-[10px] text-slate-400 mt-1">
+
                   Designated peer will receive instant in-app timetable substitution alerts once approved.
+
                 </p>
+
               </div>
+
+
 
               {/* Justification */}
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Detailed Justification (for Management Audit) *
+
                 </label>
+
                 <textarea
+
                   rows={2}
+
                   value={newPermReason}
+
                   onChange={(e) => setNewPermReason(e.target.value)}
+
                   placeholder="State specific reason for leave, medical emergency, or shift adjustment..."
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                   required
+
                 />
+
               </div>
 
+
+
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   type="button"
+
                   onClick={() => setShowPermissionModal(false)}
+
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 cursor-pointer"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   type="submit"
+
                   className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4.5 py-2 text-xs font-bold shadow-md cursor-pointer transition-colors"
+
                 >
+
                   Submit Request to Principal &rarr;
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* MODAL 2: SCHEDULE 1-ON-1 ONLINE PTM                   */}
+
       {/* ===================================================== */}
+
       {showPTMModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2">
+
                 <Video className="h-5 w-5 text-blue-600" />
+
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                   Parent-Initiated Conference Guidelines
+
                 </h3>
+
               </div>
+
               <button onClick={() => setShowPTMModal(false)} className="text-slate-400 hover:text-slate-600">
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleSchedulePTM} className="space-y-4">
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Select Student / Parent
+
                 </label>
+
                 <select
+
                   value={ptmStudent}
+
                   onChange={(e) => setPtmStudent(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                 >
+
                   <option value="Aarav Sharma">Aarav Sharma (Mr. Rajesh Sharma)</option>
+
                   <option value="Rohan Deshmukh">Rohan Deshmukh (Dr. Sunil Deshmukh)</option>
+
                   <option value="Meera Nambiar">Meera Nambiar (Mrs. Anita Nambiar)</option>
+
                   <option value="Kabir Mehta">Kabir Mehta (Mr. Suresh Mehta)</option>
+
                 </select>
+
               </div>
 
+
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Meeting Date &amp; Time
+
                 </label>
+
                 <input
+
                   type="text"
+
                   value={ptmDate}
+
                   onChange={(e) => setPtmDate(e.target.value)}
+
                   placeholder="e.g. Tomorrow, 04:30 PM"
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+
                   Discussion Agenda
+
                 </label>
+
                 <textarea
+
                   rows={2}
+
                   value={ptmAgenda}
+
                   onChange={(e) => setPtmAgenda(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+
                 />
+
               </div>
+
+
 
               <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-[11px] text-blue-900 dark:text-blue-200">
+
                 <span className="inline-flex items-center gap-1.5"><Icon3D name="bulb" size={16} /><span>Automatically generates an encrypted video link</span></span> and sends an SMS/Push invite to the parent's mobile app.
+
               </div>
+
+
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   type="button"
+
                   onClick={() => setShowPTMModal(false)}
+
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   type="submit"
+
                   className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4.5 py-2 text-xs font-bold shadow-md cursor-pointer"
+
                 >
+
                   Confirm PTM Schedule
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* ===================================================== */}
+
       {/* MODAL 3: REQUEST ACADEMIC TASK RELIEF / MIGRATION      */}
+
       {/* Task Completion & Proof Submission Modal */}
+
       {submitWorkTask && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2">
+
                 <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                   Submit Work &amp; Evidence for Approval
+
                 </h3>
+
               </div>
+
               <button onClick={() => setSubmitWorkTask(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleSubmitTaskWork} className="space-y-3.5 text-xs">
+
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+
                 <div className="font-bold text-slate-900 dark:text-white">{submitWorkTask.title}</div>
+
                 <div className="text-[11px] text-slate-500 mt-0.5">
+
                   Due: {submitWorkTask.due_date} • Priority: {submitWorkTask.priority}
+
                 </div>
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Completion Notes / Work Description *:
+
                 </label>
+
                 <textarea
+
                   required
+
                   rows={3}
+
                   value={taskSubmissionNotes}
+
                   onChange={(e) => setTaskSubmissionNotes(e.target.value)}
+
                   placeholder="Describe the steps taken and outcome (e.g. Conducted 45 min remedial session, 28/30 attended, question paper verified)..."
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Upload Evidence / Supporting Document (PDF / Scan):
+
                 </label>
+
                 <div className="flex items-center gap-2">
+
                   <input
+
                     type="text"
+
                     value={taskProofUrl}
+
                     onChange={(e) => setTaskProofUrl(e.target.value)}
+
                     placeholder="e.g. /samples/Remedial_Batch_Attendance.pdf"
+
                     className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-slate-900 dark:text-white"
+
                   />
+
                   <label className="px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold cursor-pointer hover:bg-blue-100">
+
                     Browse
+
                     <input
+
                       type="file"
+
                       className="hidden"
+
                       onChange={(e) => {
+
                         const file = e.target.files?.[0];
+
                         if (file) {
+
                           setTaskProofUrl(`/uploads/${file.name}`);
+
                         }
+
                       }}
+
                     />
+
                   </label>
+
                 </div>
+
                 <p className="text-[10px] text-slate-400 mt-1">Supports PDF, PNG, JPG, or verified cloud file link.</p>
+
               </div>
+
+
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   type="button"
+
                   onClick={() => setSubmitWorkTask(null)}
+
                   className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 cursor-pointer"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   type="submit"
+
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+
                 >
+
                   <CheckCircle2 className="h-4 w-4" />
+
                   Submit for Approval
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* ===================================================== */}
+
       {showReliefModal && reliefSelectedTask && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2">
+
                 <AlertCircle className="h-5 w-5 text-amber-500" />
+
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                   Request Task Relief / Migration
+
                 </h3>
+
               </div>
+
               <button onClick={() => setShowReliefModal(false)} className="text-slate-400 hover:text-slate-600">
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleRequestReliefSubmit} className="space-y-3.5 text-xs">
+
               <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200">
+
                 <div className="font-bold">{reliefSelectedTask.title}</div>
+
                 <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+
                   Assigned SLA: {reliefSelectedTask.sla_hours || 24}h • Due: {reliefSelectedTask.due_date}
+
                 </div>
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Primary Grounds for Relief
+
                 </label>
+
                 <select
+
                   value={reliefReason}
+
                   onChange={(e: any) => setReliefReason(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white font-medium"
+
                 >
+
                   <option value="Academic Workload Surge">Academic Workload Surge (Exam evaluations / Practical labs)</option>
+
                   <option value="Medical Emergency">Medical Emergency / Health Concern</option>
+
                 </select>
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Workload Context / Detailed Justification
+
                 </label>
+
                 <textarea
+
                   rows={3}
+
                   required
+
                   value={reliefJustification}
+
                   onChange={e => setReliefJustification(e.target.value)}
+
                   placeholder="Detail why you are unable to fulfill this task within the SLA window..."
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white"
+
                 />
+
               </div>
 
+
+
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Suggested Peer Faculty (Optional)
+
                 </label>
+
                 <select
+
                   value={reliefSuggestedPeer}
+
                   onChange={e => setReliefSuggestedPeer(e.target.value)}
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white"
+
                 >
+
                   <option value="Mrs. Neha Roy">Mrs. Neha Roy (English)</option>
+
                   <option value="Dr. Suresh Babu">Dr. Suresh Babu (Science)</option>
+
                   <option value="Mr. Arvind Saxena">Mr. Arvind Saxena (Social Sciences)</option>
+
                 </select>
+
               </div>
+
+
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] text-slate-500">
+
                 🛡️ <strong>Fair Workload Policy:</strong> Submitting relief immediately pauses your SLA and forwards the task to the Academic Coordinator for seamless re-assignment with zero penalty.
+
               </div>
+
+
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   type="button"
+
                   onClick={() => setShowReliefModal(false)}
+
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   type="submit"
+
                   className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer"
+
                 >
+
                   Submit Relief Request
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* ===================================================== */}
+
       {/* MODAL 4: FACULTY CURRICULUM UNIT LOGGING               */}
+
       {/* ===================================================== */}
+
       {logUnitCurriculum && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2">
+
                 <CheckCircle2 className="h-5 w-5 text-teal-600" />
+
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+
                   Mark Curriculum Unit Completed
+
                 </h3>
+
               </div>
+
               <button onClick={() => setLogUnitCurriculum(null)} className="text-slate-400 hover:text-slate-600">
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             <form onSubmit={handleTeacherLogUnitSubmit} className="space-y-3.5 text-xs">
+
               <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900 text-teal-900 dark:text-teal-200">
+
                 <div className="font-bold">{logUnitCurriculum.class_name} · {logUnitCurriculum.subject}</div>
+
                 <div className="text-[11px] text-teal-700 dark:text-teal-300 mt-0.5">
+
                   Current: {logUnitCurriculum.completed_units}/{logUnitCurriculum.total_units} Units ({logUnitCurriculum.completion_pct}%) → New: {logUnitCurriculum.completed_units + 1}/{logUnitCurriculum.total_units} Units
+
                 </div>
+
               </div>
+
+
 
               <div>
+
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+
                   Lesson Title / Delivered Topic (Optional)
+
                 </label>
+
                 <input
+
                   type="text"
+
                   value={logUnitNotes}
+
                   onChange={e => setLogUnitNotes(e.target.value)}
+
                   placeholder="e.g. Chapter 4: Quadratic Equations - Graphical and Roots Method"
+
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white"
+
                 />
+
               </div>
+
+
 
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] text-slate-500">
+
                 ✓ Pacing benchmark will be immediately recalibrated and synchronized with the Academic Coordinator console.
+
               </div>
+
+
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <button
+
                   type="button"
+
                   onClick={() => setLogUnitCurriculum(null)}
+
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400"
+
                 >
+
                   Cancel
+
                 </button>
+
                 <button
+
                   type="submit"
+
                   className="rounded-xl bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer"
+
                 >
+
                   Confirm +1 Unit Delivered
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* ===================================================== */}
+
       {/* ── DEDICATED STUDENT 360 SIS MODAL (FOR PTM CONFERENCES & DIRECT TEACHER CONSULTATION) ── */}
+
       {showPtmSisModal && selectedPtmSisStudent && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+
           <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 my-8">
+
             {/* Modal Header */}
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-3">
+
                 <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+
                   {selectedPtmSisStudent.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+
                 </div>
+
                 <div>
+
                   <div className="flex items-center gap-2">
+
                     <h3 className="text-base font-black text-slate-900 dark:text-white">
+
                       {selectedPtmSisStudent.name}
+
                     </h3>
+
                     <span className="font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+
                       Roll #{selectedPtmSisStudent.roll_no} &bull; {selectedPtmSisStudent.class_name}
+
                     </span>
+
                   </div>
+
                   <p className="text-xs text-slate-500">
+
                     Official Student Information System (SIS) Snapshot for PTM Consultation
+
                   </p>
+
                 </div>
+
               </div>
+
               <button
+
                 onClick={() => setShowPtmSisModal(false)}
+
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+
               >
+
                 <X className="h-5 w-5" />
+
               </button>
+
             </div>
+
+
 
             {/* Quick Metrics Grid */}
+
             <div className="grid grid-cols-3 gap-3 text-center">
+
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Attendance</span>
+
                 <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block">{selectedPtmSisStudent.attendance_pct || 94.2}%</span>
+
                 <span className="text-[10px] text-emerald-600 font-bold">Good Standing</span>
+
               </div>
+
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Term 1 Avg</span>
+
                 <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block">{selectedPtmSisStudent.academic_average_pct || 68.5}%</span>
+
                 <span className="text-[10px] text-slate-500 font-semibold">Terminal Exams</span>
+
               </div>
+
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Remedial Focus</span>
+
                 <span className={`text-xs font-black mt-1 inline-block px-2 py-0.5 rounded-full ${
+
                   selectedPtmSisStudent.has_focus_table
+
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+
                     : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+
                 }`}>
+
                   {selectedPtmSisStudent.has_focus_table ? 'Enrolled (Day 3)' : 'Exempt'}
+
                 </span>
+
                 <span className="text-[10px] text-slate-400 block mt-0.5">Focus Table 8-B</span>
+
               </div>
+
             </div>
+
+
 
             {/* Parent & Guardian Contact Card */}
+
             <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 space-y-2 text-xs">
+
               <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block">
+
                 Parent &amp; Guardian Record:
+
               </span>
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+
                 <div>
+
                   <div className="font-bold text-slate-900 dark:text-white">{selectedPtmSisStudent.guardian_name || 'Mr. Rajesh Sharma'}</div>
+
                   <div className="text-slate-500 text-[11px]">{selectedPtmSisStudent.guardian_email || 'rajesh.sharma@gmail.com'}</div>
+
                 </div>
+
                 <a
+
                   href={`tel:${selectedPtmSisStudent.guardian_phone || '+91 98450 12345'}`}
+
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs self-start sm:self-auto cursor-pointer"
+
                 >
+
                   <Phone className="h-3.5 w-3.5" />
+
                   <span>Call: {selectedPtmSisStudent.guardian_phone || '+91 98450 12345'}</span>
+
                 </a>
+
               </div>
+
             </div>
+
+
 
             {/* Faculty Academic Notes */}
+
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs">
+
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+
                 Latest Faculty Pedagogical Observation:
+
               </span>
+
               <p className="text-slate-700 dark:text-slate-300 leading-relaxed italic">
+
                 &ldquo;Aarav demonstrates high computational curiosity in class, but consistently drops negative signs when multiplying outside brackets in quadratic equation denominators. Currently on Day 3 of 7-Day Targeted Remedial Pacing.&rdquo;
+
               </p>
+
             </div>
 
+
+
             {/* Modal Actions */}
+
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+
               <Link
+
                 href={`/teacher/students/${selectedPtmSisStudent.id || 1}`}
+
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline"
+
               >
+
                 <span>Open Full 360&deg; Student Dossier</span>
+
                 <ExternalLink className="h-3 w-3" />
+
               </Link>
+
               <button
+
                 type="button"
+
                 onClick={() => setShowPtmSisModal(false)}
+
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+
               >
+
                 Close Snapshot
+
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
+
+
+
 
 
       {/* ── SALARY DISCREPANCY & ACCOUNTS INQUIRY MODAL ── */}
+
       {showSalaryInquiryModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+
           <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2.5">
+
                 <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+
                   <Mail className="h-4 w-4" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                     Contact Accounts Coordinator
+
                   </h3>
+
                   <p className="text-[11px] text-slate-500">
+
                     Official Salary &amp; Payroll Query Dispatch Desk
+
                   </p>
+
                 </div>
+
               </div>
+
               <button
+
                 type="button"
+
                 onClick={() => setShowSalaryInquiryModal(false)}
+
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+
               >
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             {/* Quick Context Summary */}
+
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 grid grid-cols-3 gap-2 text-center text-xs">
+
               <div>
+
                 <span className="text-[10px] text-slate-400 block font-semibold uppercase">Pay Cycle</span>
+
                 <span className="font-bold text-slate-800 dark:text-slate-200">{'Oct 2026'}</span>
+
               </div>
+
               <div>
+
                 <span className="text-[10px] text-slate-400 block font-semibold uppercase">Net Take-Home</span>
+
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
+
                   ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
+
                 </span>
+
               </div>
+
               <div>
+
                 <span className="text-[10px] text-slate-400 block font-semibold uppercase">UTR Reference</span>
+
                 <span className="font-mono text-[10.5px] text-slate-600 dark:text-slate-300 font-bold truncate block">
+
                   {myPayslip?.payment_utr || 'CMS-HDFC-20261028-0912'}
+
                 </span>
+
               </div>
+
             </div>
+
+
 
             <form
+
               onSubmit={async (e) => {
+
                 e.preventDefault();
+
                 if (!inquiryRemarks.trim()) {
+
                   triggerToast("Please provide specific details about your salary query.");
+
                   return;
+
                 }
+
                 setIsSubmittingInquiry(true);
+
                 try {
+
                   const res = await api.submitSalaryInquiry({
+
                     teacher_name: myPayslip?.staff_name || "Mrs. Ananya Verma",
+
                     month: "Oct 2026",
+
                     reason: inquiryCategory,
+
                     message: inquiryRemarks.trim(),
+
                     net_salary: myPayslip?.net_salary || 54260,
+
                     utr: myPayslip?.payment_utr || "CMS-HDFC-20261028-0912"
+
                   });
+
                   setShowSalaryInquiryModal(false);
+
                   setInquiryRemarks("");
+
                   triggerToast(res?.message || "Salary inquiry dispatched directly to Accounts Coordinator desk!");
+
                 } catch (err) {
+
                   triggerToast("Failed to submit inquiry. Please try again.");
+
                 } finally {
+
                   setIsSubmittingInquiry(false);
+
                 }
+
               }}
+
               className="space-y-3.5 text-xs"
+
             >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Reason for Inquiry *
-                </label>
-                <select
-                  value={inquiryCategory}
-                  onChange={(e) => setInquiryCategory(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
-                >
-                  <option value="Discrepancy in Deductions (PF / TDS / PT)">
-                    Discrepancy in Deductions (PF / TDS / PT)
-                  </option>
-                  <option value="Incorrect Loss of Pay (LOP) Days">
-                    Incorrect Loss of Pay (LOP) Days / Leave adjustment
-                  </option>
-                  <option value="Salary Not Credited / Bank UTR Trace">
-                    Salary Not Credited / Bank Account Wire Failure
-                  </option>
-                  <option value="Form 16 / Tax Exemption Proof Submission">
-                    Form 16 / Tax Exemption (HRA / 80C) Declaration
-                  </option>
-                  <option value="Special Allowance or Increment Missing">
-                    Special Allowance or Annual Increment Missing
-                  </option>
-                  <option value="Other Payroll Query">
-                    Other Payroll or Account Question
-                  </option>
-                </select>
-              </div>
 
               <div>
+
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Query Details &amp; Justification *
+
+                  Reason for Inquiry *
+
                 </label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Explain the discrepancy (e.g. Approved medical leave was counted as LOP; or PF deduction differs from declaration)..."
-                  value={inquiryRemarks}
-                  onChange={(e) => setInquiryRemarks(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none leading-relaxed"
-                />
+
+                <select
+
+                  value={inquiryCategory}
+
+                  onChange={(e) => setInquiryCategory(e.target.value)}
+
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
+
+                >
+
+                  <option value="Discrepancy in Deductions (PF / TDS / PT)">
+
+                    Discrepancy in Deductions (PF / TDS / PT)
+
+                  </option>
+
+                  <option value="Incorrect Loss of Pay (LOP) Days">
+
+                    Incorrect Loss of Pay (LOP) Days / Leave adjustment
+
+                  </option>
+
+                  <option value="Salary Not Credited / Bank UTR Trace">
+
+                    Salary Not Credited / Bank Account Wire Failure
+
+                  </option>
+
+                  <option value="Form 16 / Tax Exemption Proof Submission">
+
+                    Form 16 / Tax Exemption (HRA / 80C) Declaration
+
+                  </option>
+
+                  <option value="Special Allowance or Increment Missing">
+
+                    Special Allowance or Annual Increment Missing
+
+                  </option>
+
+                  <option value="Other Payroll Query">
+
+                    Other Payroll or Account Question
+
+                  </option>
+
+                </select>
+
               </div>
+
+
+
+              <div>
+
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+
+                  Query Details &amp; Justification *
+
+                </label>
+
+                <textarea
+
+                  rows={3}
+
+                  required
+
+                  placeholder="Explain the discrepancy (e.g. Approved medical leave was counted as LOP; or PF deduction differs from declaration)..."
+
+                  value={inquiryRemarks}
+
+                  onChange={(e) => setInquiryRemarks(e.target.value)}
+
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none leading-relaxed"
+
+                />
+
+              </div>
+
+
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+
                 <span className="text-[10px] text-slate-400">
+
                   Routes directly to Accounts Coordinator queue with high priority
+
                 </span>
+
                 <div className="flex items-center gap-2">
+
                   <button
+
                     type="button"
+
                     onClick={() => setShowSalaryInquiryModal(false)}
+
                     className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+
                   >
+
                     Cancel
+
                   </button>
+
                   <button
+
                     type="submit"
+
                     disabled={isSubmittingInquiry}
+
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+
                   >
+
                     <Send className="h-3.5 w-3.5" />
+
                     <span>{isSubmittingInquiry ? 'Sending...' : 'Submit to Accounts'}</span>
+
                   </button>
+
                 </div>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* PTM CONFERENCE CANCELLATION & RESCHEDULE MODAL */}
+
       {cancellingPtmSlot && (
+
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95">
+
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+
               <div className="flex items-center gap-2.5">
+
                 <div className="h-9 w-9 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
+
                   <AlertTriangle className="h-5 w-5" />
+
                 </div>
+
                 <div>
+
                   <h3 className="text-sm font-black text-slate-900 dark:text-white">
+
                     Cancel Booked PTM Conference
+
                   </h3>
+
                   <p className="text-[11px] text-slate-500">
+
                     Release reservation and automatically notify parent with reason
+
                   </p>
+
                 </div>
+
               </div>
+
               <button 
+
                 onClick={() => setCancellingPtmSlot(null)}
+
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+
               >
+
                 <X className="h-4 w-4" />
+
               </button>
+
             </div>
+
+
 
             {/* Conference Details Card */}
+
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+
               <div className="flex items-center justify-between">
+
                 <span className="font-bold text-slate-900 dark:text-white">
+
                   Student: {cancellingPtmSlot.booked_student_name || 'Aarav Sharma (8-B)'}
+
                 </span>
+
                 <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-md">
+
                   {cancellingPtmSlot.start_time} – {cancellingPtmSlot.end_time}
+
                 </span>
+
               </div>
+
               <div className="text-[11px] text-slate-500">
+
                 Guardian: {cancellingPtmSlot.booked_parent_name || 'Mr. Rajesh Sharma'} · Homeroom / Subject PTM
+
               </div>
+
             </div>
+
+
 
             {/* Reason Selection */}
+
             <div className="space-y-1.5">
+
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+
                 Reason for Cancellation (Required for Parent Record)
+
               </label>
+
               <select
+
                 value={ptmCancelReason}
+
                 onChange={e => setPtmCancelReason(e.target.value)}
+
                 className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white font-medium"
+
               >
+
                 <option value="Faculty Emergency / Official Duty">Official School Duty / Emergency Cover</option>
+
                 <option value="Parent-Requested Reschedule">Parent-Requested Reschedule / Mutual Agreement</option>
+
                 <option value="Medical Leave / Unforeseen Absence">Medical Leave / Faculty Unforeseen Absence</option>
+
                 <option value="Curriculum / Exam Moderation Priority">Curriculum / Exam Moderation Duty</option>
+
                 <option value="Other Administrative Conflict">Other Administrative Conflict</option>
+
               </select>
+
             </div>
+
+
 
             {/* Custom Notes */}
+
             <div className="space-y-1.5">
+
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+
                 Additional Remarks for Parent (Included in Notification)
+
               </label>
+
               <input
+
                 type="text"
+
                 value={ptmCancelCustomNote}
+
                 onChange={e => setPtmCancelCustomNote(e.target.value)}
+
                 placeholder="e.g. Apologies, called for emergency CBSE inspection duty. Please re-book."
+
                 className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+
               />
+
             </div>
+
+
 
             {/* Slot Fate Choice */}
+
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+
               <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px] uppercase tracking-wider">
+
                 Slot Availability After Cancellation:
+
               </span>
+
               <div className="flex flex-col gap-2">
-                <label className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="reopenChoice"
-                    checked={ptmReopenAsFree}
-                    onChange={() => setPtmReopenAsFree(true)}
-                    className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <div>
-                    <span className="font-bold text-slate-900 dark:text-white block">Reopen as Free Slot (Available)</span>
-                    <span className="text-[11px] text-slate-500">Other parents can immediately view and self-book this 10-minute window.</span>
-                  </div>
-                </label>
 
                 <label className="flex items-start gap-2 cursor-pointer">
+
                   <input
+
                     type="radio"
+
                     name="reopenChoice"
-                    checked={!ptmReopenAsFree}
-                    onChange={() => setPtmReopenAsFree(false)}
+
+                    checked={ptmReopenAsFree}
+
+                    onChange={() => setPtmReopenAsFree(true)}
+
                     className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+
                   />
+
                   <div>
-                    <span className="font-bold text-slate-900 dark:text-white block">Block as Faculty Break / Duty</span>
-                    <span className="text-[11px] text-slate-500">Locks this time slot completely so no other parent can reserve it.</span>
+
+                    <span className="font-bold text-slate-900 dark:text-white block">Reopen as Free Slot (Available)</span>
+
+                    <span className="text-[11px] text-slate-500">Other parents can immediately view and self-book this 10-minute window.</span>
+
                   </div>
+
                 </label>
+
+
+
+                <label className="flex items-start gap-2 cursor-pointer">
+
+                  <input
+
+                    type="radio"
+
+                    name="reopenChoice"
+
+                    checked={!ptmReopenAsFree}
+
+                    onChange={() => setPtmReopenAsFree(false)}
+
+                    className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+
+                  />
+
+                  <div>
+
+                    <span className="font-bold text-slate-900 dark:text-white block">Block as Faculty Break / Duty</span>
+
+                    <span className="text-[11px] text-slate-500">Locks this time slot completely so no other parent can reserve it.</span>
+
+                  </div>
+
+                </label>
+
               </div>
+
             </div>
+
+
 
             {/* Actions */}
+
             <div className="flex items-center justify-end gap-3 pt-2">
+
               <button
+
                 type="button"
+
                 onClick={() => setCancellingPtmSlot(null)}
+
                 className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+
               >
+
                 Keep Conference
+
               </button>
+
               <button
+
                 type="button"
+
                 onClick={handleConfirmCancelPtmSlot}
+
                 className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+
               >
+
                 Confirm Cancellation &amp; Release
+
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* 10-SECOND UNDO SNACKBAR FOR PTM CANCELLATION */}
+
       {ptmUndoBackup && (
+
         <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white p-4 shadow-2xl border border-slate-700 flex items-center gap-4 animate-in slide-in-from-bottom-5 duration-200">
+
           <div className="flex items-center gap-2.5">
+
             <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+
             <div className="text-xs">
+
               <span className="font-bold block">PTM Conference Cancelled</span>
+
               <span className="text-[11px] text-slate-400">Made a mistake? You can restore the booking.</span>
+
             </div>
+
           </div>
+
           <div className="flex items-center gap-2">
+
             <button
+
               onClick={handleUndoPtmCancellation}
+
               className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer transition-all"
+
             >
+
               Undo Cancellation
+
             </button>
+
             <button
+
               onClick={() => setPtmUndoBackup(null)}
+
               className="p-1 text-slate-400 hover:text-white"
+
             >
+
               <X className="h-4 w-4" />
+
             </button>
+
           </div>
+
         </div>
+
       )}
+
+
 
       {/* Note: Student SIS is now served on dedicated page /teacher/students/[id] */}
 
+
+
+      {/* VIRTUAL LIVE CLASSROOM (LIVEKIT WEBRTC STUDIO) */}
+
+      <EduVideoConferenceModal
+
+        isOpen={isLiveConferenceOpen}
+
+        onClose={async () => {
+
+          setIsLiveConferenceOpen(false);
+
+          try {
+
+            await api.endLiveRoom('class-8b-mathematics');
+
+          } catch {}
+
+          triggerToast('Live lecture session concluded.');
+
+        }}
+
+        roomName="class-8b-mathematics"
+
+        roomTitle="Class 8-B Mathematics • Live Studio"
+
+        userName="Mrs. Ananya Verma"
+
+        userRole="TEACHER"
+
+        studentContextName="Class 8-B Cohort"
+
+      />
+
+      {/* POST-EXAM PROCTORING AUDIT DOSSIER MODAL */}
+      {showDossierModal && (
+        <ProctorIntegrityDossierModal
+          isOpen={showDossierModal}
+          candidateId={dossierCandidateId || 1}
+          onClose={() => setShowDossierModal(false)}
+          onVerdictApplied={() => {
+            triggerToast('Proctoring audit verdict logged successfully.');
+          }}
+        />
+      )}
+
     </RoleGuard>
+
   );
+
 }
+

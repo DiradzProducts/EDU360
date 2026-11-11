@@ -27,9 +27,16 @@ import {
   Calendar,
   ExternalLink,
   ChevronRight,
-  GraduationCap
+  GraduationCap,
+  AlertTriangle,
+  ChevronDown,
+  Send,
+  Lock
 } from 'lucide-react';
-import { Student } from '@/lib/types';
+import { Student, ExitClearance } from '@/lib/types';
+import { api } from '@/lib/api';
+import { ExitClearanceView } from '@/components/exit-clearance-modal';
+import { LogOut, Library, FlaskConical } from 'lucide-react';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
 import { downloadOfficialDocumentFile } from '@/lib/export-utils';
 
@@ -42,7 +49,12 @@ export interface UnifiedSISProps {
 }
 
 export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hideBack }: UnifiedSISProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees' | 'exit'>('profile');
+  
+  // Exit Clearance State (Admin Exclusive)
+  const [exitClearance, setExitClearance] = useState<ExitClearance | null>(null);
+  const [loadingExit, setLoadingExit] = useState(false);
+  const [initiatingExit, setInitiatingExit] = useState(false);
   
   // Remarks state
   const [remarks, setRemarks] = useState<StudentRemark[]>([]);
@@ -57,6 +69,16 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
   const [certTitle, setCertTitle] = useState('Transfer Certificate (TC / SLC)');
   const [certRefNo, setCertRefNo] = useState('EDU-TC-2026-0881');
   const [certRemarks, setCertRemarks] = useState('Clearance completed across Academic, Sports, and Accounts desks.');
+
+  // Subject-Wise Attendance Breakdown & Parent Leave Request State
+  const [selectedSubjectLog, setSelectedSubjectLog] = useState<string | null>(null);
+  const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
+  const [leaveCategory, setLeaveCategory] = useState<'Medical' | 'Family Emergency' | 'Bereavement' | 'Personal'>('Medical');
+  const [leaveFromDate, setLeaveFromDate] = useState('2026-11-05');
+  const [leaveToDate, setLeaveToDate] = useState('2026-11-06');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveSuccessNotice, setLeaveSuccessNotice] = useState<string | null>(null);
+  const [excusedCount, setExcusedCount] = useState(3);
   const [certificates, setCertificates] = useState([
     {
       id: 'cert-1',
@@ -117,6 +139,9 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
     setTimeout(() => setToastMsg(null), 3500);
   };
 
+  // Effective student ID
+  const effectiveStudentId = student?.id || studentId;
+
   // Student base info (derived or fallback)
   const currentStudentName = student?.name || 'Aarav Sharma';
   const currentClass = student?.class_name || 'Class 8';
@@ -130,6 +155,39 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
     const list = getRemarksForStudent(studentId);
     setRemarks(list);
   }, [studentId]);
+
+  useEffect(() => {
+    if (viewerRole === 'admin') {
+      setLoadingExit(true);
+      api.getStudentExitClearance(effectiveStudentId).then(cl => {
+        setExitClearance(cl);
+        setLoadingExit(false);
+      }).catch(() => setLoadingExit(false));
+    }
+  }, [effectiveStudentId, viewerRole]);
+
+  const handleInitiateExit = async () => {
+    setInitiatingExit(true);
+    try {
+      const res = await api.initiateExitClearance(effectiveStudentId);
+      if (res && res.clearance) {
+        setExitClearance(res.clearance);
+        triggerToast(`Exit clearance protocol initiated for ${currentStudentName}!`);
+      }
+    } catch (err) {
+      triggerToast('Failed to initiate exit clearance');
+    } finally {
+      setInitiatingExit(false);
+    }
+  };
+
+  const handleVerifyPhysicalExit = async (scanUrl?: string) => {
+    if (!exitClearance) return;
+    await api.verifyPhysicalSign(exitClearance.id, scanUrl);
+    const updated = await api.getStudentExitClearance(effectiveStudentId);
+    setExitClearance(updated);
+    triggerToast('Physical handover register scan verified & locked in legal vault');
+  };
 
   // Handle adding new remark (Teacher / Admin)
   const handleAddRemark = (e: React.FormEvent) => {
@@ -202,6 +260,9 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
     { id: 'vault', label: 'Official Documents Vault', icon: FileText },
     ...((viewerRole === 'admin' || viewerRole === 'parent' || viewerRole === 'coordinator') ? [
       { id: 'fees', label: 'Fee & Accounts Ledger', icon: ShieldCheck }
+    ] : []),
+    ...(viewerRole === 'admin' ? [
+      { id: 'exit', label: 'Exit Clearance & TC Vault', icon: LogOut }
     ] : [])
   ] as const;
 
@@ -571,50 +632,490 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       )}
 
       {/* ======================================================== */}
-      {/* TAB 4: ATTENDANCE & BIOMETRICS                           */}
+      {/* TAB 4: ATTENDANCE & BIOMETRICS (SUBJECT-WISE BREAKDOWN)  */}
       {/* ======================================================== */}
-      {activeTab === 'attendance' && (
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Biometric Attendance Ledger &bull; Session 2026-27</h3>
-            <p className="text-xs text-slate-500 mb-6">Real-time gate RFID scans and authorized leave records</p>
+      {activeTab === 'attendance' && (() => {
+        const subjectAttendanceData = [
+          {
+            subject: 'Mathematics',
+            code: 'MATH-801',
+            faculty: 'Mrs. Ananya Verma',
+            period: 'Period 1 (08:30 AM)',
+            total: 26,
+            onTime: 18,
+            lateCount: 5,
+            avgLateMins: 14.2,
+            excused: 2,
+            unexcused: 1,
+            healthPct: 76.9,
+            statusTier: 'warning',
+            incidents: [
+              { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
+              { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
+              { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
+              { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
+              { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
+            ]
+          },
+          {
+            subject: 'Physics',
+            code: 'PHYS-802',
+            faculty: 'Dr. Rajesh Rao',
+            period: 'Period 2 (09:30 AM)',
+            total: 22,
+            onTime: 19,
+            lateCount: 2,
+            avgLateMins: 11.5,
+            excused: 1,
+            unexcused: 0,
+            healthPct: 95.5,
+            statusTier: 'healthy',
+            incidents: [
+              { date: 'Oct 30, 2026', time: '09:41 AM', elapsed: 11.5, status: 'Present', note: 'Lab transition buffer.', action: 'Approved by Dr. Rao' },
+              { date: 'Oct 16, 2026', time: '09:42 AM', elapsed: 12.0, status: 'Late', note: 'Joined at +12m.', action: 'Flagged Late' }
+            ]
+          },
+          {
+            subject: 'Chemistry',
+            code: 'CHEM-803',
+            faculty: 'Mr. Vikram Seth',
+            period: 'Period 4 (11:30 AM)',
+            total: 20,
+            onTime: 20,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: 100.0,
+            statusTier: 'perfect',
+            incidents: []
+          },
+          {
+            subject: 'English Literature',
+            code: 'ENG-804',
+            faculty: 'Ms. Priya Sen',
+            period: 'Period 5 (01:15 PM)',
+            total: 24,
+            onTime: 22,
+            lateCount: 1,
+            avgLateMins: 12.0,
+            excused: 1,
+            unexcused: 0,
+            healthPct: 95.8,
+            statusTier: 'healthy',
+            incidents: [
+              { date: 'Oct 21, 2026', time: '01:27 PM', elapsed: 12.0, status: 'Present', note: 'Debate council duty clearance.', action: 'Approved by Ms. Sen' }
+            ]
+          },
+          {
+            subject: 'Computer Science',
+            code: 'CS-805',
+            faculty: 'Mrs. Neha Gupta',
+            period: 'Period 6 (02:15 PM)',
+            total: 18,
+            onTime: 18,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: 100.0,
+            statusTier: 'perfect',
+            incidents: []
+          }
+        ];
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">Attendance Rate</span>
+        const activeSubject = subjectAttendanceData.find(s => s.subject === selectedSubjectLog);
+
+        return (
+          <div className="space-y-6">
+            {/* Success Toast for Leave Application */}
+            {leaveSuccessNotice && (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-3 text-emerald-800 dark:text-emerald-200 text-xs animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{leaveSuccessNotice}</span>
+                </div>
+                <button 
+                  onClick={() => setLeaveSuccessNotice(null)}
+                  className="p-1 hover:bg-emerald-500/20 rounded-lg text-emerald-700 dark:text-emerald-300 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* 1. TOP STATS OVERVIEW CARDS */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+              <div className="p-4 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">Overall Net Rate</span>
                 <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">{currentAttendance}%</span>
+                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-mono block mt-0.5">Healthy &bull; Active</span>
               </div>
-              <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-center">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">Working Days</span>
-                <span className="text-2xl font-black text-blue-800 dark:text-blue-200">87 Days</span>
+              <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Total Classes</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white">110</span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-0.5">Across 5 Subjects</span>
               </div>
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Days Present</span>
-                <span className="text-2xl font-black text-slate-900 dark:text-white">82 Days</span>
+              <div className="p-4 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300 block">Late Marks (&gt;10m)</span>
+                <span className="text-2xl font-black text-amber-800 dark:text-amber-200">8</span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block mt-0.5">Avg: +13.5 mins</span>
               </div>
-              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300 block">Excused Leaves</span>
-                <span className="text-2xl font-black text-amber-800 dark:text-amber-200">5 Days</span>
+              <div className="p-4 rounded-3xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-center shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">Excused Leaves</span>
+                <span className="text-2xl font-black text-blue-800 dark:text-blue-200">{excusedCount}</span>
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono block mt-0.5">Parent Approved</span>
+              </div>
+              <div className="p-4 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center shadow-sm col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-300 block">Unexcused Bunk</span>
+                <span className="text-2xl font-black text-rose-800 dark:text-rose-200">1</span>
+                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block mt-0.5">Session Locked</span>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold">
-                  ✓
-                </div>
+            {/* 2. SUBJECT-WISE PUNCTUALITY BREAKDOWN TABLE */}
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <div className="font-bold text-slate-900 dark:text-white">Today's Biometric Check-in</div>
-                  <div className="text-[11px] text-slate-500">Gate #2 RFID Reader &bull; 07:44 AM (On Time)</div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Subject-Wise Punctuality Ledger &bull; Term 1 (2026-27)
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider border border-indigo-500/20">
+                      Live Roster Audit
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Granular breakdown of punctuality, 10-minute late stipulation executions, and parental excused absence logs.
+                  </p>
+                </div>
+
+                {/* Parent Action Button */}
+                <button
+                  onClick={() => setShowApplyLeaveModal(true)}
+                  className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-600/20 self-start sm:self-auto shrink-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Apply Parent Leave Request</span>
+                </button>
+              </div>
+
+              {/* Responsive Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-3">Subject & Faculty</th>
+                      <th className="py-3 px-2 text-center">Sessions Held</th>
+                      <th className="py-3 px-2 text-center">On-Time (≤10m)</th>
+                      <th className="py-3 px-2 text-center">Late Mark (&gt;10m)</th>
+                      <th className="py-3 px-2 text-center">Excused Leave</th>
+                      <th className="py-3 px-2 text-center">Unexcused (Absent)</th>
+                      <th className="py-3 px-2 text-center">Punctuality Score</th>
+                      <th className="py-3 px-3 text-right">Detailed Log</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {subjectAttendanceData.map((sub) => (
+                      <tr 
+                        key={sub.code}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        {/* Subject & Faculty */}
+                        <td className="py-3.5 px-3">
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{sub.subject}</span>
+                            <span className="text-[10px] text-slate-400 font-mono font-normal">({sub.code})</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-normal">
+                            {sub.faculty} &bull; <span className="font-mono text-[10px]">{sub.period}</span>
+                          </div>
+                        </td>
+
+                        {/* Sessions Held */}
+                        <td className="py-3.5 px-2 text-center font-bold text-slate-700 dark:text-slate-300 font-mono">
+                          {sub.total}
+                        </td>
+
+                        {/* On-Time */}
+                        <td className="py-3.5 px-2 text-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold font-mono text-[11px] border border-emerald-500/20">
+                            <Check className="h-3 w-3" />
+                            <span>{sub.onTime}</span>
+                          </span>
+                        </td>
+
+                        {/* Late Mark */}
+                        <td className="py-3.5 px-2 text-center">
+                          {sub.lateCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold font-mono text-[11px] border border-amber-500/25">
+                              <AlertTriangle className="h-3 w-3" />
+                              <span>{sub.lateCount} Late</span>
+                              <span className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">(+{sub.avgLateMins}m)</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">—</span>
+                          )}
+                        </td>
+
+                        {/* Excused Leave */}
+                        <td className="py-3.5 px-2 text-center">
+                          {sub.excused > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 font-bold font-mono text-[11px] border border-blue-500/25">
+                              <span>🔵 {sub.excused} Days</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">—</span>
+                          )}
+                        </td>
+
+                        {/* Unexcused Absent */}
+                        <td className="py-3.5 px-2 text-center">
+                          {sub.unexcused > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 font-bold font-mono text-[11px] border border-rose-500/25">
+                              <Lock className="h-3 w-3" />
+                              <span>{sub.unexcused} Locked</span>
+                            </span>
+                          ) : (
+                            <span className="text-emerald-500 font-mono text-xs">0</span>
+                          )}
+                        </td>
+
+                        {/* Punctuality Score */}
+                        <td className="py-3.5 px-2 text-center">
+                          <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black font-mono ${
+                            sub.statusTier === 'perfect' 
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                              : sub.statusTier === 'healthy'
+                                ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
+                                : 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/35 ring-1 ring-amber-500/20'
+                          }`}>
+                            {sub.healthPct}%
+                          </span>
+                        </td>
+
+                        {/* Action: View Incident Log */}
+                        <td className="py-3.5 px-3 text-right">
+                          <button
+                            onClick={() => setSelectedSubjectLog(sub.subject)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 font-bold text-xs transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                          >
+                            <span>View Incidents</span>
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 3. INTERACTIVE SUBJECT INCIDENTS DRILL-DOWN MODAL */}
+            {activeSubject && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+                  {/* Modal Header */}
+                  <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-black uppercase">
+                          {activeSubject.code}
+                        </span>
+                        <h4 className="text-base font-black text-slate-900 dark:text-white">
+                          {activeSubject.subject} &bull; Attendance Incident Log
+                        </h4>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Faculty: <strong className="text-slate-700 dark:text-slate-300">{activeSubject.faculty}</strong> &bull; Scheduled {activeSubject.period}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedSubjectLog(null)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Incident Records Timeline */}
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                    {activeSubject.incidents.length === 0 ? (
+                      <div className="p-8 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-center space-y-2">
+                        <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                        <h5 className="font-bold text-sm text-slate-900 dark:text-white">Flawless Punctuality Record</h5>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                          Student has zero late marks, zero lockouts, and 100% on-time attendance across all sessions in {activeSubject.subject}.
+                        </p>
+                      </div>
+                    ) : (
+                      activeSubject.incidents.map((inc, idx) => (
+                        <div 
+                          key={idx}
+                          className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 dark:text-white">{inc.date}</span>
+                              <span className="text-[11px] text-slate-400 font-mono">({inc.time})</span>
+                              {inc.elapsed > 0 && (
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-mono text-[10px] font-bold">
+                                  +{inc.elapsed}m into lecture
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                              {inc.note}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-full font-bold text-xs ${
+                              inc.status === 'Present'
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                                : inc.status === 'Late'
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                                  : inc.status === 'Excused'
+                                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30'
+                                    : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'
+                            }`}>
+                              {inc.action}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button
+                      onClick={() => setSelectedSubjectLog(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Close Incident Log
+                    </button>
+                  </div>
                 </div>
               </div>
-              <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-3 py-1 text-xs font-bold">
-                Present
-              </span>
-            </div>
+            )}
+
+            {/* 4. APPLY PARENT LEAVE REQUEST MODAL */}
+            {showApplyLeaveModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+                  <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                      <h4 className="text-base font-black text-slate-900 dark:text-white">
+                        Parent Leave Application
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Submit authorized leave request. Approved leaves protect attendance standing and bypass panic alerts.
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setShowApplyLeaveModal(false)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setExcusedCount(prev => prev + 1);
+                      setShowApplyLeaveModal(false);
+                      setLeaveSuccessNotice(`Leave request for ${leaveFromDate} to ${leaveToDate} (${leaveCategory}) submitted successfully! Class Teachers notified.`);
+                      setLeaveReason('');
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Reason Category
+                      </label>
+                      <select 
+                        value={leaveCategory}
+                        onChange={(e: any) => setLeaveCategory(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white font-medium focus:outline-hidden focus:border-indigo-500"
+                      >
+                        <option value="Medical">Medical (Illness / Doctor Appointment / Prescription)</option>
+                        <option value="Family Emergency">Family Emergency / Unforeseen Urgent Event</option>
+                        <option value="Bereavement">Bereavement / Family Loss</option>
+                        <option value="Personal">Personal / Authorized Event Representation</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          From Date
+                        </label>
+                        <input 
+                          type="date"
+                          value={leaveFromDate}
+                          onChange={e => setLeaveFromDate(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white font-medium focus:outline-hidden focus:border-indigo-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          To Date
+                        </label>
+                        <input 
+                          type="date"
+                          value={leaveToDate}
+                          onChange={e => setLeaveToDate(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white font-medium focus:outline-hidden focus:border-indigo-500"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Parental Notes / Clinical Explanation
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={leaveReason}
+                        onChange={e => setLeaveReason(e.target.value)}
+                        placeholder="e.g. Aarav was diagnosed with seasonal viral fever. Prescribed 2 days bed rest by Dr. Sharma. Medical certificate attached."
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-slate-900 dark:text-white font-medium focus:outline-hidden focus:border-indigo-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-[11px] leading-relaxed">
+                      💡 <strong>Excused Absence Protection:</strong> Approved requests auto-mark live session rosters as <em>"Excused"</em>. Your child will not trigger disciplinary truancy alerts and will receive full access to all asynchronous lecture recordings.
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setShowApplyLeaveModal(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all cursor-pointer shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        <span>Submit Leave Application</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       {/* ======================================================== */}
       {/* TAB 5: OFFICIAL DOCUMENTS VAULT & CERTIFICATES           */}
@@ -736,6 +1237,145 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'exit' && viewerRole === 'admin' && (
+        <div className="space-y-6">
+          {exitClearance ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    TC
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Active Transfer Certificate (TC) Protocol in Progress
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Student is registered in the School Exit Clearance pipeline. Complete dual-verification below.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 px-3 py-1 text-xs font-bold border border-blue-200 dark:border-blue-700">
+                  {exitClearance.status}
+                </span>
+              </div>
+
+              <ExitClearanceView
+                clearance={exitClearance}
+                role="admin"
+                onVerifyPhysical={handleVerifyPhysicalExit}
+              />
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 px-2.5 py-0.5 text-xs font-bold border border-rose-200 dark:border-rose-800">
+                      Admin Authority Exclusive
+                    </span>
+                    <span className="text-xs text-slate-400">CBSE Rule 44 Statutory Compliance</span>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                    🎓 Initiate Exit Clearance &amp; Transfer Certificate (TC)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Initiate permanent school-leaving workflow for <strong className="text-slate-800 dark:text-slate-200">{currentStudentName}</strong> ({currentClass} - {currentSection}, Roll #{currentRoll}).
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleInitiateExit}
+                  disabled={initiatingExit}
+                  className="flex items-center gap-2 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 text-xs font-bold shadow-lg shadow-rose-600/20 hover:shadow-rose-600/30 transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>{initiatingExit ? 'Initiating Exit...' : 'Initiate Exit Clearance & Issue TC'}</span>
+                </button>
+              </div>
+
+              {/* 4-Department Pre-Clearance Audit Grid */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+                  Automated Multi-Department Clearance Pre-Audit
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">Fee &amp; Accounts</span>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">₹0 Outstanding Dues Verified</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <Library className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">Library Holdings</span>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">0 Active Book Holds (Returned)</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <FlaskConical className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">Laboratory Assets</span>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Science &amp; Comp Lab Cleared</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">Academic Records</span>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Mark Memo &amp; Standing Ready</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informational Workflow Callout */}
+              <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-4 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <strong className="block font-bold">Next Steps upon Initiation:</strong>
+                  <p className="text-amber-800 dark:text-amber-300">
+                    1. Student will be enrolled into the active <strong>School Exit Clearance Ledger</strong> (accessible via Admin Portal &rarr; Student TC).
+                  </p>
+                  <p className="text-amber-800 dark:text-amber-300">
+                    2. The linked parent ({student?.guardian_name || 'Parent/Guardian'}) will see an immediate <strong>In-App Digital Sign-off Banner</strong> on their Parent Dashboard.
+                  </p>
+                  <p className="text-amber-800 dark:text-amber-300">
+                    3. Once the parent provides digital approval and school admin uploads the signed physical register handover scan, the exit record will be permanently locked in the legal vault.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

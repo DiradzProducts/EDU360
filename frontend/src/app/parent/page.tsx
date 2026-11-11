@@ -1,7 +1,7 @@
 'use client';
 import { Icon3D } from '@/components/ui/icon-3d';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard,
   Award,
@@ -46,6 +46,7 @@ import {
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 import { 
   FocusTable, 
   FeeMilestone, 
@@ -56,6 +57,7 @@ import {
   TaxCertificateData
 } from '@/lib/types';
 import { BannerCarousel } from '@/components/banner-carousel';
+import { ExitClearanceView } from '@/components/exit-clearance-modal';
 import { FocusTableView } from '@/components/focus-table-view';
 import { RoleGuard } from '@/components/role-guard';
 import { ParentMarksView } from '@/components/parent-marks-view';
@@ -74,6 +76,12 @@ export interface ParentChildProfile {
   className: string;
   rollNo: number;
   initials: string;
+  admissionNo?: string;
+  attendance?: string;
+  gradeTier?: string;
+  academicAvg?: string;
+  busRoute?: string;
+  mentor?: string;
   tier: 'k5' | 'middle' | 'secondary';
   attendanceStatus: string;
   currentClass: string;
@@ -115,6 +123,23 @@ const SHARMA_CHILDREN: ParentChildProfile[] = [
   }
 ];
 
+const FERNANDES_CHILDREN: ParentChildProfile[] = [
+  {
+    id: 12,
+    name: 'John Fernandes',
+    className: 'Class 10-A',
+    rollNo: 25,
+    initials: 'JF',
+    tier: 'secondary',
+    attendanceStatus: 'Present Today ✓ • Period 4 Computer Science (Lab 2)',
+    currentClass: 'Live Virtual Class: Period 4 Active',
+    homeroomFaculty: 'Fr. George Varghese',
+    remedialSubject: 'Computer Science',
+    remedialDay: 'Day 3 of 7',
+    pendingHomeworkCount: 0
+  }
+];
+
 export type ParentNavSection = 
   | 'dashboard'
   | 'marks'
@@ -123,7 +148,8 @@ export type ParentNavSection =
   | 'ptm_connect'
   | 'chat'
   | 'fees'
-  | 'leave';
+  | 'leave'
+  | 'exit';
 
 export default function ParentPage() {
   // Navigation & Layout State
@@ -131,13 +157,71 @@ export default function ParentPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  // Application Theme Hook
+  // Application Theme & Auth Hooks
   const { theme, toggleTheme } = useTheme();
   const sidebarTheme = theme;
+  const { user } = useAuth();
 
-  // Multi-Child Profile Switcher State
-  const [activeKidId, setActiveKidId] = useState<number>(1);
-  const activeKid = SHARMA_CHILDREN.find((k) => k.id === activeKidId) || SHARMA_CHILDREN[0];
+  // Resolve strictly the children belonging to the currently logged in parent account
+  const isFernandesParent = user?.username === 'parent_john' || user?.name?.toLowerCase().includes('fernandes');
+  const [dynamicChildren, setDynamicChildren] = useState<ParentChildProfile[] | null>(null);
+  const [activeKidId, setActiveKidId] = useState<number>(() => isFernandesParent ? 12 : 1);
+
+  useEffect(() => {
+    async function loadParentChildren() {
+      if (!user) return;
+      try {
+        const fetched = await api.getParentChildren(user.username, user.phone);
+        if (fetched && Array.isArray(fetched) && fetched.length > 0) {
+          setDynamicChildren(fetched);
+          setActiveKidId(fetched[0].id);
+          return;
+        }
+      } catch (err) {
+        console.error('Error loading parent children:', err);
+      }
+
+      if (isFernandesParent) {
+        setDynamicChildren(FERNANDES_CHILDREN);
+        setActiveKidId(12);
+      } else if (user?.username?.startsWith('parent_')) {
+        const parts = user.username.split('_');
+        const lastPart = parts[parts.length - 1];
+        const stId = lastPart && !isNaN(Number(lastPart)) ? Number(lastPart) : 14;
+        const sName = user.name?.replace(/^Parent of\s+/i, '') || 'Kavya';
+        const dynamicSingle: ParentChildProfile[] = [{
+          id: stId,
+          name: sName,
+          className: 'Class 8-A',
+          currentClass: 'Class 8-A',
+          rollNo: 35,
+          initials: sName.slice(0, 2).toUpperCase(),
+          admissionNo: `EDU-2026-${stId}`,
+          attendance: '100%',
+          attendanceStatus: 'On Time (RFID Verified)',
+          tier: 'middle',
+          homeroomFaculty: 'Mrs. Ananya Verma',
+          remedialSubject: 'Mathematics Revision',
+          remedialDay: 'Day 1: Diagnostics',
+          pendingHomeworkCount: 0,
+          gradeTier: 'Class 8',
+          academicAvg: '85.0%',
+          busRoute: 'Route #4 (Campus Shuttle)',
+          mentor: 'Mrs. Ananya Verma'
+        }];
+        setDynamicChildren(dynamicSingle);
+        setActiveKidId(stId);
+      } else {
+        setDynamicChildren(SHARMA_CHILDREN);
+        setActiveKidId(1);
+      }
+    }
+    loadParentChildren();
+  }, [user, isFernandesParent]);
+
+  const currentParentChildren = dynamicChildren || (isFernandesParent ? FERNANDES_CHILDREN : SHARMA_CHILDREN);
+
+  const activeKid = currentParentChildren.find((k: ParentChildProfile) => k.id === activeKidId) || currentParentChildren[0];
   const [parentToast, setParentToast] = useState<string | null>(null);
 
   const triggerToast = (msg: string) => {
@@ -162,6 +246,11 @@ const DEFAULT_PARENT_FEES_ANANYA: FeeMilestone[] = [
   { id: 103, student_id: 7, title: "Milestone 3: Primary Activity & Discovery Hub Lab Fee", amount: 4500, due_date: "18 Aug 2026", status: "Paid", receipt_no: "REC-2026-FEE-9104", paid_at: "18 Aug 2026, 09:20 AM", payment_method: "Debit Card" },
   { id: 104, student_id: 7, title: "Milestone 4: Primary Term 2 Tuition & Activity (15% Sibling Concession Applied)", amount: 15300, due_date: "25 Oct 2026", status: "Overdue" },
   { id: 105, student_id: 7, title: "Milestone 5: Junior Annual Concert, Sports & Stage Performance", amount: 5000, due_date: "15 Dec 2026", status: "Upcoming" },
+];
+
+const DEFAULT_PARENT_FEES_JOHN: FeeMilestone[] = [
+  { id: 201, student_id: 12, title: "Milestone 1: Term 1 Grade 10 Board Fee & Tuition", amount: 42000, due_date: "15 Jul 2026", status: "Paid", receipt_no: "REC-2026-FEE-4011", paid_at: "10 Jul 2026, 10:00 AM", payment_method: "Net Banking (SBI)" },
+  { id: 202, student_id: 12, title: "Milestone 2: Term 2 Grade 10 Board Examination & Lab Clearance", amount: 42000, due_date: "15 Oct 2026", status: "Paid", receipt_no: "REC-2026-FEE-4012", paid_at: "12 Oct 2026, 02:30 PM", payment_method: "UPI (PhonePe)" }
 ];
 
 const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
@@ -283,10 +372,13 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           api.getParentLeaveRequests(activeKidId)
         ]);
         setFocusTable(ftRes);
-        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : DEFAULT_PARENT_FEES_AARAV); }
+        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : activeKidId === 12 ? DEFAULT_PARENT_FEES_JOHN : DEFAULT_PARENT_FEES_AARAV); }
         setSubmission(subRes);
         if (exitsRes && exitsRes.length > 0) {
-          setExitClearance(exitsRes[0]);
+          const kidClearance = exitsRes.find(e => e.student_id === activeKidId);
+          setExitClearance(kidClearance || null);
+        } else {
+          setExitClearance(null);
         }
         setTodayHomework(hwRes);
         if (leaveRes && leaveRes.length > 0) {
@@ -324,6 +416,40 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
     }
     loadData();
   }, [activeKidId]);
+
+  // Listen for module navigation events from Omnisearch or notifications
+  useEffect(() => {
+    const handleNavEvent = (e: any) => {
+      const rawTarget = typeof e.detail === 'string' ? e.detail : e.detail?.tab;
+      if (rawTarget) {
+        let targetNav: ParentNavSection = rawTarget as ParentNavSection;
+        if (rawTarget === 'focus') targetNav = 'focus_table';
+        else if (rawTarget === 'sis' || rawTarget === 'child_sis') targetNav = 'child_sis';
+        else if (rawTarget === 'ptm' || rawTarget === 'ptm_connect') targetNav = 'ptm_connect';
+        setActiveNav(targetNav);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('edu360-navigate', handleNavEvent as EventListener);
+    window.addEventListener('edu360:switch-tab', handleNavEvent as EventListener);
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam) {
+        let targetNav: ParentNavSection = tabParam as ParentNavSection;
+        if (tabParam === 'focus') targetNav = 'focus_table';
+        else if (tabParam === 'sis' || tabParam === 'child_sis') targetNav = 'child_sis';
+        else if (tabParam === 'ptm' || tabParam === 'ptm_connect') targetNav = 'ptm_connect';
+        setActiveNav(targetNav);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('edu360-navigate', handleNavEvent as EventListener);
+      window.removeEventListener('edu360:switch-tab', handleNavEvent as EventListener);
+    };
+  }, []);
 
   // Handlers
 
@@ -420,11 +546,13 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   };
 
   const handleDigitalSignExit = async () => {
-    await api.parentDigitalSignTC(1);
+    await api.parentDigitalSignTC(activeKidId);
     const updatedExits = await api.getExitClearances();
     if (updatedExits && updatedExits.length > 0) {
-      setExitClearance(updatedExits[0]);
+      const kidClearance = updatedExits.find(e => e.student_id === activeKidId);
+      setExitClearance(kidClearance || null);
     }
+    triggerToast('In-app parent digital signature stamped with legal seal');
   };
 
   const handleBannerAction = (target: string) => {
@@ -517,9 +645,20 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           id: 'fees' as ParentNavSection,
           label: 'Fee Milestones & Receipts',
           icon: CreditCard,
-          badge: 'Due Oct 25',
-          badgeColor: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
-        }
+          badge: activeKidId === 12 ? 'Cleared' : 'Due Oct 25',
+          badgeColor: activeKidId === 12
+            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60'
+            : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
+        },
+        ...(exitClearance ? [{
+          id: 'exit' as ParentNavSection,
+          label: 'School Exit & TC Vault',
+          icon: GraduationCap,
+          badge: exitClearance.digital_parent_approved ? 'Signed' : 'Action Req',
+          badgeColor: exitClearance.digital_parent_approved
+            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60'
+            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 animate-pulse'
+        }] : [])
       ]
     }
   ];
@@ -527,6 +666,8 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   // Helper titles for top header
   const getHeaderMeta = () => {
     switch (activeNav) {
+      case 'exit':
+        return { title: 'Transfer Certificate (TC) & School Exit Protocol', subtitle: `CBSE statutory student leaving sign-off for ${activeKid.name} (${activeKid.className})` };
       case 'dashboard':
         return { title: 'Parent Intelligence Dashboard', subtitle: `Real-time overview of ${activeKid.name}’s online classes, academic progress, and faculty communications` };
       case 'marks':
@@ -724,40 +865,52 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                 <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 hidden lg:inline-block uppercase tracking-wider">
                   Child:
                 </span>
-                {SHARMA_CHILDREN.map((kid) => {
-                  const isSelected = kid.id === activeKidId;
-                  return (
-                    <button
-                      key={kid.id}
-                      onClick={() => {
-                        playButtonClick();
-                        setActiveKidId(kid.id);
-                        triggerToast(`Switched active profile to ${kid.name} (${kid.className})`);
-                      }}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? kid.tier === 'k5'
-                            ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
-                            : 'bg-blue-600 text-white shadow-md'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-700/80'
-                      }`}
-                      title={`Switch active context to ${kid.name} (${kid.className})`}
-                    >
-                      <span className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px] font-black">
-                        {kid.initials}
-                      </span>
-                      <div className="flex flex-col text-left leading-tight">
-                        <span className="font-bold">{kid.name.split(' ')[0]}</span>
-                        <span className="text-[9px] opacity-80 font-normal">
-                          {kid.className}
+                {currentParentChildren.length === 1 ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-xs">
+                    <span className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px] font-black">
+                      {currentParentChildren[0].initials}
+                    </span>
+                    <div className="flex flex-col text-left leading-tight">
+                      <span className="font-bold">{currentParentChildren[0].name}</span>
+                      <span className="text-[9px] opacity-80 font-normal">{currentParentChildren[0].className} • Roll #{currentParentChildren[0].rollNo}</span>
+                    </div>
+                  </div>
+                ) : (
+                  currentParentChildren.map((kid: ParentChildProfile) => {
+                    const isSelected = kid.id === activeKidId;
+                    return (
+                      <button
+                        key={kid.id}
+                        onClick={() => {
+                          playButtonClick();
+                          setActiveKidId(kid.id);
+                          triggerToast(`Switched active profile to ${kid.name} (${kid.className})`);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? kid.tier === 'k5'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                              : 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-700/80'
+                        }`}
+                        title={`Switch active context to ${kid.name} (${kid.className})`}
+                      >
+                        <span className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px] font-black">
+                          {kid.initials}
                         </span>
-                      </div>
-                      {isSelected && (
-                        <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse ml-0.5" />
-                      )}
-                    </button>
-                  );
-                })}
+                        <div className="flex flex-col text-left leading-tight">
+                          <span className="font-bold">{kid.name.split(' ')[0]}</span>
+                          <span className="text-[9px] opacity-80 font-normal">
+                            {kid.className}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse ml-0.5" />
+                        )}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </header>
@@ -853,6 +1006,23 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
                 {/* Moving Banner Slider Carousel */}
                 <BannerCarousel onActionClick={handleBannerAction} />
+
+                {/* Transfer Certificate (TC) & School Exit Clearance */}
+                {exitClearance && (
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Transfer Certificate (TC) &amp; School Exit Clearance
+                      </h3>
+                      <span className="text-[11px] text-slate-400">CBSE Legal Exit Protocol</span>
+                    </div>
+                    <ExitClearanceView
+                      clearance={exitClearance}
+                      role="parent"
+                      onDigitalSign={handleDigitalSignExit}
+                    />
+                  </div>
+                )}
 
                 {/* ===================================================== */}
                 {/* 2. 4-CARD LIVE KPI STRIP (ELEVATED AESTHETIC BENTO)    */}
@@ -1794,6 +1964,47 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                 </div>
               );
             })()}
+
+            {/* ===================================================== */}
+            {/* VIEW: SCHOOL EXIT & TRANSFER CERTIFICATE PROTOCOL      */}
+            {/* ===================================================== */}
+            {activeNav === 'exit' && (
+              <div className="space-y-6">
+                {exitClearance ? (
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm space-y-6">
+                    <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                      <div className="h-12 w-12 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                        <GraduationCap className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                          Transfer Certificate (TC) &amp; School Exit Clearance
+                        </h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Official statutory exit verification and digital sign-off for {activeKid.name} ({activeKid.className} &bull; Roll #{activeKid.rollNo})
+                        </p>
+                      </div>
+                    </div>
+
+                    <ExitClearanceView
+                      clearance={exitClearance}
+                      role="parent"
+                      onDigitalSign={handleDigitalSignExit}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center space-y-3">
+                    <ShieldCheck className="h-12 w-12 text-emerald-500 mx-auto" />
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Active Enrollment in Good Standing
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      There are no active school exit or transfer certificate requests for {activeKid.name}. Student remains actively enrolled with regular academic standing.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ===================================================== */}
             {/* VIEW 8: STUDENT LEAVE REQUESTS                        */}

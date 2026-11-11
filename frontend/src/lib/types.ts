@@ -1248,6 +1248,8 @@ export interface ExamScheduleItem {
   invigilator_name?: string;
   academic_clearance: boolean;
   academic_clearance_notes?: string;
+  exam_mode?: string;
+  duration_minutes?: number;
 }
 
 export interface OcrScanResultItem {
@@ -1737,3 +1739,13 @@ export interface ExecutivePulseResponse {
 
 
 
+
+export interface LiveKitTokenResponse {
+  server_url: string;
+  token: string;
+  room_name: string;
+  participant_identity: string;
+  participant_name: string;
+  role: string;
+  is_cloud_active: boolean;
+}

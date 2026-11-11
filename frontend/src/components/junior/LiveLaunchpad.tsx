@@ -18,13 +18,15 @@ interface LiveLaunchpadProps {
   timetable?: AdventureTimetableItem[];
   onOpenQuests?: () => void;
   onEarnStars?: (stars: number) => void;
+  onJoinLiveMeeting?: (roomName?: string, roomTitle?: string) => void;
 }
 
 export function LiveLaunchpad({
   studentName = 'Aarav Kumar',
   timetable = [],
   onOpenQuests,
-  onEarnStars
+  onEarnStars,
+  onJoinLiveMeeting
 }: LiveLaunchpadProps) {
   // Countdown Timer state: Minutes and Seconds
   const [timeLeft, setTimeLeft] = useState({
@@ -83,7 +85,13 @@ export function LiveLaunchpad({
     setTimeout(() => {
       setIsConnecting(false);
       setLaunchModalOpen(false);
-    }, 1200);
+      if (onJoinLiveMeeting) {
+        onJoinLiveMeeting(
+          'class-3a-primary-adventure',
+          'Class 3-A: Live Primary Learning Adventure & Storytelling'
+        );
+      }
+    }, 700);
   };
 
   // 5 Storybook Replay Lessons matching target screenshot

@@ -1,5 +1,6 @@
 'use client';
 
+import { api } from '@/lib/api';
 import React, { useState } from 'react';
 import { 
   Sparkles, 
@@ -829,6 +830,7 @@ export function ParentGoldenFocusView({
       });
 
       const toggledDay = updatedDays.find(d => d.day_num === dayNum);
+      api.parentVerifyRemedial({ student_id: studentId, day_num: dayNum }).catch(console.error);
       if (toggledDay?.parent_approved) {
         triggerToast(`Day ${dayNum} student work verified & co-signed by Guardian! ✓`);
       } else {

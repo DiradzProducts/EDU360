@@ -1,217 +1,172 @@
 with open('frontend/src/lib/api.ts', 'r', encoding='utf-8') as f:
-    code = f.read()
+    c = f.read()
 
-# 1. Update fallbackTeacherStudents Aarav Sharma
-old_st = '{ id: 1, name: "Aarav Sharma", roll_no: "14", class_name: "Class 8-B", raw_class: "Class 8", section: "B", attendance_pct: 91.4, missed_classes_count: 3, academic_average_pct: 76.8, guardian_name: "Mr. Rajesh Sharma", guardian_phone: "+91 98450 12345", has_focus_table: true, focus_concept: "Quadratic Equations: Factorization & Signs", homework_status: "Submitted", last_active: "Today, 09:25 AM" },'
+# 1. Update fallbackExitClearance to remove Aarav Sharma
+old_fallback = """let fallbackExitClearance: ExitClearance[] = [
+  {
+    id: 1,
+    student_id: 1,
+    student_name: "Aarav Sharma (Sample Exit Flow)",
+    class_name: "Class 8B",
+    fee_cleared: true,
+    library_cleared: true,
+    inventory_cleared: true,
+    tc_ready: true,
+    digital_parent_approved: false,
+    digital_approval_timestamp: undefined,
+    physical_scan_url: undefined,
+    physical_sign_verified: false,
+    status: "Pending Parent Digital Approval"
+  },
+  {
+    id: 2,
+    student_id: 2,
+    student_name: "Karan Malhotra",
+    class_name: "Class 10A",
+    fee_cleared: true,
+    library_cleared: true,
+    inventory_cleared: true,
+    tc_ready: true,
+    digital_parent_approved: true,
+    digital_approval_timestamp: "12 Oct 2026, 04:15 PM UTC",
+    physical_scan_url: "/assets/scanned_register_karan_malhotra.png",
+    physical_sign_verified: true,
+    status: "Completed & Permanently Archived"
+  }
+];"""
 
-new_st = '''{ 
-    id: 1, 
-    name: "Aarav Sharma", 
-    roll_no: "14", 
-    class_name: "Class 8-B", 
-    raw_class: "Class 8", 
-    section: "B", 
-    attendance_pct: 91.4, 
-    missed_classes_count: 3, 
-    academic_average_pct: 76.8, 
-    guardian_name: "Mr. Rajesh Sharma", 
-    guardian_phone: "+91 98450 12345", 
-    has_focus_table: true, 
-    focus_concept: "Quadratic Equations: Factorization & Signs", 
-    homework_status: "Submitted", 
-    last_active: "Today, 09:25 AM",
-    is_on_leave: false,
-    is_leave_pending: true,
-    leave_status: 'Pending Approval',
-    leave_reason: 'Orthodontic dental consultation and braces adjustment at Apollo Clinic.',
-    is_medical_leave: true,
-    leave_from_date: '16 Oct 2026',
-    leave_to_date: '16 Oct 2026',
-    today_attendance_status: 'Leave Pending',
-    attendance_flag: 'PENDING_LEAVE'
-  },'''
+new_fallback = """let fallbackExitClearance: ExitClearance[] = [
+  {
+    id: 1,
+    student_id: 999,
+    student_name: "Karan Malhotra",
+    class_name: "Class 10A",
+    fee_cleared: true,
+    library_cleared: true,
+    inventory_cleared: true,
+    tc_ready: true,
+    digital_parent_approved: true,
+    digital_approval_timestamp: "12 Oct 2026, 04:15 PM UTC",
+    physical_scan_url: "/assets/scanned_register_karan_malhotra.png",
+    physical_sign_verified: true,
+    status: "Completed & Permanently Archived"
+  }
+];"""
 
-if old_st in code:
-    code = code.replace(old_st, new_st, 1)
-    print("SUCCESS: Updated Aarav in fallbackTeacherStudents")
-else:
-    print("WARNING: old_st not found")
+c_norm = c.replace('\r\n', '\n')
+old_fb_norm = old_fallback.replace('\r\n', '\n')
+new_fb_norm = new_fallback.replace('\r\n', '\n')
 
-# 2. Update reviewLeaveRequest in api.ts
-old_review = '''  reviewLeaveRequest: async (requestId: number, status: 'Approved' | 'Rejected', notes?: string) => {
+assert old_fb_norm in c_norm, "old_fallback not found"
+c_norm = c_norm.replace(old_fb_norm, new_fb_norm, 1)
+
+# 2. Add initiateExitClearance, getStudentExitClearance and remove resetExitClearance
+old_methods = """  getExitClearances: async () => {
+    return fetchWithFallback<ExitClearance[]>('/api/admin/exit-clearances', undefined, fallbackExitClearance);
+  },
+  verifyPhysicalSign: async (id: number, physicalScanUrl?: string) => {
     try {
-      return await fetchWithFallback<LeaveRequest>(`/api/teacher/leave-requests/${requestId}/review`, {
+      return await fetchWithFallback(`/api/admin/exit-clearances/${id}/verify-physical`, {
         method: 'POST',
-        body: JSON.stringify({ status, teacher_notes: notes })
+        body: JSON.stringify({ physical_scan_url: physicalScanUrl || '/assets/scanned_register_signed.png' })
       });
     } catch {
-      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes } : lr);
-      return fallbackLeaveRequests.find(lr => lr.id === requestId);
+      fallbackExitClearance = fallbackExitClearance.map(ec => ec.id === id ? {
+        ...ec,
+        physical_sign_verified: true,
+        physical_scan_url: physicalScanUrl || '/assets/scanned_register_signed.png',
+        status: ec.digital_parent_approved ? 'Completed & Permanently Archived' : 'Physical Verified - Awaiting Digital'
+      } : ec);
+      return { success: true, message: 'Physical scan verified in legal register' };
     }
-  },'''
-
-new_review = '''  reviewLeaveRequest: async (requestId: number, status: 'Approved' | 'Rejected', notes?: string) => {
+  },
+  resetExitClearance: async (id: number) => {
     try {
-      const res = await fetchWithFallback<LeaveRequest>(`/api/teacher/leave-requests/${requestId}/review`, {
-        method: 'POST',
-        body: JSON.stringify({ status, teacher_notes: notes })
+      return await fetchWithFallback(`/api/admin/exit-clearances/${id}/reset`, {
+        method: 'POST'
       });
-      // Synchronize in-memory fallback state so offline and hybrid flows stay 100% synced
-      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes, approval_stage: status === 'Approved' ? 'Attendance Adjusted' : 'Rejected by Teacher' } : lr);
-      if (status === 'Approved') {
-        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
-        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
-          ...st,
-          is_on_leave: true,
-          is_leave_pending: false,
-          leave_status: 'Approved Leave',
-          today_attendance_status: 'Excused Leave',
-          attendance_flag: 'EXCUSED_LEAVE',
-          last_active: 'On Approved Leave (Excused)'
-        } : st);
-        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
-          ...a,
-          status: 'Leave',
-          teacher_override: true,
-          join_timestamp: 'Excused Leave (Approved)'
-        } : a);
-      } else if (status === 'Rejected') {
-        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
-        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
-          ...st,
-          is_on_leave: false,
-          is_leave_pending: false,
-          leave_status: 'None',
-          today_attendance_status: 'Absent',
-          attendance_flag: 'ABSENT',
-          last_active: 'Absent Today'
-        } : st);
-      }
-      return res;
     } catch {
-      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? { ...lr, status, teacher_notes: notes, approval_stage: status === 'Approved' ? 'Attendance Adjusted' : 'Rejected by Teacher' } : lr);
-      if (status === 'Approved') {
-        const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
-        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
-          ...st,
-          is_on_leave: true,
-          is_leave_pending: false,
-          leave_status: 'Approved Leave',
-          today_attendance_status: 'Excused Leave',
-          attendance_flag: 'EXCUSED_LEAVE',
-          last_active: 'On Approved Leave (Excused)'
-        } : st);
-        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
-          ...a,
-          status: 'Leave',
-          teacher_override: true,
-          join_timestamp: 'Excused Leave (Approved)'
-        } : a);
-      }
-      return fallbackLeaveRequests.find(lr => lr.id === requestId);
+      fallbackExitClearance = fallbackExitClearance.map(ec => ec.id === id ? {
+        ...ec,
+        digital_parent_approved: false,
+        digital_approval_timestamp: undefined,
+        physical_scan_url: undefined,
+        physical_sign_verified: false,
+        status: 'Pending Dual Verification'
+      } : ec);
+      return { success: true, message: 'Exit clearance reset' };
     }
-  },'''
+  },"""
 
-if old_review in code:
-    code = code.replace(old_review, new_review, 1)
-    print("SUCCESS: Updated reviewLeaveRequest in api.ts")
-else:
-    print("WARNING: old_review not found")
-
-# 3. Update applyStudentLeave in api.ts
-old_apply = '''    return await fetchWithFallback<LeaveRequest>('/api/parent/leave-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });'''
-
-new_apply = '''    try {
-      const res = await fetchWithFallback<LeaveRequest>('/api/parent/leave-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      // Synchronize fallback leave requests and teacher roster
-      const newLr: LeaveRequest = {
-        id: res.id || fallbackLeaveRequests.length + 1,
-        student_id: data.student_id,
-        student_name: data.student_name,
-        parent_name: data.parent_name,
-        from_date: data.from_date,
-        to_date: data.to_date,
-        reason: data.reason,
-        status: 'Pending',
-        is_medical: data.is_medical || false,
-        attachment_name: data.attachment_name,
-        attachment_url: data.attachment_url,
-        approval_stage: 'Submitted - Pending Teacher Review',
-        applied_at: new Date().toISOString()
-      };
-      fallbackLeaveRequests = [newLr, ...fallbackLeaveRequests];
-      fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === data.student_id ? {
-        ...st,
-        is_leave_pending: true,
-        leave_status: 'Pending Approval',
-        today_attendance_status: 'Leave Pending',
-        attendance_flag: 'PENDING_LEAVE',
-        leave_reason: data.reason,
-        leave_from_date: data.from_date,
-        leave_to_date: data.to_date,
-        is_medical_leave: data.is_medical
-      } : st);
-      return res;
+new_methods = """  getExitClearances: async () => {
+    return fetchWithFallback<ExitClearance[]>('/api/admin/exit-clearances', undefined, fallbackExitClearance);
+  },
+  getStudentExitClearance: async (studentId: number) => {
+    try {
+      return await fetchWithFallback<ExitClearance | null>(`/api/admin/exit-clearances/student/${studentId}`, undefined, null);
     } catch {
-      const newLr: LeaveRequest = {
-        id: fallbackLeaveRequests.length + 10,
-        student_id: data.student_id,
-        student_name: data.student_name,
-        parent_name: data.parent_name,
-        from_date: data.from_date,
-        to_date: data.to_date,
-        reason: data.reason,
-        status: 'Pending',
-        is_medical: data.is_medical || false,
-        attachment_name: data.attachment_name,
-        attachment_url: data.attachment_url,
-        approval_stage: 'Submitted - Pending Teacher Review',
-        applied_at: new Date().toISOString()
-      };
-      fallbackLeaveRequests = [newLr, ...fallbackLeaveRequests];
-      fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === data.student_id ? {
-        ...st,
-        is_leave_pending: true,
-        leave_status: 'Pending Approval',
-        today_attendance_status: 'Leave Pending',
-        attendance_flag: 'PENDING_LEAVE',
-        leave_reason: data.reason,
-        leave_from_date: data.from_date,
-        leave_to_date: data.to_date,
-        is_medical_leave: data.is_medical
-      } : st);
-      fallbackNotifications = [
+      return fallbackExitClearance.find(ec => ec.student_id === studentId) || null;
+    }
+  },
+  initiateExitClearance: async (studentId: number) => {
+    try {
+      return await fetchWithFallback<{ success: boolean; message: string; clearance: ExitClearance }>(
+        '/api/admin/exit-clearances/initiate',
         {
-          id: Date.now(),
-          recipient_role: 'TEACHER',
-          sender_name: data.parent_name,
-          sender_role: 'PARENT',
-          title: `New Leave Application: ${data.student_name}`,
-          message: `Parent ${data.parent_name} submitted a leave request for ${data.student_name} (${data.from_date} to ${data.to_date}): "${data.reason}". Action required in Leave Approvals.`,
-          notification_type: 'LEAVE_APPLICATION',
-          priority: data.is_medical ? 'HIGH' : 'NORMAL',
-          action_url: '/teacher?tab=leave_approvals',
-          is_read: false,
-          created_at: new Date().toISOString()
-        },
-        ...fallbackNotifications
-      ];
-      return newLr;
-    }'''
+          method: 'POST',
+          body: JSON.stringify({
+            student_id: studentId,
+            fee_cleared: true,
+            library_cleared: true,
+            inventory_cleared: true,
+            tc_ready: true
+          })
+        }
+      );
+    } catch {
+      const newCl: ExitClearance = {
+        id: Date.now(),
+        student_id: studentId,
+        student_name: studentId === 12 ? 'John Fernandes' : 'Student Exit Record',
+        class_name: studentId === 12 ? 'Class 10-A' : 'Class 10',
+        fee_cleared: true,
+        library_cleared: true,
+        inventory_cleared: true,
+        tc_ready: true,
+        digital_parent_approved: false,
+        digital_approval_timestamp: undefined,
+        physical_scan_url: undefined,
+        physical_sign_verified: false,
+        status: 'Pending Dual Verification'
+      };
+      fallbackExitClearance.unshift(newCl);
+      return { success: true, message: 'Exit clearance initiated successfully', clearance: newCl };
+    }
+  },
+  verifyPhysicalSign: async (id: number, physicalScanUrl?: string) => {
+    try {
+      return await fetchWithFallback(`/api/admin/exit-clearances/${id}/verify-physical`, {
+        method: 'POST',
+        body: JSON.stringify({ physical_scan_url: physicalScanUrl || '/assets/scanned_register_signed.png' })
+      });
+    } catch {
+      fallbackExitClearance = fallbackExitClearance.map(ec => ec.id === id ? {
+        ...ec,
+        physical_sign_verified: true,
+        physical_scan_url: physicalScanUrl || '/assets/scanned_register_signed.png',
+        status: ec.digital_parent_approved ? 'Completed & Permanently Archived' : 'Physical Verified - Awaiting Digital'
+      } : ec);
+      return { success: true, message: 'Physical scan verified in legal register' };
+    }
+  },"""
 
-if old_apply in code:
-    code = code.replace(old_apply, new_apply, 1)
-    print("SUCCESS: Updated applyStudentLeave in api.ts")
-else:
-    print("WARNING: old_apply not found")
+old_m_norm = old_methods.replace('\r\n', '\n')
+new_m_norm = new_methods.replace('\r\n', '\n')
+
+assert old_m_norm in c_norm, "old_methods not found"
+c_norm = c_norm.replace(old_m_norm, new_m_norm, 1)
 
 with open('frontend/src/lib/api.ts', 'w', encoding='utf-8') as f:
-    f.write(code)
+    f.write(c_norm)
+
+print("frontend/src/lib/api.ts updated successfully!")

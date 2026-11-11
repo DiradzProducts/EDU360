@@ -1206,8 +1206,50 @@ _ptm_slots = [
 async def get_ptm_event_config():
     return _ptm_event_config
 
+def _slot_to_dict(s) -> dict:
+    import json
+    agenda = []
+    if s.focus_table_agenda:
+        try:
+            agenda = json.loads(s.focus_table_agenda) if isinstance(s.focus_table_agenda, str) else s.focus_table_agenda
+        except Exception:
+            agenda = [s.focus_table_agenda]
+    return {
+        "id": s.id,
+        "event_id": s.event_id,
+        "teacher_id": s.teacher_id,
+        "start_time": s.start_time,
+        "end_time": s.end_time,
+        "status": s.status,
+        "interaction_scope": s.interaction_scope,
+        "booked_student_id": s.booked_student_id,
+        "booked_student_name": s.booked_student_name,
+        "booked_class": s.booked_class,
+        "booked_parent_id": s.booked_parent_id,
+        "booked_parent_name": s.booked_parent_name,
+        "subject_name": s.subject_name,
+        "is_sibling_combo": bool(s.is_sibling_combo),
+        "sibling_student_id": s.sibling_student_id,
+        "sibling_student_name": s.sibling_student_name,
+        "meeting_url": s.meeting_url,
+        "focus_table_agenda": agenda
+    }
+
 @router.get("/ptm/slots", response_model=list[PTMSlotResponse])
-async def get_ptm_slots(scope: str = None):
+async def get_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
+    try:
+        from app.models.models import PTMSlot
+        stmt = select(PTMSlot)
+        if scope and scope != "ALL":
+            from sqlalchemy import or_
+            stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
+        stmt = stmt.order_by(PTMSlot.start_time.asc())
+        res = await db.execute(stmt)
+        slots = res.scalars().all()
+        if slots:
+            return [_slot_to_dict(s) for s in slots]
+    except Exception as e:
+        print(f"Error querying PTMSlot: {e}")
     if scope and scope != "ALL":
         return [s for s in _ptm_slots if s["interaction_scope"] == scope or s["status"] == "BREAK"]
     return _ptm_slots
@@ -1239,6 +1281,29 @@ async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_
             slot["sibling_student_name"] = req.sibling_student_name
             slot["focus_table_agenda"] = req.focus_table_agenda or []
             slot["meeting_url"] = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
+            # DB Persistence
+            try:
+                from app.models.models import PTMSlot
+                import json
+                db_slot_res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id))
+                db_slot = db_slot_res.scalars().first()
+                if db_slot:
+                    db_slot.status = "BOOKED"
+                    db_slot.booked_student_id = req.booked_student_id
+                    db_slot.booked_student_name = req.booked_student_name
+                    db_slot.booked_class = req.booked_class
+                    db_slot.booked_parent_id = req.booked_parent_id
+                    db_slot.booked_parent_name = req.booked_parent_name
+                    db_slot.interaction_scope = req.interaction_scope
+                    db_slot.subject_name = req.subject_name
+                    db_slot.is_sibling_combo = req.is_sibling_combo
+                    db_slot.sibling_student_id = req.sibling_student_id
+                    db_slot.sibling_student_name = req.sibling_student_name
+                    db_slot.meeting_url = slot["meeting_url"]
+                    db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
+                    await db.commit()
+            except Exception as dbe:
+                print(f"DB slot persist error: {dbe}")
 
             # Closed-loop sync: If focus table agenda provided, log to Focus Table!
             if req.focus_table_agenda and req.booked_student_id:
