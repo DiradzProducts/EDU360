@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
     LeaveRequest, ExitClearance, Homework, FeeDefaulter, PaymentTransaction,
-    ParentTeacherMessage, ReportCard
+    ParentTeacherMessage, ReportCard, SecurityAuditLog
 )
 from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
@@ -82,6 +82,7 @@ async def get_parent_ai_study_assistant(
 async def get_parent_children(
     username: Optional[str] = None,
     phone: Optional[str] = None,
+    email: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -89,7 +90,7 @@ async def get_parent_children(
     Supports legacy test parents (Sharma, Fernandes) and newly enrolled students.
     """
     # 1. If username is parent_john or contains fernandes
-    if username == "parent_john" or (username and "fernandes" in username.lower()):
+    if username == "parent_john" or (username and "fernandes" in username.lower()) or (email and "fernandes" in email.lower()):
         st_res = await db.execute(select(Student).where(Student.id == 12))
         st = st_res.scalars().first()
         if st:
@@ -107,7 +108,27 @@ async def get_parent_children(
                 "mentor": "Mr. Rajesh Nair"
             }]
 
-    # 2. If parent username matches new enrolment pattern: parent_{name}_{student_id}
+    # 2. Match by guardian email if supplied
+    if email:
+        clean_email = email.strip().lower()
+        st_res = await db.execute(select(Student).where(Student.guardian_email == clean_email))
+        sts = st_res.scalars().all()
+        if sts:
+            return [{
+                "id": st.id,
+                "name": st.name,
+                "className": f"{st.class_name}-{st.section}",
+                "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
+                "initials": "".join([part[0].upper() for part in st.name.split() if part])[:2],
+                "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
+                "attendance": f"{st.attendance_pct}%" if st.attendance_pct is not None else "Day 1 Enrollee",
+                "gradeTier": st.grade_tier or f"{st.class_name}",
+                "academicAvg": f"{st.academic_average_pct}%" if st.academic_average_pct is not None else "Enrolled",
+                "busRoute": "Route #4 (Campus Shuttle)",
+                "mentor": "Mrs. Ananya Verma"
+            } for st in sts]
+
+    # 3. If parent username matches new enrolment pattern: parent_{name}_{student_id}
     if username and username.startswith("parent_"):
         parts = username.split("_")
         if parts[-1].isdigit():
@@ -123,14 +144,14 @@ async def get_parent_children(
                     "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
                     "initials": initials,
                     "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
-                    "attendance": f"{st.attendance_pct}%",
+                    "attendance": f"{st.attendance_pct}%" if st.attendance_pct is not None else "Day 1 Enrollee",
                     "gradeTier": st.grade_tier or f"{st.class_name}",
-                    "academicAvg": f"{st.academic_average_pct}%",
+                    "academicAvg": f"{st.academic_average_pct}%" if st.academic_average_pct is not None else "Enrolled",
                     "busRoute": "Route #4 (Campus Shuttle)",
                     "mentor": "Mrs. Ananya Verma"
                 }]
 
-    # 3. Match by phone if supplied
+    # 4. Match by phone if supplied
     if phone:
         clean_phone = phone.strip()
         st_res = await db.execute(select(Student).where(Student.guardian_phone == clean_phone))
@@ -143,42 +164,44 @@ async def get_parent_children(
                 "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
                 "initials": "".join([part[0].upper() for part in st.name.split() if part])[:2],
                 "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
-                "attendance": f"{st.attendance_pct}%",
+                "attendance": f"{st.attendance_pct}%" if st.attendance_pct is not None else "Day 1 Enrollee",
                 "gradeTier": st.grade_tier or f"{st.class_name}",
-                "academicAvg": f"{st.academic_average_pct}%",
+                "academicAvg": f"{st.academic_average_pct}%" if st.academic_average_pct is not None else "Enrolled",
                 "busRoute": "Route #4 (Campus Shuttle)",
                 "mentor": "Mrs. Ananya Verma"
             } for st in sts]
 
-    # 4. Fallback: Return Sharma children (Aarav & Ananya)
-    return [
-        {
-            "id": 1,
-            "name": "Aarav Sharma",
-            "className": "Class 8-B",
-            "rollNo": 14,
-            "initials": "AS",
-            "admissionNo": "DPWS-2024-0014",
-            "attendance": "94.2%",
-            "gradeTier": "Senior (Grade 8)",
-            "academicAvg": "88.5%",
-            "busRoute": "Route #4 (North Corridor)",
-            "mentor": "Mrs. Ananya Verma"
-        },
-        {
-            "id": 2,
-            "name": "Ananya Sharma",
-            "className": "Class 3-A",
-            "rollNo": 8,
-            "initials": "ANS",
-            "admissionNo": "DPWS-2025-0089",
-            "attendance": "96.0%",
-            "gradeTier": "Junior (Grade 3)",
-            "academicAvg": "92.0%",
-            "busRoute": "Route #4 (North Corridor)",
-            "mentor": "Ms. Deepa Menon"
-        }
-    ]
+    # 5. Fallback: Only return Sharma children if username is explicitly 'parent' or empty demo
+    if username in [None, "parent", "parent_aarav", "rajesh_sharma"]:
+        return [
+            {
+                "id": 1,
+                "name": "Aarav Sharma",
+                "className": "Class 8-B",
+                "rollNo": 14,
+                "initials": "AS",
+                "admissionNo": "DPWS-2024-0014",
+                "attendance": "94.2%",
+                "gradeTier": "Senior (Grade 8)",
+                "academicAvg": "88.5%",
+                "busRoute": "Route #4 (North Corridor)",
+                "mentor": "Mrs. Ananya Verma"
+            },
+            {
+                "id": 2,
+                "name": "Ananya Sharma",
+                "className": "Class 3-A",
+                "rollNo": 8,
+                "initials": "ANS",
+                "admissionNo": "DPWS-2025-0089",
+                "attendance": "96.0%",
+                "gradeTier": "Junior (Grade 3)",
+                "academicAvg": "92.0%",
+                "busRoute": "Route #4 (North Corridor)",
+                "mentor": "Ms. Deepa Menon"
+            }
+        ]
+    return []
 
 @router.get("/banners")
 async def get_parent_banners():
@@ -264,15 +287,22 @@ async def get_child_today_homework(student_id: int, db: AsyncSession = Depends(g
     """
     Retrieve current-day homework tasks only to keep the parent profile clean and uncluttered.
     """
-    # System simulated current date is 2026-10-18
+    s_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = s_res.scalars().first()
+    if not student:
+        return []
+
     today_str = "2026-10-18"
+    from app.services.backlog_engine import is_homework_for_student
     result = await db.execute(select(Homework).where(Homework.due_date == today_str))
     items = result.scalars().all()
-    if not items:
-        # Fallback to daily homework due closest to current date
+    matching = [h for h in items if is_homework_for_student(h.class_name, student.class_name, student.section)]
+    
+    # For demo student 1, if no matches today, allow fallback; for any other student return matching or empty
+    if not matching and student_id == 1:
         fallback_res = await db.execute(select(Homework).where(Homework.task_type == "DAILY_HOMEWORK").order_by(Homework.id.desc()).limit(2))
-        items = fallback_res.scalars().all()
-    return items
+        matching = fallback_res.scalars().all()
+    return matching
 
 @router.get("/academic-compliance/{student_id}", response_model=AcademicComplianceResponse)
 async def get_child_academic_compliance(student_id: int, db: AsyncSession = Depends(get_db)):
@@ -333,14 +363,17 @@ async def get_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
                 FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Term 2 Grade 10 Board & Lab Fee", amount=42000, due_date="15 Oct 2026", status="Paid", receipt_no="REC-2026-FEE-4012", paid_at="12 Oct 2026, 02:30 PM", payment_method="UPI (PhonePe)"),
                 FeeMilestone(id=3, student_id=student_id, title="Milestone 3: Complete Exit & TC Account Clearance", amount=0, due_date="30 Oct 2026", status="Paid", receipt_no="REC-2026-EXIT-CLEAR", paid_at="30 Oct 2026, 11:00 AM", payment_method="Institutional Accounts Clearance")
             ]
-        return [
-            FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Tuition & Curriculum Fee", amount=35000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5821", paid_at="12 Jul 2026, 11:20 AM", payment_method="UPI (Google Pay)"),
-            FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Q1 AC Bus Transport & GPS Fee", amount=14500, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5822", paid_at="15 Jul 2026, 03:40 PM", payment_method="Net Banking (HDFC)"),
-            FeeMilestone(id=3, student_id=student_id, title="Milestone 3: STEM Robotics, Composite Lab & Library Fee", amount=12000, due_date="18 Aug 2026", status="Paid", receipt_no="REC-2026-FEE-5823", paid_at="18 Aug 2026, 09:15 AM", payment_method="Debit Card"),
-            FeeMilestone(id=4, student_id=student_id, title="Milestone 4: Term 2 Tuition & Infrastructure Fee", amount=35000, due_date="25 Oct 2026", status="Overdue"),
-            FeeMilestone(id=5, student_id=student_id, title="Milestone 5: Q2 AC Bus Transport Fee", amount=14500, due_date="10 Nov 2026", status="Upcoming"),
-            FeeMilestone(id=6, student_id=student_id, title="Milestone 6: Annual Day, Sports & CBSE Exam Fee", amount=16500, due_date="15 Dec 2026", status="Upcoming"),
-        ]
+        if student_id == 1:
+            return [
+                FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Tuition & Curriculum Fee", amount=35000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5821", paid_at="12 Jul 2026, 11:20 AM", payment_method="UPI (Google Pay)"),
+                FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Q1 AC Bus Transport & GPS Fee", amount=14500, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5822", paid_at="15 Jul 2026, 03:40 PM", payment_method="Net Banking (HDFC)"),
+                FeeMilestone(id=3, student_id=student_id, title="Milestone 3: STEM Robotics, Composite Lab & Library Fee", amount=12000, due_date="18 Aug 2026", status="Paid", receipt_no="REC-2026-FEE-5823", paid_at="18 Aug 2026, 09:15 AM", payment_method="Debit Card"),
+                FeeMilestone(id=4, student_id=student_id, title="Milestone 4: Term 2 Tuition & Infrastructure Fee", amount=35000, due_date="25 Oct 2026", status="Overdue"),
+                FeeMilestone(id=5, student_id=student_id, title="Milestone 5: Q2 AC Bus Transport Fee", amount=14500, due_date="10 Nov 2026", status="Upcoming"),
+                FeeMilestone(id=6, student_id=student_id, title="Milestone 6: Annual Day, Sports & CBSE Exam Fee", amount=16500, due_date="15 Dec 2026", status="Upcoming"),
+            ]
+        # Any newly enrolled student with no fee milestones has clean slate
+        return []
     return fees
 
 @router.post("/fees/{milestone_id}/pay", response_model=FeeMilestoneResponse)
@@ -440,6 +473,18 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
         action_url="/parent",
         metadata_dict={"receipt_no": receipt_num, "amount": milestone.amount}
     )
+
+    # 5. Statutory Security & Fiscal Audit Log
+    fee_audit = SecurityAuditLog(
+        actor_name=parent_name,
+        actor_role="PARENT",
+        action_type="PARENT_FEE_PAYMENT",
+        target_entity=f"FeeMilestone #{milestone_id} - {student_name} ({class_name})",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Settled {milestone.title} amount ₹{milestone.amount:,.0f} via {req.payment_method}. UTR: {utr_code}, Receipt: {receipt_num}"
+    )
+    db.add(fee_audit)
     
     await db.commit()
     await db.refresh(milestone)
@@ -491,6 +536,19 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
         approval_stage="Submitted - Pending Teacher Review"
     )
     db.add(new_lr)
+
+    # Statutory Security & Attendance Audit Log
+    leave_audit = SecurityAuditLog(
+        actor_name=req.parent_name,
+        actor_role="PARENT",
+        action_type="PARENT_LEAVE_APPLICATION",
+        target_entity=f"Student #{req.student_id} - {req.student_name}",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Leave application for {req.from_date} to {req.to_date}. Medical: {bool(req.is_medical)}. Reason: {req.reason[:150]}"
+    )
+    db.add(leave_audit)
+
     await db.commit()
     await db.refresh(new_lr)
 
@@ -534,6 +592,18 @@ async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: As
         clearance.status = "Completed & Permanently Archived"
     else:
         clearance.status = "Digital Approved - Pending Physical Sign Scan"
+
+    # Statutory Security & TC Exit Audit Log
+    tc_audit = SecurityAuditLog(
+        actor_name=f"Parent of {clearance.student_name}",
+        actor_role="PARENT",
+        action_type="STATUTORY_TC_PARENT_DIGITAL_SIGN",
+        target_entity=f"ExitClearance #{clearance.id} - Student #{student_id} ({clearance.student_name})",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"CBSE statutory TC digital sign-off stamped at {clearance.digital_approval_timestamp}. Result status: {clearance.status}"
+    )
+    db.add(tc_audit)
         
     await db.commit()
     await db.refresh(clearance)
@@ -810,6 +880,19 @@ async def sign_parent_report_card(report_card_id: int, req: ReportCardSignReques
     rc.parent_signer_name = req.signer_name
     rc.parent_signature_hash = seal_hash
     rc.parent_remarks = req.remarks
+
+    # Statutory Academic Audit Log for Parent Report Card Acknowledgment
+    rc_audit = SecurityAuditLog(
+        actor_name=req.signer_name,
+        actor_role="PARENT",
+        action_type="REPORT_CARD_PARENT_SIGN",
+        target_entity=f"ReportCard #{rc.id} - Student #{rc.student_id} ({rc.student_name})",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Term {rc.term} report card digitally signed by {req.signer_name}. Hash: {seal_hash}. Remarks: {req.remarks or 'None'}"
+    )
+    db.add(rc_audit)
+
     await db.commit()
     await db.refresh(rc)
 

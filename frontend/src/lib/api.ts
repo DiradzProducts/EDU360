@@ -2263,45 +2263,112 @@ let fallbackFeeDefaulters: FeeDefaulter[] = [
 
 
 let fallbackPaymentTransactions: PaymentTransactionItem[] = [
-
   {
-
     id: 1,
-
     utr_number: "UPI/2026101901/HDFC",
-
     student_name: "Aarav Sharma",
-
     class_name: "Class 8-B",
-
     parent_name: "Mr. Rajesh Sharma",
-
     amount: 35000,
-
     payment_method: "UPI (Google Pay)",
-
     bank_name: "HDFC School Collections Gateway",
-
     milestone_title: "Term 1 Comprehensive Fee (Tuition, Lab & Sports)",
-
     status: "Success",
-
-    transaction_date: "10 Oct 2026",
-
-    reconciled: true,
-
-    reconciled_at: "11 Oct 2026, 10:15 AM",
-
-    reconciled_by: "Mr. Arvind Krishnan",
-
+    transaction_date: "14 Nov 2026",
+    reconciled: false,
     gateway_ref: "pay_online_1_1728555300",
-
-    notes: "Settled via Parent Online Portal",
-
-    created_at: "2026-10-10T10:15:00Z"
-
+    notes: "Settled via Parent Online Portal (PhonePe/UPI)",
+    created_at: "2026-11-14T10:15:00Z"
+  },
+  {
+    id: 2,
+    utr_number: "NEFT/N1029384756/SBI",
+    student_name: "Rohan Deshmukh",
+    class_name: "Class 9-A",
+    parent_name: "Mr. Suresh Deshmukh",
+    amount: 42000,
+    payment_method: "NEFT / RTGS Wire",
+    bank_name: "State Bank of India (School Core Account)",
+    milestone_title: "Term 1 Tuition & Computer Science Lab Fee",
+    status: "Success",
+    transaction_date: "13 Nov 2026",
+    reconciled: false,
+    gateway_ref: "sbi_neft_ref_99218",
+    notes: "Direct bank transfer credited to school account. Pending accounts verification.",
+    created_at: "2026-11-13T14:30:00Z"
+  },
+  {
+    id: 3,
+    utr_number: "POS/SWIPE/20261112/ICICI",
+    student_name: "Kavya Iyer",
+    class_name: "Class 10-A",
+    parent_name: "Mrs. Meenakshi Iyer",
+    amount: 25000,
+    payment_method: "Campus Card Terminal (POS)",
+    bank_name: "ICICI Merchant Services",
+    milestone_title: "Annual Sports & Laboratory Maintenance Fee",
+    status: "Success",
+    transaction_date: "12 Nov 2026",
+    reconciled: true,
+    reconciled_at: "12 Nov 2026, 04:45 PM",
+    reconciled_by: "Mr. Arvind Krishnan",
+    gateway_ref: "pos_icici_term_04",
+    notes: "Swiped at Bursar front desk terminal. Receipt #REC-8821 generated.",
+    created_at: "2026-11-12T11:20:00Z"
+  },
+  {
+    id: 4,
+    utr_number: "UPI/2026111192/PAYTM",
+    student_name: "Ishaan Reddy",
+    class_name: "Class 7-B",
+    parent_name: "Dr. K. V. Reddy",
+    amount: 18500,
+    payment_method: "UPI (Paytm)",
+    bank_name: "HDFC School Collections Gateway",
+    milestone_title: "Term 2 Activity & Robotics Kit Fee",
+    status: "Success",
+    transaction_date: "11 Nov 2026",
+    reconciled: false,
+    gateway_ref: "pay_tm_99482716",
+    notes: "Auto-cleared via QR payment code at orientation session.",
+    created_at: "2026-11-11T16:05:00Z"
+  },
+  {
+    id: 5,
+    utr_number: "CHQ/778291/KOTAK",
+    student_name: "Ananya Pillai",
+    class_name: "Class 8-A",
+    parent_name: "Mr. G. Pillai",
+    amount: 28000,
+    payment_method: "Bank Demand Draft / Cheque",
+    bank_name: "Kotak Mahindra Bank",
+    milestone_title: "Term 1 School Bus Fleet & Transport Fee",
+    status: "Success",
+    transaction_date: "10 Nov 2026",
+    reconciled: true,
+    reconciled_at: "11 Nov 2026, 09:30 AM",
+    reconciled_by: "Mr. Arvind Krishnan",
+    gateway_ref: "chq_clear_kotak_778291",
+    notes: "Cheque deposited in drop box, cleared by Kotak clearing house.",
+    created_at: "2026-11-10T15:00:00Z"
+  },
+  {
+    id: 6,
+    utr_number: "UPI/2026110902/GPAY",
+    student_name: "Arjun Mehta",
+    class_name: "Class 10-B",
+    parent_name: "Mr. Pradeep Mehta",
+    amount: 25000,
+    payment_method: "UPI (Google Pay)",
+    bank_name: "HDFC School Collections Gateway",
+    milestone_title: "One-Time New Admission & Registration Fee",
+    status: "Success",
+    transaction_date: "09 Nov 2026",
+    reconciled: false,
+    gateway_ref: "pay_online_adm_8831",
+    notes: "New Enrolment Intake Admission Fee • Receipt #REC-ADM-2026-101",
+    created_at: "2026-11-09T09:12:00Z"
   }
-
 ];
 
 
@@ -6120,37 +6187,36 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   },
 
-  getParentChildren: async (username?: string, phone?: string) => {
-
+  getParentChildren: async (username?: string, phone?: string, email?: string) => {
     try {
-
       const params = new URLSearchParams();
-
       if (username) params.append('username', username);
-
       if (phone) params.append('phone', phone);
-
+      if (email) params.append('email', email);
       const query = params.toString() ? `?${params.toString()}` : '';
-
       return await fetchWithFallback<any[]>(`/api/parent/children${query}`);
-
     } catch {
-
       return null;
-
     }
-
   },
 
   getStudents: async () => {
-
     return fetchWithFallback<Student[]>('/api/admin/students', undefined, fallbackStudents);
+  },
 
+  getStudentById: async (studentId: number) => {
+    try {
+      return await fetchWithFallback<Student>(`/api/admin/students/${studentId}`);
+    } catch {
+      return fallbackStudents.find(s => s.id === studentId) || null;
+    }
   },
 
   getStudentDocuments: async (studentId: number) => {
 
-    return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, fallbackDocuments);
+    const fallback = studentId === 1 ? fallbackDocuments : [];
+
+    return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, fallback);
 
   },
 
@@ -8281,11 +8347,8 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   getFees: async (studentId: number = 1) => {
-
-    const fallback = studentId === 12 ? fallbackFeesJohn : fallbackFees;
-
+    const fallback = studentId === 12 ? fallbackFeesJohn : (studentId === 1 ? fallbackFees : []);
     return fetchWithFallback<FeeMilestone[]>(`/api/parent/fees/${studentId}`, undefined, fallback);
-
   },
 
   payFee: async (milestoneId: number, paymentMethod: string = 'UPI') => {
@@ -8884,8 +8947,10 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   // Student Endpoints
 
-  getStudentRecordings: async () => {
-
+  getStudentRecordings: async (studentId?: number) => {
+    if (studentId !== undefined && studentId !== 1) {
+      return [];
+    }
     const fallbackRecordings: ClassRecording[] = [
 
       { 
@@ -8998,7 +9063,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   getPortfolio: async (studentId: number = 1) => {
 
-    const fallbackPortfolio: StudentPortfolio[] = [
+    const fallbackPortfolio: StudentPortfolio[] = studentId === 1 ? [
 
       { id: 1, student_id: 1, category: "participation", title: "Inter-House Football Championship 2025", event_name: "Phoenix House Captain (Forward)", date: "Aug 2025", verified_by_school: true, description: "Led Phoenix House to the semifinals, scoring 4 goals." },
 
@@ -9008,7 +9073,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
       { id: 4, student_id: 1, category: "achievement", title: "District U-14 Rapid Chess Championship", event_name: "1st Runner-Up Trophy", date: "Dec 2025", proof_url: "/samples/chess_trophy_cert.png", verified_by_school: true, description: "Won 5 out of 6 rounds at Bangalore Youth Chess Open." }
 
-    ];
+    ] : [];
 
     return fetchWithFallback<StudentPortfolio[]>(`/api/student/portfolio/${studentId}`, undefined, fallbackPortfolio);
 
@@ -9454,7 +9519,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   // Student Homework & Assignments API
 
-  getStudentHomework: async (taskType?: TaskType, status?: string, date?: string) => {
+  getStudentHomework: async (taskType?: TaskType, status?: string, date?: string, studentId?: number) => {
 
     let url = '/api/student/homework';
 
@@ -9466,17 +9531,25 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
     if (date) params.append('date', date);
 
+    if (studentId) params.append('student_id', String(studentId));
+
     if (params.toString()) url += `?${params.toString()}`;
 
 
 
-    let filtered = [...fallbackHomeworkList];
+    let filtered: Homework[] = [];
 
-    if (taskType) filtered = filtered.filter(h => h.task_type === taskType);
+    if (!studentId || studentId === 1) {
 
-    if (status && status !== 'all') filtered = filtered.filter(h => h.status.toLowerCase() === status.toLowerCase());
+      filtered = [...fallbackHomeworkList];
 
-    if (date) filtered = filtered.filter(h => h.due_date === date);
+      if (taskType) filtered = filtered.filter(h => h.task_type === taskType);
+
+      if (status && status !== 'all') filtered = filtered.filter(h => h.status.toLowerCase() === status.toLowerCase());
+
+      if (date) filtered = filtered.filter(h => h.due_date === date);
+
+    }
 
 
 
@@ -9622,9 +9695,24 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   getAcademicCompliance: async (studentId: number = 1) => {
 
-    const comp = await fetchWithFallback<AcademicCompliance>(`/api/student/compliance/${studentId}`, undefined, fallbackAcademicCompliance);
+    const defaultCleanCompliance: AcademicCompliance = {
+      student_id: studentId,
+      student_name: 'Student',
+      total_assigned: 0,
+      on_time_submissions: 0,
+      late_submissions: 0,
+      backlog_count: 0,
+      compliance_pct: 100,
+      itemized_backlogs: []
+    };
 
-    if (!comp.itemized_backlogs || comp.itemized_backlogs.length === 0) {
+    const comp = await fetchWithFallback<AcademicCompliance>(
+      `/api/student/compliance/${studentId}`, 
+      undefined, 
+      studentId === 1 ? fallbackAcademicCompliance : defaultCleanCompliance
+    );
+
+    if (studentId === 1 && (!comp.itemized_backlogs || comp.itemized_backlogs.length === 0)) {
 
       return {
 
@@ -9636,7 +9724,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
     }
 
-    return comp;
+    return comp || defaultCleanCompliance;
 
   },
 
@@ -9711,17 +9799,14 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     }
 
     try {
-
       const res = await fetchWithFallback<Homework[]>(`/api/parent/today-homework/${studentId}`, undefined, []);
-
-      if (res && res.length > 0) return res;
-
+      if (res && Array.isArray(res)) return res;
     } catch {
-
       // Fallback below
-
     }
-
+    if (studentId !== 1 && studentId !== 7) {
+      return [];
+    }
     return fallbackHomeworkList.filter(h => h.due_date === todayStr || h.id === 3);
 
   },
@@ -10522,13 +10607,31 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
       }
 
-      return { success: true, student: res as FocusRosterItem };
+      if (res && (res.student_id || res.name)) {
+
+        return { success: true, student: res as FocusRosterItem };
+
+      }
+
+      if (studentId === 1) {
+
+        return { success: true, student: INITIAL_FOCUS_ROSTER[0] };
+
+      }
+
+      return { success: false, student: null };
 
     } catch {
 
-      const student = getFocusStudentById(studentId) || INITIAL_FOCUS_ROSTER[0];
+      if (studentId === 1) {
 
-      return { success: true, student };
+        const student = getFocusStudentById(studentId) || INITIAL_FOCUS_ROSTER[0];
+
+        return { success: true, student };
+
+      }
+
+      return { success: false, student: null };
 
     }
 
@@ -11838,6 +11941,27 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
 
+  sealQuestionPaperInVault: async (paperId: number, data?: { sealed_by?: string; barcode_hash?: string; locker_number?: string }): Promise<any> => {
+    try {
+      return await fetchWithFallback<any>(`/api/exams/question-papers/${paperId}/seal`, {
+        method: 'POST',
+        body: JSON.stringify(data || {})
+      });
+    } catch {
+      fallbackQuestionPapers = fallbackQuestionPapers.map(p => {
+        if (p.id === paperId) {
+          return { 
+            ...p, 
+            status: 'sealed_in_vault',
+            barcode_hash: data?.barcode_hash || `SEC-2026-MTH-${paperId}99-SEALED`
+          };
+        }
+        return p;
+      });
+      return { success: true, message: 'Question paper sealed in vault (fallback).' };
+    }
+  },
+
   handoffQuestionPaper: async (paperId: number): Promise<any> => {
 
     try {
@@ -12079,10 +12203,14 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       if (params?.only_published !== undefined) q.set('only_published', params.only_published ? 'true' : 'false');
 
       const res = await fetchWithFallback<{ success: boolean; report_cards: ReportCardItem[] }>(`/api/exams/report-cards?${q.toString()}`);
-
+      if (params?.student_id && params.student_id !== 1) {
+        return res?.report_cards || [];
+      }
       return res.report_cards || fallbackReportCards;
-
     } catch {
+      if (params?.student_id && params.student_id !== 1) {
+        return [];
+      }
 
       // Sync Aarav Sharma's Mathematics grade dynamically with teacher's latest grading
 
@@ -12517,13 +12645,13 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
   sendProctorTelemetry: async (candidateId: number, data: {
-
     anomaly_type: string;
-
     confidence?: number;
-
     details?: string;
-
+    strikes?: number;
+    is_paused?: boolean;
+    is_strike?: boolean;
+    title?: string;
   }): Promise<any> => {
 
     try {
@@ -13272,13 +13400,14 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
       if (params?.search) q.set('search', params.search);
 
-      const res = await fetchWithFallback<PaymentTransactionItem[]>(`/api/finance/transactions?${q.toString()}`);
+      const res = await fetchWithFallback<PaymentTransactionItem[]>(`/api/finance/transactions?${q.toString()}`, undefined, fallbackPaymentTransactions);
 
-      return Array.isArray(res) ? res : [];
+      if (Array.isArray(res) && res.length > 0) return res;
+      return fallbackPaymentTransactions;
 
     } catch {
 
-      return [];
+      return fallbackPaymentTransactions;
 
     }
 
@@ -13838,10 +13967,10 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
 
 
-  getReExamRequests: async (): Promise<ReExamRequestItem[]> => {
-
-    return fetchWithFallback<ReExamRequestItem[]>('/api/exams/re-exam-requests', undefined, fallbackReExamRequests);
-
+  getReExamRequests: async (studentId?: number): Promise<ReExamRequestItem[]> => {
+    const url = studentId !== undefined ? `/api/exams/re-exam-requests?student_id=${studentId}` : '/api/exams/re-exam-requests';
+    const fallback = studentId !== undefined && studentId !== 1 ? [] : fallbackReExamRequests;
+    return fetchWithFallback<ReExamRequestItem[]>(url, undefined, fallback);
   },
 
 

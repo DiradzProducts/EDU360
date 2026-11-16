@@ -740,10 +740,10 @@ export default function AcademicCoordinatorPage() {
                   </div>
                   <div className="my-3">
                     <div className="text-2xl font-black text-slate-900 dark:text-white">
-                      {questionPapers.filter(q => q.status === 'approved').length} / {questionPapers.length}
+                      {questionPapers.filter(q => q.status === 'approved' || q.status === 'sent_to_exam_cell' || q.status === 'sealed_in_vault').length} / {questionPapers.length}
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      Term examination papers sealed &amp; Dean-moderated
+                      Term examination papers approved &amp; in secrecy custody
                     </p>
                   </div>
                   <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -1007,11 +1007,16 @@ export default function AcademicCoordinatorPage() {
                           <td className="p-3 font-bold">{qp.blueprint?.total_marks || qp.total_marks || 100} M</td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              qp.status === 'approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                              (qp.status === 'sent_to_exam_cell' || qp.status === 'sealed_in_vault') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                              qp.status === 'approved' ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300' :
                               qp.status === 'under_review' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+                              qp.status === 'revision_requested' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
                               'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
                             }`}>
-                              {qp.status === 'approved' ? 'Dean Approved ✓' : qp.status === 'under_review' ? 'In Review' : 'Draft'}
+                              {qp.status === 'sent_to_exam_cell' || qp.status === 'sealed_in_vault' ? 'In Exam Vault 🔒' :
+                               qp.status === 'approved' ? 'Academic Approved ✓' :
+                               qp.status === 'under_review' ? 'In Review ⏳' :
+                               qp.status === 'revision_requested' ? 'Revision ⚠️' : 'Faculty Drafting'}
                             </span>
                           </td>
                           <td className="p-3 text-right">
@@ -1022,7 +1027,7 @@ export default function AcademicCoordinatorPage() {
                               }}
                               className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 hover:bg-blue-100 font-bold text-[11px] cursor-pointer"
                             >
-                              Review Blueprint
+                              {qp.status === 'under_review' ? 'Review Blueprint' : 'View Blueprint'}
                             </button>
                           </td>
                         </tr>
@@ -1609,9 +1614,9 @@ export default function AcademicCoordinatorPage() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {staff
                       .filter(member => {
-                        const matchDept = staffDeptFilter === 'all' || member.department.toLowerCase().includes(staffDeptFilter.toLowerCase());
-                        const matchSearch = !staffSearchQuery || member.name.toLowerCase().includes(staffSearchQuery.toLowerCase());
-                        return matchDept && matchSearch;
+                        const matchDept = staffDeptFilter === 'all' || (member.department && member.department.toLowerCase().includes(staffDeptFilter.toLowerCase()));
+                        const matchSearch = !staffSearchQuery || (member.name && member.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
+                        return Boolean(matchDept && matchSearch);
                       })
                       .map(member => (
                         <tr key={member.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">

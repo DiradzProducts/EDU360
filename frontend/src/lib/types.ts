@@ -1207,7 +1207,10 @@ export interface QuestionPaperItem {
   draft_file_url?: string;
   draft_file_name?: string;
   answer_key_url?: string;
-  status: 'draft' | 'under_review' | 'revision_requested' | 'approved' | 'sent_to_exam_cell';
+  status: 'draft' | 'under_review' | 'revision_requested' | 'approved' | 'sent_to_exam_cell' | 'sealed_in_vault';
+  barcode_hash?: string;
+  sealed_at?: string;
+  sealed_by?: string;
   revision_notes?: string;
   review_notes?: string;
   due_date?: string;

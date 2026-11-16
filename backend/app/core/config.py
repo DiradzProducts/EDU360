@@ -12,7 +12,7 @@ class Settings(BaseModel):
     APP_NAME: str = "EDU360 Backend"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./edu360.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")  # No SQLite fallback; PostgreSQL is required
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")

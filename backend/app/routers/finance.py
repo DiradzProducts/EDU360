@@ -10,8 +10,10 @@ from app.core.database import get_db
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
     FeeMilestone, Student, Notification, StaffMember,
-    PayrollBatch, StaffPayslip, StaffSalaryInquiry, PurchaseOrder, FleetExpenseRecord
+    PayrollBatch, StaffPayslip, StaffSalaryInquiry, PurchaseOrder, FleetExpenseRecord,
+    SecurityAuditLog
 )
+from app.core.rbac import require_role
 from app.schemas.schemas import (
     FeeDefaulterResponse, FeeDefaulterCreate, FeeDefaulterUpdate,
     VendorInvoiceResponse, VendorInvoiceCreate, VendorInvoiceUpdate,
@@ -27,10 +29,27 @@ from app.routers.notifications import create_system_notification
 
 logger = logging.getLogger("edu360.finance")
 
-router = APIRouter(prefix="/api/finance", tags=["finance"])
+router = APIRouter(prefix="/api/finance", tags=["finance"], dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "teacher", "parent", "student"]))])
 
 
 # =========================================================================
+
+async def log_financial_audit(db: AsyncSession, actor_name: str, actor_role: str, action_type: str, target: str, status: str, details: str):
+    """Logs immutable audit record into security_audit_logs for statutory and CBSE inspection."""
+    try:
+        audit_entry = SecurityAuditLog(
+            actor_name=actor_name,
+            actor_role=actor_role,
+            action_type=action_type,
+            target_entity=target,
+            status=status,
+            details=details
+        )
+        db.add(audit_entry)
+        await db.flush()
+    except Exception as e:
+        logger.warning(f"Failed to record financial audit log: {e}")
+
 # 1. DASHBOARD STATS
 # =========================================================================
 
@@ -360,6 +379,15 @@ async def apply_fee_waiver(
     else:
         defaulter.status = "Partially Paid"
 
+    await log_financial_audit(
+        db=db,
+        actor_name=req.approved_by or "Accounts Officer",
+        actor_role="accounts_coordinator",
+        action_type="FEE_WAIVER_APPLIED",
+        target=f"Student #{defaulter.student_id} ({defaulter.student_name})",
+        status="VERIFIED",
+        details=f"Fee waiver of ₹{req.waiver_amount:,.2f} applied. Reason: {req.reason}. Approved by: {req.approved_by}."
+    )
     await db.commit()
     await db.refresh(defaulter)
     return defaulter
@@ -368,11 +396,12 @@ async def apply_fee_waiver(
 @router.post("/defaulters/{id}/exam-clearance")
 async def toggle_exam_clearance(
     id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    admin_role: str = Depends(require_role(["admin", "principal", "super_admin"]))
 ):
     """
     Toggles institutional examination clearance for a student fee defaulter.
-    Directly persists to SQLite DB so exam coordinator hall-ticket engine is in sync.
+    Directly persists to PostgreSQL DB so exam coordinator hall-ticket engine is in sync.
     """
     res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id))
     defaulter = res.scalars().first()

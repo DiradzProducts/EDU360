@@ -44,7 +44,7 @@ import { AdmissionEnquiry } from '@/lib/types';
 import { exportToCsv } from '@/lib/export-utils';
 import { DocumentViewerModal, DocumentPreviewData } from '@/components/document-viewer-modal';
 
-type CrmFilter = 'all' | 'due_today' | 'hot' | 'active' | 'followup' | 'converted' | 'dropped';
+type CrmFilter = 'all' | 'due_today' | 'active' | 'passive' | 'converted' | 'dropped';
 
 export default function AdmissionsCoordinatorPage() {
   const router = useRouter();
@@ -90,7 +90,7 @@ export default function AdmissionsCoordinatorPage() {
   const [regEmail, setRegEmail] = useState('');
   const [regGrade, setRegGrade] = useState('Class 8');
   const [regSource, setRegSource] = useState('Website Form');
-  const [regTemperature, setRegTemperature] = useState<'hot' | 'warm' | 'cold'>('warm');
+  const [regCategory, setRegCategory] = useState<'active' | 'passive'>('active');
   const [regDocReportCard, setRegDocReportCard] = useState(false);
   const [regDocBirthCert, setRegDocBirthCert] = useState(false);
   const [regDocTransferCert, setRegDocTransferCert] = useState(false);
@@ -178,9 +178,8 @@ export default function AdmissionsCoordinatorPage() {
 
   // Pipeline Metrics
   const dueTodayCount = useMemo(() => enquiries.filter(isDueToday).length, [enquiries, todayStr]);
-  const hotCount = useMemo(() => enquiries.filter(e => e.stage !== 'converted' && e.stage !== 'dropped' && e.lead_temperature === 'hot').length, [enquiries]);
-  const activeCount = useMemo(() => enquiries.filter(e => e.stage !== 'converted' && e.stage !== 'dropped').length, [enquiries]);
-  const followupCount = useMemo(() => enquiries.filter(e => e.stage === 'followup').length, [enquiries]);
+  const activeCount = useMemo(() => enquiries.filter(e => e.stage !== 'converted' && e.stage !== 'dropped' && e.lead_temperature !== 'cold').length, [enquiries]);
+  const passiveCount = useMemo(() => enquiries.filter(e => e.stage !== 'converted' && e.stage !== 'dropped' && e.lead_temperature === 'cold').length, [enquiries]);
   const convertedCount = useMemo(() => enquiries.filter(e => e.stage === 'converted').length, [enquiries]);
   const droppedCount = useMemo(() => enquiries.filter(e => e.stage === 'dropped').length, [enquiries]);
 
@@ -198,9 +197,8 @@ export default function AdmissionsCoordinatorPage() {
 
       // Tab filter
       if (crmFilter === 'due_today') return isDueToday(enq);
-      if (crmFilter === 'hot') return enq.stage !== 'converted' && enq.stage !== 'dropped' && enq.lead_temperature === 'hot';
-      if (crmFilter === 'active') return enq.stage !== 'converted' && enq.stage !== 'dropped';
-      if (crmFilter === 'followup') return enq.stage === 'followup';
+      if (crmFilter === 'active') return enq.stage !== 'converted' && enq.stage !== 'dropped' && enq.lead_temperature !== 'cold';
+      if (crmFilter === 'passive') return enq.stage !== 'converted' && enq.stage !== 'dropped' && enq.lead_temperature === 'cold';
       if (crmFilter === 'converted') return enq.stage === 'converted';
       if (crmFilter === 'dropped') return enq.stage === 'dropped';
       return true;
@@ -419,7 +417,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
       phone: regPhone.trim(),
       email: emailVal,
       target_grade: regGrade,
-      lead_temperature: regTemperature,
+      lead_temperature: regCategory === 'passive' ? 'cold' : 'warm',
       source: regSource,
       doc_report_card: regDocReportCard,
       doc_birth_cert: regDocBirthCert,
@@ -443,6 +441,15 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
     const updated = await api.getEnquiries();
     setEnquiries(updated);
     triggerToast('New student enquiry registered successfully!');
+  };
+
+  // Open 1-Click SIS Convert Modal
+  const openConvertModal = (enq: AdmissionEnquiry) => {
+    setConvertModalEnquiry(enq);
+    setConvertSection('A');
+    setConvertAdmissionFee(25000);
+    setConvertFeeStatus('Paid');
+    setConvertPaymentMethod('UPI (Google Pay)');
   };
 
   // 5. Open Call Log Modal
@@ -649,10 +656,9 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
             )}
             {[
               { id: 'all', label: 'All Inquiries', icon: Users, badge: `${enquiries.length}`, badgeType: 'slate' },
-              { id: 'due_today', label: "Today's Calling Queue", icon: BellRing, badge: dueTodayCount > 0 ? `${dueTodayCount} Due` : 'Clear', badgeType: dueTodayCount > 0 ? 'amber' : 'emerald' },
-              { id: 'hot', label: "Hot Leads 🔥", icon: Flame, badge: `${hotCount}`, badgeType: 'rose' },
-              { id: 'active', label: 'All Active Leads', icon: Users, badge: `${activeCount}`, badgeType: 'blue' },
-              { id: 'followup', label: 'Follow-ups Pipeline', icon: Calendar, badge: `${followupCount}`, badgeType: 'blue' },
+              { id: 'active', label: 'Active Leads ⚡', icon: Users, badge: `${activeCount}`, badgeType: 'blue' },
+              { id: 'passive', label: 'Passive Leads 💤', icon: Users, badge: `${passiveCount}`, badgeType: 'slate' },
+              { id: 'due_today', label: "Today's Follow-ups", icon: BellRing, badge: dueTodayCount > 0 ? `${dueTodayCount} Due` : 'Clear', badgeType: dueTodayCount > 0 ? 'amber' : 'emerald' },
               { id: 'converted', label: 'Enrolled Students (SIS)', icon: UserCheck, badge: `${convertedCount}`, badgeType: 'emerald' },
               { id: 'dropped', label: 'Dropped Inquiries', icon: UserX, badge: `${droppedCount}`, badgeType: 'slate' }
             ].map(item => {
@@ -813,15 +819,6 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
-            {hotCount > 0 && crmFilter !== 'hot' && (
-              <button
-                onClick={() => setCrmFilter('hot')}
-                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1"
-              >
-                <Flame className="h-3 w-3" />
-                <span>Hot Leads ({hotCount})</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -830,10 +827,9 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
             <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span>
-              {crmFilter === 'due_today' ? "Today's Calling Queue"
-                : crmFilter === 'hot' ? "Hot Leads (High Intent)"
-                : crmFilter === 'active' ? "All Active Leads"
-                : crmFilter === 'followup' ? "Scheduled Follow-ups Pipeline"
+              {crmFilter === 'due_today' ? "Today's Follow-up Queue"
+                : crmFilter === 'active' ? "Active Leads (Engaged / Immediate Follow-up)"
+                : crmFilter === 'passive' ? "Passive Leads (Cold / Nurturing Queue)"
                 : crmFilter === 'converted' ? "Enrolled Students (SIS)"
                 : crmFilter === 'dropped' ? "Dropped / Archived Inquiries"
                 : "All Inquiries"}
@@ -863,7 +859,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
               <Users className="h-6 w-6" />
             </div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              {crmFilter === 'due_today' ? "No Calls Due for Today" : crmFilter === 'hot' ? "No Hot Leads Currently" : "No Leads Found"}
+              {crmFilter === 'due_today' ? "No Calls Due for Today" : crmFilter === 'passive' ? "No Passive Leads" : "No Leads Found"}
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
               {crmFilter === 'due_today' 
@@ -1008,27 +1004,41 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                   {/* Actions Footer */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80" onClick={(e) => e.stopPropagation()}>
                     {enq.stage !== 'converted' && enq.stage !== 'dropped' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCallModal(enq);
+                            }}
+                            className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="Add New Follow-Up Call & Outcome"
+                          >
+                            <PhoneCall className="h-3.5 w-3.5" />
+                            <span>Add Follow-up</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/admissions_coordinator/leads/${enq.id}`)}
+                            className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="View Full Lead Dossier & Requirements"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Details</span>
+                          </button>
+                        </div>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            openCallModal(enq);
+                            openConvertModal(enq);
                           }}
-                          className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="Add New Follow-Up Call & Outcome"
+                          className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Single Click Enrollment - Convert Lead directly into Enrolled Student in SIS"
                         >
-                          <PhoneCall className="h-3.5 w-3.5" />
-                          <span>Add Follow-up</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/admissions_coordinator/leads/${enq.id}`)}
-                          className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="View Full Lead Dossier & Enrollment"
-                        >
-                          <Eye className="h-3.5 w-3.5 text-slate-500" />
-                          <span>View Details</span>
+                          <UserCheck className="h-3.5 w-3.5" />
+                          <span>Single Click Enrollment (SIS)</span>
                         </button>
                       </div>
                     ) : enq.stage === 'converted' ? (
@@ -1531,15 +1541,14 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Initial Priority / Temperature</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Initial Lead Category</label>
                   <select 
-                    value={regTemperature} 
-                    onChange={e => setRegTemperature(e.target.value as any)}
+                    value={regCategory} 
+                    onChange={e => setRegCategory(e.target.value as 'active' | 'passive')}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                   >
-                    <option value="hot">🔥 Hot (High Intent / Ready)</option>
-                    <option value="warm">🌤️ Warm (In Consideration)</option>
-                    <option value="cold">❄️ Cold (Casual Inquiry)</option>
+                    <option value="active">⚡ Active Lead (Engaged / Follow-up)</option>
+                    <option value="passive">💤 Passive Lead (Cold / Nurturing)</option>
                   </select>
                 </div>
               </div>

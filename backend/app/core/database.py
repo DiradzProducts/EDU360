@@ -6,7 +6,7 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    # PostgreSQL-only — no SQLite connect_args needed
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -22,8 +22,9 @@ Base = declarative_base()
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:
-            if "sqlite" in settings.DATABASE_URL:
-                await session.execute(text("PRAGMA foreign_keys=ON;"))
+            # No SQLite-specific PRAGMA needed
+    # if "sqlite" in settings.DATABASE_URL:
+    #     await session.execute(text("PRAGMA foreign_keys=ON;"))
             yield session
         finally:
             await session.close()

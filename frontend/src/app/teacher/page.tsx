@@ -44,6 +44,8 @@ import {
 
   Play, 
 
+  Pause, 
+
   Award, 
 
   AlertTriangle, 
@@ -199,6 +201,8 @@ import { EduVideoConferenceModal } from '@/components/livekit/edu-video-conferen
 import { ProctorIntegrityDossierModal } from '@/components/proctor/proctor-integrity-dossier-modal';
 
 import { LiveInvigilatorCockpit } from '@/components/proctor/live-invigilator-cockpit';
+import { ExamCoordinatorScheduleModal } from '@/components/exam/exam-coordinator-schedule-modal';
+import { TeacherPdfScriptViewerModal, AnswerScriptSubmission } from '@/components/exam/teacher-pdf-script-viewer-modal';
 
 import { HomeworkCanvas } from '@/components/homework-canvas';
 
@@ -229,6 +233,7 @@ import { StudentRemark, getRemarksForStudent, addStudentRemark, getAllRemarks } 
 import { Footer } from '@/components/footer';
 
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 
 
 
@@ -351,6 +356,54 @@ interface HomeworkRosterItem {
 
 
 export default function TeacherPage() {
+
+  const { user, loginWithCredentials } = useAuth();
+
+  // Teacher & Chief Invigilator Profile (Strictly Mrs. Ananya Verma • Class 8-B)
+  const currentTeacherName = 'Mrs. Ananya Verma';
+  const currentTeacherSubject = 'Mathematics';
+  const currentTeacherClass = 'Class 8-B';
+
+  // Session Self-Healing: Normalize session to Mrs. Ananya Verma if teacher loaded under stale profile
+  useEffect(() => {
+    if (user && user.role === 'teacher' && (user.username === 'teacher_eng' || user.id === 14 || (user.name && user.name.includes('Sunitha')))) {
+      loginWithCredentials({
+        id: 2,
+        name: 'Mrs. Ananya Verma',
+        username: 'teacher_mat',
+        email: 'ananya.verma@edu360.internal',
+        role: 'teacher',
+        school_code: 'EDU-GLOBAL-360',
+        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+        phone: '+91 98111 00002'
+      });
+    }
+  }, [user, loginWithCredentials]);
+
+  // Real-time Malpractice Alerts state for persistent Left Corner Popup
+  interface MalpracticeNotification {
+    id: string;
+    candidateId: number;
+    studentName: string;
+    rollNo: string;
+    className: string;
+    malpracticeType: string;
+    title: string;
+    ruleTriggered: string;
+    confidence: number;
+    strikes: number;
+    timestamp: string;
+  }
+  const lastTeacherMalpracticeNonceRef = useRef<any>(0);
+  const [activeMalpracticeAlerts, setActiveMalpracticeAlerts] = useState<MalpracticeNotification[]>([]);
+  const [newExamDutyAlert, setNewExamDutyAlert] = useState<{
+    title: string;
+    subject: string;
+    className: string;
+    date: string;
+    time: string;
+    hall: string;
+  } | null>(null);
 
   const [activeTab, setActiveTab] = useState<TeacherTab>('dashboard');
 
@@ -1111,7 +1164,67 @@ export default function TeacherPage() {
 
   // OCR & Question Paper Drafting State
 
-  const [examSubTab, setExamSubTab] = useState<'marks_ledger' | 'qp_desk' | 'live_cockpit'>('marks_ledger');
+  const [examSubTab, setExamSubTab] = useState<'marks_ledger' | 'qp_desk' | 'live_cockpit' | 'pdf_scripts'>('live_cockpit');
+  const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState<boolean>(false);
+  const [isPdfScriptViewerOpen, setIsPdfScriptViewerOpen] = useState<boolean>(false);
+  const [selectedScriptSubmission, setSelectedScriptSubmission] = useState<AnswerScriptSubmission | null>(null);
+
+  const [uploadedSubmissions, setUploadedSubmissions] = useState<AnswerScriptSubmission[]>([
+    {
+      candidateId: 1,
+      studentName: 'Aarav Sharma',
+      rollNo: '14',
+      className: 'Class 8-B',
+      subject: 'Mathematics',
+      examTitle: 'Term 2 Mathematics Summative Assessment',
+      sealCode: 'SEAL-8B-9482',
+      fileName: 'Aarav_Sharma_Maths_AnswerScript.pdf',
+      fileSize: '4.2 MB',
+      pageCount: 6,
+      uploadedAt: '10:48 AM',
+      isWithin15MinWindow: true,
+      score: 23,
+      maxScore: 25,
+      teacherRemarks: 'Excellent algebraic proofs. Seal code verified on all page headers.',
+      isGraded: true
+    },
+    {
+      candidateId: 2,
+      studentName: 'Diya Patel',
+      rollNo: '01',
+      className: 'Class 8-B',
+      subject: 'Mathematics',
+      examTitle: 'Term 2 Mathematics Summative Assessment',
+      sealCode: 'SEAL-8B-7391',
+      fileName: 'Diya_Patel_Maths_Paper.pdf',
+      fileSize: '3.8 MB',
+      pageCount: 5,
+      uploadedAt: '10:42 AM',
+      isWithin15MinWindow: true,
+      score: 24,
+      maxScore: 25,
+      teacherRemarks: 'Neat geometry diagrams and accurate calculations.',
+      isGraded: true
+    },
+    {
+      candidateId: 3,
+      studentName: 'Rohan Verma',
+      rollNo: '02',
+      className: 'Class 8-B',
+      subject: 'Mathematics',
+      examTitle: 'Term 2 Mathematics Summative Assessment',
+      sealCode: 'SEAL-8B-1845',
+      fileName: 'Rohan_Verma_Class8B_AnswerSheet.pdf',
+      fileSize: '5.1 MB',
+      pageCount: 7,
+      uploadedAt: '10:51 AM',
+      isWithin15MinWindow: true,
+      score: 21,
+      maxScore: 25,
+      teacherRemarks: 'Good attempt, minor arithmetic slips in Section C.',
+      isGraded: false
+    }
+  ]);
 
   const [showScheduleExamModal, setShowScheduleExamModal] = useState<boolean>(false);
   const [showDossierModal, setShowDossierModal] = useState<boolean>(false);
@@ -2160,6 +2273,164 @@ export default function TeacherPage() {
   const [subjectSectionFilter, setSubjectSectionFilter] = useState<'ALL' | '7-A' | '8-B' | '9-C'>('ALL');
 
 
+
+  // Listen for coordinator exam schedules & live proctor broadcasts
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncSchedule = () => {
+      try {
+        const stored = localStorage.getItem('edu360_active_exam_schedule');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed) setNewExamDutyAlert(parsed);
+        }
+      } catch {}
+    };
+    syncSchedule();
+    window.addEventListener('storage', syncSchedule);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.onmessage = (e) => {
+        const data = e.data;
+        if (!data) return;
+        if (data.type === 'EXAM_SCHEDULED' || data.type === 'DUTY_ASSIGNED') {
+          triggerToast(`🔔 New Invigilation Duty: ${data.subject || 'Mathematics'} (${data.className || 'Class 8-B'}) scheduled by Exam Coordinator. Hall tickets issued.`);
+          setNewExamDutyAlert({
+            title: data.title || `${data.subject || 'Mathematics'} Examination`,
+            subject: data.subject || 'Mathematics',
+            className: data.className || 'Class 8-B',
+            date: data.date || 'Today',
+            time: data.time || '09:00 AM - 12:00 PM',
+            hall: data.hall || 'Virtual Room Alpha (Camera AI)'
+          });
+          api.getAdminTasks('academic').then(res => {
+            const myTasks = (res || []).filter((t: any) => 
+              !t.assigned_to || 
+              t.assigned_to === currentTeacherName || 
+              t.assigned_to_role === 'teacher' || 
+              (t.assigned_to && (t.assigned_to.toLowerCase().includes('verma') || t.assigned_to.toLowerCase().includes('math')))
+            );
+            setAcademicTasks(myTasks);
+          }).catch(() => {});
+        }
+
+        // Left Corner Malpractice Alert Notification
+        if (data.type === 'MALPRACTICE_ALERT' || (data.type === 'STUDENT_TELEMETRY' && data.isMalpractice)) {
+          const alertId = `malpractice-${Date.now()}-${data.candidateId || 1}`;
+          const newAlert: MalpracticeNotification = {
+            id: alertId,
+            candidateId: data.candidateId || 1,
+            studentName: data.studentName || 'Aarav Sharma',
+            rollNo: data.rollNo || '14',
+            className: data.className || 'Class 8-B',
+            malpracticeType: data.malpracticeType || data.anomalyType || 'UNAUTHORIZED_OBJECT',
+            title: data.title || 'Unauthorized Behavior Flagged',
+            ruleTriggered: data.ruleTriggered || 'Proctor Violation Detected',
+            confidence: data.confidence || 0.92,
+            strikes: data.strikes !== undefined ? data.strikes : 1,
+            timestamp: data.timestamp || new Date().toLocaleTimeString()
+          };
+
+          setActiveMalpracticeAlerts(prev => [newAlert, ...prev.filter(a => a.candidateId !== newAlert.candidateId).slice(0, 2)]);
+
+          // Sound audio attention chime
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              const audioCtx = new AudioContextClass();
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.25);
+              gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.start();
+              osc.stop(audioCtx.currentTime + 0.32);
+            }
+          } catch {}
+
+          // Auto-dismiss after 15s
+          setTimeout(() => {
+            setActiveMalpracticeAlerts(prev => prev.filter(a => a.id !== alertId));
+          }, 15000);
+        }
+
+        // Student Uploads Answer Script PDF within 15-Minute Window
+        if (data.type === 'STUDENT_SCRIPT_UPLOADED') {
+          triggerToast(`📄 New PDF Answer Script received from ${data.studentName} (Roll #${data.rollNo})! Seal Code: ${data.sealCode}`);
+          setUploadedSubmissions(prev => [data, ...prev.filter(s => s.candidateId !== data.candidateId || s.subject !== data.subject)]);
+        }
+      };
+    } catch {}
+
+    // Multi-Window & Tab-Switch Real-Time Watcher for Malpractice Alerts
+    const handleStorageMalpractice = () => {
+      try {
+        const raw = localStorage.getItem('edu360_latest_malpractice_alert');
+        if (raw) {
+          const data = JSON.parse(raw);
+          const nonce = data.nonce || data.timestamp;
+          if (data && nonce && lastTeacherMalpracticeNonceRef.current !== nonce) {
+            lastTeacherMalpracticeNonceRef.current = nonce;
+            const alertId = `malpractice-${Date.now()}-${data.candidateId || 1}`;
+            const newAlert: MalpracticeNotification = {
+              id: alertId,
+              candidateId: data.candidateId || 1,
+              studentName: data.studentName || 'Aarav Sharma',
+              rollNo: data.rollNo || '14',
+              className: data.className || 'Class 8-B',
+              malpracticeType: data.malpracticeType || data.anomalyType || 'TAB_SWITCH',
+              title: data.title || 'Unauthorized Behavior Flagged',
+              ruleTriggered: data.ruleTriggered || 'Proctor Violation Detected',
+              confidence: data.confidence || 1.0,
+              strikes: data.strikes !== undefined ? data.strikes : 1,
+              timestamp: data.timestamp || new Date().toLocaleTimeString()
+            };
+
+            setActiveMalpracticeAlerts(prev => [newAlert, ...prev.filter(a => a.candidateId !== newAlert.candidateId).slice(0, 2)]);
+
+            // Sound audio attention chime
+            try {
+              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioContextClass) {
+                const audioCtx = new AudioContextClass();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.25);
+                gain.gain.setValueAtTime(0.16, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.32);
+              }
+            } catch {}
+
+            setTimeout(() => {
+              setActiveMalpracticeAlerts(prev => prev.filter(a => a.id !== alertId));
+            }, 15000);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('storage', handleStorageMalpractice);
+    const storagePoll = setInterval(handleStorageMalpractice, 500);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorageMalpractice);
+      window.removeEventListener('storage', syncSchedule);
+      clearInterval(storagePoll);
+    };
+  }, []);
 
   // Listen for global command palette navigation events
 
@@ -4145,12 +4416,16 @@ export default function TeacherPage() {
 
                 </div>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
 
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
+                  <div className="flex items-center justify-between gap-1">
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
+                  </div>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Mrs. Ananya Verma • 8-B</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">
+                      Mrs. Ananya Verma &bull; Class 8-B
+                    </span>
                     {pendingExamEvaluationsCount > 0 && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse">
                         {pendingExamEvaluationsCount} to grade
@@ -4627,7 +4902,10 @@ export default function TeacherPage() {
 
                     <button
                       type="button"
-                      onClick={() => setExamSubTab('live_cockpit')}
+                      onClick={() => {
+                        setActiveTab('exams_gradebook');
+                        setExamSubTab('live_cockpit');
+                      }}
                       className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all cursor-pointer ${
                         examSubTab === 'live_cockpit'
                           ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 font-bold'
@@ -5157,7 +5435,38 @@ export default function TeacherPage() {
 
           <div className="space-y-6">
 
-            
+            {/* 🔴 LIVE INVIGILATION DUTY HERO BANNER (Point 3 - Real-Time Cockpit Access) */}
+            <div className="rounded-2xl border-2 border-violet-500/60 bg-gradient-to-r from-violet-950 via-slate-900 to-indigo-950 p-5 shadow-xl text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-violet-600/30 border border-violet-400 flex items-center justify-center text-violet-300 shadow-md shrink-0">
+                  <ShieldAlert className="h-6 w-6 text-violet-400 animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs animate-pulse">
+                      🔴 Live Invigilation Duty Active
+                    </span>
+                    <span className="text-xs font-mono text-violet-300">Class 8-B • Term 1 Assessment</span>
+                  </div>
+                  <h3 className="text-base font-black text-white">English Literature: Class 8 Mathematics Examination</h3>
+                  <p className="text-xs text-slate-300">
+                    40 Enrolled Candidates • Chief Invigilator Studio • Real-Time AI Proctor Surveillance Matrix
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
+                <button
+                  onClick={() => {
+                    setActiveTab('exams_gradebook');
+                    setExamSubTab('live_cockpit');
+                  }}
+                  className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <Radio className="h-4 w-4" />
+                  <span>Launch Invigilation Command Cockpit &rarr;</span>
+                </button>
+              </div>
+            </div>
 
             {/* EXECUTIVE TEACHER GREETING & OPERATIONAL CONTEXT BANNER */}
 
@@ -5838,6 +6147,36 @@ export default function TeacherPage() {
                     </div>
 
 
+
+                    {/* Priority Task: Official Exam Invigilation Duty */}
+                    <div className="p-3.5 rounded-xl bg-violet-50/90 dark:bg-violet-950/40 border-2 border-violet-500/60 space-y-2 shadow-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-violet-700 dark:text-violet-300 flex items-center gap-1.5">
+                          <Radio className="h-3 w-3 text-rose-500 animate-ping" />
+                          <span>Official Invigilation Duty</span>
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200/80 dark:bg-violet-900 text-violet-900 dark:text-violet-200">
+                          Class 8-B
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-900 dark:text-white font-black">
+                        Mathematics Midterm Examination &bull; Virtual Room Alpha
+                      </p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Scheduled by Exam Coordinator. Candidate Hall Tickets issued. Launch Live Room to verify admit passes &amp; monitor YOLO edge proctoring.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('exams_gradebook');
+                          setExamSubTab('live_cockpit');
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white py-2 text-xs font-black shadow-xs cursor-pointer transition-all active:scale-95"
+                      >
+                        <Video className="h-3.5 w-3.5 text-white" />
+                        <span>Launch Live Proctor Classroom &nearr;</span>
+                      </button>
+                    </div>
 
                     {/* Task Item 1: Homework */}
 
@@ -9368,59 +9707,77 @@ export default function TeacherPage() {
                 <div className="flex flex-wrap items-center gap-2">
 
                   <button
-
                     type="button"
-
                     onClick={() => setExamSubTab('live_cockpit')}
-
                     className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs ${
-
                       examSubTab === 'live_cockpit'
-
                         ? 'bg-violet-600 text-white shadow-violet-600/20'
-
                         : 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/60 hover:bg-violet-100'
-
                     }`}
-
                   >
-
                     <Radio className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
-
-                    <span>Live AI Proctor Cockpit</span>
-
+                    <span>Live AI Proctor Classroom</span>
                   </button>
 
                   <button
-
                     type="button"
-
-                    onClick={() => setShowScheduleExamModal(true)}
-
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
-
+                    onClick={() => setExamSubTab('pdf_scripts')}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                      examSubTab === 'pdf_scripts'
+                        ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
+                    }`}
                   >
-
-                    <Plus className="h-3.5 w-3.5" />
-
-                    <span>Schedule CBT Exam &amp; Paper</span>
-
+                    <FileText className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Uploaded Answer Sheets (PDF Desk)</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-600 text-white font-bold ml-1">
+                      {uploadedSubmissions.length}
+                    </span>
                   </button>
 
                   <button
-
-                    onClick={loadExams}
-
-                    disabled={isLoadingExams}
-
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-colors cursor-pointer shadow-xs"
-
+                    type="button"
+                    onClick={() => setExamSubTab('marks_ledger')}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                      examSubTab === 'marks_ledger'
+                        ? 'bg-indigo-600 text-white shadow-indigo-600/20'
+                        : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100'
+                    }`}
                   >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    <span>Evaluation Ledger</span>
+                  </button>
 
+                  <button
+                    type="button"
+                    onClick={() => setExamSubTab('qp_desk')}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                      examSubTab === 'qp_desk'
+                        ? 'bg-blue-600 text-white shadow-blue-600/20'
+                        : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 hover:bg-blue-100'
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>QP Blueprints</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadExams}
+                    disabled={isLoadingExams}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  >
                     <RefreshCw className={`h-3.5 w-3.5 ${isLoadingExams ? 'animate-spin' : ''}`} />
+                    <span>Sync</span>
+                  </button>
 
-                    <span>Refresh</span>
-
+                  <button
+                    type="button"
+                    onClick={() => setIsCoordinatorModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-3.5 py-2 text-xs font-black transition-all cursor-pointer shadow-md shadow-violet-600/20 ml-auto"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-violet-200" />
+                    <span>Schedule Exam (Coordinator Desk)</span>
                   </button>
 
                 </div>
@@ -9437,6 +9794,112 @@ export default function TeacherPage() {
               {examSubTab === 'live_cockpit' && (
                 <div className="space-y-6">
                   <LiveInvigilatorCockpit />
+                </div>
+              )}
+
+              {/* TAB CONTENT: UPLOADED ANSWER SHEETS (PDF DESK) */}
+              {examSubTab === 'pdf_scripts' && (
+                <div className="space-y-6">
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl space-y-6">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">
+                            Uploaded Student Answer Scripts (PDF Deposit Vault)
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Handwritten answer booklets submitted within the 15-minute post-exam grace window. Evaluator can inspect, verify Security Seal Codes, and record official marks.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          {uploadedSubmissions.length} Total Scripts Received
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Submissions Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider bg-slate-50 dark:bg-slate-950/50">
+                            <th className="py-3 px-4">Candidate</th>
+                            <th className="py-3 px-4">Subject &amp; Exam</th>
+                            <th className="py-3 px-4">Security Seal Code</th>
+                            <th className="py-3 px-4">15-Min Window</th>
+                            <th className="py-3 px-4">Document Details</th>
+                            <th className="py-3 px-4">Evaluation Status</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {uploadedSubmissions.map((sub) => (
+                            <tr key={`${sub.candidateId}-${sub.subject}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-9 w-9 rounded-xl bg-violet-600/20 border border-violet-500/40 text-violet-300 font-bold text-xs flex items-center justify-center shrink-0">
+                                    {sub.studentName.split(' ').map(n => n[0]).join('')}
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-slate-900 dark:text-white block">{sub.studentName}</span>
+                                    <span className="font-mono text-[10px] text-slate-400">Roll #{sub.rollNo} &bull; {sub.className}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono">
+                                <span className="font-bold text-violet-600 dark:text-violet-400 block">{sub.subject}</span>
+                                <span className="text-[11px] text-slate-500">{sub.examTitle}</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1.5 w-fit">
+                                  <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
+                                  <span>{sub.sealCode}</span>
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 text-[11px]">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  <span>On-Time ({sub.uploadedAt})</span>
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                                <span className="font-bold text-slate-700 dark:text-slate-300 block truncate max-w-[160px]">{sub.fileName}</span>
+                                <span>{sub.pageCount} Pages ({sub.fileSize})</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                {sub.isGraded ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
+                                    <Check className="h-3 w-3" />
+                                    <span>Graded: {sub.score}/{sub.maxScore || 25}</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1 w-fit">
+                                    <Clock className="h-3 w-3" />
+                                    <span>Pending Grading</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedScriptSubmission(sub);
+                                    setIsPdfScriptViewerOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                  <span>Inspect &amp; Grade PDF</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -11356,7 +11819,7 @@ export default function TeacherPage() {
 
                       <div className="text-2xl font-black text-emerald-800 dark:text-emerald-300">
 
-                        {teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell').length} Sealed
+                        {teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell' || p.status === 'sealed_in_vault').length} Sealed
 
                       </div>
 
@@ -11384,7 +11847,7 @@ export default function TeacherPage() {
 
                         { id: 'under_review', label: 'Under Review', count: teacherQpList.filter(p => p.status === 'under_review').length },
 
-                        { id: 'approved', label: 'Approved & Sealed', count: teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell').length }
+                        { id: 'approved', label: 'Approved & Sealed', count: teacherQpList.filter(p => p.status === 'approved' || p.status === 'sent_to_exam_cell' || p.status === 'sealed_in_vault').length }
 
                       ].map(flt => (
 
@@ -11446,7 +11909,7 @@ export default function TeacherPage() {
 
                       if (qpFilterStatus === 'under_review') return p.status === 'under_review';
 
-                      if (qpFilterStatus === 'approved') return p.status === 'approved' || p.status === 'sent_to_exam_cell';
+                      if (qpFilterStatus === 'approved') return p.status === 'approved' || p.status === 'sent_to_exam_cell' || p.status === 'sealed_in_vault';
 
                       return true;
 
@@ -11576,7 +12039,7 @@ export default function TeacherPage() {
 
                                   <span className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-2xs ${
 
-                                    qp.status === 'sent_to_exam_cell'
+                                    (qp.status === 'sent_to_exam_cell' || qp.status === 'sealed_in_vault')
 
                                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300'
 
@@ -11596,15 +12059,25 @@ export default function TeacherPage() {
 
                                   }`}>
 
-                                    {qp.status === 'sent_to_exam_cell' ? '<span className="inline-flex items-center gap-1.5"><Icon3D name="lock" size={16} /><span>Sealed in Exam Vault</span></span>' :
-
-                                     qp.status === 'approved' ? '✓ Academic Approved' :
-
-                                     qp.status === 'under_review' ? '⏳ Under Review by Dean' :
-
-                                     qp.status === 'revision_requested' ? '⚠️ Revision Requested' :
-
-                                     '📝 Drafting Pending'}
+                                    {qp.status === 'sealed_in_vault' ? (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <Lock className="h-3.5 w-3.5" />
+                                        <span>Sealed in Exam Vault</span>
+                                      </span>
+                                    ) : qp.status === 'sent_to_exam_cell' ? (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <Lock className="h-3.5 w-3.5" />
+                                        <span>In Exam Cell Custody</span>
+                                      </span>
+                                    ) : qp.status === 'approved' ? (
+                                      '✓ Academic Approved'
+                                    ) : qp.status === 'under_review' ? (
+                                      '⏳ Under Review by Dean'
+                                    ) : qp.status === 'revision_requested' ? (
+                                      '⚠️ Revision Requested'
+                                    ) : (
+                                      '📝 Drafting Pending'
+                                    )}
 
                                   </span>
 
@@ -17278,6 +17751,20 @@ export default function TeacherPage() {
 
                             )}
 
+                            {(task.title?.toLowerCase().includes('invigil') || task.title?.toLowerCase().includes('exam')) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab('exams_gradebook');
+                                  setExamSubTab('live_cockpit');
+                                }}
+                                className="w-full py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black shadow-xs cursor-pointer flex items-center justify-center gap-1.5 transition-all active:scale-95 mb-1.5"
+                              >
+                                <Video className="h-3.5 w-3.5 text-white" />
+                                <span>Launch Live Proctor Classroom &nearr;</span>
+                              </button>
+                            )}
+
                             <button
 
                               type="button"
@@ -18155,6 +18642,34 @@ export default function TeacherPage() {
 
 
                               {/* Category Action Area: Substitution */}
+
+                              {activeDuty.category === 'EXAM_INVIGILATION' && (
+                                <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-3 text-xs">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                                      <Video className="h-4 w-4 text-amber-600" />
+                                      Official Examination Invigilation Command
+                                    </span>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
+                                      Active Session
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                    Scheduled by Exam Coordinator. Candidates connect via LiveKit SFU with Edge YOLO AI proctoring. Admitting students requires Hall Ticket verification at the proctor desk.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab('exams_gradebook');
+                                      setExamSubTab('live_cockpit');
+                                    }}
+                                    className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black shadow-md cursor-pointer flex items-center justify-center gap-2 transition-all active:scale-95"
+                                  >
+                                    <Video className="h-4 w-4 text-white" />
+                                    <span>Launch Live Proctor Classroom &nearr;</span>
+                                  </button>
+                                </div>
+                              )}
 
                               {activeDuty.category === 'CAMPUS_SUBSTITUTION' && (
 
@@ -21621,6 +22136,179 @@ export default function TeacherPage() {
           }}
         />
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* Interactive New Exam Duty Notification Banner with Move to Tab */}
+      {newExamDutyAlert && (
+        <div className="fixed top-20 right-6 z-50 max-w-md w-full bg-slate-900/95 text-white p-4 rounded-2xl border-2 border-violet-500 shadow-2xl backdrop-blur-md animate-in slide-in-from-top-3 duration-200">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-violet-400 animate-ping" />
+              <span className="text-xs font-black uppercase tracking-wider text-violet-400">New Invigilation Duty Assigned</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setNewExamDutyAlert(null)} 
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-1 mb-3">
+            <h4 className="text-sm font-bold text-white">{newExamDutyAlert.subject} ({newExamDutyAlert.className})</h4>
+            <p className="text-xs text-slate-300">
+              Assigned by Exam Coordinator &bull; Hall: <b className="text-violet-300">{newExamDutyAlert.hall}</b>
+            </p>
+            <p className="text-[11px] font-mono text-slate-400">{newExamDutyAlert.date} ({newExamDutyAlert.time})</p>
+            <p className="text-[10px] text-violet-300">✓ Digital Hall Tickets released. Live AI Proctor Cockpit ready.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('exams_gradebook');
+                setExamSubTab('live_cockpit');
+                setNewExamDutyAlert(null);
+              }}
+              className="flex-1 py-2 px-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Move to Tab (Open Invigilation Desk)</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewExamDutyAlert(null)}
+              className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE MALPRACTICE POPUP ON LEFT CORNER (PERSISTENT PROCTOR MONITORING) */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {activeMalpracticeAlerts.length > 0 && (
+        <div className="fixed bottom-6 left-6 z-50 flex flex-col gap-3 max-w-sm sm:max-w-md w-full animate-in slide-in-from-bottom-5 duration-300">
+          {activeMalpracticeAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className="rounded-2xl border-2 border-rose-500 bg-slate-900/95 text-white p-4 shadow-2xl backdrop-blur-md ring-4 ring-rose-500/20 relative overflow-hidden"
+            >
+              {/* Top Warning Strip */}
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full bg-rose-500 animate-ping"></span>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                    <ShieldAlert className="h-4 w-4 text-rose-500" />
+                    <span>MALPRACTICE ALERT &bull; ROOM ALPHA</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveMalpracticeAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                  className="text-slate-400 hover:text-white p-0.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Candidate Details & Violation */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-black text-white">
+                    {alert.studentName} <span className="font-mono text-xs text-violet-300">({alert.className} &bull; Roll #{alert.rollNo})</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                    Strike {alert.strikes}/3 {alert.strikes >= 3 ? '(-5 Marks)' : ''}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs space-y-1">
+                  <span className="font-bold text-rose-200 block">{alert.title}</span>
+                  <span className="text-[11px] text-slate-300 font-mono block line-clamp-1">{alert.ruleTriggered}</span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
+                    <span>Confidence: {(alert.confidence * 100).toFixed(0)}%</span>
+                    <span>{alert.timestamp}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const ch = new BroadcastChannel('edu360_exam_live_channel');
+                      ch.postMessage({
+                        type: 'TALK_ONE_ON_ONE',
+                        candidateId: alert.candidateId,
+                        message: `${alert.studentName}, this is Chief Invigilator. Stop unauthorized action immediately.`
+                      });
+                      ch.close();
+                    } catch {}
+                    triggerToast(`🎙️ 1-on-1 Voice Warning sent to ${alert.studentName}.`);
+                  }}
+                  className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all"
+                >
+                  <PhoneCall className="h-3 w-3 text-rose-400" />
+                  <span>Talk 1-on-1</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const ch = new BroadcastChannel('edu360_exam_live_channel');
+                      ch.postMessage({ type: 'EXAM_PAUSE', candidateId: alert.candidateId });
+                      ch.close();
+                    } catch {}
+                    triggerToast(`⏸️ Screen & Timer Paused for ${alert.studentName}.`);
+                  }}
+                  className="px-2 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all"
+                >
+                  <Pause className="h-3 w-3" />
+                  <span>Pause Exam</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('exams_gradebook');
+                    setExamSubTab('live_cockpit');
+                    setActiveMalpracticeAlerts(prev => prev.filter(a => a.id !== alert.id));
+                  }}
+                  className="px-2 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-all"
+                >
+                  <Video className="h-3 w-3" />
+                  <span>View Feed</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Exam Coordinator Scheduling Modal */}
+      <ExamCoordinatorScheduleModal
+        isOpen={isCoordinatorModalOpen}
+        onClose={() => setIsCoordinatorModalOpen(false)}
+        onScheduledSuccess={(exam) => {
+          triggerToast(`🚀 Official Schedule Published for ${exam.subject} (${exam.className})! Invigilation Desk is ready.`);
+        }}
+      />
+
+      {/* Teacher Answer Script PDF Inspection & Grading Modal */}
+      <TeacherPdfScriptViewerModal
+        isOpen={isPdfScriptViewerOpen}
+        onClose={() => setIsPdfScriptViewerOpen(false)}
+        submission={selectedScriptSubmission}
+        onSaveGrading={(updated) => {
+          setUploadedSubmissions(prev => prev.map(s => s.candidateId === updated.candidateId ? updated : s));
+          triggerToast(`✓ Evaluated marks (${updated.score}/${updated.maxScore}) recorded for ${updated.studentName}!`);
+        }}
+      />
 
     </RoleGuard>
 

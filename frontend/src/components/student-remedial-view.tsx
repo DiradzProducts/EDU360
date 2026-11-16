@@ -396,10 +396,6 @@ export function StudentRemedialView({ studentId = 1 }: StudentRemedialViewProps)
     loadData();
   }, [studentId]);
 
-  const student: FocusRosterItem = selectedSubject === 'Mathematics' 
-    ? (mathStudent || SCIENCE_PHYSICS_REMEDIAL) 
-    : (selectedSubject === 'Physics' ? physicsStudent : englishStudent);
-
   if (loading && !mathStudent) {
     return (
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
@@ -410,6 +406,24 @@ export function StudentRemedialView({ studentId = 1 }: StudentRemedialViewProps)
       </div>
     );
   }
+
+  if (!loading && !mathStudent && studentId !== 1) {
+    return (
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center space-y-3">
+        <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+          No Remedial Interventions Required
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          This student has no diagnosed conceptual gaps, backlogs, or remedial focus tables. Academic standing is normal and on track.
+        </p>
+      </div>
+    );
+  }
+
+  const student: FocusRosterItem = selectedSubject === 'Mathematics' 
+    ? (mathStudent || SCIENCE_PHYSICS_REMEDIAL) 
+    : (selectedSubject === 'Physics' ? physicsStudent : englishStudent);
 
   // Active day data
   const activeDay = student.plan_days.find(d => d.day_num === selectedDayNum) || student.plan_days[0];

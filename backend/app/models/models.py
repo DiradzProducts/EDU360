@@ -122,7 +122,7 @@ class OfficialDocument(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     title = Column(String(150), nullable=False)
 
@@ -132,11 +132,11 @@ class OfficialDocument(Base):
 
     is_official = Column(Boolean, default=True)
 
-    uploaded_by_role = Column(String(20), default="admin")  # STRICT: only admin can modify
+    uploaded_by_role = Column(String(50), default="admin")  # STRICT: only admin can modify
 
     upload_date = Column(DateTime, default=datetime.datetime.utcnow)
 
-    status = Column(String(20), default="Verified")
+    status = Column(String(50), default="Verified")
 
     verified_stamp = Column(String(100), default="EDU360 Official Seal")
 
@@ -168,6 +168,10 @@ class TriageAlert(Base):
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    __table_args__ = (
+        Index("ix_triage_alerts_resolved_level", "resolved", "level"),
+    )
+
 
 
 class AdminTask(Base):
@@ -194,9 +198,9 @@ class AdminTask(Base):
 
     created_by_role = Column(String(50), default="admin")
 
-    status = Column(String(30), default="Pending")  # Pending, In Progress, Pending Review, Completed
+    status = Column(String(30), default="Pending", index=True)  # Pending, In Progress, Pending Review, Completed
 
-    priority = Column(String(20), default="High")  # Low, Medium, High, Critical
+    priority = Column(String(20), default="High", index=True)  # Low, Medium, High, Critical
 
     sla_hours = Column(Integer, default=48)
 
@@ -362,7 +366,7 @@ class ExitClearance(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     student_name = Column(String(100), nullable=False)
 
@@ -384,7 +388,7 @@ class ExitClearance(Base):
 
     physical_sign_verified = Column(Boolean, default=False)
 
-    status = Column(String(30), default="Pending Signatures")
+    status = Column(String(100), default="Pending Signatures")
 
 
 
@@ -490,9 +494,9 @@ class HomeworkSubmission(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    homework_id = Column(Integer, ForeignKey("homeworks.id"), nullable=False)
+    homework_id = Column(Integer, ForeignKey("homeworks.id"), nullable=False, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     student_name = Column(String(100), nullable=False)
 
@@ -506,7 +510,7 @@ class HomeworkSubmission(Base):
 
     teacher_remarks = Column(Text, nullable=True)
 
-    status = Column(String(20), default="submitted")  # submitted, graded, pending, backlog
+    status = Column(String(20), default="submitted", index=True)  # submitted, graded, pending, backlog
 
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -596,7 +600,7 @@ class LeaveRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     student_name = Column(String(100), nullable=False)
 
@@ -608,7 +612,7 @@ class LeaveRequest(Base):
 
     reason = Column(Text, nullable=False)
 
-    status = Column(String(20), default="Pending")  # Pending, Approved, Rejected
+    status = Column(String(20), default="Pending", index=True)  # Pending, Approved, Rejected
 
     teacher_notes = Column(Text, nullable=True)
 
@@ -684,7 +688,7 @@ class StudentPortfolio(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     category = Column(String(30), nullable=False)  # participation, achievement
 
@@ -782,7 +786,7 @@ class DailyQuest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     title = Column(String(150), nullable=False)  # e.g. "Count & Color 10 Stars in Chapter 2 Workbook"
 
@@ -810,7 +814,7 @@ class MagicBoosterChest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
 
     concept_title = Column(String(100), nullable=False)  # "Number Counting & Phonics"
 
@@ -882,7 +886,7 @@ class PTMSlot(Base):
 
     booked_class = Column(String(30), nullable=True)
 
-    booked_parent_id = Column(Integer, nullable=True)
+    booked_parent_id = Column(String(100), nullable=True)
 
     booked_parent_name = Column(String(100), nullable=True)
 
@@ -905,6 +909,10 @@ class PTMSlot(Base):
 class ProctorTelemetryLog(Base):
 
     __tablename__ = "proctor_telemetry_logs"
+
+    __table_args__ = (
+        Index("idx_proctor_telemetry_cand_time", "candidate_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -1134,7 +1142,13 @@ class QuestionPaper(Base):
 
     answer_key_url = Column(Text, nullable=True)
 
-    status = Column(String(40), default="draft", index=True)  # draft, under_review, revision_requested, approved, sent_to_exam_cell
+    status = Column(String(40), default="draft", index=True)  # draft, under_review, revision_requested, approved, sent_to_exam_cell, sealed_in_vault
+
+    barcode_hash = Column(String(100), nullable=True)
+
+    sealed_at = Column(DateTime, nullable=True)
+
+    sealed_by = Column(String(100), nullable=True)
 
     revision_notes = Column(Text, nullable=True)
 
@@ -1172,7 +1186,7 @@ class ExamSchedule(Base):
 
     exam_mode = Column(String(50), default="MODE_CBT")
 
-    exam_date = Column(String(30), nullable=False)
+    exam_date = Column(String(30), nullable=False, index=True)
 
     start_time = Column(String(20), default="09:00 AM")
 
@@ -1190,7 +1204,7 @@ class ExamSchedule(Base):
 
     status = Column(String(50), default="Scheduled")
 
-    academic_clearance = Column(Boolean, default=False)
+    academic_clearance = Column(Boolean, default=False, index=True)
 
     academic_clearance_notes = Column(Text, nullable=True)
 
@@ -1296,6 +1310,11 @@ class ExamCandidateAttempt(Base):
 
     __tablename__ = "exam_candidate_attempts"
 
+    __table_args__ = (
+        Index("idx_attempt_room_status", "livekit_room_id", "status"),
+        Index("idx_attempt_exam_student", "exam_id", "student_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
 
     exam_id = Column(Integer, ForeignKey("exams.id"), nullable=True, index=True)
@@ -1328,7 +1347,7 @@ class ExamCandidateAttempt(Base):
 
     anomaly_type = Column(String(100), nullable=True)
 
-    camera_active = Column(Boolean, default=True)
+    camera_active = Column(Boolean, default=False)
 
     is_paused = Column(Boolean, default=False)
 
@@ -2111,4 +2130,33 @@ class ParentTeacherMessage(Base):
     is_read = Column(Boolean, default=False, index=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+
+class SecurityAuditLog(Base):
+
+    __tablename__ = "security_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    actor_name = Column(String(150), nullable=False)
+
+    actor_role = Column(String(50), nullable=False)
+
+    action_type = Column(String(100), nullable=False, index=True)
+
+    target_entity = Column(String(255), nullable=False)
+
+    ip_address = Column(String(45), default="0.0.0.0")
+
+    status = Column(String(50), default="VERIFIED")
+
+    details = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_audit_logs_actor_role", "actor_role"),
+        Index("ix_audit_logs_timestamp", "timestamp"),
+    )
 

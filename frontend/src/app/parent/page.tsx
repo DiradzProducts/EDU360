@@ -47,6 +47,7 @@ import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/theme-context';
 import { useAuth } from '@/lib/auth-context';
+import { MockPaymentGatewayModal } from '@/components/payment/mock-payment-gateway-modal';
 import { 
   FocusTable, 
   FeeMilestone, 
@@ -164,14 +165,15 @@ export default function ParentPage() {
 
   // Resolve strictly the children belonging to the currently logged in parent account
   const isFernandesParent = user?.username === 'parent_john' || user?.name?.toLowerCase().includes('fernandes');
+  const isSharmaParent = user?.username === 'parent' || user?.username === 'parent_aarav' || user?.email === 'rajesh.sharma@example.com';
   const [dynamicChildren, setDynamicChildren] = useState<ParentChildProfile[] | null>(null);
-  const [activeKidId, setActiveKidId] = useState<number>(() => isFernandesParent ? 12 : 1);
+  const [activeKidId, setActiveKidId] = useState<number>(() => isFernandesParent ? 12 : (isSharmaParent ? 1 : 0));
 
   useEffect(() => {
     async function loadParentChildren() {
       if (!user) return;
       try {
-        const fetched = await api.getParentChildren(user.username, user.phone);
+        const fetched = await api.getParentChildren(user.username, user.phone, user.email);
         if (fetched && Array.isArray(fetched) && fetched.length > 0) {
           setDynamicChildren(fetched);
           setActiveKidId(fetched[0].id);
@@ -184,44 +186,68 @@ export default function ParentPage() {
       if (isFernandesParent) {
         setDynamicChildren(FERNANDES_CHILDREN);
         setActiveKidId(12);
+      } else if (isSharmaParent) {
+        setDynamicChildren(SHARMA_CHILDREN);
+        setActiveKidId(1);
       } else if (user?.username?.startsWith('parent_')) {
         const parts = user.username.split('_');
         const lastPart = parts[parts.length - 1];
-        const stId = lastPart && !isNaN(Number(lastPart)) ? Number(lastPart) : 14;
-        const sName = user.name?.replace(/^Parent of\s+/i, '') || 'Kavya';
+        const stId = lastPart && !isNaN(Number(lastPart)) ? Number(lastPart) : 16;
+        const sName = user.name?.replace(/^Parent of\s+/i, '') || 'Student';
         const dynamicSingle: ParentChildProfile[] = [{
           id: stId,
           name: sName,
           className: 'Class 8-A',
           currentClass: 'Class 8-A',
-          rollNo: 35,
+          rollNo: stId,
           initials: sName.slice(0, 2).toUpperCase(),
           admissionNo: `EDU-2026-${stId}`,
-          attendance: '100%',
-          attendanceStatus: 'On Time (RFID Verified)',
+          attendance: 'Day 1 Enrollee',
+          attendanceStatus: 'Onboarding (Day 1)',
           tier: 'middle',
           homeroomFaculty: 'Mrs. Ananya Verma',
-          remedialSubject: 'Mathematics Revision',
-          remedialDay: 'Day 1: Diagnostics',
+          remedialSubject: 'Standard Track',
+          remedialDay: 'Regular Schedule',
           pendingHomeworkCount: 0,
           gradeTier: 'Class 8',
-          academicAvg: '85.0%',
+          academicAvg: 'Enrolled',
           busRoute: 'Route #4 (Campus Shuttle)',
           mentor: 'Mrs. Ananya Verma'
         }];
         setDynamicChildren(dynamicSingle);
         setActiveKidId(stId);
       } else {
-        setDynamicChildren(SHARMA_CHILDREN);
-        setActiveKidId(1);
+        setDynamicChildren([]);
+        setActiveKidId(0);
       }
     }
     loadParentChildren();
-  }, [user, isFernandesParent]);
+  }, [user, isFernandesParent, isSharmaParent]);
 
-  const currentParentChildren = dynamicChildren || (isFernandesParent ? FERNANDES_CHILDREN : SHARMA_CHILDREN);
+  const currentParentChildren = (dynamicChildren && dynamicChildren.length > 0) 
+    ? dynamicChildren 
+    : (isFernandesParent ? FERNANDES_CHILDREN : (isSharmaParent ? SHARMA_CHILDREN : []));
 
-  const activeKid = currentParentChildren.find((k: ParentChildProfile) => k.id === activeKidId) || currentParentChildren[0];
+  const activeKid: ParentChildProfile = currentParentChildren.find((k: ParentChildProfile) => k.id === activeKidId) || currentParentChildren[0] || {
+    id: 0,
+    name: user?.name ? user.name.replace(/^Parent of\s+/i, '') : 'Student',
+    className: 'Class 8-A',
+    currentClass: 'Class 8-A',
+    rollNo: 1,
+    initials: 'ST',
+    admissionNo: 'EDU-2026-NEW',
+    attendance: 'Day 1',
+    attendanceStatus: 'Enrolled',
+    tier: 'middle',
+    homeroomFaculty: 'Mrs. Ananya Verma',
+    remedialSubject: 'None',
+    remedialDay: 'On Track',
+    pendingHomeworkCount: 0,
+    gradeTier: 'Class 8',
+    academicAvg: 'Enrolled',
+    busRoute: 'Campus Shuttle',
+    mentor: 'Mrs. Ananya Verma'
+  };
   const [parentToast, setParentToast] = useState<string | null>(null);
 
   const triggerToast = (msg: string) => {
@@ -255,7 +281,7 @@ const DEFAULT_PARENT_FEES_JOHN: FeeMilestone[] = [
 
 const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
-  const [fees, setFees] = useState<FeeMilestone[]>(DEFAULT_PARENT_FEES);
+  const [fees, setFees] = useState<FeeMilestone[]>([]);
   const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
   const [exitClearance, setExitClearance] = useState<ExitClearance | null>(null);
 
@@ -277,52 +303,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
   // High-Signal Notification Drawer State
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
-  const [notifications, setNotifications] = useState<ParentNotification[]>([
-    {
-      id: 'notif-1',
-      level: 'red',
-      category: 'Absence & Attendance',
-      title: 'Action Required: Consecutive Unexcused Absence Alert',
-      description: 'Aarav was recorded absent yesterday (13 Oct) without an approved leave application on file. Please submit a leave note or medical certificate.',
-      timestamp: 'Today, 08:45 AM',
-      actionLabel: 'Submit Leave Note',
-      targetTab: 'leave',
-      unread: true
-    },
-    {
-      id: 'notif-2',
-      level: 'orange',
-      category: 'Fee Payment',
-      title: 'Payment Reminder: Term 2 Fees Due in 5 Days',
-      description: 'Fee Milestone 2 (Tuition & Transport fee ₹18,500) is due on 25 Oct 2026. Instant online UPI & Card payment is open.',
-      timestamp: 'Yesterday, 11:20 AM',
-      actionLabel: 'Pay ₹18,500 Online',
-      targetTab: 'fees',
-      unread: true
-    },
-    {
-      id: 'notif-3',
-      level: 'purple',
-      category: 'Pedagogical Remark',
-      title: 'Teacher Pedagogical Annotation on Focus Table',
-      description: 'Mrs. Sunitha Rao annotated Worksheet #4: "Aarav solved 10 factoring problems correctly! Please monitor negative sign conventions during Day 2."',
-      timestamp: '12 Oct, 05:15 PM',
-      actionLabel: 'View Shared Focus Table',
-      targetTab: 'focus',
-      unread: true
-    },
-    {
-      id: 'notif-4',
-      level: 'blue',
-      category: 'Exam Marks',
-      title: 'Unit Test 2 Report Cards & Rank Published',
-      description: 'Class 8B Unit Test 2 marks are officially published. Aarav secured Rank #4 (88.8% Aggregate) with Grade A1 Distinction.',
-      timestamp: '10 Oct, 02:00 PM',
-      actionLabel: 'View Report Card',
-      targetTab: 'marks',
-      unread: false
-    }
-  ]);
+  const [notifications, setNotifications] = useState<ParentNotification[]>([]);
 
   // Today's Homework State (Current Day Only - Keeping Profile Uncluttered)
   const [todayHomework, setTodayHomework] = useState<Homework[]>([]);
@@ -372,7 +353,11 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           api.getParentLeaveRequests(activeKidId)
         ]);
         setFocusTable(ftRes);
-        if (feesRes && feesRes.length > 0) { setFees(feesRes); } else { setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : activeKidId === 12 ? DEFAULT_PARENT_FEES_JOHN : DEFAULT_PARENT_FEES_AARAV); }
+        if (feesRes && feesRes.length > 0) { 
+          setFees(feesRes); 
+        } else { 
+          setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : activeKidId === 12 ? DEFAULT_PARENT_FEES_JOHN : activeKidId === 1 ? DEFAULT_PARENT_FEES_AARAV : []); 
+        }
         setSubmission(subRes);
         if (exitsRes && exitsRes.length > 0) {
           const kidClearance = exitsRes.find(e => e.student_id === activeKidId);
@@ -401,11 +386,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
               unread: !n.is_read
             }));
 
-            setNotifications(prev => {
-              const existingTitles = new Set(prev.map(p => p.title));
-              const fresh = mappedDynamic.filter(d => !existingTitles.has(d.title));
-              return [...fresh, ...prev];
-            });
+            setNotifications(mappedDynamic);
           }
         } catch (e) {
           console.warn('Could not sync dynamic parent notifications:', e);
@@ -464,11 +445,12 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
     setFocusTable(updated);
   };
 
-  const handlePayFee = async () => {
+  const handlePayFee = async (method?: string) => {
     if (!payingMilestone) return;
     setPaying(true);
     try {
-      const updated = await api.payFee(payingMilestone.id, selectedPaymentMethod);
+      const chosenMethod = method || selectedPaymentMethod;
+      const updated = await api.payFee(payingMilestone.id, chosenMethod);
       const allFees = await api.getFees(activeKidId);
       setFees(allFees);
       setPaymentSuccess(true);
@@ -1900,66 +1882,19 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                     </div>
                   </div>
 
-                  {/* Payment Modal */}
+                  {/* Instant Mock Payment Gateway Modal (UPI QR, Card, Net Banking) */}
                   {payingMilestone && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-                      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-                        <div>
-                          <h3 className="text-base font-black text-slate-900 dark:text-white">
-                            Instant Fee Payment Gateway (Mock)
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            {payingMilestone.title} • {activeKid.name} ({activeKid.className})
-                          </p>
-                        </div>
-
-                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Total Payable Amount</span>
-                          <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            ₹{payingMilestone.amount.toLocaleString()}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Payment Rail</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {['UPI (Google Pay)', 'UPI (PhonePe)', 'Credit/Debit Card', 'Net Banking'].map((method) => (
-                              <button
-                                key={method}
-                                type="button"
-                                onClick={() => setSelectedPaymentMethod(method)}
-                                className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left ${
-                                  selectedPaymentMethod === method
-                                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200'
-                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                                }`}
-                              >
-                                {method}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                          <button
-                            type="button"
-                            onClick={() => setPayingMilestone(null)}
-                            className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handlePayFee}
-                            disabled={paying}
-                            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-bold shadow-md disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            <span>{paying ? 'Processing Payment...' : `Authorize ₹${payingMilestone.amount.toLocaleString()}`}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <MockPaymentGatewayModal
+                      isOpen={Boolean(payingMilestone)}
+                      onClose={() => setPayingMilestone(null)}
+                      amount={payingMilestone.amount}
+                      title={payingMilestone.title}
+                      studentName={activeKid.name}
+                      className={activeKid.className}
+                      onSuccess={async (method, refId) => {
+                        await handlePayFee(method);
+                      }}
+                    />
                   )}
                 </div>
               );

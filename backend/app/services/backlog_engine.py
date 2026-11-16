@@ -56,6 +56,30 @@ def parse_deadline_datetime(due_date_str: str, due_time_str: str) -> Optional[da
 
     return None
 
+def is_homework_for_student(hw_class: Optional[str], student_class: Optional[str], student_section: Optional[str]) -> bool:
+    if not hw_class:
+        return True
+    hw_c = hw_class.lower().replace(" ", "").replace("-", "")
+    st_c = (student_class or "").lower().replace(" ", "").replace("-", "")
+    st_sec = (student_section or "").lower().replace(" ", "").replace("section", "")
+
+    # Compare base grade e.g. "class8"
+    if st_c and st_c not in hw_c and hw_c not in st_c:
+        return False
+
+    # Check section: 'a', 'b', 'c', etc.
+    hw_has_a = 'a' in hw_c[len(st_c):] or hw_c.endswith('a')
+    hw_has_b = 'b' in hw_c[len(st_c):] or hw_c.endswith('b')
+    hw_has_c = 'c' in hw_c[len(st_c):] or hw_c.endswith('c')
+
+    if st_sec == 'a' and (hw_has_b or hw_has_c):
+        return False
+    if st_sec == 'b' and (hw_has_a or hw_has_c):
+        return False
+    if st_sec == 'c' and (hw_has_a or hw_has_b):
+        return False
+    return True
+
 class BacklogEngine:
     @staticmethod
     async def evaluate_backlogs(db: AsyncSession) -> dict:
@@ -91,6 +115,10 @@ class BacklogEngine:
                 continue
 
             for student in students:
+                # Only evaluate homework assigned to this student's class and section
+                if not is_homework_for_student(hw.class_name, student.class_name, student.section):
+                    continue
+
                 # Check student submission
                 sub_query = await db.execute(select(HomeworkSubmission).where(
                     HomeworkSubmission.homework_id == hw.id,
@@ -172,12 +200,14 @@ class BacklogEngine:
             unresolved_count = b_query.scalar() or 0
             student.backlog_count = unresolved_count
 
-            # Count total assigned and on-time submissions
+            # Count total assigned and on-time submissions for this student's specific class
+            st_class_hws = [h for h in homeworks if is_homework_for_student(h.class_name, student.class_name, student.section)]
+            st_total = len(st_class_hws)
             all_subs_q = await db.execute(select(HomeworkSubmission).where(
                 HomeworkSubmission.student_id == student.id
             ))
             subs = all_subs_q.scalars().all()
-            student.total_assigned = total_scanned
+            student.total_assigned = st_total
             student.on_time_count = len([s for s in subs if s.status in ("submitted", "graded") and not s.late_submission])
 
             # Update Focus Table
@@ -187,9 +217,9 @@ class BacklogEngine:
             ft = ft_query.scalars().first()
             if ft:
                 ft.backlog_count = unresolved_count
-                compliance_rate = round((student.on_time_count / total_scanned * 100), 1) if total_scanned > 0 else 100.0
+                compliance_rate = round((student.on_time_count / st_total * 100), 1) if st_total > 0 else 100.0
                 ft.academic_compliance_json = json.dumps({
-                    "total_assigned": total_scanned,
+                    "total_assigned": st_total,
                     "on_time_submissions": student.on_time_count,
                     "late_submissions": len([s for s in subs if s.late_submission]),
                     "backlog_count": unresolved_count,
@@ -221,8 +251,10 @@ class BacklogEngine:
         ).order_by(BacklogEvent.id.desc()))
         backlogs = b_query.scalars().all()
 
-        hw_total_q = await db.execute(select(func.count(Homework.id)))
-        total_assigned = hw_total_q.scalar() or len(backlogs)
+        hw_all_q = await db.execute(select(Homework))
+        all_hws = hw_all_q.scalars().all()
+        student_hws = [h for h in all_hws if is_homework_for_student(h.class_name, student.class_name if student else None, student.section if student else None)]
+        total_assigned = len(student_hws)
 
         sub_q = await db.execute(select(HomeworkSubmission).where(
             HomeworkSubmission.student_id == student_id
@@ -233,6 +265,39 @@ class BacklogEngine:
         late = len([s for s in subs if s.late_submission])
         unresolved_backlogs = [b for b in backlogs if b.status == "UNRESOLVED"]
         
+        # Newly enrolled students (non-demo) start with 0 backlogs and a clean ledger
+        if student_id != 1:
+            return {
+                "student_id": student_id,
+                "student_name": student_name,
+                "total_assigned": len(subs),
+                "on_time_submissions": on_time,
+                "late_submissions": late,
+                "backlog_count": len(unresolved_backlogs),
+                "compliance_pct": 100.0 if not subs else (round((on_time / len(subs) * 100), 1) if len(subs) > 0 else 100.0),
+                "itemized_backlogs": [
+                    {
+                        "id": b.id,
+                        "student_id": b.student_id,
+                        "homework_id": b.homework_id,
+                        "focus_table_id": b.focus_table_id,
+                        "evidence_code": b.evidence_code,
+                        "subject": b.subject,
+                        "title": b.title,
+                        "task_type": b.task_type,
+                        "due_date": b.due_date,
+                        "due_time": b.due_time,
+                        "status": b.status,
+                        "detected_at": b.detected_at.isoformat() if b.detected_at else None,
+                        "resolved_at": b.resolved_at.isoformat() if b.resolved_at else None,
+                        "late_submission": b.late_submission,
+                        "teacher_name": b.teacher_name,
+                        "notes": b.notes
+                    }
+                    for b in unresolved_backlogs
+                ]
+            }
+
         # Guard: If no backlogs in DB for student 1, provide default verified evidence record
         if not backlogs and student_id == 1:
             default_ev = {

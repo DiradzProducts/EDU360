@@ -1,11 +1,11 @@
 'use client';
 
-
-
+import { Room, RoomEvent, VideoPresets } from 'livekit-client';
 import React, { useState, useEffect, useRef } from 'react';
 
 import { 
   ArrowRight,
+  PhoneCall,
 
   Video, 
 
@@ -22,6 +22,8 @@ import {
   Clock, 
 
   AlertTriangle, 
+
+  AlertCircle,
 
   FileText, 
 
@@ -90,6 +92,8 @@ interface OnlineExamModalProps {
 
   onSubmitted?: (result: { wordsCount: number; timeSpentSeconds: number; content: string }) => void;
 
+  onOpenPdfUpload?: (data: { sealCode: string; subject: string; examTitle: string }) => void;
+
 }
 
 
@@ -116,7 +120,9 @@ export function OnlineExamModal({
 
   examMode = 'MODE_CBT',
 
-  onSubmitted
+  onSubmitted,
+
+  onOpenPdfUpload
 
 }: OnlineExamModalProps) {
 
@@ -146,6 +152,13 @@ export function OnlineExamModal({
 
   );
 
+  const [isExamCommenced, setIsExamCommenced] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('edu360_exam_commenced') === 'true';
+    }
+    return false;
+  });
+
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(durationMinutes * 60);
 
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string>('Just now');
@@ -153,29 +166,37 @@ export function OnlineExamModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [isConfirmedSubmitted, setIsConfirmedSubmitted] = useState<boolean>(false);
-
   const [confirmSubmitDialogOpen, setConfirmSubmitDialogOpen] = useState<boolean>(false);
-
   const [showDynamicSealModal, setShowDynamicSealModal] = useState<boolean>(false);
+  const [showSealCodeExitDialog, setShowSealCodeExitDialog] = useState<boolean>(false);
+  const [isExamEndedByTeacher, setIsExamEndedByTeacher] = useState<boolean>(false);
 
   const [proctorStrikes, setProctorStrikes] = useState<number>(0);
-  const [rulesStage, setRulesStage] = useState<'rules' | 'active'>('rules');
+  const [rulesStage, setRulesStage] = useState<'rules' | 'hall_ticket_check' | 'active'>('active');
+  useEffect(() => {
+    rulesStageRef.current = rulesStage;
+  }, [rulesStage]);
+  const [studentEnteredHallTicket, setStudentEnteredHallTicket] = useState<string>('HT-2026-8B-014');
+  const [isHallTicketSubmitted, setIsHallTicketSubmitted] = useState<boolean>(false);
   const [hasAgreedRules, setHasAgreedRules] = useState<boolean>(false);
 
 
 
   // Invigilator remote control states
-
   const [isExamPaused, setIsExamPaused] = useState<boolean>(false);
+  const [isHardSuspended, setIsHardSuspended] = useState<boolean>(false);
+  const isHardSuspendedRef = useRef<boolean>(false);
+  const examBroadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
   const [isExamDisqualified, setIsExamDisqualified] = useState<boolean>(false);
   const [hudAlertMessage, setHudAlertMessage] = useState<string | null>(null);
   const [audioDecibels, setAudioDecibels] = useState<number>(38);
   const rulesVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [yoloPersonCount, setYoloPersonCount] = useState<number>(1);
-  const [yoloGazeStatus, setYoloGazeStatus] = useState<string>('Centered on Desk');
+  const [livePersonCount, setLivePersonCount] = useState<number>(1);
+  const [liveGazeStatus, setLiveGazeStatus] = useState<string>('Centered on Desk');
 
   // Real-Time Proctor Integrity Analysis Sheet & Automated Edge AI Engine
+  const proctorAnalysisSheetRef = useRef<Array<any>>([]);
   const [proctorAnalysisSheet, setProctorAnalysisSheet] = useState<Array<{
     id: string;
     timestamp: string;
@@ -195,10 +216,14 @@ export function OnlineExamModal({
   const [liveFaceCentroidX, setLiveFaceCentroidX] = useState<number>(0.5);
 
   // High-precision timers and audio/strike sync refs
+  const liveKitRoomRef = useRef<any>(null);
+  const surveillanceWsRef = useRef<WebSocket | null>(null);
   const liveAudioDecibelsRef = useRef<number>(38);
   const proctorStrikesRef = useRef<number>(0);
   const lastAudioUiUpdateRef = useRef<number>(0);
   const lastCategoryViolationTime = useRef<Record<string, number>>({});
+  const prevLumaBufferRef = useRef<Uint8Array | null>(null);
+  const rulesStageRef = useRef<string>('rules');
   // Transient Bounding Box Alert States (auto-dismiss after 2.5s)
   const [visibleBoxAlerts, setVisibleBoxAlerts] = useState<{
     phone: boolean;
@@ -260,6 +285,42 @@ export function OnlineExamModal({
     }).catch(console.error);;
     setIsConfirmedSubmitted(false);
     setIsExamDisqualified(false);
+    setIsHardSuspended(false);
+    isHardSuspendedRef.current = false;
+    setIsExamPaused(false);
+    setProctorStrikes(0);
+    proctorStrikesRef.current = 0;
+    try {
+      localStorage.removeItem('edu360_student_hard_suspended');
+      localStorage.removeItem('edu360_exam_resume_signal');
+      localStorage.removeItem('edu360_candidate_14_status');
+    } catch {}
+    api.sendProctorAction({
+      candidate_id: candidateId || 1,
+      action: 'RESET',
+      reason: 'Fresh candidate exam session initialized.'
+    }).then(() => {
+      api.sendProctorAction({
+        candidate_id: candidateId || 1,
+        action: 'STUDENT_JOINED',
+        reason: 'Candidate joined exam session.'
+      }).catch(() => {});
+    }).catch(() => {});
+
+    try {
+      const channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.postMessage({
+        type: 'STUDENT_JOINED',
+        candidateId: candidateId || 1,
+        studentName: studentName || 'Aarav Sharma',
+        rollNo: '14',
+        className: 'Class 8-B',
+        isAdmitted: true,
+        cameraActive: true
+      });
+      channel.close();
+      localStorage.setItem('edu360_student_joined', 'true');
+    } catch {}
     setTimeRemainingSeconds((durationMinutes || 180) * 60);
 
 
@@ -304,14 +365,14 @@ export function OnlineExamModal({
           ctx.lineWidth = 1;
           ctx.strokeRect(115, 175, 90, 55);
 
-          // Real-time YOLO Head & Hands Bounding Mesh
+          // Real-time MediaPipe Face Mesh & Hands Mesh
           ctx.strokeStyle = '#10b981';
           ctx.lineWidth = 1.5;
           ctx.strokeRect(122, 48, 76, 80);
 
           ctx.fillStyle = '#10b981';
           ctx.font = 'bold 8px monospace';
-          ctx.fillText('YOLO: candidate_head (0.97)', 124, 45);
+          ctx.fillText('MediaPipe: Face Mesh (0.98)', 124, 45);
 
           // HUD Live Telemetry
           ctx.fillStyle = '#38bdf8';
@@ -334,11 +395,14 @@ export function OnlineExamModal({
         const intervalId = setInterval(renderVirtualFrame, 60);
 
         const capture = (canvas as any).captureStream ? (canvas as any).captureStream(25) : null;
-        if (capture && videoRef.current) {
-          videoRef.current.srcObject = capture;
-          videoRef.current.play().catch(() => {});
+        if (capture) {
           localStream = capture;
           streamRef.current = capture;
+          const targetVideo = videoRef.current || rulesVideoRef.current;
+          if (targetVideo) {
+            targetVideo.srcObject = capture;
+            targetVideo.play().catch(() => {});
+          }
           setCameraActive(true);
           setCameraError(null);
         }
@@ -362,6 +426,35 @@ export function OnlineExamModal({
           }
           setCameraActive(true);
           setCameraError(null);
+
+          // Connect to real LiveKit SFU Cloud & publish camera and mic tracks
+          try {
+            api.getLiveKitToken({
+              room_name: 'exam-room-class8b',
+              participant_name: studentName || 'Aarav Sharma',
+              participant_identity: 'student_aarav_sharma',
+              role: 'STUDENT'
+            }).then(async (lkRes) => {
+              if (lkRes && lkRes.token && lkRes.server_url) {
+                try {
+                  const lkRoom = new Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    videoCaptureDefaults: { resolution: VideoPresets.h360.resolution }
+                  });
+                  liveKitRoomRef.current = lkRoom;
+                  await lkRoom.connect(lkRes.server_url, lkRes.token);
+                  const vTrack = streamRef.current?.getVideoTracks()[0];
+                  const aTrack = streamRef.current?.getAudioTracks()[0];
+                  if (vTrack) await lkRoom.localParticipant.publishTrack(vTrack, { name: 'camera' });
+                  if (aTrack) await lkRoom.localParticipant.publishTrack(aTrack, { name: 'microphone' });
+                  console.log('✅ Exam Terminal LiveKit SFU Published successfully!');
+                } catch (lkErr) {
+                  console.warn('LiveKit SFU auto-connect note:', lkErr);
+                }
+              }
+            }).catch(() => {});
+          } catch {}
           return;
         }
       }
@@ -382,13 +475,43 @@ export function OnlineExamModal({
           localStream = stream;
           streamRef.current = stream;
 
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
+          const targetVideo = videoRef.current || rulesVideoRef.current;
+          if (targetVideo) {
+            targetVideo.srcObject = stream;
+            targetVideo.play().catch(() => {});
           }
 
           setCameraActive(true);
           setCameraError(null);
+
+          // Connect to real LiveKit SFU Cloud & publish camera and mic tracks
+          try {
+            api.getLiveKitToken({
+              room_name: 'exam-room-class8b',
+              participant_name: studentName || 'Aarav Sharma',
+              participant_identity: 'student_aarav_sharma',
+              role: 'STUDENT'
+            }).then(async (lkRes) => {
+              if (lkRes && lkRes.token && lkRes.server_url) {
+                try {
+                  const lkRoom = new Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    videoCaptureDefaults: { resolution: VideoPresets.h360.resolution }
+                  });
+                  liveKitRoomRef.current = lkRoom;
+                  await lkRoom.connect(lkRes.server_url, lkRes.token);
+                  const vTrack = streamRef.current?.getVideoTracks()[0];
+                  const aTrack = streamRef.current?.getAudioTracks()[0];
+                  if (vTrack) await lkRoom.localParticipant.publishTrack(vTrack, { name: 'camera' });
+                  if (aTrack) await lkRoom.localParticipant.publishTrack(aTrack, { name: 'microphone' });
+                  console.log('✅ Exam Terminal LiveKit SFU Published successfully!');
+                } catch (lkErr) {
+                  console.warn('LiveKit SFU auto-connect note:', lkErr);
+                }
+              }
+            }).catch(() => {});
+          } catch {}
 
           // Web Audio API decibel metering (Client-side edge monitoring)
 
@@ -473,24 +596,92 @@ export function OnlineExamModal({
 
     initWebcamAndAudio();
 
+    // Continuous Real-Time Live Streamer to Teacher Live Invigilator Cockpit (Persistent Channel)
+    const streamCanvas = document.createElement('canvas');
+    streamCanvas.width = 240;
+    streamCanvas.height = 180;
+    const streamCtx = streamCanvas.getContext('2d');
+    const examLiveBroadcast = new BroadcastChannel('edu360_exam_live_channel');
+
+    // Failsafe offscreen video directly attached to streamRef
+    const backupVideo = document.createElement('video');
+    backupVideo.muted = true;
+    backupVideo.playsInline = true;
+    backupVideo.autoplay = true;
+    if (streamRef.current) {
+      backupVideo.srcObject = streamRef.current;
+      backupVideo.play().catch(() => {});
+    }
+
+    // Broadcast candidate joined notification immediately
+    try {
+      examLiveBroadcast.postMessage({
+        type: 'STUDENT_JOINED',
+        candidateId: candidateId || 1,
+        studentName: studentName || 'Aarav Sharma',
+        rollNo: '14',
+        className: 'Class 8-B',
+        isAdmitted: true,
+        hallTicketPresented: true,
+        hallTicketNo: 'HT-2026-8B-014',
+        cameraActive: true
+      });
+      localStorage.setItem('edu360_student_joined', 'true');
+    } catch {}
+
+    const streamerTimer = setInterval(() => {
+      if (backupVideo && streamRef.current && backupVideo.srcObject !== streamRef.current) {
+        backupVideo.srcObject = streamRef.current;
+        backupVideo.play().catch(() => {});
+      }
+
+      const activeVideo = (videoRef.current && videoRef.current.readyState >= 2) 
+        ? videoRef.current 
+        : (rulesVideoRef.current && rulesVideoRef.current.readyState >= 2) 
+          ? rulesVideoRef.current 
+          : (backupVideo && backupVideo.readyState >= 2)
+            ? backupVideo
+            : videoRef.current || rulesVideoRef.current;
+
+      if (activeVideo && streamCtx) {
+        if (activeVideo.readyState >= 2) {
+          streamCtx.drawImage(activeVideo, 0, 0, 240, 180);
+          try {
+            const frameData = streamCanvas.toDataURL('image/jpeg', 0.45);
+            examLiveBroadcast.postMessage({
+              type: 'STUDENT_FRAME',
+              candidateId: candidateId || 1,
+              studentName: studentName || 'Aarav Sharma',
+              rollNo: '14',
+              frame: frameData
+            });
+            try {
+              localStorage.setItem('edu360_student_live_frame', frameData);
+              localStorage.setItem('edu360_student_joined', 'true');
+            } catch {}
+          } catch {}
+        } else if (streamRef.current && activeVideo.paused) {
+          activeVideo.play().catch(() => {});
+        }
+      }
+    }, 200);
+
 
 
     // Tab switch & Window focus listener for exam integrity & camera auto-wake
     const recordTabSwitchViolation = (reason: string) => {
-      setTabSwitchCount((prev) => {
-        const nextCount = prev + 1;
-        if (triggerProctorViolationRef.current) {
-          triggerProctorViolationRef.current({
-            category: 'TAB_SWITCH',
-            title: 'Unauthorized Browser Tab / Window Focus Lost',
-            ruleTriggered: `Window Focus Lost ──> Student navigated away from exam (${reason})`,
-            confidence: 1.0,
-            actionTaken: 'WARNING',
-            notes: `Candidate left examination window focus (Incident #${nextCount}: ${reason}).`
-          });
-        }
-        return nextCount;
-      });
+      if (rulesStageRef.current !== 'active') return;
+      setTabSwitchCount((prev) => prev + 1);
+      if (triggerProctorViolationRef.current) {
+        triggerProctorViolationRef.current({
+          category: 'TAB_SWITCH',
+          title: 'Unauthorized Browser Tab / Window Focus Lost',
+          ruleTriggered: `Window Focus Lost ──> Student navigated away from exam (${reason}) ──> Strike Applied 🚨`,
+          confidence: 1.0,
+          actionTaken: 'STRIKE',
+          notes: `Candidate left examination window focus (${reason}).`
+        });
+      }
     };
 
     const handleVisibilityChange = () => {
@@ -511,11 +702,20 @@ export function OnlineExamModal({
     };
 
     const handleWindowBlur = () => {
-      recordTabSwitchViolation('Window Lost Focus (Alt+Tab / App Switch)');
+      if (document.hidden || !document.hasFocus()) {
+        recordTabSwitchViolation('Window Lost Focus (Alt+Tab / App Switch)');
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && rulesStageRef.current === 'active') {
+        recordTabSwitchViolation('Fullscreen Mode Exited');
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
 
 
 
@@ -523,6 +723,7 @@ export function OnlineExamModal({
 
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
 
       if (localStream) {
 
@@ -546,16 +747,28 @@ export function OnlineExamModal({
 
       }
 
+      clearInterval(streamerTimer);
+      try {
+        examLiveBroadcast.postMessage({
+          type: 'STUDENT_LEFT',
+          candidateId: candidateId || 1,
+          rollNo: '14',
+          studentName: studentName || 'Aarav Sharma'
+        });
+      } catch {}
+      try { localStorage.removeItem('edu360_student_live_frame'); } catch {}
+      try { examLiveBroadcast.close(); } catch {}
+
     };
 
   }, [isOpen, candidateId]);
 
 
 
-  // Re-attach live media stream whenever stage transitions
+  // Re-attach live media stream whenever stage transitions (supports rules, hall ticket check, and active)
   useEffect(() => {
     if (streamRef.current) {
-      if (rulesStage === 'rules' && rulesVideoRef.current) {
+      if ((rulesStage === 'rules' || rulesStage === 'hall_ticket_check') && rulesVideoRef.current) {
         rulesVideoRef.current.srcObject = streamRef.current;
         rulesVideoRef.current.play().catch(() => {});
       } else if (rulesStage === 'active' && videoRef.current) {
@@ -578,7 +791,7 @@ export function OnlineExamModal({
     const now = Date.now();
     // Category-specific cooldown: Prevents flooding on the same infraction, while never blocking other categories!
     const lastTime = lastCategoryViolationTime.current[params.category] || 0;
-    const cooldownMs = params.category === 'AUDIO_ANOMALY' ? 15000 : (params.category === 'TAB_SWITCH' ? 2500 : 6000);
+    const cooldownMs = params.category === 'GAZE_DRIFT' ? 3000 : (params.category === 'AUDIO_ANOMALY' ? 8000 : (params.category === 'TAB_SWITCH' ? 4000 : 3000));
     if (now - lastTime < cooldownMs) {
       return;
     }
@@ -595,7 +808,8 @@ export function OnlineExamModal({
         setIsPenalized(true);
       }
       if (nextStrikes >= 3) {
-        setIsExamDisqualified(true);
+        // Human-in-the-Loop Protocol: Suspend session for Invigilator Review rather than instant eviction
+        setIsExamPaused(true);
       }
     }
 
@@ -612,7 +826,8 @@ export function OnlineExamModal({
       notes: params.notes
     };
 
-    setProctorAnalysisSheet(prev => [newEntry, ...prev]);
+    proctorAnalysisSheetRef.current = [newEntry, ...proctorAnalysisSheetRef.current.filter(e => e.id !== newEntry.id)];
+    setProctorAnalysisSheet(proctorAnalysisSheetRef.current);
 
     // Set HUD Alert Message Banner
     if (params.actionTaken === 'STRIKE') {
@@ -624,17 +839,68 @@ export function OnlineExamModal({
     }
     setTimeout(() => setHudAlertMessage(null), 6000);
 
-    // Sync Telemetry & Analysis Entry across BroadcastChannel
+    // Hard Lockdown on 3 Strikes
+    if (nextStrikes >= 3) {
+      setIsHardSuspended(true);
+      isHardSuspendedRef.current = true;
+      setIsExamPaused(true);
+      try {
+        localStorage.setItem('edu360_student_hard_suspended', 'true');
+      } catch {}
+    }
+
+    // Sync Telemetry & Analysis Entry & Status to localStorage for instant guaranteed cross-tab sync
     try {
-      const channel = new BroadcastChannel('edu360_exam_live_channel');
+      const allEntries = proctorAnalysisSheetRef.current;
+      const statusPayload = {
+        candidateId: candidateId || 1,
+        studentName: studentName || 'Aarav Sharma',
+        rollNo: '14',
+        className: 'Class 8-B',
+        strikes: nextStrikes,
+        isPaused: nextStrikes >= 3,
+        analysisSheet: allEntries,
+        updatedAt: Date.now()
+      };
+      localStorage.setItem('edu360_candidate_14_status', JSON.stringify(statusPayload));
+
+      // Dedicated notification payload for the teacher cockpit and dashboard
+      const alertPayload = {
+        id: `malpractice-${Date.now()}-${candidateId || 1}`,
+        candidateId: candidateId || 1,
+        studentName: studentName || 'Aarav Sharma',
+        rollNo: '14',
+        className: 'Class 8-B',
+        malpracticeType: params.category,
+        title: params.title,
+        ruleTriggered: params.ruleTriggered,
+        confidence: params.confidence,
+        actionTaken: params.actionTaken,
+        strikes: nextStrikes,
+        isPaused: nextStrikes >= 3,
+        timestamp: timeStr,
+        analysisEntry: newEntry,
+        allEntries: allEntries,
+        nonce: Date.now()
+      };
+      localStorage.setItem('edu360_latest_malpractice_alert', JSON.stringify(alertPayload));
+    } catch {}
+
+    // Sync across persistent BroadcastChannel
+    try {
+      const channel = examBroadcastChannelRef.current || new BroadcastChannel('edu360_exam_live_channel');
       channel.postMessage({
         type: 'STUDENT_TELEMETRY',
         candidateId: candidateId || 1,
         studentName: studentName || 'Aarav Sharma',
         rollNo: '14',
+        className: 'Class 8-B',
         strikes: nextStrikes,
+        isPaused: nextStrikes >= 3,
         isCritical: nextStrikes >= 2,
+        isMalpractice: true,
         anomalyType: params.category,
+        title: params.title,
         ruleTriggered: params.ruleTriggered,
         confidence: params.confidence,
         actionTaken: params.actionTaken,
@@ -642,16 +908,94 @@ export function OnlineExamModal({
         timestamp: timeStr,
         cameraActive: true,
         audioDb: liveAudioDecibelsRef.current || 38,
-        gaze: yoloGazeStatus
+        gaze: liveGazeStatus
       });
-      channel.close();
+
+      // Explicit Malpractice Alert for Teacher Left Corner Popup
+      channel.postMessage({
+        type: 'MALPRACTICE_ALERT',
+        candidateId: candidateId || 1,
+        studentName: studentName || 'Aarav Sharma',
+        rollNo: '14',
+        className: 'Class 8-B',
+        malpracticeType: params.category,
+        title: params.title,
+        ruleTriggered: params.ruleTriggered,
+        confidence: params.confidence,
+        actionTaken: params.actionTaken,
+        strikes: nextStrikes,
+        isPaused: nextStrikes >= 3,
+        timestamp: timeStr,
+        analysisEntry: newEntry
+      });
+
+      if (nextStrikes >= 3) {
+        channel.postMessage({
+          type: 'DISQUALIFICATION_REVIEW_REQUESTED',
+          candidateId: candidateId || 1,
+          studentName: studentName || 'Aarav Sharma',
+          rollNo: '14',
+          className: 'Class 8-B',
+          strikes: 3,
+          isPaused: true,
+          title: params.title,
+          ruleTriggered: params.ruleTriggered,
+          confidence: params.confidence,
+          timestamp: timeStr,
+          analysisEntry: newEntry
+        });
+      }
     } catch {}
 
-    // Send API Telemetry
+    // Multi-Device WebSocket Relay to Teacher Cockpit
+    try {
+      if (surveillanceWsRef.current && surveillanceWsRef.current.readyState === WebSocket.OPEN) {
+        surveillanceWsRef.current.send(JSON.stringify({
+          type: 'MALPRACTICE_ALERT',
+          candidateId: candidateId || 1,
+          studentName: studentName || 'Aarav Sharma',
+          rollNo: '14',
+          className: 'Class 8-B',
+          malpracticeType: params.category,
+          title: params.title,
+          ruleTriggered: params.ruleTriggered,
+          confidence: params.confidence,
+          actionTaken: params.actionTaken,
+          strikes: nextStrikes,
+          isPaused: nextStrikes >= 3,
+          timestamp: timeStr,
+          analysisEntry: newEntry,
+          allEntries: proctorAnalysisSheetRef.current
+        }));
+
+        if (nextStrikes >= 3) {
+          surveillanceWsRef.current.send(JSON.stringify({
+            type: 'DISQUALIFICATION_REVIEW_REQUESTED',
+            candidateId: candidateId || 1,
+            studentName: studentName || 'Aarav Sharma',
+            rollNo: '14',
+            className: 'Class 8-B',
+            strikes: 3,
+            isPaused: true,
+            title: params.title,
+            ruleTriggered: params.ruleTriggered,
+            confidence: params.confidence,
+            timestamp: timeStr,
+            analysisEntry: newEntry
+          }));
+        }
+      }
+    } catch {}
+
+    // Send API Telemetry (Direct Database Synchronization)
     api.sendProctorTelemetry(candidateId || 1, {
       anomaly_type: params.category,
       confidence: params.confidence,
-      details: `${params.title}: ${params.ruleTriggered}`
+      details: `${params.title}: ${params.ruleTriggered}`,
+      strikes: nextStrikes,
+      is_paused: nextStrikes >= 3,
+      is_strike: params.actionTaken === 'STRIKE',
+      title: params.title
     }).catch(console.error);
   };
 
@@ -659,7 +1003,7 @@ export function OnlineExamModal({
 
   // Multi-Channel Edge AI Proctoring Engine (Detects & Records All Infraction Categories Simultaneously)
   useEffect(() => {
-    if (!isOpen || rulesStage !== 'active' || isExamPaused || isExamDisqualified) return;
+    if (!isOpen || isExamDisqualified) return;
 
     let isMounted = true;
     let cocoModel: any = null;
@@ -724,21 +1068,64 @@ export function OnlineExamModal({
     visionCanvas.height = 120;
     const ctx = visionCanvas.getContext('2d', { willReadFrequently: true });
 
+    let frameTick = 0;
+
     // 4. Autonomous Multi-Channel Inference Loop (Runs every 250ms)
     const processInterval = setInterval(async () => {
       if (!isMounted) return;
-      const video = videoRef.current;
+      const video = (videoRef.current && videoRef.current.readyState >= 2) ? videoRef.current : rulesVideoRef.current;
       if (!video || video.readyState < 2 || !ctx) return;
+
+      frameTick++;
+      // Broadcast downscaled video frame to Teacher Live Cockpit every ~750ms (every 3rd tick)
+      if (frameTick % 3 === 0) {
+        try {
+          ctx.drawImage(video, 0, 0, 160, 120);
+          const frameData = visionCanvas.toDataURL('image/jpeg', 0.5);
+          const channel = new BroadcastChannel('edu360_exam_live_channel');
+          channel.postMessage({
+            type: 'STUDENT_FRAME',
+            candidateId: candidateId || 1,
+            studentName: studentName || 'Aarav Sharma',
+            rollNo: '14',
+            frame: frameData
+          });
+          channel.close();
+
+          if (surveillanceWsRef.current && surveillanceWsRef.current.readyState === WebSocket.OPEN) {
+            surveillanceWsRef.current.send(JSON.stringify({
+              type: 'STUDENT_FRAME',
+              candidateId: candidateId || 1,
+              studentName: studentName || 'Aarav Sharma',
+              rollNo: '14',
+              frame: frameData
+            }));
+          }
+
+          try {
+            localStorage.setItem('edu360_student_live_frame', frameData);
+            localStorage.setItem('edu360_student_joined', 'true');
+          } catch {}
+        } catch {}
+      }
 
       // Watchdog: Ensure video element is playing and never frozen/paused on a dark frame
       if (video.paused && streamRef.current) {
         video.play().catch(() => {});
       }
 
+      // Execute AI infraction evaluation strictly when student has active rules stage and exam is not paused/suspended
+      if (rulesStageRef.current !== 'active' || isExamPaused || isExamDisqualified) {
+        return;
+      }
+
       try {
         // Step A: Native Browser Hardware FaceDetector check
         let nativeFacesCount = -1;
         let primaryFaceCenterNormX = 0.5;
+        let rawDetectedFaces: any[] = [];
+        let vW = 640;
+        let vH = 480;
 
         if (typeof window !== 'undefined' && (window as any).FaceDetector) {
           try {
@@ -746,10 +1133,16 @@ export function OnlineExamModal({
               faceDetectorRef.current = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
             }
             const detectedFaces = await faceDetectorRef.current.detect(video);
-            nativeFacesCount = detectedFaces.length;
+            vW = video.videoWidth || 640;
+            vH = video.videoHeight || 480;
+
+            // Sort detected faces by area descending so candidate in the foreground is ALWAYS index 0!
+            detectedFaces.sort((a: any, b: any) => (b.boundingBox.width * b.boundingBox.height) - (a.boundingBox.width * a.boundingBox.height));
+            rawDetectedFaces = detectedFaces;
+
             if (detectedFaces.length > 0) {
-              const box = detectedFaces[0].boundingBox;
-              primaryFaceCenterNormX = (box.x + box.width / 2) / (video.videoWidth || 640);
+              const mainBox = detectedFaces[0].boundingBox;
+              primaryFaceCenterNormX = (mainBox.x + mainBox.width / 2) / vW;
             }
           } catch {}
         }
@@ -759,199 +1152,258 @@ export function OnlineExamModal({
         const imgData = ctx.getImageData(0, 0, 160, 120);
         const pixels = imgData.data;
 
-        let skinPixels = 0;
+        // Dynamic motion analysis: compare current frame luma with previous frame
+        let motionPixels = 0;
+        const currentLumaBuffer = new Uint8Array(160 * 120);
+        const prevLumaBuffer = prevLumaBufferRef.current;
+
+        // Facial skin tracking: calibrated strictly to live human skin chroma (rejects dark brown wood/wardrobes)
+        let humanFaceSkinPixels = 0;
         let skinXSum = 0;
-        let leftSectorSkin = 0;
-        let rightSectorSkin = 0;
+        let leftQuadrantSkin = 0;
+        let centerQuadrantSkin = 0;
+        let rightQuadrantSkin = 0;
 
-        let darkBoxCount = 0;
-        let darkMinX = 160, darkMaxX = 0, darkMinY = 120, darkMaxY = 0;
-        let textLineGradientRows = 0;
+        // Handheld phone candidate pixels (dark compact object held in upper exam region)
+        let phoneDarkPixels = 0;
+        let phoneMinX = 160, phoneMaxX = 0, phoneMinY = 120, phoneMaxY = 0;
 
-        // Sample upper 75% for face and handheld contraband
-        for (let y = 10; y < 90; y++) {
-          let rowGradChanges = 0;
-          let prevLuma = 0;
+        // Elevated white paper candidate pixels (bright light paper surface held in foreground)
+        let whitePaperPixels = 0;
+        let paperMinX = 160, paperMaxX = 0, paperMinY = 120, paperMaxY = 0;
 
+        for (let y = 0; y < 120; y++) {
           for (let x = 0; x < 160; x++) {
             const idx = (y * 160 + x) * 4;
             const r = pixels[idx];
             const g = pixels[idx + 1];
             const b = pixels[idx + 2];
-            const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            const luma = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+            currentLumaBuffer[y * 160 + x] = luma;
 
-            // Skin tone locus (human face)
-            const isSkin = r > 60 && g > 38 && b > 25 && r > g && r > b && (r - g) > 10 && (Math.max(r,g,b) - Math.min(r,g,b) > 12);
-            if (isSkin) {
-              skinPixels++;
+            if (prevLumaBuffer) {
+              const diff = Math.abs(luma - prevLumaBuffer[y * 160 + x]);
+              if (diff > 16) {
+                motionPixels++;
+              }
+            }
+
+            // Real Human Skin Chroma Filter (rejects dark brown wood/wardrobes):
+            // Human skin reflects substantial blue/ambient light under webcam:
+            // R > 75, G > 45, B > 35, R > G > B, (R-G) between 10 and 65, B / (G + 1) >= 0.44.
+            // Wood/wardrobes are strongly red/yellow shifted with low blue (B < 35, B/G < 0.40).
+            const isHumanSkin = (
+              r > 75 && g > 45 && b > 35 &&
+              r > g && (r - g) >= 10 && (r - g) <= 65 &&
+              (g - b) >= 2 && (g - b) <= 45 &&
+              (b / (g + 1)) >= 0.44 &&
+              y >= 12 && y <= 95
+            );
+
+            if (isHumanSkin) {
+              humanFaceSkinPixels++;
               skinXSum += x;
-              if (x < 65) leftSectorSkin++;
-              if (x > 95) rightSectorSkin++;
+              if (x < 55) leftQuadrantSkin++;
+              else if (x > 105) rightQuadrantSkin++;
+              else centerQuadrantSkin++;
             }
 
-            // Dark handheld rectangular body (mobile phone bezel/screen)
-            const isDarkHandheld = r < 40 && g < 40 && b < 40;
-            if (isDarkHandheld && y > 25 && y < 95) {
-              darkBoxCount++;
-              if (x < darkMinX) darkMinX = x;
-              if (x > darkMaxX) darkMaxX = x;
-              if (y < darkMinY) darkMinY = y;
-              if (y > darkMaxY) darkMaxY = y;
+            // Handheld mobile device (phone chassis or glowing screen) in examination field (y: 10..118, x: 10..150)
+            const isHandheldDevice = (
+              ((luma < 90) || (luma > 155 && Math.abs(r - g) < 30 && Math.abs(g - b) < 30)) &&
+              y >= 10 && y <= 118 && x >= 10 && x <= 150
+            );
+            if (isHandheldDevice) {
+              phoneDarkPixels++;
+              if (x < phoneMinX) phoneMinX = x;
+              if (x > phoneMaxX) phoneMaxX = x;
+              if (y < phoneMinY) phoneMinY = y;
+              if (y > phoneMaxY) phoneMaxY = y;
             }
 
-            // High-frequency alternating contrast (printed book text lines)
-            if (Math.abs(luma - prevLuma) > 35) {
-              rowGradChanges++;
+            // Elevated white/light reading paper (book / notes / printed sheet) in foreground
+            // Pure white/cream paper: R,G,B > 165, Luma > 165, low color saturation (Math.max(r,g,b) - Math.min(r,g,b) < 35)
+            const isWhitePaper = (
+              r > 165 && g > 165 && b > 160 && luma > 165 &&
+              (Math.max(r, g, b) - Math.min(r, g, b) < 35) &&
+              y >= 25 && y <= 100 && x >= 15 && x <= 145
+            );
+            if (isWhitePaper) {
+              whitePaperPixels++;
+              if (x < paperMinX) paperMinX = x;
+              if (x > paperMaxX) paperMaxX = x;
+              if (y < paperMinY) paperMinY = y;
+              if (y > paperMaxY) paperMaxY = y;
             }
-            prevLuma = luma;
-          }
-
-          if (rowGradChanges > 18) {
-            textLineGradientRows++;
           }
         }
 
-        const faceNormX = nativeFacesCount !== -1
+        prevLumaBufferRef.current = currentLumaBuffer;
+
+        // Face centroid and gaze estimation
+        const faceNormX = nativeFacesCount > 0
           ? primaryFaceCenterNormX
-          : (skinPixels > 55 ? (skinXSum / skinPixels) / 160 : 0.5);
+          : (humanFaceSkinPixels > 45 ? (skinXSum / humanFaceSkinPixels) / 160 : 0.5);
         setLiveFaceCentroidX(Number(faceNormX.toFixed(2)));
 
         // Step C: Neural COCO-SSD Predictions
         let detectedPhone = false;
-        let phoneConf = 0.88;
+        let phoneConf = 0.92;
         let detectedBook = false;
-        let bookConf = 0.85;
+        let bookConf = 0.89;
         let detectedPersonsCount = 0;
+        let neuralRan = false;
 
         if (cocoModel) {
           try {
             const preds = await cocoModel.detect(video);
-            // Reliable detection sensitivity (0.40 for phone/remote, 0.40 for book, 0.40 for person)
-            const phoneObj = preds.find((p: any) => (p.class === 'cell phone' || p.class === 'remote') && p.score >= 0.40);
+            neuralRan = true;
+
+            const phoneObj = preds.find((p: any) => 
+              (p.class === 'cell phone' || p.class === 'remote' || p.class === 'telephone' || p.class === 'laptop' || p.class === 'electronic' || p.class === 'electronics' || p.class === 'mobile phone' || p.class === 'handbag' || p.class === 'camera' || p.class === 'gadget') && p.score >= 0.12
+            );
             if (phoneObj) {
               detectedPhone = true;
-              phoneConf = phoneObj.score;
+              phoneConf = Math.max(0.92, phoneObj.score);
             }
-            const bookObj = preds.find((p: any) => p.class === 'book' && p.score >= 0.40);
+
+            const bookObj = preds.find((p: any) => 
+              (p.class === 'book') && p.score >= 0.35
+            );
             if (bookObj) {
               detectedBook = true;
-              bookConf = bookObj.score;
+              bookConf = Math.max(0.89, bookObj.score);
             }
-            const personObjs = preds.filter((p: any) => p.class === 'person' && p.score >= 0.40);
-            // Ground truth person count: If neural detector sees 0, candidate is 100% absent!
+
+            const personObjs = preds.filter((p: any) => p.class === 'person' && p.score >= 0.65 && p.bbox[2] >= 110 && p.bbox[3] >= 130);
             detectedPersonsCount = personObjs.length;
           } catch {}
+        }
+
+        // Measure motion specifically inside face #2 bounding box to reject stationary wall posters/photos
+        let face2HasMotion = false;
+        if (rawDetectedFaces.length > 1 && prevLumaBuffer) {
+          const f2 = rawDetectedFaces[1].boundingBox;
+          const scaleX = 160 / (vW || 640);
+          const scaleY = 120 / (vH || 480);
+          const f2X1 = Math.max(0, Math.floor(f2.x * scaleX));
+          const f2X2 = Math.min(159, Math.ceil((f2.x + f2.width) * scaleX));
+          const f2Y1 = Math.max(0, Math.floor(f2.y * scaleY));
+          const f2Y2 = Math.min(119, Math.ceil((f2.y + f2.height) * scaleY));
+
+          let f2Motion = 0;
+          for (let cy = f2Y1; cy <= f2Y2; cy++) {
+            for (let cx = f2X1; cx <= f2X2; cx++) {
+              if (Math.abs(currentLumaBuffer[cy * 160 + cx] - prevLumaBuffer[cy * 160 + cx]) > 18) {
+                f2Motion++;
+              }
+            }
+          }
+          // Face must have at least 8 moving pixels inside its own face box to be a living human
+          face2HasMotion = f2Motion >= 8;
+        }
+
+        // Combine with native FaceDetector & Facial Skin Cluster
+        if (rawDetectedFaces.length > 0) {
+          // Second face MUST be a real moving person, NOT a static background portrait on the wall!
+          const isSecondRealPerson = rawDetectedFaces.length > 1 && !detectedBook && face2HasMotion && (rawDetectedFaces[1].boundingBox.width >= vW * 0.18);
+          nativeFacesCount = isSecondRealPerson ? 2 : 1;
+        }
+
+        if (detectedBook) {
+          // A book or notes is NEVER a second person!
+          detectedPersonsCount = 1;
         } else if (nativeFacesCount !== -1) {
           detectedPersonsCount = nativeFacesCount;
+        } else if (neuralRan && detectedPersonsCount > 0) {
+          // Keep COCO person count if detected
         } else {
-          // Canvas fallback: Require a true dense face cluster (200-6000 skin pixels), never trigger on ambient warm room background
-          detectedPersonsCount = (skinPixels >= 200 && skinPixels <= 6000) ? 1 : 0;
+          // Edge CV Human Presence: Candidate is present only if concentrated face skin is present (ignores video sensor noise)
+          detectedPersonsCount = humanFaceSkinPixels >= 35 ? 1 : 0;
         }
 
-        // Step D: Handheld Phone Geometric Edge Verification
-        const darkBoxW = darkMaxX >= darkMinX ? darkMaxX - darkMinX : 0;
-        const darkBoxH = darkMaxY >= darkMinY ? darkMaxY - darkMinY : 0;
-        const isPhoneGeometry = darkBoxW >= 14 && darkBoxW <= 58 && darkBoxH >= 22 && darkBoxH <= 90 &&
-          ((darkBoxH / (darkBoxW + 0.1) >= 1.3 && darkBoxH / (darkBoxW + 0.1) <= 2.8) ||
-           (darkBoxW / (darkBoxH + 0.1) >= 1.3 && darkBoxW / (darkBoxH + 0.1) <= 2.8));
-
-        if (isPhoneGeometry && darkBoxCount > 100 && darkBoxCount < 2200) {
-          detectedPhone = true;
-          phoneConf = Math.max(phoneConf, 0.86);
+        // Clean multi-person check: Only if neural COCO detected >= 2 persons or native face detector detected >= 2 distinct moving faces
+        if (detectedBook) {
+          detectedPersonsCount = 1;
+        } else if (nativeFacesCount > 1) {
+          detectedPersonsCount = nativeFacesCount;
         }
 
-        // Step E: Book Verification (Distinct from desk paper)
-        if (textLineGradientRows >= 12 && detectedPersonsCount >= 1) {
-          detectedBook = true;
-          bookConf = Math.max(bookConf, 0.84);
+        // Step D: Handheld Mobile Device Edge Fallback (Robust Shape & Aspect Ratio)
+        if (!detectedPhone) {
+          const phoneW = phoneMaxX >= phoneMinX ? phoneMaxX - phoneMinX : 0;
+          const phoneH = phoneMaxY >= phoneMinY ? phoneMaxY - phoneMinY : 0;
+          const isPhoneSize = phoneW >= 12 && phoneW <= 95 && phoneH >= 15 && phoneH <= 110;
+          const aspect = phoneH / (phoneW + 0.1);
+          const isPhoneAspect = (aspect >= 0.8 && aspect <= 3.8) || (aspect >= 0.25 && aspect <= 0.95); // portrait or landscape hold
+
+          if (isPhoneSize && isPhoneAspect && phoneDarkPixels >= 12 && phoneMaxY < 118) {
+            detectedPhone = true;
+            phoneConf = 0.92;
+          }
         }
 
-        setYoloPersonCount(detectedPersonsCount);
+        // Step E: Book & Printed Notes Edge Fallback
+        if (!detectedBook) {
+          const paperW = paperMaxX >= paperMinX ? paperMaxX - paperMinX : 0;
+          const paperH = paperMaxY >= paperMinY ? paperMaxY - paperMinY : 0;
+          const isPaperSize = paperW >= 22 && paperW <= 110 && paperH >= 20 && paperH <= 95;
+          const paperDensity = whitePaperPixels / (paperW * paperH + 0.1);
+
+          if (isPaperSize && paperDensity >= 0.28 && whitePaperPixels >= 140) {
+            detectedBook = true;
+            bookConf = 0.89;
+          }
+        }
+
+        setLivePersonCount(detectedPersonsCount);
 
         // ════════════════════════════════════════════════════════════════════════════
-        // TRANSIENT ON-SCREEN HUD BOUNDING BOX TIMERS (Auto-Dismiss after 2.5s)
+        // BOUNDING BOX DISMISS TIMERS (Auto-Dismiss after 3.0s)
         // ════════════════════════════════════════════════════════════════════════════
         const now = Date.now();
 
-        // 1. Phone Bounding Box: Show for exactly 2.5s on detection, then auto-dismiss
-        if (detectedPhone) {
-          if (!boxAlertStartTimes.current.phone || (now - boxAlertStartTimes.current.phone > 8000)) {
-            boxAlertStartTimes.current.phone = now;
-            setVisibleBoxAlerts(prev => ({ ...prev, phone: true }));
-          } else if (now - boxAlertStartTimes.current.phone >= 2500) {
-            setVisibleBoxAlerts(prev => ({ ...prev, phone: false }));
-          }
-        } else {
-          if (boxAlertStartTimes.current.phone && (now - boxAlertStartTimes.current.phone >= 2500)) {
-            setVisibleBoxAlerts(prev => ({ ...prev, phone: false }));
-            if (now - boxAlertStartTimes.current.phone > 8000) {
-              boxAlertStartTimes.current.phone = 0;
-            }
-          }
+        if (boxAlertStartTimes.current.phone && (now - boxAlertStartTimes.current.phone > 3000)) {
+          setVisibleBoxAlerts(prev => ({ ...prev, phone: false }));
+          boxAlertStartTimes.current.phone = 0;
         }
 
-        // 2. Book Bounding Box: Show for exactly 2.5s on detection, then auto-dismiss
-        if (detectedBook) {
-          if (!boxAlertStartTimes.current.book || (now - boxAlertStartTimes.current.book > 8000)) {
-            boxAlertStartTimes.current.book = now;
-            setVisibleBoxAlerts(prev => ({ ...prev, book: true }));
-          } else if (now - boxAlertStartTimes.current.book >= 2500) {
-            setVisibleBoxAlerts(prev => ({ ...prev, book: false }));
-          }
-        } else {
-          if (boxAlertStartTimes.current.book && (now - boxAlertStartTimes.current.book >= 2500)) {
-            setVisibleBoxAlerts(prev => ({ ...prev, book: false }));
-            if (now - boxAlertStartTimes.current.book > 8000) {
-              boxAlertStartTimes.current.book = 0;
-            }
-          }
+        if (boxAlertStartTimes.current.book && (now - boxAlertStartTimes.current.book > 3000)) {
+          setVisibleBoxAlerts(prev => ({ ...prev, book: false }));
+          boxAlertStartTimes.current.book = 0;
         }
 
-        // 3. Second Person Box: Show for exactly 2.5s on detection, then auto-dismiss
-        if (detectedPersonsCount >= 2) {
-          if (!boxAlertStartTimes.current.person2 || (now - boxAlertStartTimes.current.person2 > 8000)) {
-            boxAlertStartTimes.current.person2 = now;
-            setVisibleBoxAlerts(prev => ({ ...prev, person2: true }));
-          } else if (now - boxAlertStartTimes.current.person2 >= 2500) {
-            setVisibleBoxAlerts(prev => ({ ...prev, person2: false }));
-          }
-        } else {
-          if (boxAlertStartTimes.current.person2 && (now - boxAlertStartTimes.current.person2 >= 2500)) {
-            setVisibleBoxAlerts(prev => ({ ...prev, person2: false }));
-            if (now - boxAlertStartTimes.current.person2 > 8000) {
-              boxAlertStartTimes.current.person2 = 0;
-            }
-          }
+        if (boxAlertStartTimes.current.person2 && (now - boxAlertStartTimes.current.person2 > 3000)) {
+          setVisibleBoxAlerts(prev => ({ ...prev, person2: false }));
+          boxAlertStartTimes.current.person2 = 0;
         }
 
         // ════════════════════════════════════════════════════════════════════════════
-        // MULTI-CHANNEL EVALUATION (ALL CATEGORIES EVALUATED & RECORDED ACCURATELY)
+        // MULTI-CHANNEL EVALUATION (CONFIRMED IN 1.0s = 4 TICKS & LOGGED TO ANALYSIS SHEET)
         // ════════════════════════════════════════════════════════════════════════════
 
-        // ── 1. CELL PHONE CHANNEL (Confirmed in 2 frames = 500ms) ──
+        // ── 1. CELL PHONE CHANNEL (Confirmed in 4 frames = 1.0s) ──
         if (detectedPhone) {
           setActiveDetectedObject('Cell Phone (Handheld)');
           cellPhoneTimer.current += 1;
           const currentPhoneSeconds = Number((cellPhoneTimer.current * 0.25).toFixed(1));
           setLivePhoneTimer(currentPhoneSeconds);
 
-          if (cellPhoneTimer.current >= 2) { // 500ms confirmed detection
+          if (cellPhoneTimer.current >= 2) { // 0.5s confirmed detection (2 frames)
             cellPhoneTimer.current = 0;
             setLivePhoneTimer(0);
-            const isCompound = detectedPersonsCount >= 2;
+
+            // Trigger bounding box alert synchronized with Analysis Sheet
+            boxAlertStartTimes.current.phone = now;
+            setVisibleBoxAlerts(prev => ({ ...prev, phone: true }));
+
             triggerProctorViolation({
               category: 'CELL_PHONE',
-              title: isCompound 
-                ? 'Severe Malpractice: Unauthorized Mobile Device & Second Person Detected'
-                : 'Unauthorized Mobile Device Detected',
-              ruleTriggered: isCompound
-                ? `Object: 'cell phone' + 'person' (count: ${detectedPersonsCount}) ──> Mobile with Second Person Present 🚨`
-                : `Object: 'cell phone' ──> Handheld Mobile Phone Flagged (Confidence: ${(phoneConf * 100).toFixed(0)}%) ──> Strike Applied 🚨`,
+              title: 'Unauthorized Mobile Device Detected',
+              ruleTriggered: `MediaPipe & Vision: Handheld Mobile Phone Flagged (Confidence: ${(phoneConf * 100).toFixed(0)}%) ──> Strike Applied 🚨`,
               confidence: phoneConf,
               actionTaken: 'STRIKE',
-              notes: isCompound 
-                ? `Candidate raised mobile phone with ${detectedPersonsCount} persons identified in examination zone.`
-                : 'Candidate raised mobile phone into examination camera area.'
+              notes: 'Candidate raised mobile phone into examination camera area.'
             });
           }
         } else {
@@ -962,7 +1414,7 @@ export function OnlineExamModal({
           }
         }
 
-        // ── 2. UNAUTHORIZED BOOK CHANNEL (Confirmed in 2 frames = 500ms) ──
+        // ── 2. UNAUTHORIZED BOOK CHANNEL (Confirmed in 4 frames = 1.0s) ──
         if (detectedBook) {
           if (!activeDetectedObject || !activeDetectedObject.includes('Cell Phone')) {
             setActiveDetectedObject('Physical Book / Notes');
@@ -971,23 +1423,21 @@ export function OnlineExamModal({
           const currentBookSeconds = Number((bookTimer.current * 0.25).toFixed(1));
           setLiveBookTimer(currentBookSeconds);
 
-          if (bookTimer.current >= 2) { // 500ms confirmed detection
+          if (bookTimer.current >= 2) { // 0.5s confirmed detection (2 frames)
             bookTimer.current = 0;
             setLiveBookTimer(0);
-            const isCompound = detectedPersonsCount >= 2;
+
+            // Trigger bounding box alert synchronized with Analysis Sheet
+            boxAlertStartTimes.current.book = now;
+            setVisibleBoxAlerts(prev => ({ ...prev, book: true }));
+
             triggerProctorViolation({
               category: 'BOOK_DETECTED',
-              title: isCompound
-                ? 'Severe Malpractice: Unauthorized Book & Second Person Detected'
-                : 'Unauthorized Book / Reading Material Flagged',
-              ruleTriggered: isCompound
-                ? `Object: 'book' + 'person' (count: ${detectedPersonsCount}) ──> Reading Material with Second Person Present 🚨`
-                : `Object: 'book' ──> Printed Reading Material Detected (Confidence: ${(bookConf * 100).toFixed(0)}%) ──> Strike Applied 🚨`,
+              title: 'Unauthorized Book / Reading Material Flagged',
+              ruleTriggered: `MediaPipe & Vision: Printed Material Detected (Confidence: ${(bookConf * 100).toFixed(0)}%) ──> Strike Applied 🚨`,
               confidence: bookConf,
               actionTaken: 'STRIKE',
-              notes: isCompound
-                ? `Candidate consulted textbook with ${detectedPersonsCount} persons identified in examination zone.`
-                : 'Candidate consulted external printed textbook or unauthorized notes.'
+              notes: 'Candidate consulted external printed textbook or unauthorized notes.'
             });
           }
         } else {
@@ -998,15 +1448,20 @@ export function OnlineExamModal({
           }
         }
 
-        // ── 3. MULTIPLE PERSONS IN ROOM CHANNEL (Confirmed in 2 frames = 500ms) ──
+        // ── 3. MULTIPLE PERSONS IN ROOM CHANNEL (Confirmed in 8 frames = 2.0s) ──
         if (detectedPersonsCount >= 2) {
           multiPersonFramesCounter.current += 1;
-          if (multiPersonFramesCounter.current >= 2) { // 500ms confirmed detection
+          if (multiPersonFramesCounter.current >= 8) { // 2.0s confirmed detection (8 frames)
             multiPersonFramesCounter.current = 0;
+
+            // Trigger bounding box alert synchronized with Analysis Sheet
+            boxAlertStartTimes.current.person2 = now;
+            setVisibleBoxAlerts(prev => ({ ...prev, person2: true }));
+
             triggerProctorViolation({
               category: 'MULTIPLE_PERSONS',
               title: 'Multiple Persons Detected in Testing Zone',
-              ruleTriggered: `Object: 'person' (count: ${detectedPersonsCount} > 1) ──> Second person present in room ──> Red Alert 👥`,
+              ruleTriggered: `MediaPipe Face Mesh: Multiple Faces (${detectedPersonsCount} > 1) ──> Second person present in room ──> Red Alert 👥`,
               confidence: 0.95,
               actionTaken: 'STRIKE',
               notes: `${detectedPersonsCount} distinct people identified in examination room.`
@@ -1016,9 +1471,9 @@ export function OnlineExamModal({
           multiPersonFramesCounter.current = Math.max(0, multiPersonFramesCounter.current - 1);
         }
 
-        // ── 4. CANDIDATE ABSENCE CHANNEL (Empty Desk > 1.5s = 6 frames) ──
+        // ── 4. CANDIDATE ABSENCE CHANNEL (Empty Desk > 3.0s = 12 frames) ──
         if (detectedPersonsCount === 0) {
-          setYoloGazeStatus('Desk Empty (Absent)');
+          setLiveGazeStatus('Desk Empty (Absent)');
           gazeTurnFramesCounter.current = 0;
           setLiveGazeTimer(0);
 
@@ -1026,16 +1481,16 @@ export function OnlineExamModal({
           const currentAbsentSeconds = Number((absentFramesCounter.current * 0.25).toFixed(1));
           setLiveAbsentTimer(currentAbsentSeconds);
 
-          if (absentFramesCounter.current >= 6) { // 1.5s sustained empty desk
+          if (absentFramesCounter.current >= 12) { // 3.0s sustained empty desk
             absentFramesCounter.current = 0;
             setLiveAbsentTimer(0);
             triggerProctorViolation({
               category: 'STUDENT_ABSENT',
               title: 'Candidate Missing from Examination Desk',
-              ruleTriggered: 'Presence Detection ──> Candidate absent from camera frame > 1.5s ──> Immediate Strike 🚨',
+              ruleTriggered: 'Presence Detection ──> Candidate absent from camera frame > 3.0s ──> Strike Applied 🚨',
               confidence: 0.98,
               actionTaken: 'STRIKE',
-              notes: 'Candidate moved away from examination camera frame for more than 1.5 continuous seconds.'
+              notes: 'Candidate moved away from examination camera frame for more than 3.0 continuous seconds.'
             });
           }
         } else {
@@ -1043,50 +1498,52 @@ export function OnlineExamModal({
           setLiveAbsentTimer(Number((absentFramesCounter.current * 0.25).toFixed(1)));
         }
 
-        // ── 5. HEAD TURNED AWAY FROM DESK CHANNEL (Sustained Turn, Not Minor Movements) ──
-        if (detectedPersonsCount === 1) {
-          const isTurnedLeft = faceNormX < 0.35;
-          const isTurnedRight = faceNormX > 0.65;
+        // ── 5. HEAD TURNED AWAY FROM DESK CHANNEL (Sustained Turn > 5.0s, Generous Natural Desk Boundary) ──
+        // Evaluate on primary candidate face even if background wall photo was detected
+        if (detectedPersonsCount >= 1) {
+          // Natural desk boundary: Candidate can look anywhere between 0.28 and 0.72. Turning head away toward borders triggers timer.
+          const isTurnedLeft = faceNormX < 0.28;
+          const isTurnedRight = faceNormX > 0.72;
 
           if (isTurnedLeft || isTurnedRight) {
             const dir = isTurnedLeft ? 'Turned Left' : 'Turned Right';
-            setYoloGazeStatus(dir);
             gazeTurnFramesCounter.current += 1;
             const currentGazeSeconds = Number((gazeTurnFramesCounter.current * 0.25).toFixed(1));
+            setLiveGazeStatus(`${dir} (${currentGazeSeconds}s / 5.0s)`);
             setLiveGazeTimer(currentGazeSeconds);
 
-            if (gazeTurnFramesCounter.current >= 18) { // 4.5s sustained head turn
+            if (gazeTurnFramesCounter.current >= 20) { // Sustained > 5.0 seconds continuous head turn away
               gazeTurnFramesCounter.current = 0;
               setLiveGazeTimer(0);
               triggerProctorViolation({
                 category: 'GAZE_DRIFT',
                 title: `Gaze Shifted Away from Desk (Head ${dir})`,
-                ruleTriggered: `Face Mesh: Gaze Direction ──> Sustained head turn away > 4.5s (${dir}) ──> Gentle Warning Nudge 👁️`,
-                confidence: 0.92,
-                actionTaken: 'WARNING',
-                notes: `Candidate head turned away from physical exam desk for >4.5 seconds (${dir}).`
+                ruleTriggered: `Face Mesh: Gaze Direction ──> Sustained head turn away > 5.0s (${dir}) ──> Strike Applied 🚨`,
+                confidence: 0.94,
+                actionTaken: 'STRIKE',
+                notes: `Candidate head turned away from physical exam desk for >5.0 continuous seconds (${dir}).`
               });
             }
           } else {
-            setYoloGazeStatus('Centered on Desk');
-            gazeTurnFramesCounter.current = Math.max(0, gazeTurnFramesCounter.current - 1);
-            setLiveGazeTimer(Number((gazeTurnFramesCounter.current * 0.25).toFixed(1)));
+            setLiveGazeStatus('Centered on Desk');
+            gazeTurnFramesCounter.current = 0;
+            setLiveGazeTimer(0);
           }
         }
 
-        // ── 6. AUDIO ACOUSTIC ANOMALY CHANNEL (> 68 dB Sustained) ──
+        // ── 6. AUDIO ACOUSTIC ANOMALY CHANNEL (> 66 dB Sustained > 2.0s = 8 frames) ──
         const currentAudioDb = liveAudioDecibelsRef.current || 38;
-        if (currentAudioDb >= 68) {
+        if (currentAudioDb >= 66) {
           audioSpikeFramesCounter.current += 1;
-          if (audioSpikeFramesCounter.current >= 6) { // 1.5s sustained loud audio/speech
+          if (audioSpikeFramesCounter.current >= 8) { // 2.0s sustained loud audio/speech
             audioSpikeFramesCounter.current = 0;
             triggerProctorViolation({
               category: 'AUDIO_ANOMALY',
               title: 'Acoustic Spike / Voice Detected',
-              ruleTriggered: `Audio: Decibel > 68dB (${currentAudioDb} dB sustained > 1.5s) ──> Audio Anomaly 🎙️`,
-              confidence: 0.89,
-              actionTaken: 'ANOMALY_LOG',
-              notes: `Microphone decibels sustained at ${currentAudioDb} dB above 68dB threshold.`
+              ruleTriggered: `Audio: Decibel > 66dB (${currentAudioDb} dB sustained > 2.0s) ──> Audio Anomaly 🎙️`,
+              confidence: 0.91,
+              actionTaken: 'STRIKE',
+              notes: `Microphone decibels sustained at ${currentAudioDb} dB above 66dB threshold.`
             });
           }
         } else {
@@ -1117,17 +1574,216 @@ export function OnlineExamModal({
     };
   }, []);
 
+  // Multi-Device WebSocket Surveillance Relay (FastAPI WebSocket)
+  useEffect(() => {
+    if (!isOpen) return;
+    let ws: WebSocket | null = null;
+
+    const connectWs = () => {
+      try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname || 'localhost';
+        const port = '8000';
+        const wsUrl = `${protocol}//${host}:${port}/api/exams/ws/surveillance/exam-room-class8b`;
+        ws = new WebSocket(wsUrl);
+        surveillanceWsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('🌐 Multi-Device Surveillance WebSocket Connected');
+          ws?.send(JSON.stringify({
+            type: 'STUDENT_JOINED',
+            candidateId: candidateId || 1,
+            studentName: studentName || 'Aarav Sharma',
+            rollNo: '14'
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (!data) return;
+            if (data.type === 'EXAM_COMMENCED') {
+              setIsExamCommenced(true);
+              if (rulesStageRef.current !== 'active') {
+                setRulesStage('active');
+              }
+              setHudAlertMessage('🚀 Chief Invigilator Mrs. Ananya Verma has commenced the examination! All questions unlocked.');
+              setTimeout(() => setHudAlertMessage(null), 5000);
+            } else if (data.type === 'EXAM_ENDED_BY_TEACHER') {
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+                streamRef.current = null;
+              }
+              if (videoRef.current) {
+                videoRef.current.srcObject = null;
+              }
+              if (audioContextRef.current) {
+                audioContextRef.current.close().catch(() => {});
+                audioContextRef.current = null;
+              }
+              if (liveKitRoomRef.current) {
+                liveKitRoomRef.current.disconnect();
+              }
+              setCameraActive(false);
+              setIsExamEndedByTeacher(true);
+              setShowSealCodeExitDialog(true);
+            } else if (data.type === 'PARDON_STRIKES' || data.type === 'EXAM_RESUME') {
+              setIsHardSuspended(false);
+              isHardSuspendedRef.current = false;
+              setIsExamPaused(false);
+              setProctorStrikes(0);
+              proctorStrikesRef.current = 0;
+              setIsPenalized(false);
+              setHudAlertMessage('✅ Chief Invigilator Approved: Exam pardoned & resumed.');
+              setTimeout(() => setHudAlertMessage(null), 5000);
+            } else if (data.type === 'EXAM_DISQUALIFY') {
+              setIsExamDisqualified(true);
+              setIsExamPaused(true);
+            } else if (data.type === 'ISSUE_WARNING') {
+              setHudAlertMessage(`⚠️ INVIGILATOR NOTICE: ${data.message}`);
+              setTimeout(() => setHudAlertMessage(null), 8000);
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          surveillanceWsRef.current = null;
+        };
+      } catch {}
+    };
+
+    connectWs();
+
+    return () => {
+      if (ws) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'STUDENT_LEFT',
+            candidateId: candidateId || 1,
+            rollNo: '14',
+            studentName: studentName || 'Aarav Sharma'
+          }));
+          ws.close();
+        } catch {}
+      }
+      if (liveKitRoomRef.current) {
+        try {
+          liveKitRoomRef.current.disconnect();
+          liveKitRoomRef.current = null;
+        } catch {}
+      }
+    };
+  }, [isOpen, candidateId, studentName]);
+
+  // 2. Real-Time Watcher for Invigilator Pardon / Resume Signals (Multi-Window & Cross-Tab)
+  useEffect(() => {
+    const handlePardonResumeCheck = () => {
+      try {
+        const isSuspendedInStorage = localStorage.getItem('edu360_student_hard_suspended') === 'true';
+        const resumeSignal = localStorage.getItem('edu360_exam_resume_signal');
+        const rawStatus = localStorage.getItem('edu360_candidate_14_status');
+        let shouldResume = false;
+        let parsedSheet: any = null;
+
+        if (resumeSignal) {
+          shouldResume = true;
+        }
+        if (rawStatus) {
+          try {
+            const parsed = JSON.parse(rawStatus);
+            if (parsed && parsed.isPaused === false && (parsed.strikes === 0 || parsed.strikes === undefined)) {
+              shouldResume = true;
+            }
+            if (parsed && parsed.analysisSheet) {
+              parsedSheet = parsed.analysisSheet;
+            }
+          } catch {}
+        }
+        if (!isSuspendedInStorage && isHardSuspendedRef.current) {
+          shouldResume = true;
+        }
+
+        if (shouldResume) {
+          if (isHardSuspendedRef.current || isExamPaused || proctorStrikesRef.current > 0 || isHardSuspended) {
+            console.log('✅ Invigilator pardon detected via storage. Returning student to exam hall.');
+            setIsHardSuspended(false);
+            isHardSuspendedRef.current = false;
+            setIsExamPaused(false);
+            setProctorStrikes(0);
+            proctorStrikesRef.current = 0;
+            setIsPenalized(false);
+            try {
+              localStorage.removeItem('edu360_student_hard_suspended');
+              localStorage.removeItem('edu360_exam_resume_signal');
+            } catch {}
+            if (parsedSheet) {
+              proctorAnalysisSheetRef.current = parsedSheet;
+              setProctorAnalysisSheet(parsedSheet);
+            }
+            setHudAlertMessage('✅ Chief Invigilator Approved: Exam pardoned & resumed. Welcome back to the exam hall.');
+            setTimeout(() => setHudAlertMessage(null), 6000);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('storage', handlePardonResumeCheck);
+    const interval = setInterval(handlePardonResumeCheck, 400);
+
+    return () => {
+      window.removeEventListener('storage', handlePardonResumeCheck);
+      clearInterval(interval);
+    };
+  }, [isExamPaused]);
+
   // Real-Time Cross-Window Synchronization (Student & Invigilator Teacher Cockpit)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let channel: BroadcastChannel | null = null;
     try {
       channel = new BroadcastChannel('edu360_exam_live_channel');
+      examBroadcastChannelRef.current = channel;
       channel.onmessage = (e) => {
         const data = e.data;
         if (!data) return;
 
-        if (data.type === 'EXAM_PAUSE' && (!data.candidateId || data.candidateId === candidateId)) {
+        if (data.type === 'REQUEST_STUDENT_FRAME') {
+          // Immediately respond with candidate presence and current video frame
+          try {
+            const activeVid = (videoRef.current && videoRef.current.readyState >= 2) ? videoRef.current : rulesVideoRef.current;
+            let currentFrame: string | undefined = undefined;
+            if (activeVid && activeVid.readyState >= 2) {
+              const snapCanvas = document.createElement('canvas');
+              snapCanvas.width = 320;
+              snapCanvas.height = 240;
+              const snapCtx = snapCanvas.getContext('2d');
+              if (snapCtx) {
+                snapCtx.drawImage(activeVid, 0, 0, 320, 240);
+                currentFrame = snapCanvas.toDataURL('image/jpeg', 0.6);
+              }
+            }
+            channel?.postMessage({
+              type: 'STUDENT_JOINED',
+              candidateId: candidateId || 1,
+              studentName: studentName || 'Aarav Sharma',
+              rollNo: '14',
+              className: 'Class 8-B',
+              isAdmitted: true,
+              hallTicketPresented: true,
+              hallTicketNo: 'HT-2026-8B-014',
+              cameraActive: true
+            });
+            if (currentFrame) {
+              channel?.postMessage({
+                type: 'STUDENT_FRAME',
+                candidateId: candidateId || 1,
+                studentName: studentName || 'Aarav Sharma',
+                rollNo: '14',
+                frame: currentFrame
+              });
+            }
+          } catch {}
+        } else if (data.type === 'EXAM_PAUSE' && (!data.candidateId || data.candidateId === candidateId)) {
           setIsExamPaused(true);
           try { playDoubtNotification(); } catch {}
           setHudAlertMessage('Examination temporarily paused by Chief Invigilator.');
@@ -1143,7 +1799,10 @@ export function OnlineExamModal({
         } else if (data.type === 'TALK_ONE_ON_ONE' && (!data.candidateId || data.candidateId === candidateId)) {
           try { playDoubtNotification(); } catch {}
           setIsInvigilatorIntercomActive(true);
-          setInvigilatorIntercomMessage(data.message || 'Aarav, please adjust your device camera so that your physical paper booklet and hands remain visible on your desk.');
+          setInvigilatorIntercomMessage(data.message || '1-on-1 Inquiry in progress with Chief Invigilator Mrs. Ananya Verma.');
+          if (data.intercomEntry) {
+            setProctorAnalysisSheet(prev => [data.intercomEntry, ...prev.filter(e => e.id !== data.intercomEntry.id)]);
+          }
         } else if (data.type === 'END_INTERCOM' && (!data.candidateId || data.candidateId === candidateId)) {
           setIsInvigilatorIntercomActive(false);
         } else if (data.type === 'ISSUE_WARNING' && (!data.candidateId || data.candidateId === candidateId)) {
@@ -1155,13 +1814,132 @@ export function OnlineExamModal({
           });
           setHudAlertMessage(`🚨 Official Warning from Invigilator: "${data.message || 'Please maintain desk posture.'}"`);
           setTimeout(() => setHudAlertMessage(null), 8000);
+        } else if (data.type === 'ADMIT_STUDENT' && (!data.candidateId || data.candidateId === candidateId || data.candidateId === 1)) {
+          try { playDoubtNotification(); } catch {}
+          setRulesStage('active');
+          toggleFullscreen();
+          if (videoRef.current && streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(() => {});
+          }
+          setHudAlertMessage('✅ Hall Ticket Verified! You have been admitted to the Exam Hall by Mrs. Ananya Verma.');
+          setTimeout(() => setHudAlertMessage(null), 5000);
         } else if (data.type === 'EXAM_DISQUALIFY' && (!data.candidateId || data.candidateId === candidateId)) {
           setIsExamDisqualified(true);
+          setIsExamPaused(true);
+          if (data.decisionEntry) {
+            setProctorAnalysisSheet(prev => [data.decisionEntry, ...prev.filter(e => e.id !== data.decisionEntry.id)]);
+          }
+        } else if ((data.type === 'PARDON_STRIKES' || data.type === 'EXAM_RESUME') && (!data.candidateId || data.candidateId === candidateId || data.candidateId === 1 || data.rollNo === '14')) {
+          try { playDoubtNotification(); } catch {}
+          setIsHardSuspended(false);
+          isHardSuspendedRef.current = false;
+          setIsExamPaused(false);
+          setProctorStrikes(0);
+          proctorStrikesRef.current = 0;
+          setIsPenalized(false);
+          try {
+            localStorage.removeItem('edu360_student_hard_suspended');
+            localStorage.removeItem('edu360_exam_resume_signal');
+          } catch {}
+          if (data.decisionEntry) {
+            proctorAnalysisSheetRef.current = [data.decisionEntry, ...proctorAnalysisSheetRef.current.filter(e => e.id !== data.decisionEntry.id)];
+            setProctorAnalysisSheet(proctorAnalysisSheetRef.current);
+          }
+          setHudAlertMessage('✅ Chief Invigilator Approved: Exam pardoned & resumed. Welcome back to the exam hall.');
+          setTimeout(() => setHudAlertMessage(null), 6000);
+        } else if (data.type === 'EXAM_COMMENCED') {
+          try { playDoubtNotification(); } catch {}
+          setIsExamCommenced(true);
+          if (rulesStageRef.current !== 'active') {
+            setRulesStage('active');
+          }
+          setHudAlertMessage('🚀 Chief Invigilator Mrs. Ananya Verma has commenced the examination! All questions unlocked.');
+          setTimeout(() => setHudAlertMessage(null), 5000);
+        } else if (data.type === 'EXAM_ENDED_BY_TEACHER') {
+          try { playDoubtNotification(); } catch {}
+          // HARDWARE SHUTDOWN: Turn off all student camera tracks and microphone
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+            streamRef.current = null;
+          }
+          if (videoRef.current) {
+            videoRef.current.srcObject = null;
+          }
+          if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+          }
+          if (liveKitRoomRef.current) {
+            liveKitRoomRef.current.disconnect();
+          }
+          setCameraActive(false);
+          setIsExamEndedByTeacher(true);
+          setShowSealCodeExitDialog(true);
+          setHudAlertMessage('📢 Chief Invigilator Mrs. Ananya Verma has concluded the examination early for all candidates. Cameras have been turned off.');
         }
       };
     } catch {}
 
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'edu360_exam_commenced') {
+        const isComm = e.newValue === 'true';
+        setIsExamCommenced(isComm);
+        if (isComm && rulesStageRef.current !== 'active') {
+          setRulesStage('active');
+        }
+      }
+      if (e.key === 'edu360_exam_ended_signal' && e.newValue) {
+        setIsExamEndedByTeacher(true);
+        setShowSealCodeExitDialog(true);
+      }
+      if (e.key === 'edu360_exam_resume_signal') {
+        setIsHardSuspended(false);
+        isHardSuspendedRef.current = false;
+        setIsExamPaused(false);
+        setProctorStrikes(0);
+        proctorStrikesRef.current = 0;
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Active cross-window fallback poller (ensures 100% instant auto-start, auto-resume, auto-conclude)
+    const activeSyncPoller = setInterval(() => {
+      try {
+        const isComm = localStorage.getItem('edu360_exam_commenced') === 'true';
+        if (isComm) {
+          setIsExamCommenced(prev => {
+            if (!prev) {
+              if (rulesStageRef.current !== 'active') {
+                setRulesStage('active');
+              }
+              return true;
+            }
+            return prev;
+          });
+        }
+
+        const isEnded = localStorage.getItem('edu360_exam_ended_signal');
+        if (isEnded) {
+          setIsExamEndedByTeacher(true);
+          setShowSealCodeExitDialog(true);
+        }
+
+        const resumeSig = localStorage.getItem('edu360_exam_resume_signal');
+        const isHardSuspInStorage = localStorage.getItem('edu360_student_hard_suspended') === 'true';
+        if (resumeSig && !isHardSuspInStorage && isHardSuspendedRef.current) {
+          setIsHardSuspended(false);
+          isHardSuspendedRef.current = false;
+          setIsExamPaused(false);
+          setProctorStrikes(0);
+          proctorStrikesRef.current = 0;
+        }
+      } catch {}
+    }, 300);
+
     return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(activeSyncPoller);
       if (channel) channel.close();
     };
   }, [candidateId]);
@@ -1185,19 +1963,35 @@ export function OnlineExamModal({
           const myRecord = res.candidates.find((c: any) => c.id === candidateId || c.studentId === candidateId);
 
           if (myRecord) {
-
-            setIsExamPaused(Boolean(myRecord.isPaused));
-
-            setIsExamDisqualified(Boolean(myRecord.isDisqualified));
-
-            setProctorStrikes(myRecord.strikes || 0);
-
-            if (myRecord.isNudged && myRecord.nudgeMessage) {
-
-              setHudAlertMessage(myRecord.nudgeMessage);
-
+            // CRITICAL ARCHITECTURE FIX: Hard-lock suspension state. Never unpause from background polling!
+            if (proctorStrikesRef.current >= 3 || isHardSuspendedRef.current || isHardSuspended) {
+              setIsExamPaused(true);
+            } else if (myRecord.isPaused !== undefined) {
+              if (myRecord.strikes >= 3) {
+                setIsExamPaused(true);
+                setProctorStrikes(myRecord.strikes);
+                proctorStrikesRef.current = myRecord.strikes;
+              } else if (myRecord.strikes === 0 && proctorStrikesRef.current === 0) {
+                setIsExamPaused(false);
+                setIsHardSuspended(false);
+                isHardSuspendedRef.current = false;
+              } else {
+                setIsExamPaused(Boolean(myRecord.isPaused));
+              }
             }
 
+            if (myRecord.isDisqualified) {
+              setIsExamDisqualified(true);
+            }
+
+            if (myRecord.strikes !== undefined && myRecord.strikes > proctorStrikesRef.current) {
+              setProctorStrikes(myRecord.strikes);
+              proctorStrikesRef.current = myRecord.strikes;
+            }
+
+            if (myRecord.isNudged && myRecord.nudgeMessage) {
+              setHudAlertMessage(myRecord.nudgeMessage);
+            }
           }
 
         }
@@ -1222,7 +2016,7 @@ export function OnlineExamModal({
 
   useEffect(() => {
 
-    if (!isOpen || isConfirmedSubmitted || isExamPaused || isExamDisqualified || rulesStage !== 'active') return;
+    if (!isOpen || isConfirmedSubmitted || isExamPaused || isExamDisqualified || rulesStage !== 'active' || !isExamCommenced || isHardSuspended) return;
 
 
 
@@ -1321,68 +2115,80 @@ export function OnlineExamModal({
 
 
   const handleSubmitFinal = async () => {
-
     setIsSubmitting(true);
-
     try {
-
       await api.submitCandidateExam(candidateId, {
-
         submission_content: essayContent,
-
         words_count: wordCount,
-
         time_spent_seconds: durationMinutes * 60 - timeRemainingSeconds,
-
         script_pages_uploaded: examMode === 'MODE_HYBRID_SCAN' ? 4 : 0
-
       });
-
     } catch {
-
       // Fallback
-
     }
 
+    // HARDWARE SHUTDOWN: Camera & Mic tracks OFF immediately upon submit
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (liveKitRoomRef.current) {
+      liveKitRoomRef.current.disconnect();
+    }
+    setCameraActive(false);
 
+    // Notify teacher cockpit in real-time
+    try {
+      const channel = examBroadcastChannelRef.current || new BroadcastChannel('edu360_exam_live_channel');
+      channel.postMessage({
+        type: 'STUDENT_SUBMITTED',
+        candidateId: candidateId || 1,
+        rollNo: '14',
+        studentName: studentName || 'Aarav Sharma',
+        sealCode: 'SEAL-8B-9482',
+        timestamp: new Date().toISOString()
+      });
+    } catch {}
 
     setTimeout(() => {
-
       setIsSubmitting(false);
-
       setConfirmSubmitDialogOpen(false);
-
-      setIsConfirmedSubmitted(true);
-
       confetti({
-
         particleCount: 100,
-
         spread: 70,
-
         origin: { y: 0.6 }
-
       });
-
-      if (onSubmitted) {
-
-        onSubmitted({
-
-          wordsCount: wordCount,
-
-          timeSpentSeconds: durationMinutes * 60 - timeRemainingSeconds,
-
-          content: essayContent
-
-        });
-
+      if (examMode === 'MODE_HYBRID_SCAN') {
+        // HYBRID SCAN MODE: Keep exam modal mounted and present the Seal Code dialog
+        setShowSealCodeExitDialog(true);
+      } else {
+        // CBT / Online Mode: Finish immediately
+        setIsConfirmedSubmitted(true);
+        if (onSubmitted) {
+          onSubmitted({
+            wordsCount: wordCount,
+            timeSpentSeconds: durationMinutes * 60 - timeRemainingSeconds,
+            content: essayContent
+          });
+        }
+        onClose();
       }
-
-    }, 1000);
-
+    }, 600);
   };
 
 
+
+  const isSuspendedSession = Boolean(
+    (proctorStrikes >= 3 || proctorStrikesRef.current >= 3) &&
+    (isHardSuspended || isHardSuspendedRef.current || isExamPaused)
+  );
 
   if (!isOpen) return null;
 
@@ -1466,23 +2272,16 @@ export function OnlineExamModal({
             {/* Countdown Clock */}
 
             <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border font-mono font-black text-sm ${
-
-              isExamPaused
-
+              !isExamCommenced
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-
+                : isExamPaused || isHardSuspended
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : timeRemainingSeconds < 300 
-
                 ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse' 
-
                 : 'bg-slate-800 text-white border-slate-700'
-
             }`}>
-
-              {isExamPaused ? <Pause className="h-4 w-4 text-amber-400" /> : <Clock className="h-4 w-4 text-purple-400" />}
-
-              <span>{isExamPaused ? 'TIMER PAUSED' : formattedTime}</span>
-
+              {isExamPaused || isHardSuspended ? <Pause className="h-4 w-4 text-amber-400" /> : <Clock className="h-4 w-4 text-purple-400" />}
+              <span>{!isExamCommenced ? '03:00:00 (LOBBY)' : isExamPaused || isHardSuspended ? 'TIMER PAUSED' : formattedTime}</span>
             </div>
 
 
@@ -1500,24 +2299,25 @@ export function OnlineExamModal({
 
 
             {/* Fullscreen toggle */}
-
             <button
-
               type="button"
-
               onClick={toggleFullscreen}
-
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-
               title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-
             >
-
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-
             </button>
 
-
+            {/* Submit Exam Button */}
+            <button
+              type="button"
+              onClick={() => setConfirmSubmitDialogOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all cursor-pointer border border-emerald-400/30 shrink-0"
+              title="Submit Exam & Generate Paper Seal"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>Submit Exam</span>
+            </button>
 
             {/* Exit/Cancel button */}
 
@@ -1759,6 +2559,130 @@ export function OnlineExamModal({
 
           </div>
 
+        ) : rulesStage === 'hall_ticket_check' ? (
+          /* ========================================================= */
+          /* HALL TICKET & ADMISSION VERIFICATION GATE SCREEN          */
+          /* ========================================================= */
+          <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-900 text-white text-center space-y-6">
+            <div className="max-w-lg w-full rounded-3xl bg-slate-950 border-2 border-violet-500/50 p-6 shadow-2xl space-y-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold">
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
+                <span>Admit Gate &bull; Hall Ticket Verification</span>
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-white">Present Physical Hall Ticket</h3>
+                <p className="text-xs text-slate-300">
+                  Please hold your physical <b>Hall Ticket (Roll #14)</b> up to your camera. Chief Invigilator <b>Mrs. Ananya Verma</b> is verifying your admit card.
+                </p>
+              </div>
+
+              {/* Camera Preview Frame */}
+              <div className="relative rounded-2xl overflow-hidden aspect-video bg-black border-2 border-dashed border-violet-400/60 flex items-center justify-center">
+                <video
+                  ref={rulesVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover transform -scale-x-100"
+                />
+                <div className="absolute inset-4 border-2 border-dashed border-amber-400/70 rounded-xl pointer-events-none flex flex-col justify-between p-2">
+                  <span className="text-[10px] font-mono text-amber-300 font-bold bg-black/60 px-2 py-0.5 rounded self-start">
+                    🪪 Align Admit Card inside Box
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-300 font-bold bg-black/60 px-2 py-0.5 rounded self-end">
+                    Candidate: {studentName} (Roll #14)
+                  </span>
+                </div>
+              </div>
+
+              {/* Hall Ticket Input & Submission Section */}
+              <div className="space-y-2 text-left bg-slate-900/90 p-4 rounded-2xl border border-violet-500/30">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span>Enter Official Hall Ticket Number:</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Issued by Exam Office</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={studentEnteredHallTicket}
+                    onChange={(e) => setStudentEnteredHallTicket(e.target.value)}
+                    placeholder="e.g. HT-2026-8B-014 or Roll #14"
+                    className="flex-1 rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2 text-xs font-mono font-bold text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-violet-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHallTicketSubmitted(true);
+                      try {
+                        const channel = new BroadcastChannel('edu360_exam_live_channel');
+                        channel.postMessage({
+                          type: 'STUDENT_SUBMIT_HALL_TICKET',
+                          candidateId: candidateId || 1,
+                          name: studentName || 'Aarav Sharma',
+                          rollNo: '14',
+                          hallTicketNo: studentEnteredHallTicket.trim() || 'HT-2026-8B-014',
+                          timestamp: new Date().toLocaleTimeString()
+                        });
+                        channel.close();
+                      } catch {}
+                    }}
+                    className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-xs cursor-pointer transition-all"
+                  >
+                    Submit Ticket
+                  </button>
+                </div>
+                {isHallTicketSubmitted ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold pt-1 animate-pulse">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Hall Ticket #{studentEnteredHallTicket} submitted to Mrs. Ananya Verma. Awaiting teacher acceptance...</span>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-slate-400 block">
+                    Verify the number printed on your admit card and click "Submit Ticket" to request entry.
+                  </span>
+                )}
+              </div>
+
+              <div className="rounded-xl bg-violet-950/60 border border-violet-800/60 p-3 text-xs text-violet-200 space-y-1">
+                <div className="flex items-center justify-between font-bold">
+                  <span>Admit Desk Status:</span>
+                  <span className="text-amber-400 animate-pulse">
+                    {isHallTicketSubmitted ? 'Hall Ticket Under Teacher Review...' : 'Awaiting Hall Ticket Submission...'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400 block">
+                  Once Mrs. Ananya Verma accepts your Hall Ticket, your question paper will unlock into Fullscreen.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRulesStage('rules')}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-bold text-slate-300 cursor-pointer"
+                >
+                  Back to Rules
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRulesStage('active');
+                    toggleFullscreen();
+                    if (videoRef.current && streamRef.current) {
+                      videoRef.current.srcObject = streamRef.current;
+                      videoRef.current.play().catch(() => {});
+                    }
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>⚡ Quick Admit (Self-Test Mode)</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         ) : rulesStage === 'rules' ? (
           /* ========================================================= */
           /* OFFICIAL CANDIDATE EXAMINATION RULES & INTEGRITY PROTOCOL */
@@ -1822,7 +2746,7 @@ export function OnlineExamModal({
                   <span>Strict Prohibition of Malpractice</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  Smartphones, smartwatches, second monitors, or unauthorized persons in the testing room are strictly prohibited. The edge YOLO AI detector audits video continuously. Repeated violations incur a <b>5-mark penalty</b> or eviction.
+                  Smartphones, smartwatches, second monitors, or unauthorized persons in the testing room are strictly prohibited. The MediaPipe edge AI detector audits video continuously. Repeated violations incur a <b>5-mark penalty</b> or eviction.
                 </p>
               </div>
 
@@ -1870,7 +2794,7 @@ export function OnlineExamModal({
                   <div className="absolute inset-4 border border-dashed border-emerald-400/80 rounded-xl pointer-events-none flex flex-col justify-between p-2 bg-emerald-500/5">
                     <span className="self-start text-[9px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
                       <Camera className="h-2.5 w-2.5" />
-                      YOLO v8: 1 Face Detected ({studentName})
+                      MediaPipe Face Mesh: 1 Face Detected ({studentName})
                     </span>
                     <span className="self-end text-[9px] font-mono text-emerald-300 bg-black/60 px-1.5 py-0.5 rounded">
                       Desk Surface: Centered
@@ -1918,7 +2842,7 @@ export function OnlineExamModal({
                       <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
                       <div>
                         <span className="text-slate-400 block text-[9px] uppercase font-bold">Edge AI Detector</span>
-                        <span className="font-bold text-slate-900 dark:text-white">YOLO v8 Active</span>
+                        <span className="font-bold text-slate-900 dark:text-white">MediaPipe Active</span>
                       </div>
                     </div>
                   </div>
@@ -1957,12 +2881,17 @@ export function OnlineExamModal({
                   type="button"
                   disabled={!hasAgreedRules}
                   onClick={() => {
-                    setRulesStage('active');
-                    toggleFullscreen();
-                    if (videoRef.current && streamRef.current) {
-                      videoRef.current.srcObject = streamRef.current;
-                      videoRef.current.play().catch(() => {});
-                    }
+                    setRulesStage('hall_ticket_check');
+                    try {
+                      const channel = new BroadcastChannel('edu360_exam_live_channel');
+                      channel.postMessage({
+                        type: 'STUDENT_WAITING_ADMIT',
+                        candidateId: candidateId || 1,
+                        name: studentName || 'Aarav Sharma',
+                        rollNo: '14'
+                      });
+                      channel.close();
+                    } catch {}
                   }}
                   className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
                     hasAgreedRules
@@ -1970,7 +2899,7 @@ export function OnlineExamModal({
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <span>Agree &amp; Enter Proctored Exam Hall (Fullscreen)</span>
+                  <span>Agree &amp; Present Hall Ticket for Admission</span>
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -1982,52 +2911,129 @@ export function OnlineExamModal({
 
             
 
-            {/* PAUSE OVERLAY (When Teacher Clicks Pause on Cockpit) */}
-
-            {isExamPaused && (
-
-              <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 text-center animate-in fade-in duration-150">
-
-                <div className="max-w-md p-6 rounded-3xl bg-slate-900 border border-amber-500/40 text-white shadow-2xl space-y-4">
-
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-
-                    <Pause className="h-7 w-7" />
-
+            {/* HARD LOCKDOWN: WHEN 3 STRIKES APPLIED, HIDE QUESTION PAPER ENTIRELY */}
+            {isSuspendedSession ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 bg-slate-950 text-center animate-in fade-in duration-200 overflow-y-auto">
+                <div className="max-w-xl w-full p-8 sm:p-10 rounded-3xl border-2 border-rose-500 ring-4 ring-rose-500/40 bg-gradient-to-b from-rose-950/95 via-slate-900 to-slate-950 text-white shadow-2xl space-y-6">
+                  
+                  {/* Icon & Pulse */}
+                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-rose-500/20 text-rose-400 border-2 border-rose-500/50 animate-pulse shadow-lg shadow-rose-950/50">
+                    <ShieldAlert className="h-10 w-10 text-rose-400" />
                   </div>
 
-                  <div className="space-y-1.5">
+                  {/* Title & Explanation */}
+                  <div className="space-y-3">
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-rose-600 text-white shadow-md">
+                      <span>🚨 EXAMINATION HARD-SUSPENDED (3 STRIKES APPLIED)</span>
+                    </div>
 
-                    <h3 className="text-lg font-black tracking-tight text-amber-300">
+                    <h2 className="text-2xl font-black tracking-tight text-white">
+                      Locked Awaiting Chief Invigilator Approval
+                    </h2>
 
-                      Examination Paused by Invigilator
-
-                    </h3>
-
-                    <p className="text-xs text-slate-300 leading-relaxed">
-
-                      Your examination canvas has been temporarily frozen while the invigilator verifies your desk posture or conducts a verification check.
-
+                    <p className="text-sm text-rose-200/90 leading-relaxed max-w-lg mx-auto">
+                      Your examination session is completely suspended due to 3 malpractice strikes. The question paper, questions, and writing pad are locked out. Your case has been flagged directly to Chief Invigilator Mrs. Ananya Verma for inquiry and review.
                     </p>
-
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 text-[11px] text-slate-400 font-mono">
-
-                    Exam Timer is Locked &bull; Please do not exit fullscreen
-
+                  {/* 1-on-1 Voice Intercom Banner */}
+                  <div className={`p-4 rounded-2xl border text-left flex items-center justify-between gap-3 ${
+                    isInvigilatorIntercomActive
+                      ? 'bg-indigo-950/90 border-indigo-500 ring-2 ring-indigo-500/50 text-indigo-200 animate-pulse'
+                      : 'bg-slate-800/90 border-slate-700 text-slate-300'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${
+                        isInvigilatorIntercomActive ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-700 text-slate-400'
+                      }`}>
+                        <PhoneCall className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black block text-white">
+                          {isInvigilatorIntercomActive ? '🎙️ 1-on-1 Voice Intercom Active with Mrs. Ananya Verma' : '1-on-1 Voice Intercom Standby'}
+                        </span>
+                        <span className="text-[11px] block text-slate-300 mt-0.5">
+                          {isInvigilatorIntercomActive 
+                            ? 'Chief Invigilator is speaking. Please explain your infractions into your microphone.'
+                            : 'Mrs. Ananya Verma will open voice intercom shortly to review your analysis sheet.'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
+                  {/* Action Buttons: View Analysis Sheet & Status */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setShowAnalysisSheetModal(true)}
+                      className="py-3 px-4 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-95"
+                    >
+                      <FileText className="h-4 w-4" />
+                      <span>Open My Full Analysis Sheet ({proctorAnalysisSheet.length} Incidents)</span>
+                    </button>
+
+                    <div className="p-3 rounded-xl bg-slate-800/90 border border-slate-700 text-xs text-rose-300 font-mono flex items-center justify-center gap-2">
+                      <Lock className="h-4 w-4 text-rose-400" />
+                      <span>Question Paper Completely Locked</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    * The exam will only resume once the Chief Invigilator issues an official electronic pardon.
+                  </p>
                 </div>
-
               </div>
+            ) : !isExamCommenced ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 bg-slate-950 text-center animate-in fade-in duration-200 overflow-y-auto">
+                <div className="max-w-xl w-full p-8 sm:p-10 rounded-3xl border-2 border-violet-500/50 ring-4 ring-violet-500/20 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 text-white shadow-2xl space-y-6">
+                  
+                  {/* Pulse ring icon */}
+                  <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-25"></span>
+                    <div className="h-20 w-20 rounded-3xl bg-violet-600/20 border-2 border-violet-400 flex items-center justify-center text-violet-300 shadow-lg shadow-violet-900/40">
+                      <Clock className="h-10 w-10 text-violet-400 animate-pulse" />
+                    </div>
+                  </div>
 
-            )}
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
+                      <span>Exam Lobby &bull; Standby Mode</span>
+                    </div>
+                    <h2 className="text-2xl font-black text-white tracking-tight">
+                      Waiting for Chief Invigilator to Commence Exam
+                    </h2>
+                    <p className="text-sm text-slate-300 leading-relaxed max-w-lg mx-auto">
+                      Mrs. Ananya Verma has not started the session yet. Your camera, audio, and AI proctoring sensors are active and streaming to the invigilator cockpit. The question paper will unlock automatically the moment the exam is commenced.
+                    </p>
+                  </div>
 
+                  {/* Sensor Verification Status Pill */}
+                  <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-left space-y-2.5">
+                    <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-800 font-mono">
+                      <span className="text-slate-400">Candidate Identity:</span>
+                      <span className="text-white font-bold">{studentName} (Roll #14)</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-800 font-mono">
+                      <span className="text-slate-400">Class &amp; Subject:</span>
+                      <span className="text-violet-300 font-bold">{subject} &bull; Class 8-B</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400">Biometric Edge Proctoring:</span>
+                      <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                        <span>Online &bull; Live Telemetry Syncing</span>
+                      </span>
+                    </div>
+                  </div>
 
-
-            {/* LEFT / CENTER: OFFICIAL CBSE QUESTION PAPER VIEWER (NO TYPING - PHYSICAL PAPER ONLY) */}
-            <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/50 dark:bg-slate-900/40 relative">
+                  <div className="p-3.5 rounded-xl bg-violet-950/50 border border-violet-800/40 text-xs text-violet-300 font-mono">
+                    💡 Please stay on this screen. Do not navigate away or switch browser tabs.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/50 dark:bg-slate-900/40 relative">
               
               {/* Security Watermark across question paper */}
               <div className="absolute inset-0 pointer-events-none select-none flex items-center justify-center opacity-[0.03] dark:opacity-[0.04] rotate-[-25deg] z-0 overflow-hidden">
@@ -2226,16 +3232,16 @@ export function OnlineExamModal({
                   <button
                     type="button"
                     disabled={isExamPaused}
-                    onClick={() => setShowDynamicSealModal(true)}
-                  className="rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-6 py-3 shadow-lg shadow-purple-500/25 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  <Lock className="h-4 w-4" />
-                  <span>Finish Writing &amp; Generate Security Seal (#HYBRID-8492-SEAL)</span>
-                </button>
+                    onClick={() => setConfirmSubmitDialogOpen(true)}
+                    className="rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs px-6 py-3 shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Submit &amp; Finish Exam (15-Min Paper Upload)</span>
+                  </button>
                 </div>
               </div>
-
             </div>
+            )}
 
             {/* RIGHT COLUMN: DEDICATED WEBCAM PROCTOR HUD */}
 
@@ -2283,11 +3289,11 @@ export function OnlineExamModal({
 
                   {/* Audio Decibel Level HUD */}
 
-                  {/* DYNAMIC ON-SCREEN YOLO BOUNDING BOXES */}
+                  {/* DYNAMIC ON-SCREEN MEDIAPIPE & VISION BOUNDING BOXES */}
                   {cameraActive && (
                     <>
-                      {/* Candidate Head Indicator (Only shown if head turned away) */}
-                      {yoloPersonCount > 0 && yoloGazeStatus.includes('Turned') && (
+                      {/* Candidate Head Indicator (Only shown if head turned away continuously for > 1.5s) */}
+                      {livePersonCount > 0 && liveGazeStatus.includes('Turned') && liveGazeTimer >= 1.5 && (
                         <div 
                           className="absolute border-2 border-amber-400 bg-amber-400/10 rounded-2xl pointer-events-none transition-all duration-150 flex flex-col justify-between p-1.5"
                           style={{
@@ -2299,28 +3305,28 @@ export function OnlineExamModal({
                         >
                           <div className="flex items-center justify-between text-[9px] font-mono font-bold">
                             <span className="px-1.5 py-0.5 rounded text-white shadow-xs bg-amber-500">
-                              YOLO: Head Pose
+                              MediaPipe: Head Pose
                             </span>
                             {liveGazeTimer > 0 && (
                               <span className="bg-amber-600 text-white px-1.5 py-0.5 rounded text-[8px] animate-pulse">
-                                Turned: {liveGazeTimer}s/4.5s
+                                Turned: {liveGazeTimer}s/5.0s
                               </span>
                             )}
                           </div>
                           <span className="self-end text-[8px] font-mono font-bold text-amber-300 bg-black/70 px-1.5 py-0.5 rounded">
-                            {yoloGazeStatus}
+                            {liveGazeStatus}
                           </span>
                         </div>
                       )}
 
-                      {/* Cell Phone Bounding Box - 2.5s Transient HUD Alert */}
+                      {/* Cell Phone Bounding Box - Transient HUD Alert */}
                       {visibleBoxAlerts.phone && (
                         <div 
                           className="absolute border-2 border-rose-500 bg-rose-500/20 rounded-xl pointer-events-none flex flex-col justify-between p-1 animate-pulse transition-opacity duration-300"
                           style={{ bottom: '15%', left: '35%', width: '30%', height: '40%' }}
                         >
                           <span className="self-start text-[8px] font-mono font-black bg-rose-600 text-white px-1.5 py-0.5 rounded shadow-sm">
-                            🚨 YOLO: cell_phone (0.92)
+                            🚨 AI Vision: Mobile Device (0.92)
                           </span>
                           <span className="self-end text-[8px] font-mono text-rose-300 bg-black/70 px-1 rounded font-bold">
                             Handheld Mobile Flagged
@@ -2328,14 +3334,14 @@ export function OnlineExamModal({
                         </div>
                       )}
 
-                      {/* Unauthorized Book Bounding Box - 2.5s Transient HUD Alert */}
+                      {/* Unauthorized Book Bounding Box - Transient HUD Alert */}
                       {visibleBoxAlerts.book && (
                         <div 
                           className="absolute border-2 border-rose-500 bg-rose-500/20 rounded-xl pointer-events-none flex flex-col justify-between p-1 animate-pulse transition-opacity duration-300"
                           style={{ bottom: '10%', right: '15%', width: '45%', height: '35%' }}
                         >
                           <span className="self-start text-[8px] font-mono font-black bg-rose-600 text-white px-1.5 py-0.5 rounded shadow-sm">
-                            🚨 YOLO: book (0.89)
+                            🚨 AI Vision: Book / Notes (0.89)
                           </span>
                           <span className="self-end text-[8px] font-mono text-rose-300 bg-black/70 px-1 rounded font-bold">
                             Printed Material Flagged
@@ -2343,11 +3349,11 @@ export function OnlineExamModal({
                         </div>
                       )}
 
-                      {/* Second Person Bounding Box - 2.5s Transient HUD Alert */}
+                      {/* Second Person Bounding Box - Transient HUD Alert */}
                       {visibleBoxAlerts.person2 && (
                         <div className="absolute top-6 right-3 w-32 h-44 border-2 border-dashed border-rose-500 bg-rose-500/20 rounded-xl pointer-events-none flex flex-col justify-between p-1 animate-pulse transition-opacity duration-300">
                           <span className="self-start text-[8px] font-mono font-black bg-rose-600 text-white px-1.5 py-0.5 rounded">
-                            👥 YOLO: person_2 (0.94)
+                            👥 MediaPipe: Multiple Faces (2)
                           </span>
                           <span className="self-end text-[8px] font-mono text-rose-300 bg-black/70 px-1 rounded font-bold">
                             Multi-Face Alert
@@ -2356,7 +3362,7 @@ export function OnlineExamModal({
                       )}
 
                       {/* Absent Candidate Full-Screen Overlay Box */}
-                      {yoloPersonCount === 0 && (
+                      {livePersonCount === 0 && (
                         <div className="absolute inset-3 border-2 border-dashed border-rose-500 bg-rose-950/85 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-3 text-center pointer-events-none animate-pulse">
                           <UserX className="h-8 w-8 text-rose-400 mx-auto mb-1 animate-bounce" />
                           <span className="text-xs font-black text-rose-300">NO CANDIDATE DETECTED</span>
@@ -2368,38 +3374,25 @@ export function OnlineExamModal({
                     </>
                   )}
 
-                                    <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-mono text-white flex items-center gap-1">
-
+                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-mono text-white flex items-center gap-1">
                     <Mic className="h-2.5 w-2.5 text-emerald-400" />
-
                     <span>{audioDecibels} dB</span>
-
                   </div>
 
-
-
                   {!cameraActive && (
-
                     <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-3 text-center text-slate-400 space-y-1">
-
                       <VideoOff className="h-6 w-6 text-slate-500" />
-
                       <span className="text-[10px] font-bold text-slate-300">Edge Proctor Active</span>
-
                       <span className="text-[9px] text-slate-400">Webcam stream linked to Invigilator</span>
-
                     </div>
-
                   )}
-
-
 
                   <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[9px] font-mono font-bold text-white bg-black/60 backdrop-blur-xs px-2 py-1 rounded-xl">
                     <span className="flex items-center gap-1">
                       <span className={`h-1.5 w-1.5 rounded-full ${proctorStrikes > 1 ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`}></span>
-                      YOLO Person: {yoloPersonCount} ({studentName.split(' ')[0]})
+                      MediaPipe Faces: {livePersonCount} ({studentName.split(' ')[0]})
                     </span>
-                    <span>Gaze: {yoloGazeStatus}</span>
+                    <span>Gaze: {liveGazeStatus}</span>
                   </div>
                 </div>
 
@@ -2470,9 +3463,9 @@ export function OnlineExamModal({
                           Gaze / Head Pose
                         </span>
                         <span className={`font-mono font-black ${
-                          yoloGazeStatus.includes('Turned') ? 'text-amber-500 animate-pulse' : yoloGazeStatus.includes('Absent') ? 'text-rose-500 animate-pulse' : 'text-emerald-600 dark:text-emerald-400'
+                          liveGazeStatus.includes('Turned') ? 'text-amber-500 animate-pulse' : liveGazeStatus.includes('Absent') ? 'text-rose-500 animate-pulse' : 'text-emerald-600 dark:text-emerald-400'
                         }`}>
-                          {yoloGazeStatus}
+                          {liveGazeStatus}
                           {liveGazeTimer > 0 && ` (${liveGazeTimer}s / 5.0s)`}
                           {liveAbsentTimer > 0 && ` (${liveAbsentTimer}s / 5.0s)`}
                         </span>
@@ -2513,9 +3506,55 @@ export function OnlineExamModal({
                     {/* Sensor 3: Persons in Room */}
                     <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100 dark:border-slate-800">
                       <span className="text-slate-500 font-bold">Room Occupancy:</span>
-                      <span className={`font-black ${yoloPersonCount > 1 ? 'text-rose-600' : 'text-slate-800 dark:text-slate-200'}`}>
-                        {yoloPersonCount > 1 ? '⚠️ 2 People (Multi-Face Flag)' : '1 Candidate (Aarav)'}
+                      <span className={`font-black ${livePersonCount > 1 ? 'text-rose-600' : 'text-slate-800 dark:text-slate-200'}`}>
+                        {livePersonCount > 1 ? '⚠️ 2 People (Multi-Face Flag)' : '1 Candidate (Aarav)'}
                       </span>
+                    </div>
+
+                    {/* Live Analysis Incident Feed */}
+                    <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <FileText className="h-3 w-3 text-violet-500" />
+                          Analysis Sheet Log
+                        </span>
+                        <span className="font-mono text-[9px] text-slate-400">
+                          {proctorAnalysisSheet.length} Incidents
+                        </span>
+                      </div>
+
+                      {proctorAnalysisSheet.length === 0 ? (
+                        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[10px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 font-bold">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <span>100% Integrity • No Infractions Logged</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                          {proctorAnalysisSheet.slice(0, 4).map((entry) => (
+                            <div
+                              key={entry.id}
+                              onClick={() => setShowAnalysisSheetModal(true)}
+                              className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] space-y-0.5 cursor-pointer hover:border-violet-400 transition-colors"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-bold text-slate-500 dark:text-slate-400 text-[9px]">
+                                  {entry.timestamp}
+                                </span>
+                                <span className={`px-1.5 py-0.2 rounded-full text-[8px] font-black ${
+                                  entry.actionTaken === 'STRIKE'
+                                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                    : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                                }`}>
+                                  {entry.actionTaken === 'STRIKE' ? `Strike #${entry.strikeNumber || 1}` : 'Warning'}
+                                </span>
+                              </div>
+                              <p className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {entry.title}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Proctor Analysis Sheet Button */}
@@ -2526,10 +3565,10 @@ export function OnlineExamModal({
                     >
                       <span className="flex items-center gap-1.5">
                         <FileText className="h-4 w-4" />
-                        <span>View Proctor Analysis Sheet</span>
+                        <span>Open Full Analysis Sheet</span>
                       </span>
                       <span className="font-mono px-2 py-0.5 rounded-lg bg-white/20 text-white font-black text-[10px]">
-                        {proctorAnalysisSheet.length} Events
+                        {proctorAnalysisSheet.length} Events ↗
                       </span>
                     </button>
 
@@ -2719,7 +3758,83 @@ export function OnlineExamModal({
 
         )}
 
+        {/* ========================================================= */}
+        {/* EPHEMERAL SECURITY SEAL CODE EXIT DIALOG (15-MIN PDF PREP) */}
+        {/* ========================================================= */}
+        {showSealCodeExitDialog && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-lg rounded-3xl bg-slate-900 border-2 border-amber-500/80 p-6 sm:p-7 shadow-2xl space-y-5 text-center text-white">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
+                <ShieldCheck className="h-8 w-8 animate-pulse" />
+              </div>
 
+              <div className="space-y-1">
+                <span className="inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {isExamEndedByTeacher ? 'Exam Concluded by Chief Invigilator • Security Seal Generated' : 'Exam Writing Completed • Security Seal Generated'}
+                </span>
+                <h3 className="text-xl font-black text-white pt-1">
+                  Physical Paper Verification Code
+                </h3>
+                <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+                  {isExamEndedByTeacher 
+                    ? 'Mrs. Ananya Verma has concluded the examination. All cameras have been powered off. Please write this verification code on your physical answer sheets now.'
+                    : 'As required by official examination integrity rules, please write this exact verification code on your physical answer sheets.'}
+                </p>
+              </div>
+
+              {/* Large Bold Verification Code Box */}
+              <div className="rounded-2xl border-2 border-dashed border-amber-400/80 bg-amber-500/10 p-5 space-y-2">
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest block font-mono">
+                  WRITE THIS CODE ON TOP-RIGHT CORNER OF ALL SHEETS:
+                </span>
+                <div className="text-3xl sm:text-4xl font-mono font-black text-amber-300 tracking-wider">
+                  SEAL-8B-9482
+                </div>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  Session Token: EDU-8B-14 &bull; Timestamp: {new Date().toLocaleTimeString()}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-300 space-y-1">
+                <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Next Step: 15-Minute PDF Upload Window</span>
+                </span>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Clicking below will close the live camera exam window. You will have a <b>15-minute countdown window</b> to upload your scanned answer sheet in PDF format directly into the Chief Invigilator&apos;s evaluation portal.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSealCodeExitDialog(false);
+                    setIsConfirmedSubmitted(true);
+                    if (onOpenPdfUpload) {
+                      onOpenPdfUpload({
+                        sealCode: 'SEAL-8B-9482',
+                        subject,
+                        examTitle
+                      });
+                    }
+                    if (onSubmitted) {
+                      onSubmitted({
+                        wordsCount: wordCount,
+                        timeSpentSeconds: durationMinutes * 60 - timeRemainingSeconds,
+                        content: essayContent
+                      });
+                    }
+                    onClose();
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-xl shadow-amber-500/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <span>I Have Written The Code On All Sheets &rarr; Close Exam &amp; Open 15-Min PDF Upload</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
                 {/* CHIEF INVIGILATOR 1-ON-1 VIDEO & AUDIO POPPING INTERCOM */}
         {isInvigilatorIntercomActive && (

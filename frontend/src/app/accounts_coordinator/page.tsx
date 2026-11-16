@@ -56,6 +56,7 @@ import {
   FleetExpenseItem
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
+import { MockPaymentGatewayModal } from '@/components/payment/mock-payment-gateway-modal';
 
 type AccountsTab = 'dashboard' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'tasks' | 'dispatch_logs';
 
@@ -137,6 +138,7 @@ export default function AccountsCoordinatorPage() {
 
   // Payment Recording Modal
   const [paymentModalDefaulter, setPaymentModalDefaulter] = useState<FeeDefaulter | null>(null);
+  const [gatewayModalDefaulter, setGatewayModalDefaulter] = useState<FeeDefaulter | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [paymentUtr, setPaymentUtr] = useState('');
@@ -1569,34 +1571,20 @@ export default function AccountsCoordinatorPage() {
                           </td>
                           <td className="p-3.5">
                             {d.exam_clearance ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                  No-Dues Cleared
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleExamClearance(d)}
-                                  className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
-                                  title="Revoke exam clearance / Place on financial hold"
-                                >
-                                  Hold
-                                </button>
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10.5px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" title="Cleared by Principal / Super Admin">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                <div>
+                                  <span className="block leading-none">Cleared</span>
+                                  <span className="text-[9px] text-emerald-600/80 font-normal">Admin Override</span>
+                                </div>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  Exam Hold
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleExamClearance(d)}
-                                  className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800"
-                                  title="Issue No-Dues Certificate for Hall Ticket / Report Card"
-                                >
-                                  Clear
-                                </button>
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10.5px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800" title="Financial hold active. Only Super Admin can override.">
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                <div>
+                                  <span className="block leading-none">Exam Hold</span>
+                                  <span className="text-[9px] text-rose-600/80 font-normal">Admin Approval Req.</span>
+                                </div>
                               </div>
                             )}
                           </td>
@@ -1618,6 +1606,14 @@ export default function AccountsCoordinatorPage() {
                                 title="Record Manual / Counter Payment"
                               >
                                 Record Pay
+                              </button>
+                              <button
+                                onClick={() => setGatewayModalDefaulter(d)}
+                                className="rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                title="Open Digital Payment Rails (UPI QR, Card, Net Banking)"
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                <span>Mock Pay</span>
                               </button>
                               <button
                                 onClick={() => {
@@ -2663,6 +2659,30 @@ export default function AccountsCoordinatorPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── MOCK PAYMENT GATEWAY MODAL (UPI QR, CARD, NETBANKING) ── */}
+      {gatewayModalDefaulter && (
+        <MockPaymentGatewayModal
+          isOpen={Boolean(gatewayModalDefaulter)}
+          onClose={() => setGatewayModalDefaulter(null)}
+          amount={gatewayModalDefaulter.amount_due}
+          title={`Outstanding Milestone Dues: ₹${gatewayModalDefaulter.amount_due.toLocaleString('en-IN')}`}
+          studentName={gatewayModalDefaulter.student_name}
+          className={gatewayModalDefaulter.class_name}
+          onSuccess={async (method, refId) => {
+            await api.recordFeePayment(gatewayModalDefaulter.id, {
+              amount_paid: gatewayModalDefaulter.amount_due,
+              payment_method: method,
+              utr_or_cheque_no: refId,
+              notes: `Settled via Instant Digital Gateway (${method})`,
+              received_by: 'EDU360 Digital Gateway'
+            });
+            triggerToast(`Payment of ₹${gatewayModalDefaulter.amount_due.toLocaleString('en-IN')} confirmed via ${method} (Ref: ${refId})`);
+            setGatewayModalDefaulter(null);
+            loadData();
+          }}
+        />
       )}
 
       {/* ── MODAL: APPLY CONCESSION / WAIVER ── */}

@@ -84,6 +84,7 @@ import { StudentRemedialView } from '@/components/student-remedial-view';
 import { Footer } from '@/components/footer';
 import { JuniorStudentDashboard } from '@/components/junior/JuniorStudentDashboard';
 import { OnlineExamModal } from '@/components/online-exam-modal';
+import { StudentExamPdfUploadModal } from '@/components/exam/student-pdf-upload-modal';
 import { EvaluationKeyModal } from '@/components/evaluation-key-modal';
 import { UnifiedSISView } from '@/components/unified-sis-view';
 import { downloadStudyNotesFile, downloadMarksMemoFile } from '@/lib/export-utils';
@@ -120,8 +121,8 @@ const announcementSlides: AnnouncementSlide[] = [
     id: 1,
     badge: 'Campus Bulletin',
     badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-400/30',
-    title: 'Annual Day in 5 Days — Stage Committees Assigned',
-    subtitle: 'Aarav assigned to Western Choir (Lead Tenor) and Stage Tech Coordination committee.',
+    title: 'Annual Day in 5 Days — Stage Committees Active',
+    subtitle: 'Auditorium rehearsals active for student choir and stage tech coordination committees.',
     actionLabel: 'BULLETIN ACTION',
     actionTitle: 'Western Choir & Rehearsals',
     ctaText: 'View Rehearsal Calendar',
@@ -133,7 +134,7 @@ const announcementSlides: AnnouncementSlide[] = [
     badge: 'STEM & Robotics',
     badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
     title: 'Inter-School Science Olympiad 2026 Shortlist',
-    subtitle: 'Congratulations Aarav! You have qualified for Phase 2 regional robotics and optics practicals.',
+    subtitle: 'Phase 2 regional robotics and optics practicals registration now active for qualified students.',
     actionLabel: 'BULLETIN ACTION',
     actionTitle: 'Optics Lab Practice & Kits',
     ctaText: 'View Olympiad Details',
@@ -142,12 +143,12 @@ const announcementSlides: AnnouncementSlide[] = [
   },
   {
     id: 3,
-    badge: 'Remedial Target',
+    badge: 'Academic Notice',
     badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
-    title: 'My Focus Table: Quadratic Equations Intervention',
-    subtitle: 'Mrs. Ananya Verma scheduled 4-day targeted revision and practice test series.',
+    title: 'My Focus Table: Targeted Academic Progress',
+    subtitle: 'Review teacher recommendations, practice worksheets, and personalized learning milestones.',
     actionLabel: 'BULLETIN ACTION',
-    actionTitle: 'Complete Quadratic Worksheet 4.2',
+    actionTitle: 'Complete Focus Exercises',
     ctaText: 'Open Focus Table Plan',
     targetNav: 'focus_table',
     gradient: 'from-[#0F172A] to-[#1E293B]'
@@ -157,7 +158,7 @@ const announcementSlides: AnnouncementSlide[] = [
     badge: 'CBSE Examination',
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
     title: 'CBSE Term 1 Model Examination Schedule',
-    subtitle: 'Seating arrangements and admit cards generated for Hall B, Desk #A-14.',
+    subtitle: 'Official examination timetables, seating allotments, and admit cards generated for Hall B.',
     actionLabel: 'BULLETIN ACTION',
     actionTitle: 'Download Exam Admit Card PDF',
     ctaText: 'View Exam Schedule',
@@ -169,6 +170,8 @@ const announcementSlides: AnnouncementSlide[] = [
 
 function StandardStudentDashboard() {
   const { user, logout } = useAuth();
+  const currentStudentId = user?.student_id || user?.id || 1;
+  const isDemoStudent = user?.name === 'Aarav Sharma' || (user?.student_id === 1 && !user?.name);
   // Navigation & Layout State
   const [activeNav, setActiveNav] = useState<NavSection>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -192,10 +195,133 @@ function StandardStudentDashboard() {
   const [onlineExamMaxMarks, setOnlineExamMaxMarks] = useState<number>(20);
   const [onlineExamMode, setOnlineExamMode] = useState<'MODE_CBT' | 'MODE_HYBRID_SCAN'>('MODE_HYBRID_SCAN');
   const [studentExamSchedules, setStudentExamSchedules] = useState<ExamScheduleItem[]>([]);
+  const [isPdfUploadModalOpen, setIsPdfUploadModalOpen] = useState<boolean>(false);
+  const [pdfUploadData, setPdfUploadData] = useState<{
+    sealCode: string;
+    subject: string;
+    examTitle: string;
+  } | null>(null);
+  const [examSubmissionState, setExamSubmissionState] = useState<'not_started' | 'upload_pending' | 'completed'>('not_started');
+  const [examUploadDetails, setExamUploadDetails] = useState<{
+    fileName?: string;
+    pageCount?: number;
+    uploadedAt?: string;
+    sealCode?: string;
+    fileSize?: string;
+    pdfUrl?: string;
+    uploadDurationSeconds?: number;
+  } | null>(null);
+  const [newExamStudentAlert, setNewExamStudentAlert] = useState<{
+    title: string;
+    subject: string;
+    className: string;
+    invigilator: string;
+    date: string;
+    time: string;
+    hall: string;
+  } | null>(null);
 
   // Announcement Carousel State
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+
+  // Real-time coordinator exam broadcast listener
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncSchedule = () => {
+      try {
+        const stored = localStorage.getItem('edu360_active_exam_schedule');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed) setNewExamStudentAlert(parsed);
+        }
+      } catch {}
+
+      try {
+        const storedSubState = localStorage.getItem('edu360_exam_submission_state') as 'not_started' | 'upload_pending' | 'completed' | null;
+        if (storedSubState) {
+          setExamSubmissionState(storedSubState);
+        }
+        const storedUpload = localStorage.getItem('edu360_exam_upload_details');
+        if (storedUpload) {
+          setExamUploadDetails(JSON.parse(storedUpload));
+        } else {
+          const storedList = JSON.parse(localStorage.getItem('edu360_exam_submissions') || '[]');
+          const aarav = storedList.find((s: any) => s.candidateId === 1 || s.rollNo === '14' || s.studentName === 'Aarav Sharma');
+          if (aarav) {
+            setExamSubmissionState('completed');
+            setExamUploadDetails(aarav);
+          }
+        }
+      } catch {}
+    };
+    syncSchedule();
+    window.addEventListener('storage', (e) => {
+      syncSchedule();
+      if (e.key === 'edu360_exam_submission_state' && e.newValue) {
+        setExamSubmissionState(e.newValue as any);
+      }
+      if (e.key === 'edu360_exam_upload_details' && e.newValue) {
+        try {
+          setExamUploadDetails(JSON.parse(e.newValue));
+        } catch {}
+      }
+    });
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('edu360_exam_live_channel');
+      channel.onmessage = (e) => {
+        const data = e.data;
+        if (!data) return;
+        if (data.type === 'EXAM_SCHEDULED') {
+          triggerToast(`🎫 Official Admit Card Released: ${data.subject || 'Mathematics'} Examination scheduled for ${data.className || 'Class 8-B'}. Hall Ticket #14 is active.`);
+          setNewExamStudentAlert({
+            title: data.title || `${data.subject || 'Mathematics'} Examination`,
+            subject: data.subject || 'Mathematics',
+            className: data.className || 'Class 8-B',
+            invigilator: data.invigilator || 'Mrs. Ananya Verma',
+            date: data.date || 'Today',
+            time: data.time || '09:00 AM - 12:00 PM',
+            hall: data.hall || 'Virtual Room Alpha (Camera AI)'
+          });
+        } else if (data.type === 'STUDENT_SUBMITTED') {
+          setExamSubmissionState('upload_pending');
+        } else if (data.type === 'STUDENT_SCRIPT_UPLOADED') {
+          setExamSubmissionState('completed');
+          setExamUploadDetails(data);
+        }
+      };
+    } catch {}
+
+    // Multi-device WebSocket listener
+    let ws: WebSocket | null = null;
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname || 'localhost';
+      ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.type === 'EXAM_SCHEDULED') {
+            triggerToast(`🎫 Official Admit Card Released: ${data.subject || 'Mathematics'} Examination scheduled! Hall Ticket #14 active.`);
+            setNewExamStudentAlert(data);
+          } else if (data && data.type === 'STUDENT_SUBMITTED') {
+            setExamSubmissionState('upload_pending');
+          } else if (data && data.type === 'STUDENT_SCRIPT_UPLOADED') {
+            setExamSubmissionState('completed');
+            setExamUploadDetails(data);
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('storage', syncSchedule);
+      if (channel) channel.close();
+      if (ws) ws.close();
+    };
+  }, []);
 
   // Live Class Simulation State
   const [isLiveClassModalOpen, setIsLiveClassModalOpen] = useState(false);
@@ -282,14 +408,12 @@ function StandardStudentDashboard() {
   // Descriptive Terminal Exams Upload State
   const [descriptiveExams, setDescriptiveExams] = useState<ExamItem[]>([]);
   const [activeUploadExam, setActiveUploadExam] = useState<ExamItem | null>(null);
-  const [examAnswerFileName, setExamAnswerFileName] = useState<string>('Aarav_Math_Term1_Paper.pdf');
+  const [examAnswerFileName, setExamAnswerFileName] = useState<string>('Exam_Answer_Paper.pdf');
   const [examAnswerFileUrl, setExamAnswerFileUrl] = useState<string>('/samples/math_exam_sample.svg');
   const [examStudentNotes, setExamStudentNotes] = useState<string>('');
   const [isSubmittingExamPaper, setIsSubmittingExamPaper] = useState<boolean>(false);
   const [studentReportCard, setStudentReportCard] = useState<ReportCardItem | null>(null);
-  const [studentSubmittedExams, setStudentSubmittedExams] = useState<Record<number, { fileName: string; submittedAt: string; marks?: number; pct?: number; feedback?: string; weak_concept?: string; is_remedial?: boolean }>>({
-    1: { fileName: "Aarav_Sharma_Math_Term1_Paper.pdf", submittedAt: "14 Oct 2026, 02:30 PM", marks: 52, pct: 52, feedback: "Sign error in quadratic factorization step 3.", weak_concept: "Quadratic Factorization: Sign Error", is_remedial: true }
-  });
+  const [studentSubmittedExams, setStudentSubmittedExams] = useState<Record<number, { fileName: string; submittedAt: string; marks?: number; pct?: number; feedback?: string; weak_concept?: string; is_remedial?: boolean }>>({});
 
   // Admit Card (Hall Ticket) Modal State
   const [showAdmitCardModal, setShowAdmitCardModal] = useState(false);
@@ -305,7 +429,7 @@ function StandardStudentDashboard() {
     setLoadingAdmitCard(true);
     setShowAdmitCardModal(true);
     try {
-      const studentId = user?.id || 1;
+      const studentId = currentStudentId;
       const res = await api.getStudentHallTicket(studentId);
       if (res && res.success && res.ticket) {
         setAdmitCardData(res.ticket);
@@ -327,12 +451,12 @@ function StandardStudentDashboard() {
         try {
           const subRes = await api.getExamSubmissions(exId);
           if (subRes && subRes.success && subRes.submissions) {
-            const mySub = subRes.submissions.find((s: any) => s.student_id === 1);
+            const mySub = subRes.submissions.find((s: any) => s.student_id === currentStudentId);
             if (mySub) {
               setStudentSubmittedExams(prev => ({
                 ...prev,
                 [exId]: {
-                  fileName: mySub.paper_file_name || 'Aarav_Sharma_Exam_Paper.pdf',
+                  fileName: mySub.paper_file_name || 'Exam_Answer_Paper.pdf',
                   submittedAt: mySub.submitted_at || '14 Oct 2026',
                   marks: mySub.marks_obtained !== null && mySub.marks_obtained !== undefined ? mySub.marks_obtained : undefined,
                   pct: mySub.percentage !== null && mySub.percentage !== undefined ? mySub.percentage : undefined,
@@ -392,7 +516,7 @@ function StandardStudentDashboard() {
     setIsUploadingHomework(true);
     try {
       const fileUrl = selectedFileForUpload ? `/uploads/${selectedFileForUpload.name}` : '/samples/math_worksheet.png';
-      const updatedSub = await api.submitHomework(task.id, 1, fileUrl);
+      const updatedSub = await api.submitHomework(task.id, currentStudentId, fileUrl);
       setSubmission(updatedSub);
       setHomeworkSubmittedSuccess(true);
       setStudentHomeworkList(prev => prev.map(item => item.id === task.id ? {
@@ -401,7 +525,7 @@ function StandardStudentDashboard() {
         late_submission: isLate || Boolean(updatedSub.late_submission)
       } : item));
       
-      const comp = await api.getAcademicCompliance(1);
+      const comp = await api.getAcademicCompliance(currentStudentId);
       setComplianceOverview(comp);
       
       triggerToast(isLate 
@@ -460,8 +584,8 @@ function StandardStudentDashboard() {
     try {
       const scanRes = await api.triggerBacklogCheck();
       const [hwRes, compRes] = await Promise.all([
-        api.getStudentHomework(),
-        api.getAcademicCompliance(1)
+        api.getStudentHomework(undefined, undefined, undefined, currentStudentId),
+        api.getAcademicCompliance(currentStudentId)
       ]);
       setStudentHomeworkList(hwRes);
       setComplianceOverview(compRes);
@@ -479,36 +603,43 @@ function StandardStudentDashboard() {
     async function loadPortalData() {
       try {
         const [recRes, portRes, subRes, docsRes, hwRes, compRes, rcRes, reExamRes, schedRes] = await Promise.all([
-          api.getStudentRecordings(),
-          api.getPortfolio(1),
-          api.getSubmission(1),
-          api.getStudentDocuments(1),
-          api.getStudentHomework(),
-          api.getAcademicCompliance(1),
-          api.getReportCards({ student_id: 1 }),
-          api.getReExamRequests(),
+          api.getStudentRecordings(currentStudentId),
+          api.getPortfolio(currentStudentId),
+          api.getSubmission(currentStudentId),
+          api.getStudentDocuments(currentStudentId),
+          api.getStudentHomework(undefined, undefined, undefined, currentStudentId),
+          api.getAcademicCompliance(currentStudentId),
+          api.getReportCards({ student_id: currentStudentId }),
+          api.getReExamRequests(currentStudentId),
           api.getExamSchedules()
         ]);
         if (schedRes && Array.isArray(schedRes)) {
           setStudentExamSchedules(schedRes);
         }
-        setReExamRequests(reExamRes || []);
-        setRecordings(recRes);
-        setPortfolio(portRes);
-        setSubmission(subRes);
-        setDocuments(docsRes);
-        setStudentHomeworkList(hwRes);
-        setComplianceOverview(compRes);
-        if (rcRes && rcRes.length > 0) {
+        setReExamRequests(isDemoStudent ? (reExamRes || []) : (reExamRes || []).filter((r: any) => r.student_id === currentStudentId));
+        setRecordings(isDemoStudent ? (recRes || []) : []);
+        setPortfolio(isDemoStudent ? (portRes || []) : []);
+        setSubmission(isDemoStudent ? subRes : null);
+        setDocuments(isDemoStudent ? (docsRes || []) : []);
+        setStudentHomeworkList(isDemoStudent ? (hwRes || []) : (hwRes || []).filter((h: any) => h.student_id === currentStudentId));
+        setComplianceOverview(isDemoStudent ? compRes : null);
+        if (isDemoStudent && rcRes && rcRes.length > 0) {
           setStudentReportCard(rcRes[0]);
+        } else {
+          setStudentReportCard(null);
         }
-        await loadDescriptiveExams();
+        if (isDemoStudent) {
+          await loadDescriptiveExams();
+        } else {
+          setDescriptiveExams([]);
+          setStudentSubmittedExams({});
+        }
       } catch (err) {
         console.error('Error fetching student data', err);
       }
     }
     loadPortalData();
-  }, []);
+  }, [user, currentStudentId, isDemoStudent]);
 
   // Multi-window role testing sync: automatically update schedules when Exam Coordinator creates new slots in other windows
   useEffect(() => {
@@ -952,11 +1083,43 @@ function StandardStudentDashboard() {
                     <FileText className="h-4 w-4 shrink-0" />
                     {!sidebarCollapsed && <span>Homework &amp; Tasks</span>}
                   </div>
-                  {!sidebarCollapsed && (
-                    <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold">
-                      2 Pending
-                    </span>
-                  )}
+                  {!sidebarCollapsed && (() => {
+                    if (!isDemoStudent) {
+                      const pendingCount = (studentHomeworkList || []).filter(t => t.status === 'PENDING').length;
+                      if (pendingCount > 0) {
+                        return (
+                          <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                            {pendingCount} Pending
+                          </span>
+                        );
+                      }
+                      return null;
+                    }
+                    const pendingCount = studentHomeworkList.filter(t => t.status === 'PENDING').length;
+                    const overdueCount = studentHomeworkList.filter(t => t.status === 'BACKLOG' || (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING')).length;
+                    if (overdueCount > 0) {
+                      return (
+                        <span className="rounded-full bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200/60 dark:border-red-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                          {overdueCount} Backlog
+                        </span>
+                      );
+                    }
+                    if (pendingCount > 0) {
+                      return (
+                        <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                          {pendingCount} Pending
+                        </span>
+                      );
+                    }
+                    if (isDemoStudent && studentHomeworkList.length === 0) {
+                      return (
+                        <span className="rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                          2 Pending
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </button>
 
                 {/* My Focus Table */}
@@ -973,11 +1136,25 @@ function StandardStudentDashboard() {
                     <Target className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                     {!sidebarCollapsed && <span>My Focus Table</span>}
                   </div>
-                  {!sidebarCollapsed && (
-                    <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold">
-                      2 Weak Areas
-                    </span>
-                  )}
+                  {!sidebarCollapsed && (() => {
+                    if (!isDemoStudent) return null;
+                    const weakCount = complianceOverview?.itemized_backlogs?.length || 0;
+                    if (weakCount > 0) {
+                      return (
+                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                          {weakCount} Weak {weakCount === 1 ? 'Area' : 'Areas'}
+                        </span>
+                      );
+                    }
+                    if (isDemoStudent && weakCount === 0) {
+                      return (
+                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                          2 Weak Areas
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </button>
 
                 {/* Exams & Results */}
@@ -994,11 +1171,15 @@ function StandardStudentDashboard() {
                     <BarChart className="h-4 w-4 shrink-0" />
                     {!sidebarCollapsed && <span>Exams &amp; Results</span>}
                   </div>
-                  {!sidebarCollapsed && (
-                    <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 text-[9px] font-bold">
-                      88.8%
-                    </span>
-                  )}
+                  {!sidebarCollapsed && (() => {
+                    if (!isDemoStudent) return null;
+                    const examPct = studentReportCard?.overall_percentage ? `${studentReportCard.overall_percentage}%` : '88.8%';
+                    return (
+                      <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.5 text-[9px] font-bold">
+                        {examPct}
+                      </span>
+                    );
+                  })()}
                 </button>
               </div>
             </div>
@@ -1025,7 +1206,7 @@ function StandardStudentDashboard() {
                     <Trophy className="h-4 w-4 shrink-0 text-amber-500" />
                     {!sidebarCollapsed && <span>Dual Portfolio</span>}
                   </div>
-                  {!sidebarCollapsed && (
+                  {!sidebarCollapsed && isDemoStudent && (
                     <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-bold">
                       {portfolio.length} Items
                     </span>
@@ -1070,8 +1251,10 @@ function StandardStudentDashboard() {
                     <UserCircle className="h-4 w-4 shrink-0 text-blue-500" />
                     {!sidebarCollapsed && <span>SIS Profile</span>}
                   </div>
-                  {!sidebarCollapsed && (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">94.2%</span>
+                  {!sidebarCollapsed && isDemoStudent && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                      94.2%
+                    </span>
                   )}
                 </button>
 
@@ -1170,6 +1353,38 @@ function StandardStudentDashboard() {
           {activeNav === 'dashboard' && (
             <div className="space-y-6 max-w-7xl mx-auto">
               
+              {/* 🔴 LIVE CBT EXAMINATION HERO BANNER (Point 3 - Real-Time Student Hall Entry) */}
+              <div className="rounded-2xl border-2 border-violet-500/60 bg-gradient-to-r from-violet-950 via-slate-900 to-indigo-950 p-5 shadow-xl text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-violet-600/30 border border-violet-400 flex items-center justify-center text-violet-300 shadow-md shrink-0">
+                    <Radio className="h-6 w-6 text-violet-400 animate-pulse" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs animate-pulse">
+                        🔴 Live Exam Scheduled Today
+                      </span>
+                      <span className="text-xs font-mono text-violet-300">Class 8-B • Term 1 Assessment</span>
+                    </div>
+                    <h3 className="text-base font-black text-white">English Literature: Class 8 Mathematics Assessment</h3>
+                    <p className="text-xs text-slate-300">
+                      Chief Invigilator: <b>Mrs. Ananya Verma</b> • AI Proctoring Edge Active • Roll #14 Hall Ticket Ready
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
+                  <button
+                    onClick={() => {
+                      setIsOnlineExamOpen(true);
+                    }}
+                    className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Radio className="h-4 w-4" />
+                    <span>Enter Exam Room &bull; Waiting Lobby &rarr;</span>
+                  </button>
+                </div>
+              </div>
+              
               {/* ===================================================== */}
               {/* 1. STUDENT COMMAND CENTER HERO HEADER                 */}
               {/* ===================================================== */}
@@ -1177,23 +1392,41 @@ function StandardStudentDashboard() {
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                   <div className="space-y-3 max-w-2xl">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 px-3.5 py-1 text-xs font-bold">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>Present Today ✓ • On Time Active</span>
-                      </span>
+                      {isDemoStudent ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 px-3.5 py-1 text-xs font-bold">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Present Today ✓ • On Time Active</span>
+                          </span>
 
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 px-3 py-1 text-xs font-bold">
-                        <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                        <span>Period 3 Live • Class 8-A Mathematics (10:30 – 11:15 AM)</span>
-                      </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 px-3 py-1 text-xs font-bold">
+                            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                            <span>Period 3 Live • Class 8-A Mathematics (10:30 – 11:15 AM)</span>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 px-3.5 py-1 text-xs font-bold">
+                            <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                            <span>Newly Enrolled Student • Session 2026-27</span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 px-3 py-1 text-xs font-bold">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                            <span>Live Timetable &amp; Online Classes Active</span>
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     <div>
                       <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-                        Welcome, Aarav Sharma!
+                        Welcome, {user?.name || (isDemoStudent ? 'Aarav Sharma' : 'Student')}!
                       </h1>
                       <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Secondary Department (Class 8-A) • Academic Mission: Period 3 Mathematics Live in Room 204 • 2 homework tasks due before 5:00 PM • Day 2 Remedial Sprint active.
+                        {isDemoStudent 
+                          ? 'Secondary Department • Academic Workspace & Student Ledger.'
+                          : 'Online Academy • Daily Class Timetable & Live Interactive Stream Portal.'}
                       </p>
                     </div>
 
@@ -1201,18 +1434,22 @@ function StandardStudentDashboard() {
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
                       <span className="flex items-center gap-1 font-medium">
                         <GraduationCap className="h-3.5 w-3.5 text-blue-500" />
-                        <span>Class: <strong className="text-slate-700 dark:text-slate-200">8-A (Roll #01)</strong></span>
+                        <span>Class: <strong className="text-slate-700 dark:text-slate-200">{isDemoStudent ? '8-A (Roll #01)' : 'Class 8-A'}</strong></span>
                       </span>
                       <span className="text-slate-300 dark:text-slate-700">•</span>
                       <span className="flex items-center gap-1 font-medium">
                         <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
                         <span>Homeroom: <strong className="text-slate-700 dark:text-slate-200">Mrs. Ananya Verma</strong></span>
                       </span>
-                      <span className="text-slate-300 dark:text-slate-700">•</span>
-                      <span className="flex items-center gap-1 font-medium">
-                        <Trophy className="h-3.5 w-3.5 text-amber-500" />
-                        <span>Role: <strong className="text-slate-700 dark:text-slate-200">Phoenix House Captain</strong></span>
-                      </span>
+                      {isDemoStudent && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-700">•</span>
+                          <span className="flex items-center gap-1 font-medium">
+                            <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                            <span>Role: <strong className="text-slate-700 dark:text-slate-200">Phoenix House Captain</strong></span>
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -1237,21 +1474,43 @@ function StandardStudentDashboard() {
                     </button>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setActiveNav('homework')}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-amber-500" />
-                        <span>2 Homeworks Due</span>
-                      </button>
+                      {isDemoStudent ? (
+                        <>
+                          <button
+                            onClick={() => setActiveNav('homework')}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                          >
+                            <FileText className="h-3.5 w-3.5 text-amber-500" />
+                            <span>2 Homeworks Due</span>
+                          </button>
 
-                      <button
-                        onClick={() => setActiveNav('focus_table')}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                      >
-                        <Target className="h-3.5 w-3.5 text-purple-500" />
-                        <span>Focus Sprint</span>
-                      </button>
+                          <button
+                            onClick={() => setActiveNav('focus_table')}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                          >
+                            <Target className="h-3.5 w-3.5 text-purple-500" />
+                            <span>Focus Sprint</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setActiveNav('timetable')}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3.5 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 transition-colors cursor-pointer"
+                          >
+                            <CalendarDays className="h-3.5 w-3.5 text-blue-500" />
+                            <span>View Timetable</span>
+                          </button>
+
+                          <button
+                            onClick={() => setActiveNav('live_classes')}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 px-3.5 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer"
+                          >
+                            <Video className="h-3.5 w-3.5 text-emerald-500" />
+                            <span>Upcoming Classes</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1321,25 +1580,25 @@ function StandardStudentDashboard() {
                     <div>
                       <div className="flex items-baseline gap-2">
                         <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                          2 Tasks Due
+                          {isDemoStudent ? '2 Tasks Due' : `${studentHomeworkList.length} Tasks Due`}
                         </h3>
                         <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
-                          By 5:00 PM
+                          {isDemoStudent ? 'By 5:00 PM' : studentHomeworkList.length === 0 ? 'Up to Date' : 'Pending'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        English Analysis &amp; Chemistry Worksheet 4.2
+                        {isDemoStudent ? 'English Analysis & Chemistry Worksheet 4.2' : studentHomeworkList.length === 0 ? 'No homework assigned yet. Follow your timetable.' : `${studentHomeworkList.length} exercises assigned.`}
                       </p>
                     </div>
 
                     {/* Progress bar */}
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-amber-500 h-full rounded-full" style={{ width: '71%' }} />
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: isDemoStudent ? '71%' : studentHomeworkList.length === 0 ? '0%' : '50%' }} />
                     </div>
                   </div>
 
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                    <span>Submit Tonight&apos;s Work</span>
+                    <span>{isDemoStudent ? 'Submit Tonight\'s Work' : 'Open Homework Desk'}</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </div>
                 </div>
@@ -1352,7 +1611,7 @@ function StandardStudentDashboard() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        1-Week Remedial Sprint
+                        {isDemoStudent ? '1-Week Remedial Sprint' : 'Remedial Sprint Status'}
                       </span>
                       <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
                         <Sparkles className="h-5 w-5" />
@@ -1362,25 +1621,25 @@ function StandardStudentDashboard() {
                     <div>
                       <div className="flex items-baseline gap-2">
                         <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                          Day 2 of 7
+                          {isDemoStudent ? 'Day 2 of 7' : 'All Clear'}
                         </h3>
                         <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/60">
-                          Mathematics
+                          {isDemoStudent ? 'Mathematics' : 'Standard Track'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Quadratic Factoring • 42% Mastery (Goal &gt;70%)
+                        {isDemoStudent ? 'Quadratic Factoring • 42% Mastery (Goal >70%)' : 'Standard curriculum track. No diagnosed conceptual lags.'}
                       </p>
                     </div>
 
                     {/* Progress bar */}
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-purple-500 h-full rounded-full" style={{ width: '42%' }} />
+                      <div className="bg-purple-500 h-full rounded-full" style={{ width: isDemoStudent ? '42%' : '0%' }} />
                     </div>
                   </div>
 
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
-                    <span>Inspect Focus Sprint</span>
+                    <span>{isDemoStudent ? 'Inspect Focus Sprint' : 'View Focus Table'}</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </div>
                 </div>
@@ -1403,20 +1662,20 @@ function StandardStudentDashboard() {
                     <div>
                       <div className="flex items-baseline gap-2">
                         <h3 className="text-2xl font-black text-slate-900 dark:text-white">
-                          94.2% Safe
+                          {isDemoStudent ? '94.2% Safe' : 'New Enrollee'}
                         </h3>
                         <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
-                          Rank #4 · ↑ 2.1%
+                          {isDemoStudent ? 'Rank #4 · ↑ 2.1%' : 'Active Day 1'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        146/155 Days • Checked In: 08:02 AM Today
+                        {isDemoStudent ? '146/155 Days • Checked In: 08:02 AM Today' : 'Attendance logging begins upon joining your first live class.'}
                       </p>
                     </div>
 
                     {/* Progress bar */}
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: '94%' }} />
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: isDemoStudent ? '94%' : '0%' }} />
                     </div>
                   </div>
 
@@ -1638,63 +1897,106 @@ function StandardStudentDashboard() {
                 <div className="lg:col-span-5 space-y-5">
                   
                   {/* ACTIVE 1-WEEK REMEDIAL FOCUS CARD */}
-                  <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-white dark:bg-[#0F172A] p-5 shadow-sm space-y-3.5">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                          <Target className="h-4 w-4" />
+                  {isDemoStudent ? (
+                    <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-white dark:bg-[#0F172A] p-5 shadow-sm space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                            <Target className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                              My Remedial Sprint
+                            </h4>
+                            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
+                              Mathematics • Mrs. Ananya Verma
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                            My Remedial Sprint
-                          </h4>
-                          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
-                            Mathematics • Mrs. Ananya Verma
+
+                        <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 px-2 py-0.5 text-[10px] font-black uppercase">
+                          Day 2 Active
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50 space-y-1.5">
+                          <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider block">
+                            Assigned Target Concept
+                          </span>
+                          <h5 className="text-xs font-bold text-slate-900 dark:text-white">
+                            Quadratic Equations: Factorization by Splitting the Middle Term
+                          </h5>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Goal: Score &gt;70% on Friday's speed re-test to exit remediation.
+                          </p>
+                        </div>
+
+                        {/* Day 2 Practice Problem */}
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-slate-700 dark:text-slate-200">Today's Assigned Task:</span>
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">Pending Review ⏳</span>
+                          </div>
+                          <p className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-800">
+                            Solve: x² - 5x + 6 = 0 using step-by-step middle-term splitting.
+                          </p>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block pt-0.5">
+                            Rough paper uploaded • Teacher rubric checkpoint: Monitor negative sign rule.
                           </span>
                         </div>
                       </div>
 
-                      <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 px-2 py-0.5 text-[10px] font-black uppercase">
-                        Day 2 Active
-                      </span>
+                      <button
+                        onClick={() => setActiveNav('focus_table')}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        <span>Open 1-Week Remedial Focus Table</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
                     </div>
+                  ) : (
+                    <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/60 bg-white dark:bg-[#0F172A] p-5 shadow-sm space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                            <CalendarDays className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                              Online Class Schedule &amp; Timetable
+                            </h4>
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                              Standard Academic Track &bull; Active
+                            </span>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                          Good Standing
+                        </span>
+                      </div>
 
-                    <div className="space-y-2">
-                      <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50 space-y-1.5">
-                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider block">
-                          Assigned Target Concept
+                      <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 space-y-2">
+                        <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">
+                          Curriculum Status
                         </span>
                         <h5 className="text-xs font-bold text-slate-900 dark:text-white">
-                          Quadratic Equations: Factorization by Splitting the Middle Term
+                          No Remedial Interventions Required
                         </h5>
                         <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                          Goal: Score &gt;70% on Friday's speed re-test to exit remediation.
+                          Your account is registered on the standard curriculum track. Join your scheduled daily live lectures and interactive periods via the Timetable.
                         </p>
                       </div>
 
-                      {/* Day 2 Practice Problem */}
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-700 dark:text-slate-200">Today's Assigned Task:</span>
-                          <span className="font-semibold text-amber-600 dark:text-amber-400">Pending Review ⏳</span>
-                        </div>
-                        <p className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-800">
-                          Solve: x² - 5x + 6 = 0 using step-by-step middle-term splitting.
-                        </p>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block pt-0.5">
-                          Rough paper uploaded • Teacher rubric checkpoint: Monitor negative sign rule.
-                        </span>
-                      </div>
+                      <button
+                        onClick={() => setActiveNav('timetable')}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        <span>Open Complete Class Timetable</span>
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() => setActiveNav('focus_table')}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                    >
-                      <span>Open 1-Week Remedial Focus Table</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  )}
 
                   {/* CAMPUS BULLETIN CAROUSEL */}
                   <div
@@ -1944,26 +2246,28 @@ function StandardStudentDashboard() {
               return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
             };
 
-            const allTasks: Homework[] = studentHomeworkList.length > 0 ? studentHomeworkList : DEFAULT_FALLBACK_TASKS;
+            const allTasks: Homework[] = isDemoStudent 
+              ? (studentHomeworkList.length > 0 ? studentHomeworkList : DEFAULT_FALLBACK_TASKS)
+              : (studentHomeworkList || []);
 
             const dailyTasks = allTasks.filter(t => (t.task_type || 'DAILY_HOMEWORK') === 'DAILY_HOMEWORK');
             const assignmentTasks = allTasks.filter(t => t.task_type === 'ASSIGNMENT');
 
             // Overall Summary Counts
-            const dueTodayCount = allTasks.filter(t => 
+            const dueTodayCount = isDemoStudent ? allTasks.filter(t => 
               t.due_date === '2026-10-17' && 
               t.status !== 'SUBMITTED' && 
               t.status !== 'GRADED'
-            ).length;
+            ).length : 0;
 
-            const completedCount = allTasks.filter(t => 
+            const completedCount = isDemoStudent ? allTasks.filter(t => 
               t.status === 'SUBMITTED' || t.status === 'GRADED'
-            ).length;
+            ).length : 0;
 
-            const backlogCount = allTasks.filter(t => 
+            const backlogCount = isDemoStudent ? allTasks.filter(t => 
               t.status === 'BACKLOG' || 
               (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING')
-            ).length;
+            ).length : 0;
 
             // Stream-specific filtered list
             const currentStreamTasks = homeworkWorkstream === 'daily' ? dailyTasks : assignmentTasks;
@@ -2229,7 +2533,30 @@ function StandardStudentDashboard() {
                 </div>
 
                 {/* 5. WORKSTREAM CONTENT */}
-                {homeworkWorkstream === 'daily' ? (
+                {!isDemoStudent && allTasks.length === 0 ? (
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center space-y-4 shadow-xs">
+                    <div className="h-16 w-16 rounded-3xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
+                      <CheckCircle2 className="h-8 w-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                        All Clear • No Homework Assigned Yet
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                        Your academic ledger is completely up to date. Homework assignments, daily worksheets, and project tasks will appear here once assigned by your teachers.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => setActiveNav('timetable')}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                      >
+                        <Clock className="h-4 w-4" />
+                        <span>View Class Timetable &amp; Schedule</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : homeworkWorkstream === 'daily' ? (
                   /* ===================================================== */
                   /* WORKSTREAM 1: DAILY HOMEWORK & HORIZONTAL DATE STRIP */
                   /* ===================================================== */
@@ -2804,99 +3131,194 @@ function StandardStudentDashboard() {
                 <div className="space-y-6">
                   {/* TOP CARDS: ACTIVE ONLINE TEST & EXAM SEATING */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Active Online Test Card */}
-                    <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                          </span>
-                          <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                            {studentExamSchedules[0]?.exam_mode === 'MODE_HYBRID_SCAN'
-                              ? '📝 Hybrid Scan & Upload Examination'
-                              : studentExamSchedules[0]?.exam_mode === 'MODE_OFFLINE'
-                              ? '🏢 Physical Hall Examination'
-                              : '💻 Live CBT Examination Portal'}
-                          </span>
-                          {studentExamSchedules.length > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                              {studentExamSchedules[0].exam_mode === 'MODE_HYBRID_SCAN' ? 'Hybrid OCR' : studentExamSchedules[0].exam_mode || 'MODE_CBT'}
+                    {/* Active Online Test Card with Dynamic Lifecycle States */}
+                    {examSubmissionState === 'upload_pending' ? (
+                      /* State B: Upload Pending (15-min countdown active) */
+                      <div className="rounded-2xl border-2 border-amber-500/70 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-transparent dark:from-amber-950/50 dark:via-orange-950/30 dark:to-slate-900 p-5 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in duration-300">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                             </span>
-                          )}
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                              <Clock className="h-3 w-3 inline" />
+                              <span>Writing Concluded &bull; 15-Minute Scan &amp; Upload Active</span>
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                              Seal Code: {pdfUploadData?.sealCode || 'SEAL-8B-9482'}
+                            </span>
+                          </div>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                            {studentExamSchedules.length > 0 
+                              ? studentExamSchedules[0].title
+                              : 'Class 8 Mathematics &bull; Term 1 Hybrid Assessment'}
+                          </h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-300">
+                            Live camera proctoring concluded. Verify <strong>SEAL-8B-9482</strong> is written on top of all pages, scan into a single PDF, and upload into the Chief Invigilator vault.
+                          </p>
                         </div>
-                        <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                          {studentExamSchedules.length > 0 
-                            ? `Active Test: ${studentExamSchedules[0].title}`
-                            : 'Active Online Test: Mathematics Quiz (20 mins, 15 MCQs)'}
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {studentExamSchedules.length > 0
-                            ? `Subject: ${studentExamSchedules[0].subject} • Hall: ${studentExamSchedules[0].hall_name || 'Virtual Room'} • ${studentExamSchedules[0].exam_date} (${studentExamSchedules[0].start_time} - ${studentExamSchedules[0].end_time}) • Chief Invigilator: ${studentExamSchedules[0].chief_invigilator_name || 'Assigned Faculty'}`
-                            : 'Topic: Quadratic Equations & Polynomials • Window closes at 05:00 PM'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const active = studentExamSchedules[0];
-                          const targetMode = active?.exam_mode === 'MODE_CBT' ? 'MODE_CBT' : 'MODE_HYBRID_SCAN';
-                          const prompt = active?.question_paper_title
-                            ? `Official CBSE Board Timetable Exam: ${active.title}. Question Reference: ${active.question_paper_title}. Step-wise handwritten working required on physical paper booklet.`
-                            : 'Official CBSE Assessment: Solve questions on physical paper booklet under active webcam/YOLO proctoring. Verify and upload final scan with session token.';
-                          handleLaunchExam(
-                            active?.subject || 'Mathematics',
-                            active?.title || 'Term 1 Hybrid Proctored Assessment',
-                            active?.duration_minutes || 180,
-                            prompt,
-                            100,
-                            targetMode
-                          );
-                        }}
-                        className="shrink-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-5 py-3 shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <span className="relative flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
-                        </span>
-                        <Play className="h-3.5 w-3.5 fill-current" />
-                        <span>Join Proctored Exam Room</span>
-                      </button>
-                    </div>
-
-                    {/* Upcoming Final Exam Seating Card */}
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs flex items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Board &amp; Term Seating Allocation
-                        </span>
-                        <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                          Upcoming Final Exam — Hall B, Desk #A-14
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Candidate: Aarav Sharma (Roll #14) &bull; Examination Block 2 &bull; Entry Gate 3
-                        </p>
-                        <div className="pt-1">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
                           <button
-                            onClick={handleOpenAdmitCard}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                            onClick={() => {
+                              setPdfUploadData({
+                                sealCode: 'SEAL-8B-9482',
+                                subject: studentExamSchedules[0]?.subject || onlineExamSubject,
+                                examTitle: studentExamSchedules[0]?.title || `${onlineExamSubject}: ${onlineExamTopic}`
+                              });
+                              setIsPdfUploadModalOpen(true);
+                            }}
+                            className="rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs px-5 py-3 shadow-lg shadow-amber-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
                           >
-                            <span>View &amp; Print Full Hall Ticket</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
+                            <Upload className="h-4 w-4" />
+                            <span>Upload Answer Sheets (PDF)</span>
                           </button>
                         </div>
                       </div>
-                      <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 font-mono font-black text-sm shadow-xs">
-                        #A-14
+                    ) : examSubmissionState === 'completed' ? (
+                      /* State C: Completed & Uploaded to Evaluation Vault */
+                      <div className="rounded-2xl border-2 border-emerald-500/60 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent dark:from-emerald-950/50 dark:via-teal-950/30 dark:to-slate-900 p-5 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in duration-300">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="p-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                              Assessment Concluded &bull; Answer Script In Vault
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                              Verified: {examUploadDetails?.sealCode || 'SEAL-8B-9482'}
+                            </span>
+                          </div>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                            {studentExamSchedules.length > 0 
+                              ? studentExamSchedules[0].title
+                              : 'Class 8 Mathematics &bull; Term 1 Hybrid Assessment'}
+                          </h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-300">
+                            Answer script ({examUploadDetails?.pageCount || 6} pages &bull; {examUploadDetails?.fileSize || '4.2 MB'}) synced at {examUploadDetails?.uploadedAt || 'recently'}. Assigned to Chief Invigilator Mrs. Ananya Verma for evaluation.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              setPdfUploadData({
+                                sealCode: examUploadDetails?.sealCode || 'SEAL-8B-9482',
+                                subject: studentExamSchedules[0]?.subject || onlineExamSubject,
+                                examTitle: studentExamSchedules[0]?.title || `${onlineExamSubject}: ${onlineExamTopic}`
+                              });
+                              setIsPdfUploadModalOpen(true);
+                            }}
+                            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs px-5 py-3 shadow-lg shadow-emerald-600/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <FileCheck className="h-4 w-4" />
+                            <span>View Script &amp; Receipt</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      /* State A: Not Started / Active Exam Room */
+                      <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                              {studentExamSchedules[0]?.exam_mode === 'MODE_HYBRID_SCAN'
+                                ? '📝 Hybrid Scan & Upload Examination'
+                                : studentExamSchedules[0]?.exam_mode === 'MODE_OFFLINE'
+                                ? '🏢 Physical Hall Examination'
+                                : '💻 Live CBT Examination Portal'}
+                            </span>
+                            {studentExamSchedules.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                {studentExamSchedules[0].exam_mode === 'MODE_HYBRID_SCAN' ? 'Hybrid OCR' : studentExamSchedules[0].exam_mode || 'MODE_CBT'}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                            {studentExamSchedules.length > 0 
+                              ? `Active Test: ${studentExamSchedules[0].title}`
+                              : 'Active Online Test: Mathematics Quiz (20 mins, 15 MCQs)'}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {studentExamSchedules.length > 0
+                              ? `Subject: ${studentExamSchedules[0].subject} • Hall: ${studentExamSchedules[0].hall_name || 'Virtual Room'} • ${studentExamSchedules[0].exam_date} (${studentExamSchedules[0].start_time} - ${studentExamSchedules[0].end_time}) • Chief Invigilator: ${studentExamSchedules[0].chief_invigilator_name || 'Assigned Faculty'}`
+                              : 'Topic: Quadratic Equations & Polynomials • Window closes at 05:00 PM'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const active = studentExamSchedules[0];
+                            const targetMode = active?.exam_mode === 'MODE_CBT' ? 'MODE_CBT' : 'MODE_HYBRID_SCAN';
+                            const prompt = active?.question_paper_title
+                              ? `Official CBSE Board Timetable Exam: ${active.title}. Question Reference: ${active.question_paper_title}. Step-wise handwritten working required on physical paper booklet.`
+                              : 'Official CBSE Assessment: Solve questions on physical paper booklet under active webcam/YOLO proctoring. Verify and upload final scan with session token.';
+                            handleLaunchExam(
+                              active?.subject || 'Mathematics',
+                              active?.title || 'Term 1 Hybrid Proctored Assessment',
+                              active?.duration_minutes || 180,
+                              prompt,
+                              100,
+                              targetMode
+                            );
+                          }}
+                          className="shrink-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-5 py-3 shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                          </span>
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          <span>Join Proctored Exam Room</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Upcoming Final Exam Seating Card */}
+                    {(admitCardData || isDemoStudent) && (
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                            Board &amp; Term Seating Allocation
+                          </span>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                            Upcoming Exam — {admitCardData?.hall_name || 'Examination Hall B'}, Desk #{admitCardData?.desk_number || 'A-14'}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Candidate: {admitCardData?.student_name || user?.name || 'Aarav Sharma'} &bull; Examination Block 2 &bull; Entry Gate 3
+                          </p>
+                          <div className="pt-1">
+                            <button
+                              onClick={handleOpenAdmitCard}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                            >
+                              <span>View &amp; Print Full Hall Ticket</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 font-mono font-black text-sm shadow-xs">
+                          {admitCardData?.desk_number || '#A-14'}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* ======================================================= */}
                   {/* AUTHORIZED RE-EXAMINATION SPECIAL TIMETABLE & STATUS    */}
                   {/* ======================================================= */}
-                  {reExamRequests && reExamRequests.length > 0 && (
-                    <div className="space-y-4">
-                      {reExamRequests.map((req) => (
+                  {(() => {
+                    const studentReExamRequests = (reExamRequests || []).filter((req: any) => 
+                      (req.student_id && req.student_id === currentStudentId) ||
+                      (isDemoStudent && req.student_name === 'Aarav Sharma')
+                    );
+                    if (!studentReExamRequests || studentReExamRequests.length === 0) return null;
+                    return (
+                      <div className="space-y-4">
+                        {studentReExamRequests.map((req) => (
                         <div
                           key={req.id}
                           className={`rounded-2xl border p-5 shadow-xs transition-all relative overflow-hidden ${
@@ -2973,7 +3395,7 @@ function StandardStudentDashboard() {
                               )}
                             </div>
 
-                            {req.status === 'Approved by Admin' || req.status === 'Scheduled' && (
+                            {(req.status === 'Approved by Admin' || req.status === 'Scheduled') && (
                               <button
                                 onClick={() => handleOpenAdmitCard()}
                                 className="shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer self-start lg:self-center"
@@ -2985,8 +3407,9 @@ function StandardStudentDashboard() {
                           </div>
                         </div>
                       ))}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
 
                   {/* OFFICIAL CBSE DATESHEET TIMETABLE */}
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -3161,6 +3584,19 @@ function StandardStudentDashboard() {
                       </div>
                     </div>
 
+                    {!isDemoStudent ? (
+                      <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
+                        <div className="h-12 w-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                          No Previous Examination Papers
+                        </h3>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto">
+                          You have not taken or submitted any terminal examination papers yet. When descriptive exams are conducted, your evaluated papers and marks will appear here.
+                        </p>
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Exam 1: Term 1 Mathematics */}
                       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-4 space-y-3 shadow-2xs">
@@ -3288,6 +3724,7 @@ function StandardStudentDashboard() {
                         )}
                       </div>
                     </div>
+                    )}
                   </div>
 
                   {/* Virtual Examination Hall & Answer Upload Modal */}
@@ -4730,7 +5167,7 @@ function StandardStudentDashboard() {
               </div>
 
               {/* Dedicated 1-Week Remedial Focus Table with Gold Card Subject Filter */}
-              <StudentRemedialView studentId={1} />
+              <StudentRemedialView studentId={currentStudentId} />
             </div>
           )}
 
@@ -4916,20 +5353,20 @@ function StandardStudentDashboard() {
                     <div className="h-20 rounded-xl bg-slate-50/40 dark:bg-slate-900/40 border border-transparent"></div>
 
                     {[
-                      { day: 1, weekday: 'Thu', status: 'present', checkIn: '08:05 AM', rfid: 'Gate 2', bus: 'KA-05-EB-4491 (07:44 AM)', periods: '6/6 Attended', notes: 'Normal school day' },
+                      { day: 1, weekday: 'Thu', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:05 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:44 AM)' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Normal school day' },
                       { day: 2, weekday: 'Fri', status: 'holiday', holidayName: 'Gandhi Jayanti', holidayType: 'National Gazetted Holiday' },
-                      { day: 3, weekday: 'Sat', status: 'present', checkIn: '08:12 AM', rfid: 'Gate 1', periods: '4/4 Attended (Half Day)', notes: 'Club activities' },
+                      { day: 3, weekday: 'Sat', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:12 AM' : undefined, rfid: isDemoStudent ? 'Gate 1' : undefined, periods: isDemoStudent ? '4/4 Attended (Half Day)' : '4 Periods Scheduled', notes: 'Club activities' },
                       { day: 4, weekday: 'Sun', status: 'weekend' },
-                      { day: 5, weekday: 'Mon', status: 'present', checkIn: '08:01 AM', rfid: 'Gate 2', bus: 'KA-05-EB-4491 (07:41 AM)', periods: '6/6 Attended', notes: 'Weekly assembly' },
-                      { day: 6, weekday: 'Tue', status: 'present', checkIn: '08:03 AM', rfid: 'Gate 2', periods: '6/6 Attended' },
-                      { day: 7, weekday: 'Wed', status: 'absent', leaveReason: 'Approved Sick Leave', doctorNote: 'Dr. Sen Paediatrics note on record', notes: 'Viral fever — approved by Principal' },
-                      { day: 8, weekday: 'Thu', status: 'present', checkIn: '08:08 AM', rfid: 'Gate 2', periods: '6/6 Attended' },
-                      { day: 9, weekday: 'Fri', status: 'present', checkIn: '08:04 AM', rfid: 'Gate 2', periods: '6/6 Attended' },
-                      { day: 10, weekday: 'Sat', status: 'present', checkIn: '08:10 AM', rfid: 'Gate 1', periods: '4/4 Attended', notes: 'Saturday Activity' },
+                      { day: 5, weekday: 'Mon', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:01 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:41 AM)' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Weekly assembly' },
+                      { day: 6, weekday: 'Tue', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:03 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
+                      { day: 7, weekday: 'Wed', status: isDemoStudent ? 'absent' : 'upcoming', leaveReason: isDemoStudent ? 'Approved Sick Leave' : undefined, doctorNote: isDemoStudent ? 'Dr. Sen Paediatrics note on record' : undefined, notes: isDemoStudent ? 'Viral fever — approved by Principal' : 'Regular School Day' },
+                      { day: 8, weekday: 'Thu', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:08 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
+                      { day: 9, weekday: 'Fri', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:04 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
+                      { day: 10, weekday: 'Sat', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:10 AM' : undefined, rfid: isDemoStudent ? 'Gate 1' : undefined, periods: isDemoStudent ? '4/4 Attended' : '4 Periods Scheduled', notes: 'Saturday Activity' },
                       { day: 11, weekday: 'Sun', status: 'holiday', holidayName: 'Dussehra (Vijayadashami)', holidayType: 'Festival Public Holiday' },
-                      { day: 12, weekday: 'Mon', status: 'present', checkIn: '08:02 AM', rfid: 'Gate 2', periods: '6/6 Attended' },
-                      { day: 13, weekday: 'Tue', status: 'present', checkIn: '08:05 AM', rfid: 'Gate 2', periods: '6/6 Attended' },
-                      { day: 14, weekday: 'Wed', status: 'present', isToday: true, checkIn: '08:02 AM', rfid: 'Gate 2 Turnstile', bus: 'KA-05-EB-4491 (07:42 AM)', periods: '3/6 Attended (Period 3 Live)', notes: 'Class 8-A Mathematics Live now in session' },
+                      { day: 12, weekday: 'Mon', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:02 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
+                      { day: 13, weekday: 'Tue', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:05 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
+                      { day: 14, weekday: 'Wed', status: isDemoStudent ? 'present' : 'upcoming', isToday: isDemoStudent, checkIn: isDemoStudent ? '08:02 AM' : undefined, rfid: isDemoStudent ? 'Gate 2 Turnstile' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:42 AM)' : undefined, periods: isDemoStudent ? '3/6 Attended (Period 3 Live)' : '6 Periods Scheduled', notes: 'Classes in session' },
                       { day: 15, weekday: 'Thu', status: 'upcoming', eventName: 'U-14 Football Trial Match', targetNav: 'calendar' },
                       { day: 16, weekday: 'Fri', status: 'event', eventName: 'UT-2 Results Discussion Assembly', eventTime: '10:00 AM • Auditorium', targetNav: 'exams' },
                       { day: 17, weekday: 'Sat', status: 'upcoming' },
@@ -5049,14 +5486,14 @@ function StandardStudentDashboard() {
                         </h3>
                       </div>
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        selectedCalendarDay === 14 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' :
-                        selectedCalendarDay === 7 ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800' :
+                        (isDemoStudent && selectedCalendarDay === 14) ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' :
+                        (isDemoStudent && selectedCalendarDay === 7) ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800' :
                         selectedCalendarDay === 2 || selectedCalendarDay >= 28 ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800' :
                         selectedCalendarDay === 16 || selectedCalendarDay === 24 ? 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800' :
                         'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                       }`}>
-                        {selectedCalendarDay === 14 ? '🟢 Present Today' :
-                         selectedCalendarDay === 7 ? '🔴 Medical Leave' :
+                        {(isDemoStudent && selectedCalendarDay === 14) ? '🟢 Present Today' :
+                         (isDemoStudent && selectedCalendarDay === 7) ? '🔴 Medical Leave' :
                          selectedCalendarDay === 2 || selectedCalendarDay >= 28 ? '🟡 School Holiday' :
                          selectedCalendarDay === 16 || selectedCalendarDay === 24 ? '🟣 Campus Event' :
                          'Regular School Day'}
@@ -5065,7 +5502,7 @@ function StandardStudentDashboard() {
 
                     {/* Telemetry Breakdown for Selected Day */}
                     <div className="space-y-3 text-xs">
-                      {selectedCalendarDay === 7 ? (
+                      {(isDemoStudent && selectedCalendarDay === 7) ? (
                         <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 space-y-1.5">
                           <span className="font-bold text-red-800 dark:text-red-300 block">Medical Leave Verification</span>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
@@ -5092,7 +5529,9 @@ function StandardStudentDashboard() {
                         <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-2">
                           <span className="font-bold text-purple-800 dark:text-purple-300 block">Unit Test 2 Results Declaration Assembly</span>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                            Auditorium gathering for Class 8 term evaluation review. Aarav ranked #4 in section.
+                            {isDemoStudent 
+                              ? 'Auditorium gathering for Class 8 term evaluation review. Aarav ranked #4 in section.' 
+                              : 'Auditorium gathering for Class 8 term evaluation review.'}
                           </p>
                           <button
                             onClick={() => setActiveNav('exams')}
@@ -5106,7 +5545,9 @@ function StandardStudentDashboard() {
                         <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-2">
                           <span className="font-bold text-purple-800 dark:text-purple-300 block">CBSE Regional Robotics &amp; AI Exhibition</span>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                            Aarav presenting smart robotics controller and dual portfolio certificates.
+                            {isDemoStudent 
+                              ? 'Aarav presenting smart robotics controller and dual portfolio certificates.' 
+                              : 'CBSE Regional exhibition showcase and student presentations.'}
                           </p>
                           <button
                             onClick={() => setActiveNav('portfolio')}
@@ -5116,7 +5557,7 @@ function StandardStudentDashboard() {
                             <span>Navigate to Dual Portfolio</span>
                           </button>
                         </div>
-                      ) : (
+                      ) : isDemoStudent ? (
                         <div className="space-y-2.5">
                           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                             <div>
@@ -5163,6 +5604,27 @@ function StandardStudentDashboard() {
                           >
                             <CalendarDays className="h-3.5 w-3.5" />
                             <span>View Full Timetable for This Day</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase">Scheduled School Day</span>
+                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
+                                6 Periods
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                              Classes are conducted according to your section timetable. Real-time attendance is logged during classroom roll-call.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setActiveNav('timetable')}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white p-2.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                          >
+                            <Clock className="h-4 w-4" />
+                            <span>View Class Timetable &amp; Schedule</span>
                           </button>
                         </div>
                       )}
@@ -5294,7 +5756,7 @@ function StandardStudentDashboard() {
           {activeNav === 'profile' && (
             <div className="space-y-6 max-w-7xl mx-auto">
               <UnifiedSISView
-                studentId={1}
+                studentId={currentStudentId}
                 viewerRole="student"
               />
             </div>
@@ -5975,10 +6437,59 @@ function StandardStudentDashboard() {
         );
       })()}
 
+      {/* Interactive Exam Scheduled & Admit Card Notification Banner with Move to Tab */}
+      {newExamStudentAlert && (
+        <div className="fixed top-20 right-6 z-50 max-w-md w-full bg-slate-900/95 text-white p-4 rounded-2xl border-2 border-blue-500 shadow-2xl backdrop-blur-md animate-in slide-in-from-top-3 duration-200">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-400 animate-ping" />
+              <span className="text-xs font-black uppercase tracking-wider text-blue-400">Exam Scheduled &amp; Hall Ticket Issued</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setNewExamStudentAlert(null)} 
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-1 mb-3">
+            <h4 className="text-sm font-bold text-white">{newExamStudentAlert.subject} ({newExamStudentAlert.className})</h4>
+            <p className="text-xs text-slate-300">
+              Chief Invigilator: <b className="text-blue-300">{newExamStudentAlert.invigilator}</b> &bull; Hall Ticket #HT-2026-8B-014
+            </p>
+            <p className="text-[11px] font-mono text-slate-400">{newExamStudentAlert.date} ({newExamStudentAlert.time})</p>
+            <p className="text-[10px] text-blue-300">✓ Digital Hall Ticket active. Live CBT Exam Hall is now open.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveNav('exams');
+                setIsOnlineExamOpen(true);
+                setNewExamStudentAlert(null);
+              }}
+              className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Move to Tab (Enter Exam Desk)</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewExamStudentAlert(null)}
+              className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Live Proctoring & Online CBT Examination Modal */}
       <OnlineExamModal
         isOpen={isOnlineExamOpen}
         onClose={() => setIsOnlineExamOpen(false)}
+        candidateId={currentStudentId}
         examTitle={`${onlineExamSubject}: ${onlineExamTopic}`}
         subject={onlineExamSubject}
         durationMinutes={onlineExamDuration}
@@ -5986,9 +6497,61 @@ function StandardStudentDashboard() {
         maxMarks={onlineExamMaxMarks}
         examMode={onlineExamMode}
         studentName={user?.name || 'Aarav Sharma'}
+        onOpenPdfUpload={(data) => {
+          setPdfUploadData(data);
+          setExamSubmissionState('upload_pending');
+          try {
+            localStorage.setItem('edu360_exam_submission_state', 'upload_pending');
+            localStorage.setItem('edu360_exam_seal_code', data.sealCode || 'SEAL-8B-9482');
+          } catch {}
+          setIsPdfUploadModalOpen(true);
+        }}
         onSubmitted={({ wordsCount }) => {
           setIsOnlineExamOpen(false);
-          triggerToast(`✓ Examination submitted successfully! ${wordsCount} words recorded under academic audit vault.`);
+          if (onlineExamMode === 'MODE_HYBRID_SCAN') {
+            if (examSubmissionState !== 'completed') {
+              setExamSubmissionState('upload_pending');
+              try {
+                localStorage.setItem('edu360_exam_submission_state', 'upload_pending');
+              } catch {}
+              setPdfUploadData({
+                sealCode: 'SEAL-8B-9482',
+                subject: onlineExamSubject,
+                examTitle: `${onlineExamSubject}: ${onlineExamTopic}`
+              });
+              setIsPdfUploadModalOpen(true);
+            }
+            triggerToast(`✓ Examination writing completed! Seal Code SEAL-8B-9482 recorded. 15-minute PDF upload active.`);
+          } else {
+            setExamSubmissionState('completed');
+            try {
+              localStorage.setItem('edu360_exam_submission_state', 'completed');
+            } catch {}
+            triggerToast(`✓ Examination submitted successfully! ${wordsCount} words recorded under academic audit vault.`);
+          }
+        }}
+      />
+
+      {/* 15-Minute Answer Script PDF Upload Modal */}
+      <StudentExamPdfUploadModal
+        isOpen={isPdfUploadModalOpen}
+        onClose={() => setIsPdfUploadModalOpen(false)}
+        sealCode={pdfUploadData?.sealCode || 'SEAL-8B-9482'}
+        studentName={user?.name || 'Aarav Sharma'}
+        rollNo={String((user as any)?.roll_no || '14')}
+        candidateId={currentStudentId}
+        subject={pdfUploadData?.subject || onlineExamSubject}
+        examTitle={pdfUploadData?.examTitle || `${onlineExamSubject}: ${onlineExamTopic}`}
+        className={(user as any)?.class_name ? `${(user as any).class_name}-${(user as any).section || 'B'}` : 'Class 8-B'}
+        initialReceipt={examUploadDetails}
+        onUploadSuccess={(receiptData) => {
+          setExamSubmissionState('completed');
+          setExamUploadDetails(receiptData);
+          try {
+            localStorage.setItem('edu360_exam_submission_state', 'completed');
+            localStorage.setItem('edu360_exam_upload_details', JSON.stringify(receiptData));
+          } catch {}
+          triggerToast(`✓ Answer Script (${receiptData.fileName}) with ${receiptData.pageCount} pages synced to Teacher Evaluation Desk!`);
         }}
       />
 
@@ -6681,15 +7244,15 @@ export default function StudentPage() {
 
   if (isJunior) {
     const juniorUser: User = user || {
-      id: 5,
-      name: 'Aarav Kumar',
-      email: 'aarav.junior@student.edu360.internal',
+      id: 7,
+      name: 'Ananya Sharma',
+      email: 'ananya.junior@edu360.com',
       role: 'student',
       school_code: 'EDU-GLOBAL-360',
       avatar: 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150',
       grade_tier: 'k5',
       is_junior_k5: true,
-      student_id: 6
+      student_id: 7
     };
 
     return (

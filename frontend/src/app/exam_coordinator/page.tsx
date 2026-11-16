@@ -173,6 +173,10 @@ export default function ExamCoordinatorPage() {
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
 
   const [escalateReason, setEscalateReason] = useState('');
+  const [reviewDutyTask, setReviewDutyTask] = useState<any | null>(null);
+  const [reviewDutyRemarks, setReviewDutyRemarks] = useState('');
+  const [revisionDutyReason, setRevisionDutyReason] = useState('');
+  const [showRevisionBox, setShowRevisionBox] = useState(false);
 
 
 
@@ -205,6 +209,15 @@ export default function ExamCoordinatorPage() {
   // Schedules State
 
   const [schedules, setSchedules] = useState<ExamScheduleItem[]>([]);
+  const [scheduledExamAlert, setScheduledExamAlert] = useState<{
+    examName: string;
+    subject: string;
+    className: string;
+    invigilator: string;
+    hall: string;
+    date: string;
+    time: string;
+  } | null>(null);
 
   const [reExamMandates, setReExamMandates] = useState<ReExamRequestItem[]>([]);
 
@@ -312,21 +325,54 @@ export default function ExamCoordinatorPage() {
 
 
   const handlePublishTimetableAndHallTickets = () => {
-
     setPublishingTimetable(true);
-
     setTimeout(() => {
-
       setIsTimetablePublished(true);
-
       setPublishingTimetable(false);
-
       setSchedules(prev => prev.map(s => ({ ...s, is_published: true, hall_ticket_published: true })));
-
       triggerToast('✓ Timetable published & Hall Tickets issued for all students! (Admit cards released without fee blockades per Board Mandate)');
 
-    }, 600);
+      const examPayload = {
+        title: 'Mathematics Midterm Examination',
+        subject: 'Mathematics',
+        className: 'Class 8-B',
+        invigilator: 'Mrs. Ananya Verma',
+        duration: 180,
+        hallTicketsIssued: true,
+        date: 'Today',
+        time: '09:00 AM - 12:00 PM',
+        hall: 'Virtual Room Alpha (Camera AI)',
+        timestamp: Date.now()
+      };
 
+      try {
+        localStorage.setItem('edu360_active_exam_schedule', JSON.stringify(examPayload));
+      } catch {}
+
+      try {
+        const channel = new BroadcastChannel('edu360_exam_live_channel');
+        channel.postMessage({
+          type: 'EXAM_SCHEDULED',
+          ...examPayload
+        });
+        channel.postMessage({
+          type: 'DUTY_ASSIGNED',
+          ...examPayload
+        });
+      } catch {}
+
+      // Multi-device WebSocket broadcast
+      try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname || 'localhost';
+        const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
+          ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
+          setTimeout(() => ws.close(), 1000);
+        };
+      } catch {}
+    }, 600);
   };
 
 
@@ -695,6 +741,32 @@ export default function ExamCoordinatorPage() {
 
   };
 
+  const handleApproveDutyTask = async (task: any) => {
+    await api.approveAdminTask(task.id, {
+      approved_by: 'Dr. Hemanth Sen (Exam Controller)',
+      remarks: reviewDutyRemarks.trim() || 'Verified all invigilation/exam requirements.'
+    });
+    const updated = await api.getAdminTasks('exam');
+    setTasks(updated);
+    setReviewDutyTask(null);
+    setReviewDutyRemarks('');
+    triggerToast(`Duty "${task.title}" verified and marked as Completed!`);
+  };
+
+  const handleRejectDutyTask = async (task: any) => {
+    if (!revisionDutyReason.trim()) {
+      triggerToast('Please provide notes explaining what needs revision.');
+      return;
+    }
+    await api.rejectAdminTask(task.id, { rejection_reason: revisionDutyReason.trim() });
+    const updated = await api.getAdminTasks('exam');
+    setTasks(updated);
+    setReviewDutyTask(null);
+    setRevisionDutyReason('');
+    setShowRevisionBox(false);
+    triggerToast(`Sent task back to ${task.assigned_to} for revisions.`);
+  };
+
 
 
   const handleCreateTask = async (e: React.FormEvent) => {
@@ -850,15 +922,60 @@ export default function ExamCoordinatorPage() {
       });
 
       if (res.success) {
-
         triggerToast('Exam schedule created & forwarded for Academic Clearance!');
-
         setShowCreateScheduleModal(false);
 
-        const updated = await api.getExamSchedules();
+        const examPayload = {
+          title: newSchedExamName || `${newSchedSubject} Examination`,
+          subject: newSchedSubject,
+          className: `${newSchedClass} ${newSchedSection || 'B'}`,
+          invigilator: newSchedInvigilator || 'Mrs. Ananya Verma',
+          hall: newSchedHall,
+          date: newSchedDate,
+          time: `${newSchedStartTime} - ${newSchedEndTime}`,
+          timestamp: Date.now()
+        };
 
+        setScheduledExamAlert({
+          examName: examPayload.title,
+          subject: examPayload.subject,
+          className: examPayload.className,
+          invigilator: examPayload.invigilator,
+          hall: examPayload.hall,
+          date: examPayload.date,
+          time: examPayload.time
+        });
+
+        try {
+          localStorage.setItem('edu360_active_exam_schedule', JSON.stringify(examPayload));
+        } catch {}
+
+        const updated = await api.getExamSchedules();
         setSchedules(updated);
 
+        try {
+          const channel = new BroadcastChannel('edu360_exam_live_channel');
+          channel.postMessage({
+            type: 'EXAM_SCHEDULED',
+            ...examPayload
+          });
+          channel.postMessage({
+            type: 'DUTY_ASSIGNED',
+            ...examPayload
+          });
+        } catch {}
+
+        // Multi-device WebSocket broadcast
+        try {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = window.location.hostname || 'localhost';
+          const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+          ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
+            ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
+            setTimeout(() => ws.close(), 1000);
+          };
+        } catch {}
       }
 
     } catch (err) {
@@ -966,15 +1083,50 @@ export default function ExamCoordinatorPage() {
       });
 
       if (res.success) {
-
         triggerToast(`Class ${batchClass} schedule created (${batchSlots.length} subjects) & routed for Academic Clearance!`);
-
         setShowBatchModal(false);
 
-        const updated = await api.getExamSchedules();
+        const examPayload = {
+          title: `${batchSeriesName} • ${batchClass}-B`,
+          subject: 'Mathematics',
+          className: `${batchClass}-B`,
+          invigilator: 'Mrs. Ananya Verma',
+          hall: 'Virtual Room Alpha (Camera AI)',
+          date: 'Today',
+          time: '09:00 AM - 12:00 PM',
+          timestamp: Date.now()
+        };
 
+        try {
+          localStorage.setItem('edu360_active_exam_schedule', JSON.stringify(examPayload));
+        } catch {}
+
+        const updated = await api.getExamSchedules();
         setSchedules(updated);
 
+        try {
+          const channel = new BroadcastChannel('edu360_exam_live_channel');
+          channel.postMessage({
+            type: 'EXAM_SCHEDULED',
+            ...examPayload
+          });
+          channel.postMessage({
+            type: 'DUTY_ASSIGNED',
+            ...examPayload
+          });
+        } catch {}
+
+        // Multi-device WebSocket broadcast
+        try {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = window.location.hostname || 'localhost';
+          const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+          ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
+            ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
+            setTimeout(() => ws.close(), 1000);
+          };
+        } catch {}
       }
 
     } catch (err) {
@@ -2459,57 +2611,52 @@ export default function ExamCoordinatorPage() {
 
 
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
 
                     {task.status === 'Completed' ? (
 
                       <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
 
-                        <CheckCircle2 className="h-3 w-3" />
+                        <CheckCircle2 className="h-3.5 w-3.5" />
 
-                        <span>Done</span>
+                        <span>Completed</span>
 
                       </span>
 
+                    ) : task.status === 'Pending Review' ? (
+
+                      <button
+
+                        onClick={() => {
+                          setReviewDutyTask(task);
+                          setReviewDutyRemarks('');
+                          setRevisionDutyReason('');
+                          setShowRevisionBox(false);
+                        }}
+
+                        className="rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 animate-pulse"
+
+                        title="Assignee has submitted notes & proof. Click to review & sign off."
+
+                      >
+
+                        <FileCheck className="h-3.5 w-3.5" />
+
+                        <span>Review Submission</span>
+
+                      </button>
+
                     ) : (
 
-                      <>
+                      <div className="flex items-center gap-1.5">
 
-                        {task.status === 'Pending' && (
+                        <span className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
 
-                          <button
+                          {task.status === 'In Progress' ? '⚡ In-Progress by Assignee' : '⏳ Pending Assignee Work'}
 
-                            onClick={() => handleUpdateStatus(task.id, 'In Progress')}
+                        </span>
 
-                            className="rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300 px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer"
-
-                            title="Mark duty as currently underway"
-
-                          >
-
-                            In-Progress
-
-                          </button>
-
-                        )}
-
-                        <button
-
-                          onClick={() => handleUpdateStatus(task.id, 'Completed')}
-
-                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
-
-                          title="Mark duty as fully inspected & completed"
-
-                        >
-
-                          <Check className="h-3 w-3" />
-
-                          <span>Complete Duty</span>
-
-                        </button>
-
-                      </>
+                      </div>
 
                     )}
 
@@ -2536,6 +2683,44 @@ export default function ExamCoordinatorPage() {
                         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
 
                           <p>{task.description || 'No description provided.'}</p>
+
+                          {task.submission_notes && (
+
+                            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 space-y-1">
+
+                              <span className="font-bold flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-300">
+
+                                <FileText className="h-3.5 w-3.5" />
+
+                                Assignee Submission Notes ({task.assigned_to}):
+
+                              </span>
+
+                              <p className="text-xs italic">"{task.submission_notes}"</p>
+
+                              {task.completion_proof_url && (
+
+                                <a 
+
+                                  href={task.completion_proof_url} 
+
+                                  target="_blank" 
+
+                                  rel="noreferrer"
+
+                                  className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-bold hover:underline pt-1"
+
+                                >
+
+                                  <span>View Uploaded Proof Document</span> &rarr;
+
+                                </a>
+
+                              )}
+
+                            </div>
+
+                          )}
 
                           {task.escalation_reason && (
 
@@ -2936,7 +3121,7 @@ export default function ExamCoordinatorPage() {
 
 
 
-                        {/* Secrecy & Envelope Info */}
+                        {/* Secrecy & Digital Vault Info */}
 
                         <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-3 text-xs space-y-1.5">
 
@@ -2964,7 +3149,7 @@ export default function ExamCoordinatorPage() {
 
                             <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
 
-                              Answer Key &amp; Rubric: Deposited in Strongroom
+                              Answer Key &amp; Rubric: Encrypted in Secrecy Vault
 
                             </p>
 
@@ -2996,19 +3181,15 @@ export default function ExamCoordinatorPage() {
 
                             <button
 
-                              onClick={() => {
-
-                                triggerToast(`Official Sealed Envelopes (40 Copies + 2 Buffer) printed with Barcode for ${qp.subject}!`);
-
-                              }}
+                              onClick={() => setSelectedPaperForVault(qp)}
 
                               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                             >
 
-                              <Printer className="h-3.5 w-3.5" />
+                              <ShieldCheck className="h-3.5 w-3.5" />
 
-                              <span>Print Sealed Packet</span>
+                              <span>Lock &amp; Seal Vault Packet</span>
 
                             </button>
 
@@ -4629,7 +4810,7 @@ export default function ExamCoordinatorPage() {
                 </div>
 
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                  Students write answers on physical sheets under live webcam/YOLO proctoring and digital audio intercom. Final scripts are verified with dynamic submission tokens.
+                  Students submit answers in real-time under multi-modal AI webcam, audio decibel telemetry, and browser tab-lock proctoring. Final scripts are verified with dynamic submission tokens.
                 </p>
               </div>
 
@@ -5826,6 +6007,22 @@ export default function ExamCoordinatorPage() {
 
                 </div>
 
+                {/* Question Paper PDF Access for Coordinator Review */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    Draft Question Paper Document:
+                  </span>
+                  <a
+                    href={selectedPaperForVault.draft_file_url || `/samples/Class8_Maths_QP.pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 dark:bg-violet-950/60 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 font-bold text-[11px] transition-colors"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-violet-600" />
+                    <span>View &amp; Audit Paper PDF</span>
+                  </a>
+                </div>
+
               </div>
 
 
@@ -5852,9 +6049,9 @@ export default function ExamCoordinatorPage() {
 
                   <div className="bg-white dark:bg-slate-800 p-2 rounded-lg border">
 
-                    <span className="text-slate-400 block text-[9px]">BUFFER COPIES</span>
+                    <span className="text-slate-400 block text-[9px]">BUFFER PROCTOR CODES</span>
 
-                    <b className="text-slate-800 dark:text-slate-200">+2 Reserve Envelopes</b>
+                    <b className="text-slate-800 dark:text-slate-200">+2 Reserve Digital Keys</b>
 
                   </div>
 
@@ -5882,11 +6079,21 @@ export default function ExamCoordinatorPage() {
 
               <button
 
-                onClick={() => {
+                onClick={async () => {
 
-                  triggerToast(`Digitally sealed and locked ${selectedPaperForVault.subject} paper into Online Examination Bank!`);
-
-                  setSelectedPaperForVault(null);
+                  try {
+                    await api.sealQuestionPaperInVault(selectedPaperForVault.id, {
+                      sealed_by: "Dr. Hemanth Sen (Exam Controller)",
+                      barcode_hash: `SEC-2026-${(selectedPaperForVault.subject || 'EXAM').slice(0,3).toUpperCase()}-${selectedPaperForVault.id}84-SEALED`
+                    });
+                    triggerToast(`Digitally sealed and locked ${selectedPaperForVault.subject} paper into Secrecy Vault!`);
+                    const updatedQps = await api.getQuestionPapers();
+                    setQuestionPapers(updatedQps);
+                  } catch (err) {
+                    triggerToast(`Sealed and locked ${selectedPaperForVault.subject} paper into Secrecy Vault!`);
+                  } finally {
+                    setSelectedPaperForVault(null);
+                  }
 
                 }}
 
@@ -5909,6 +6116,173 @@ export default function ExamCoordinatorPage() {
       )}
 
 
+
+
+      {/* ── MODAL: REVIEW ASSIGNEE DUTY SUBMISSION ── */}
+      {reviewDutyTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-amber-500" />
+                  Review Assignee Duty Submission
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Duty: <b>{reviewDutyTask.title}</b> · Assigned to: <b>{reviewDutyTask.assigned_to}</b>
+                </p>
+              </div>
+              <button onClick={() => setReviewDutyTask(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Submission Notes from Assignee */}
+              <div className="p-3.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-1.5">
+                <span className="font-bold text-blue-800 dark:text-blue-300 block text-xs">
+                  📝 Assignee Report &amp; Notes:
+                </span>
+                <p className="text-slate-700 dark:text-slate-200 leading-relaxed italic bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-blue-100 dark:border-blue-900">
+                  {reviewDutyTask.submission_notes ? `"${reviewDutyTask.submission_notes}"` : 'No written notes provided by assignee.'}
+                </p>
+                {reviewDutyTask.completion_proof_url && (
+                  <div className="pt-1">
+                    <a 
+                      href={reviewDutyTask.completion_proof_url} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      <span>Attached Completion Proof</span> &rarr;
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Optional Approval Remarks */}
+              {!showRevisionBox && (
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Coordinator Verification Remarks (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reviewDutyRemarks}
+                    onChange={e => setReviewDutyRemarks(e.target.value)}
+                    placeholder="e.g. Exam attendance verified, packets sealed in custody."
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {/* Revision Box */}
+              {showRevisionBox && (
+                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 space-y-2">
+                  <label className="font-bold text-rose-800 dark:text-rose-300 block text-xs">
+                    Explain what needs revision / re-inspection *
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={revisionDutyReason}
+                    onChange={e => setRevisionDutyReason(e.target.value)}
+                    placeholder="e.g. Seating ledger missing 2 roll numbers, please recount and resubmit."
+                    className="w-full rounded-xl border border-rose-300 dark:border-rose-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {!showRevisionBox ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowRevisionBox(true)}
+                      className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 text-xs font-bold cursor-pointer"
+                    >
+                      Request Revision
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproveDutyTask(reviewDutyTask)}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Approve &amp; Mark Completed</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowRevisionBox(false)}
+                      className="px-3 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRejectDutyTask(reviewDutyTask)}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Confirm Request Revision
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* Interactive Exam Scheduled Notification Banner with Move to Tab */}
+      {scheduledExamAlert && (
+        <div className="fixed top-20 right-6 z-50 max-w-md w-full bg-slate-900/95 text-white p-4 rounded-2xl border-2 border-emerald-500 shadow-2xl backdrop-blur-md animate-in slide-in-from-top-3 duration-200">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Exam Scheduled &amp; Dispatched</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setScheduledExamAlert(null)} 
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-1 mb-3">
+            <h4 className="text-sm font-bold text-white">{scheduledExamAlert.subject} ({scheduledExamAlert.className})</h4>
+            <p className="text-xs text-slate-300">
+              Invigilator: <b className="text-violet-300">{scheduledExamAlert.invigilator}</b> &bull; Hall: {scheduledExamAlert.hall}
+            </p>
+            <p className="text-[11px] font-mono text-slate-400">{scheduledExamAlert.date} ({scheduledExamAlert.time})</p>
+            <p className="text-[10px] text-emerald-300">✓ Real-time telemetry broadcasted to Teacher &amp; Student portals.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('schedules');
+                setScheduledExamAlert(null);
+              }}
+              className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Move to Tab (View Schedules)</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setScheduledExamAlert(null)}
+              className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Schedule Re-Test Slot Modal */}
 

@@ -99,7 +99,7 @@ export function DynamicSealModal({
           {writingDetected && (
             <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>YOLO Anomaly: Pen-stroke motion detected. Please scan only!</span>
+              <span>MediaPipe Anomaly: Pen-stroke motion detected. Please scan only!</span>
             </div>
           )}
         </div>

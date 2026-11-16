@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, AttendanceRecord, Student, Homework, HomeworkSubmission,
-    FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint
+    FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint, SecurityAuditLog
 )
 from app.schemas.schemas import (
     LiveClassResponse, AttendanceRecordResponse, AttendanceJoinSimulate, AttendanceOverride,
@@ -113,6 +113,18 @@ async def override_attendance_record(class_id: int, record_id: int, req: Attenda
         raise HTTPException(status_code=404, detail="Attendance record not found")
     record.status = req.status
     record.teacher_override = True
+
+    # Statutory Audit Log for Attendance Override
+    audit_entry = SecurityAuditLog(
+        actor_name="Mrs. Ananya Verma",
+        actor_role="teacher",
+        action_type="LIVE_ATTENDANCE_OVERRIDDEN",
+        target_entity=f"Attendance #{record.id}: {record.student_name} (Class #{class_id})",
+        status="OVERRIDDEN",
+        details=f"Attendance manually updated to '{req.status}' by class teacher override."
+    )
+    db.add(audit_entry)
+
     await db.commit()
     await db.refresh(record)
     return record
@@ -306,6 +318,17 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
             )
         except Exception as e:
             print(f"Warning: could not dispatch parent leave rejection notification: {e}")
+
+    # Statutory Audit Log for Leave Application Review
+    audit_entry = SecurityAuditLog(
+        actor_name="Mrs. Ananya Verma",
+        actor_role="teacher",
+        action_type="STUDENT_LEAVE_REVIEWED",
+        target_entity=f"Leave #{lr.id}: {lr.student_name} ({lr.from_date} to {lr.to_date})",
+        status=req.status.upper(),
+        details=f"Leave request marked '{req.status}'. Reason: {lr.reason}. Teacher Notes: {req.teacher_notes or 'None'}. Attendance adjusted: {req.status == 'Approved'}."
+    )
+    db.add(audit_entry)
 
     await db.commit()
     await db.refresh(lr)

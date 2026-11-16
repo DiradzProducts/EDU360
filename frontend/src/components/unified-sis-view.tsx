@@ -79,7 +79,25 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
   const [leaveReason, setLeaveReason] = useState('');
   const [leaveSuccessNotice, setLeaveSuccessNotice] = useState<string | null>(null);
   const [excusedCount, setExcusedCount] = useState(3);
-  const [certificates, setCertificates] = useState([
+  // Effective student ID
+  const effectiveStudentId = student?.id || studentId;
+  const isDemoStudent = effectiveStudentId === 1;
+
+  const [loadedStudent, setLoadedStudent] = useState<Student | null>(student || null);
+
+  useEffect(() => {
+    if (student) {
+      setLoadedStudent(student);
+    } else {
+      api.getStudentById(effectiveStudentId).then(res => {
+        if (res) setLoadedStudent(res);
+      }).catch(() => {});
+    }
+  }, [effectiveStudentId, student]);
+
+  const activeStudent = loadedStudent || student;
+
+  const [certificates, setCertificates] = useState(() => isDemoStudent ? [
     {
       id: 'cert-1',
       title: 'Transfer Certificate (TC / School Leaving Certificate)',
@@ -130,7 +148,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       status: 'Verified & Active',
       description: 'Biometrically verified national citizen identity dossier with address proof.'
     }
-  ]);
+  ] : []);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -139,17 +157,22 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Effective student ID
-  const effectiveStudentId = student?.id || studentId;
-
   // Student base info (derived or fallback)
-  const currentStudentName = student?.name || 'Aarav Sharma';
-  const currentClass = student?.class_name || 'Class 8';
-  const currentSection = student?.section || 'B';
-  const currentRoll = student?.roll_no || '14';
-  const currentAdmissionNo = student?.admission_no || 'EDU-2024-082';
-  const currentAttendance = student?.attendance_pct || 94.2;
-  const currentAcademicAvg = student?.academic_average_pct || 88.8;
+  const currentStudentName = activeStudent?.name || (isDemoStudent ? 'Aarav Sharma' : 'Student Enrollee');
+  const currentClass = activeStudent?.class_name || 'Class 8';
+  const currentSection = activeStudent?.section || (isDemoStudent ? 'B' : 'A');
+  const currentRoll = activeStudent?.roll_no || (isDemoStudent ? '14' : String(effectiveStudentId));
+  const currentAdmissionNo = activeStudent?.admission_no || (isDemoStudent ? 'EDU-2024-082' : `EDU-2026-${effectiveStudentId}`);
+  const currentAttendance = activeStudent?.attendance_pct !== undefined && activeStudent?.attendance_pct !== null
+    ? activeStudent.attendance_pct
+    : (isDemoStudent ? 94.2 : 100);
+  const currentAcademicAvg = activeStudent?.academic_average_pct !== undefined && activeStudent?.academic_average_pct !== null
+    ? activeStudent.academic_average_pct
+    : (isDemoStudent ? 88.8 : null);
+
+  const guardianName = activeStudent?.guardian_name || (isDemoStudent ? 'Mr. Rajesh Sharma' : 'Guardian');
+  const guardianPhone = activeStudent?.guardian_phone || (isDemoStudent ? '+91 98111 00003' : '—');
+  const guardianEmail = activeStudent?.guardian_email || (isDemoStudent ? 'rajesh.sharma@example.com' : '—');
 
   useEffect(() => {
     const list = getRemarksForStudent(studentId);
@@ -321,7 +344,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                 <span>Adm ID: <strong className="text-slate-700 dark:text-slate-200">{currentAdmissionNo}</strong></span>
                 <span>•</span>
-                <span>Guardian: <strong className="text-slate-700 dark:text-slate-200">Mr. Rajesh Sharma (+91 98111 00003)</strong></span>
+                <span>Guardian: <strong className="text-slate-700 dark:text-slate-200">{guardianName} ({guardianPhone})</strong></span>
                 <span>•</span>
                 <span>Board: <strong className="text-slate-700 dark:text-slate-200">CBSE Affiliation #103049</strong></span>
               </div>
@@ -332,15 +355,21 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance</span>
-              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{currentAttendance}%</span>
+              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                {isDemoStudent ? `${currentAttendance}%` : '—'}
+              </span>
             </div>
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Avg</span>
-              <span className="text-lg font-black text-blue-600 dark:text-blue-400">{currentAcademicAvg}%</span>
+              <span className="text-lg font-black text-blue-600 dark:text-blue-400">
+                {isDemoStudent ? (currentAcademicAvg !== null ? `${currentAcademicAvg}%` : 'Enrolled') : '—'}
+              </span>
             </div>
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Fee Status</span>
-              <span className="text-lg font-black text-amber-600 dark:text-amber-400">₹18,500</span>
+              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                {isDemoStudent ? '₹18,500' : 'Clear ✓'}
+              </span>
             </div>
           </div>
         </div>
@@ -382,16 +411,16 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                   Verified Primary Contact
                 </span>
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Mr. Rajesh Sharma</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Sr. Director, Enterprise Technology</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{guardianName}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{isDemoStudent ? 'Sr. Director, Enterprise Technology' : 'Registered Parent & Legal Guardian'}</p>
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
                   <Phone className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>+91 98111 00003</span>
+                  <span>{guardianPhone}</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
                   <Mail className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span>rajesh.sharma@example.com</span>
+                  <span>{guardianEmail}</span>
                 </div>
               </div>
             </div>
@@ -404,16 +433,16 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                   Authorized Emergency Pickup
                 </span>
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Mrs. Priya Sharma</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Management Consultant</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{isDemoStudent ? 'Mrs. Priya Sharma' : 'Secondary Emergency Contact'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{isDemoStudent ? 'Management Consultant' : 'Primary guardian serves as primary contact'}</p>
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
                   <Phone className="h-4 w-4 text-purple-500 shrink-0" />
-                  <span>+91 98450 99881</span>
+                  <span>{isDemoStudent ? '+91 98450 99881' : guardianPhone}</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
                   <Mail className="h-4 w-4 text-purple-500 shrink-0" />
-                  <span>priya.sharma@consulting.com</span>
+                  <span>{isDemoStudent ? 'priya.sharma@consulting.com' : guardianEmail}</span>
                 </div>
               </div>
             </div>
@@ -464,7 +493,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       {/* ======================================================== */}
       {activeTab === 'academics' && (() => {
         const isJuniorTier = studentId === 7 || currentClass.includes('3') || currentClass.toLowerCase().includes('primary');
-        const subjectsList = isJuniorTier ? [
+        const subjectsList = isDemoStudent ? (isJuniorTier ? [
           { subject: 'English Reading & Phonics', marks: 98, max: 100, grade: 'A1+', teacher: 'Ms. Priya Nair' },
           { subject: 'Junior Mathematics', marks: 96, max: 100, grade: 'A1+', teacher: 'Mrs. Kavitha Reddy' },
           { subject: 'Environmental Studies (EVS)', marks: 94, max: 100, grade: 'A1', teacher: 'Ms. Priya Nair' },
@@ -478,6 +507,13 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
           { subject: 'Social Science', marks: 86, max: 100, grade: 'A2', teacher: 'Mr. P. Roy' },
           { subject: 'Hindi Course-B', marks: 90, max: 100, grade: 'A1', teacher: 'Mrs. M. Sharma' },
           { subject: 'Information Technology', marks: 96, max: 100, grade: 'A1', teacher: 'Mr. Rajesh K' }
+        ]) : [
+          { subject: 'Mathematics', marks: '—', max: 100, grade: 'Pending', teacher: 'Mrs. Ananya Verma' },
+          { subject: 'Science (PCB)', marks: '—', max: 100, grade: 'Pending', teacher: 'Dr. K. Raman' },
+          { subject: 'English Communicative', marks: '—', max: 100, grade: 'Pending', teacher: 'Ms. Shweta Iyer' },
+          { subject: 'Social Science', marks: '—', max: 100, grade: 'Pending', teacher: 'Mr. P. Roy' },
+          { subject: 'Hindi Course-B', marks: '—', max: 100, grade: 'Pending', teacher: 'Mrs. M. Sharma' },
+          { subject: 'Information Technology', marks: '—', max: 100, grade: 'Pending', teacher: 'Mr. Rajesh K' }
         ];
 
         return (
@@ -486,10 +522,16 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">Academic Performance Breakdown &bull; {currentClass}-{currentSection}</h3>
-                  <p className="text-xs text-slate-500">Term 1 Periodic Assessment official subject-wise marks</p>
+                  <p className="text-xs text-slate-500">
+                    {isDemoStudent ? 'Term 1 Periodic Assessment official subject-wise marks' : 'Official assessments scheduled during upcoming periodic examinations'}
+                  </p>
                 </div>
-                <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-3 py-1 text-xs font-extrabold">
-                  {isJuniorTier ? 'Star Performer (96.5%)' : 'Term 1 Rank #4 (88.8%)'}
+                <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                  isDemoStudent
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                }`}>
+                  {isDemoStudent ? (isJuniorTier ? 'Star Performer (96.5%)' : 'Term 1 Rank #4 (88.8%)') : 'Newly Enrolled • Pending Evaluation'}
                 </span>
               </div>
 
@@ -507,7 +549,10 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                       <span className="text-[10px] text-slate-500 font-medium">{sub.teacher}</span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                      <div className="h-full bg-blue-600 rounded-full" style={{ width: `${sub.marks}%` }} />
+                      <div 
+                        className="h-full bg-blue-600 rounded-full transition-all" 
+                        style={{ width: typeof sub.marks === 'number' ? `${(sub.marks / sub.max) * 100}%` : '0%' }} 
+                      />
                     </div>
                   </div>
                 ))}
@@ -635,7 +680,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       {/* TAB 4: ATTENDANCE & BIOMETRICS (SUBJECT-WISE BREAKDOWN)  */}
       {/* ======================================================== */}
       {activeTab === 'attendance' && (() => {
-        const subjectAttendanceData = [
+        const subjectAttendanceData = isDemoStudent ? [
           {
             subject: 'Mathematics',
             code: 'MATH-801',
@@ -722,6 +767,82 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
             statusTier: 'perfect',
             incidents: []
           }
+        ] : [
+          {
+            subject: 'Mathematics',
+            code: 'MATH-801',
+            faculty: 'Mrs. Ananya Verma',
+            period: 'Period 1 (08:30 AM)',
+            total: 0,
+            onTime: 0,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: null,
+            statusTier: 'healthy',
+            incidents: []
+          },
+          {
+            subject: 'Physics',
+            code: 'PHYS-802',
+            faculty: 'Dr. Rajesh Rao',
+            period: 'Period 2 (09:30 AM)',
+            total: 0,
+            onTime: 0,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: null,
+            statusTier: 'healthy',
+            incidents: []
+          },
+          {
+            subject: 'Chemistry',
+            code: 'CHEM-803',
+            faculty: 'Mr. Vikram Seth',
+            period: 'Period 4 (11:30 AM)',
+            total: 0,
+            onTime: 0,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: null,
+            statusTier: 'healthy',
+            incidents: []
+          },
+          {
+            subject: 'English Literature',
+            code: 'ENG-804',
+            faculty: 'Ms. Priya Sen',
+            period: 'Period 5 (01:15 PM)',
+            total: 0,
+            onTime: 0,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: null,
+            statusTier: 'healthy',
+            incidents: []
+          },
+          {
+            subject: 'Computer Science',
+            code: 'CS-805',
+            faculty: 'Mrs. Neha Gupta',
+            period: 'Period 6 (02:15 PM)',
+            total: 0,
+            onTime: 0,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: null,
+            statusTier: 'healthy',
+            incidents: []
+          }
         ];
 
         const activeSubject = subjectAttendanceData.find(s => s.subject === selectedSubjectLog);
@@ -748,28 +869,44 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
               <div className="p-4 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">Overall Net Rate</span>
-                <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">{currentAttendance}%</span>
-                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-mono block mt-0.5">Healthy &bull; Active</span>
+                <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
+                  {isDemoStudent ? `${currentAttendance}%` : '—'}
+                </span>
+                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-mono block mt-0.5">
+                  {isDemoStudent ? 'Healthy • Active' : 'Enrolled • Active'}
+                </span>
               </div>
               <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Total Classes</span>
-                <span className="text-2xl font-black text-slate-900 dark:text-white">110</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white">
+                  {isDemoStudent ? '110' : '0'}
+                </span>
                 <span className="text-[10px] text-slate-500 font-mono block mt-0.5">Across 5 Subjects</span>
               </div>
               <div className="p-4 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300 block">Late Marks (&gt;10m)</span>
-                <span className="text-2xl font-black text-amber-800 dark:text-amber-200">8</span>
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block mt-0.5">Avg: +13.5 mins</span>
+                <span className="text-2xl font-black text-amber-800 dark:text-amber-200">
+                  {isDemoStudent ? '8' : '0'}
+                </span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block mt-0.5">
+                  {isDemoStudent ? 'Avg: +13.5 mins' : 'Zero Infractions'}
+                </span>
               </div>
               <div className="p-4 rounded-3xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">Excused Leaves</span>
-                <span className="text-2xl font-black text-blue-800 dark:text-blue-200">{excusedCount}</span>
+                <span className="text-2xl font-black text-blue-800 dark:text-blue-200">
+                  {isDemoStudent ? excusedCount : 0}
+                </span>
                 <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono block mt-0.5">Parent Approved</span>
               </div>
               <div className="p-4 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center shadow-sm col-span-2 sm:col-span-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-300 block">Unexcused Bunk</span>
-                <span className="text-2xl font-black text-rose-800 dark:text-rose-200">1</span>
-                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block mt-0.5">Session Locked</span>
+                <span className="text-2xl font-black text-rose-800 dark:text-rose-200">
+                  {isDemoStudent ? '1' : '0'}
+                </span>
+                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block mt-0.5">
+                  {isDemoStudent ? 'Session Locked' : 'No Lockouts'}
+                </span>
               </div>
             </div>
 
@@ -890,7 +1027,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                                 ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
                                 : 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/35 ring-1 ring-amber-500/20'
                           }`}>
-                            {sub.healthPct}%
+                            {sub.healthPct !== null ? `${sub.healthPct}%` : '—'}
                           </span>
                         </td>
 
@@ -943,9 +1080,13 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                     {activeSubject.incidents.length === 0 ? (
                       <div className="p-8 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-center space-y-2">
                         <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
-                        <h5 className="font-bold text-sm text-slate-900 dark:text-white">Flawless Punctuality Record</h5>
+                        <h5 className="font-bold text-sm text-slate-900 dark:text-white">
+                          {isDemoStudent ? 'Flawless Punctuality Record' : 'Clean Attendance Record'}
+                        </h5>
                         <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Student has zero late marks, zero lockouts, and 100% on-time attendance across all sessions in {activeSubject.subject}.
+                          {isDemoStudent 
+                            ? `Student has zero late marks, zero lockouts, and 100% on-time attendance across all sessions in ${activeSubject.subject}.`
+                            : `No attendance incidents, infractions, or unexcused absences recorded for ${activeSubject.subject}.`}
                         </p>
                       </div>
                     ) : (
@@ -1145,7 +1286,18 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
             </div>
 
             <div className="space-y-3">
-              {certificates.map(cert => (
+              {certificates.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center space-y-2">
+                  <FileText className="h-8 w-8 text-slate-400 mx-auto opacity-60" />
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    No Official Documents or Certificates In Vault Yet
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Official bonafide study certificates, character endorsements, and transfer documentation will appear here once issued.
+                  </p>
+                </div>
+              ) : (
+                certificates.map(cert => (
                 <div 
                   key={cert.id}
                   className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4.5 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4"
@@ -1183,7 +1335,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                     </button>
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
           </div>
         </div>
@@ -1198,44 +1350,58 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Academic Fee Ledger &bull; Session 2026-27</h3>
             <p className="text-xs text-slate-500 mb-6">Tuition, lab facilities, and bus transportation clearance schedule</p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Annual Fee Structure</span>
-                <span className="text-xl font-black text-slate-900 dark:text-white block mt-0.5">₹1,45,000</span>
+            {!isDemoStudent ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center space-y-2">
+                <ShieldCheck className="h-8 w-8 text-emerald-500 mx-auto" />
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Accounts &amp; Tuition Clearance: Up to Date
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  No outstanding institutional fee dues. Fee receipts and future term invoices will appear here.
+                </p>
               </div>
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
-                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase">Total Realized</span>
-                <span className="text-xl font-black text-emerald-800 dark:text-emerald-200 block mt-0.5">₹1,26,500</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center">
-                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Outstanding Balance</span>
-                <span className="text-xl font-black text-amber-800 dark:text-amber-200 block mt-0.5">₹18,500</span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Annual Fee Structure</span>
+                    <span className="text-xl font-black text-slate-900 dark:text-white block mt-0.5">₹1,45,000</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase">Total Realized</span>
+                    <span className="text-xl font-black text-emerald-800 dark:text-emerald-200 block mt-0.5">₹1,26,500</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center">
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Outstanding Balance</span>
+                    <span className="text-xl font-black text-amber-800 dark:text-amber-200 block mt-0.5">₹18,500</span>
+                  </div>
+                </div>
 
-            <div className="space-y-3">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">Term 1 Composite Tuition &amp; Lab Fee</div>
-                  <div className="text-[11px] text-slate-500">Paid on 10 Jul 2026 via UPI (Ref: EDU-RCP-8801)</div>
-                </div>
-                <div className="text-right">
-                  <span className="font-black text-emerald-600 block">₹72,500 Paid</span>
-                  <span className="text-[10px] text-slate-400">Receipt Available</span>
-                </div>
-              </div>
+                <div className="space-y-3">
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">Term 1 Composite Tuition &amp; Lab Fee</div>
+                      <div className="text-[11px] text-slate-500">Paid on 10 Jul 2026 via UPI (Ref: EDU-RCP-8801)</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-emerald-600 block">₹72,500 Paid</span>
+                      <span className="text-[10px] text-slate-400">Receipt Available</span>
+                    </div>
+                  </div>
 
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">Term 2 Composite Fee &bull; Partial Installment</div>
-                  <div className="text-[11px] text-slate-500">Paid on 05 Oct 2026 via Bank POS (Ref: EDU-RCP-9142)</div>
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">Term 2 Composite Fee &bull; Partial Installment</div>
+                      <div className="text-[11px] text-slate-500">Paid on 05 Oct 2026 via Bank POS (Ref: EDU-RCP-9142)</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-emerald-600 block">₹54,000 Paid</span>
+                      <span className="text-[10px] text-amber-500 font-bold">₹18,500 Balance Due 15 Nov</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-black text-emerald-600 block">₹54,000 Paid</span>
-                  <span className="text-[10px] text-amber-500 font-bold">₹18,500 Balance Due 15 Nov</span>
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}

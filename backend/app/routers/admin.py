@@ -10,9 +10,10 @@ from app.models.models import (
     User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
     StaffMember, InventoryItem, PTMEvent, PaymentTransaction, FeeDefaulter,
-    LeaveRequest
+    LeaveRequest, SecurityAuditLog
 )
 from app.routers.notifications import create_system_notification
+from app.core.rbac import require_admin, require_staff, require_role
 from app.schemas.schemas import (
     TriageAlertResponse, TriageActionRequest,
     AdminTaskResponse, AdminTaskCreate, AdminTaskUpdate,
@@ -33,7 +34,7 @@ from app.schemas.schemas import (
     ExecutivePulseResponse, QuickActionCounts, AdmissionsPulse, AccountsPulse, ExamsPulse, StaffAndPacingPulse
 )
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 # --- 0. Executive Command Center Pulse ---
 @router.get("/executive-pulse", response_model=ExecutivePulseResponse)
@@ -292,6 +293,25 @@ async def create_admin_task(task_in: AdminTaskCreate, db: AsyncSession = Depends
         print(f"Failed to create notification for admin task: {e}")
 
     return new_task
+
+@router.delete("/tasks/{task_id}")
+async def delete_admin_task(task_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task_title = task.title
+    await db.delete(task)
+    await db.commit()
+    _add_audit_log(
+        actor_name="Administrator",
+        actor_role="admin",
+        action_type="TASK_DELETED",
+        target_entity=task_title,
+        status="VERIFIED",
+        details=f"Task #{task_id} deleted permanently by Admin."
+    )
+    return {"success": True, "message": f"Task #{task_id} deleted successfully."}
 
 @router.patch("/tasks/{task_id}", response_model=AdminTaskResponse)
 async def update_admin_task(task_id: int, task_up: AdminTaskUpdate, db: AsyncSession = Depends(get_db)):
@@ -1052,6 +1072,14 @@ async def convert_enquiry_to_student(
     payment_method = payload.payment_method if payload and payload.payment_method else "UPI"
 
     enquiry.stage = "converted"
+    _add_audit_log(
+        actor_name="Admissions Coordinator",
+        actor_role="admissions_coordinator",
+        action_type="LEAD_CONVERTED_TO_SIS",
+        target_entity=f"Enquiry #{enquiry_id} -> Student: {enquiry.student_name}",
+        status="VERIFIED",
+        details=f"Lead converted to enrolled student. Grade: {enquiry.target_grade}, Section: {section_val}, Fee: {fee_amt} ({fee_status})"
+    )
     enquiry.notes = (enquiry.notes or "") + f" | Converted to SIS ({section_val}). Admission Fee: ₹{fee_amt:,.0f} ({fee_status})"
     
     # Generate Admission Number and create Student record
@@ -1065,9 +1093,9 @@ async def convert_enquiry_to_student(
         guardian_name=enquiry.parent_name,
         guardian_phone=enquiry.phone,
         guardian_email=enquiry.email,
-        attendance_pct=100.0,
+        attendance_pct=0.0,
         bus_route_id=4,
-        academic_average_pct=85.0,
+        academic_average_pct=0.0,
         status="Active"
     )
     db.add(new_student)
@@ -1349,9 +1377,9 @@ async def direct_enroll_or_forward_vip(
             guardian_name=payload.parent_name,
             guardian_phone=payload.phone,
             guardian_email=payload.email or "parent@edu360.internal",
-            attendance_pct=100.0,
+            attendance_pct=0.0,
             bus_route_id=4,
-            academic_average_pct=85.0,
+            academic_average_pct=0.0,
             status="Active"
         )
         db.add(new_student)
@@ -1554,6 +1582,117 @@ async def delete_official_document(doc_id: int, db: AsyncSession = Depends(get_d
     await db.delete(doc)
     await db.commit()
     return {"success": True, "message": "Document deleted by Administrator"}
+
+@router.get("/leads/{enquiry_id}/tc-remaining")
+async def get_lead_tc_remaining(enquiry_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Exposes 30-day provisional tenure countdown for pending Transfer Certificate (TC).
+    Calculates remaining days based on enquiry conversion / creation date.
+    """
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    enquiry = result.scalars().first()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    # Check for provisional TC document under linked student or enquiry
+    clean_student = "".join(ch for ch in enquiry.student_name.lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
+    st_res = await db.execute(select(Student).where(Student.name.ilike(enquiry.student_name)))
+    student = st_res.scalars().first()
+
+    base_date = enquiry.created_at or datetime.datetime.utcnow()
+    total_tenure_days = 30
+    elapsed_days = (datetime.datetime.utcnow() - base_date).days
+    days_remaining = max(0, total_tenure_days - elapsed_days)
+    is_overdue = elapsed_days > total_tenure_days
+
+    tc_doc_status = "Pending Submission"
+    if student:
+        doc_res = await db.execute(
+            select(OfficialDocument).where(
+                OfficialDocument.student_id == student.id,
+                OfficialDocument.doc_type == "Transfer Certificate"
+            )
+        )
+        tc_doc = doc_res.scalars().first()
+        if tc_doc:
+            tc_doc_status = tc_doc.status
+
+    return {
+        "enquiry_id": enquiry_id,
+        "student_name": enquiry.student_name,
+        "tenure_days_total": total_tenure_days,
+        "days_elapsed": elapsed_days,
+        "days_remaining": days_remaining,
+        "is_overdue": is_overdue,
+        "tc_status": tc_doc_status,
+        "deadline_date": (base_date + datetime.timedelta(days=total_tenure_days)).strftime("%d %b %Y")
+    }
+
+class BulkDocumentItem(BaseModel):
+    student_id: int
+    title: str
+    doc_type: str
+    file_url: str
+
+class BulkImportRequest(BaseModel):
+    documents: list[BulkDocumentItem]
+
+@router.post("/documents/bulk-import")
+async def bulk_import_official_documents(payload: BulkImportRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Bulk import official academic documents into the central SIS vault.
+    """
+    added_docs = []
+    for item in payload.documents:
+        doc = OfficialDocument(
+            student_id=item.student_id,
+            title=item.title,
+            doc_type=item.doc_type,
+            file_url=item.file_url,
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Official Vault Bulk Seal"
+        )
+        db.add(doc)
+        added_docs.append(item.title)
+
+    await db.commit()
+    _add_audit_log(
+        actor_name="Administrator",
+        actor_role="admin",
+        action_type="BULK_DOCUMENT_IMPORT",
+        target_entity=f"{len(added_docs)} Documents",
+        status="VERIFIED",
+        details=f"Bulk imported {len(added_docs)} documents into official vault."
+    )
+    return {
+        "success": True,
+        "imported_count": len(added_docs),
+        "message": f"Successfully imported {len(added_docs)} documents to vault."
+    }
+
+@router.get("/documents/bulk-export")
+async def bulk_export_official_documents(doc_type: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """
+    Export catalog of official verified documents for compliance audits.
+    """
+    query = select(OfficialDocument)
+    if doc_type:
+        query = query.where(OfficialDocument.doc_type == doc_type)
+    result = await db.execute(query.order_by(OfficialDocument.id.desc()))
+    docs = result.scalars().all()
+
+    csv_rows = ["id,student_id,title,doc_type,file_url,status,verified_stamp,upload_date"]
+    for d in docs:
+        csv_rows.append(f'"{d.id}","{d.student_id}","{d.title}","{d.doc_type}","{d.file_url}","{d.status}","{d.verified_stamp}","{d.upload_date}"')
+
+    return Response(
+        content="\n".join(csv_rows),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="sis_vault_documents_export.csv"'}
+    )
 
 # --- 5. Exit Clearance & Dual Signature Verification ---
 @router.get("/exit-clearances", response_model=list[ExitClearanceResponse])
@@ -2252,6 +2391,7 @@ _security_audit_logs = [
 ]
 
 def _add_audit_log(actor_name: str, actor_role: str, action_type: str, target_entity: str, status: str, details: str):
+    """Add to in-memory list (legacy) AND queue for DB persistence."""
     new_log = {
         "id": len(_security_audit_logs) + 1,
         "timestamp": f"Today, {datetime.datetime.utcnow().strftime('%I:%M %p')}",
@@ -2264,6 +2404,24 @@ def _add_audit_log(actor_name: str, actor_role: str, action_type: str, target_en
         "details": details
     }
     _security_audit_logs.insert(0, new_log)
+
+
+async def persist_audit_log(db: AsyncSession, actor_name: str, actor_role: str, action_type: str, target_entity: str, status: str, details: str):
+    """Persist an audit log entry to the PostgreSQL security_audit_logs table."""
+    _add_audit_log(actor_name, actor_role, action_type, target_entity, status, details)
+    try:
+        log_entry = SecurityAuditLog(
+            actor_name=actor_name,
+            actor_role=actor_role,
+            action_type=action_type,
+            target_entity=target_entity,
+            status=status,
+            details=details
+        )
+        db.add(log_entry)
+        await db.flush()
+    except Exception as e:
+        print(f"[AUDIT] Failed to persist audit log: {e}")
 
 @router.get("/audit-logs", response_model=list[SecurityAuditLogResponse])
 async def list_security_audit_logs():

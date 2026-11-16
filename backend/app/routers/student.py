@@ -1,5 +1,6 @@
 import datetime
 from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -8,8 +9,9 @@ from app.models.models import (
     LiveClass, ClassRecording, Homework, HomeworkSubmission,
     StudentPortfolio, OfficialDocument, Student, BusRoute,
     StudentGamification, DailyQuest, MagicBoosterChest,
-    BacklogEvent, FocusTable
+    BacklogEvent, FocusTable, SecurityAuditLog
 )
+from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
     LiveClassResponse, ClassRecordingResponse,
     HomeworkResponse, HomeworkSubmissionResponse, HomeworkCreate,
@@ -48,18 +50,47 @@ async def list_student_homework(
     task_type: Optional[str] = None,
     status: Optional[str] = None,
     date: Optional[str] = None,
+    student_id: Optional[int] = None,
+    class_name: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     stmt = select(Homework)
     if task_type:
         stmt = stmt.where(Homework.task_type == task_type)
-    if status:
+    if status and not student_id:
         stmt = stmt.where(Homework.status == status)
     if date:
         stmt = stmt.where(Homework.due_date == date)
+    if class_name:
+        stmt = stmt.where(Homework.class_name.ilike(f"%{class_name}%"))
     stmt = stmt.order_by(Homework.id.desc())
     result = await db.execute(stmt)
-    return result.scalars().all()
+    all_hw = list(result.scalars().all())
+
+    if student_id:
+        st_res = await db.execute(select(Student).where(Student.id == student_id))
+        st = st_res.scalars().first()
+        if st:
+            # Newly enrolled students (non-demo) start with a clean slate; do not leak past term homework
+            if st.id != 1:
+                return []
+            
+            from app.services.backlog_engine import is_homework_for_student
+            all_hw = [h for h in all_hw if is_homework_for_student(h.class_name, st.class_name, st.section)]
+            
+            # Map student submission statuses to homework items
+            subs_res = await db.execute(select(HomeworkSubmission).where(HomeworkSubmission.student_id == student_id))
+            subs_map = {s.homework_id: s for s in subs_res.scalars().all()}
+            for h in all_hw:
+                sub = subs_map.get(h.id)
+                if sub:
+                    h.status = sub.status.upper() if sub.status else "PENDING"
+                else:
+                    h.status = "PENDING"
+            
+            if status:
+                all_hw = [h for h in all_hw if h.status.lower() == status.lower()]
+    return all_hw
 
 @router.post("/homework", response_model=HomeworkResponse)
 async def create_student_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
@@ -119,6 +150,7 @@ async def submit_homework(
         existing.late_submission = is_late
         existing.is_backlog = False
         target_sub = existing
+        student_name = existing.student_name or "Student"
     else:
         st_res = await db.execute(select(Student).where(Student.id == student_id))
         st = st_res.scalars().first()
@@ -149,6 +181,37 @@ async def submit_homework(
         ev.late_submission = True
         ev.notes = f"Late submission uploaded on {current_time.strftime('%d %b %Y, %I:%M %p')}. Retained in backlog history for parent/teacher review."
 
+    # Statutory Security & Compliance Audit Log
+    sub_audit = SecurityAuditLog(
+        actor_name=student_name,
+        actor_role="STUDENT",
+        action_type="HOMEWORK_SUBMISSION",
+        target_entity=f"Homework #{homework_id} - Student #{student_id} ({student_name})",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Worksheet submitted. Late: {is_late}. Cutoff check: {hw.due_date if hw else ''} {hw.due_time if hw else ''}."
+    )
+    db.add(sub_audit)
+
+    # Dispatch notification to Teacher SpeedGrader
+    try:
+        status_label = "Late Submission" if is_late else "New Submission"
+        hw_title = hw.title if hw else "Homework Worksheet"
+        await create_system_notification(
+            db=db,
+            recipient_role="TEACHER",
+            sender_name=student_name,
+            sender_role="STUDENT",
+            title=f"{status_label}: {hw_title}",
+            message=f"{student_name} submitted worksheet for {hw_title}. Ready for grading.",
+            notification_type="HOMEWORK_SUBMISSION",
+            priority="HIGH" if is_late else "NORMAL",
+            action_url="/teacher?tab=speedgrader",
+            metadata_dict={"student_id": student_id, "homework_id": homework_id, "is_late": is_late}
+        )
+    except Exception as ne:
+        print(f"Warning: could not create teacher notification for homework submission: {ne}")
+
     await db.commit()
     await db.refresh(target_sub)
 
@@ -171,6 +234,31 @@ async def get_student_backlog_events(student_id: int, db: AsyncSession = Depends
 @router.post("/check-backlogs")
 async def run_manual_backlog_check(db: AsyncSession = Depends(get_db)):
     return await BacklogEngine.evaluate_backlogs(db)
+
+# --- AI Socratic Doubt Tutor (Gemini 1.5 + Chapter Fallback Bank) ---
+class StudentAITutorRequest(BaseModel):
+    student_id: int
+    question_text: str
+    day_num: Optional[int] = 3
+    student_attempt: Optional[str] = None
+    attempt_count: Optional[int] = 1
+    chapter: Optional[str] = "Linear Equations in One Variable"
+
+@router.post("/ai-tutor")
+async def student_ai_socratic_tutor(req: StudentAITutorRequest):
+    """
+    CBSE Secondary AI Socratic Doubt Tutor (Google Gemini + Chapter Hint Bank Fallback):
+    Guides secondary students step-by-step through mathematical problems without giving
+    direct solutions, promoting cognitive discovery and critical thinking.
+    """
+    from app.services.remedial_service import RemedialService
+    return await RemedialService.get_socratic_hint(
+        student_id=req.student_id,
+        day_num=req.day_num or 3,
+        question_text=req.question_text,
+        student_attempt=req.student_attempt,
+        attempt_count=req.attempt_count or 1
+    )
 
 # --- 3. Side-by-Side Portfolio ---
 @router.get("/portfolio/{student_id}", response_model=list[StudentPortfolioResponse])
