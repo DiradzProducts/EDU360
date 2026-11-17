@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func, and_
 from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
@@ -23,8 +23,9 @@ from app.schemas.schemas import (
 )
 from app.services.backlog_engine import BacklogEngine
 from app.services.gemini_study_assistant import consult_gemini_study_assistant
+from app.core.rbac import require_role
 
-router = APIRouter(prefix="/api/parent", tags=["parent"])
+router = APIRouter(prefix="/api/parent", tags=["parent"], dependencies=[Depends(require_role(["parent", "admin", "principal", "super_admin", "teacher"]))])
 
 # --- AI Parent Study Assistant (Google Gemini 1.5 Flash + BacklogEngine) ---
 @router.post("/ai-study-assistant", response_model=AIStudyAssistantResponse)
@@ -285,23 +286,89 @@ async def get_child_homework_submissions(student_id: int, db: AsyncSession = Dep
 @router.get("/today-homework/{student_id}", response_model=list[HomeworkResponse])
 async def get_child_today_homework(student_id: int, db: AsyncSession = Depends(get_db)):
     """
-    Retrieve current-day homework tasks only to keep the parent profile clean and uncluttered.
+    Retrieve current-day homework tasks projected with the student's actual submission status via SQLAlchemy OUTER JOIN.
     """
     s_res = await db.execute(select(Student).where(Student.id == student_id))
     student = s_res.scalars().first()
     if not student:
         return []
 
-    today_str = "2026-10-18"
+    from app.core.clock import ClockProvider
+    today_str = ClockProvider.get_current_date_str()
     from app.services.backlog_engine import is_homework_for_student
-    result = await db.execute(select(Homework).where(Homework.due_date == today_str))
-    items = result.scalars().all()
-    matching = [h for h in items if is_homework_for_student(h.class_name, student.class_name, student.section)]
+    
+    eff_status = func.upper(func.coalesce(HomeworkSubmission.status, "PENDING"))
+    stmt = (
+        select(Homework, eff_status.label("effective_status"))
+        .outerjoin(
+            HomeworkSubmission,
+            and_(
+                HomeworkSubmission.homework_id == Homework.id,
+                HomeworkSubmission.student_id == student_id
+            )
+        )
+        .where(Homework.due_date == today_str)
+        .order_by(Homework.id.desc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    matching = []
+    for h, eff_st in rows:
+        if is_homework_for_student(h.class_name, student.class_name, student.section):
+            matching.append({
+                "id": h.id,
+                "title": h.title,
+                "subject": h.subject,
+                "class_name": h.class_name,
+                "description": h.description,
+                "task_type": h.task_type,
+                "due_date": h.due_date,
+                "due_time": h.due_time,
+                "status": eff_st,
+                "assigned_date": h.assigned_date,
+                "teacher_id": h.teacher_id,
+                "teacher_name": h.teacher_name,
+                "max_marks": h.max_marks,
+                "resource_url": h.resource_url,
+                "weightage": h.weightage,
+                "progress_pct": h.progress_pct or 0.0
+            })
     
     # For demo student 1, if no matches today, allow fallback; for any other student return matching or empty
     if not matching and student_id == 1:
-        fallback_res = await db.execute(select(Homework).where(Homework.task_type == "DAILY_HOMEWORK").order_by(Homework.id.desc()).limit(2))
-        matching = fallback_res.scalars().all()
+        fallback_stmt = (
+            select(Homework, eff_status.label("effective_status"))
+            .outerjoin(
+                HomeworkSubmission,
+                and_(
+                    HomeworkSubmission.homework_id == Homework.id,
+                    HomeworkSubmission.student_id == student_id
+                )
+            )
+            .where(Homework.task_type == "DAILY_HOMEWORK")
+            .order_by(Homework.id.desc())
+            .limit(2)
+        )
+        fallback_res = await db.execute(fallback_stmt)
+        for h, eff_st in fallback_res.all():
+            matching.append({
+                "id": h.id,
+                "title": h.title,
+                "subject": h.subject,
+                "class_name": h.class_name,
+                "description": h.description,
+                "task_type": h.task_type,
+                "due_date": h.due_date,
+                "due_time": h.due_time,
+                "status": eff_st,
+                "assigned_date": h.assigned_date,
+                "teacher_id": h.teacher_id,
+                "teacher_name": h.teacher_name,
+                "max_marks": h.max_marks,
+                "resource_url": h.resource_url,
+                "weightage": h.weightage,
+                "progress_pct": h.progress_pct or 0.0
+            })
     return matching
 
 @router.get("/academic-compliance/{student_id}", response_model=AcademicComplianceResponse)
@@ -378,10 +445,12 @@ async def get_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/fees/{milestone_id}/pay", response_model=FeeMilestoneResponse)
 async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(FeeMilestone).where(FeeMilestone.id == milestone_id))
+    result = await db.execute(select(FeeMilestone).where(FeeMilestone.id == milestone_id).with_for_update())
     milestone = result.scalars().first()
     if not milestone:
         raise HTTPException(status_code=404, detail="Fee milestone not found")
+    if milestone.status == "Paid":
+        raise HTTPException(status_code=409, detail="This fee milestone has already been paid and settled.")
     
     receipt_num = f"REC-2026-FEE-{milestone_id + 5821}"
     paid_time_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
@@ -522,6 +591,19 @@ async def dispatch_parent_fee_whatsapp(req: WhatsAppFeeDispatchRequest, db: Asyn
 # --- 5. Leave Request Application ---
 @router.post("/leave-requests", response_model=LeaveRequestResponse)
 async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depends(get_db)):
+    # Strict CBSE attachment extension whitelist (PDF, PNG, JPG, JPEG, WEBP)
+    ALLOWED_LEAVE_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+    for target in [req.attachment_name, req.attachment_url]:
+        if target:
+            clean_target = target.split("?")[0].strip()
+            import os
+            ext = os.path.splitext(clean_target)[1].lower()
+            if ext and ext not in ALLOWED_LEAVE_EXTENSIONS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid medical leave attachment extension '{ext}'. Only authenticated documents (PDF, PNG, JPG, WEBP) are accepted."
+                )
+
     new_lr = LeaveRequest(
         student_id=req.student_id,
         student_name=req.student_name,
@@ -614,7 +696,11 @@ async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: As
     }
 
 # --- 7. Dual-Mode Parent-Teacher Connection & Sliding PTM Engine ---
-from app.routers.teacher import _ptm_slots, _ptm_event_config, _parent_teacher_notes
+from app.routers.teacher import (
+    _ptm_slots, _ptm_event_config, _parent_teacher_notes,
+    _slot_to_dict, _ptn_to_dict, _ensure_ptm_slots_seeded, _ensure_parent_notes_seeded
+)
+from app.models.models import PTMSlot, ParentTeacherNote
 from app.schemas.schemas import (
     PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest,
     PTMSlotCancelRequest,
@@ -628,12 +714,11 @@ async def get_parent_ptm_event_config():
 
 @router.get("/ptm/slots", response_model=list[PTMSlotResponse])
 async def get_parent_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
     try:
-        from app.models.models import PTMSlot
-        from app.routers.teacher import _slot_to_dict
+        from sqlalchemy import or_
         stmt = select(PTMSlot)
         if scope and scope != "ALL":
-            from sqlalchemy import or_
             stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
         stmt = stmt.order_by(PTMSlot.start_time.asc())
         res = await db.execute(stmt)
@@ -647,7 +732,24 @@ async def get_parent_ptm_slots(scope: str = None, db: AsyncSession = Depends(get
     return _ptm_slots
 
 @router.post("/ptm/slots/{slot_id}/hold")
-async def parent_hold_ptm_slot(slot_id: str):
+async def parent_hold_ptm_slot(slot_id: str, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id).with_for_update())
+        slot = res.scalars().first()
+        if slot:
+            if slot.status != "AVAILABLE":
+                raise HTTPException(status_code=400, detail="Slot is not available")
+            slot.status = "HELD"
+            await db.commit()
+            for s in _ptm_slots:
+                if s["id"] == slot_id:
+                    s["status"] = "HELD"
+            return {"success": True, "message": "Slot held for 5 minutes", "slot": _slot_to_dict(slot)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error holding PTMSlot in parent: {e}")
     for slot in _ptm_slots:
         if slot["id"] == slot_id:
             if slot["status"] != "AVAILABLE":
@@ -658,6 +760,51 @@ async def parent_hold_ptm_slot(slot_id: str):
 
 @router.post("/ptm/slots/book", response_model=PTMSlotResponse)
 async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
+    meeting_url = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if not db_slot:
+            raise HTTPException(status_code=404, detail="PTM slot not found")
+        if db_slot.status == "BOOKED":
+            raise HTTPException(status_code=409, detail="This PTM slot has already been booked by another parent.")
+        if db_slot:
+            db_slot.status = "BOOKED"
+            db_slot.booked_student_id = req.booked_student_id
+            db_slot.booked_student_name = req.booked_student_name
+            db_slot.booked_class = req.booked_class
+            db_slot.booked_parent_id = req.booked_parent_id
+            db_slot.booked_parent_name = req.booked_parent_name
+            db_slot.interaction_scope = req.interaction_scope
+            db_slot.subject_name = req.subject_name
+            db_slot.is_sibling_combo = req.is_sibling_combo
+            db_slot.sibling_student_id = req.sibling_student_id
+            db_slot.sibling_student_name = req.sibling_student_name
+            db_slot.meeting_url = meeting_url
+            db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
+            await db.commit()
+
+            # Closed-Loop Telemetry: Auto-update Focus Table if agenda items selected
+            if req.focus_table_agenda and req.booked_student_id:
+                ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.booked_student_id))
+                ft = ft_res.scalars().first()
+                if ft:
+                    agenda_str = ", ".join(req.focus_table_agenda)
+                    ft.teacher_action = f"[PTM Agenda Booked for 24 Oct]: {agenda_str}"
+                    ft.updated_at = datetime.datetime.utcnow()
+                    await db.commit()
+
+            for slot in _ptm_slots:
+                if slot["id"] == req.slot_id:
+                    slot.update(_slot_to_dict(db_slot))
+            return _slot_to_dict(db_slot)
+    except HTTPException:
+        raise
+    except Exception as dbe:
+        await db.rollback()
+        print(f"DB slot persist error in parent: {dbe}")
+
     for slot in _ptm_slots:
         if slot["id"] == req.slot_id:
             slot["status"] = "BOOKED"
@@ -672,41 +819,7 @@ async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depen
             slot["sibling_student_id"] = req.sibling_student_id
             slot["sibling_student_name"] = req.sibling_student_name
             slot["focus_table_agenda"] = req.focus_table_agenda or []
-            slot["meeting_url"] = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
-            # DB Persistence
-            try:
-                from app.models.models import PTMSlot
-                import json
-                db_slot_res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id))
-                db_slot = db_slot_res.scalars().first()
-                if db_slot:
-                    db_slot.status = "BOOKED"
-                    db_slot.booked_student_id = req.booked_student_id
-                    db_slot.booked_student_name = req.booked_student_name
-                    db_slot.booked_class = req.booked_class
-                    db_slot.booked_parent_id = req.booked_parent_id
-                    db_slot.booked_parent_name = req.booked_parent_name
-                    db_slot.interaction_scope = req.interaction_scope
-                    db_slot.subject_name = req.subject_name
-                    db_slot.is_sibling_combo = req.is_sibling_combo
-                    db_slot.sibling_student_id = req.sibling_student_id
-                    db_slot.sibling_student_name = req.sibling_student_name
-                    db_slot.meeting_url = slot["meeting_url"]
-                    db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
-                    await db.commit()
-            except Exception as dbe:
-                print(f"DB slot persist error in parent: {dbe}")
-
-            # Closed-Loop Telemetry: Auto-update Focus Table if agenda items selected
-            if req.focus_table_agenda and req.booked_student_id:
-                ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.booked_student_id))
-                ft = ft_res.scalars().first()
-                if ft:
-                    agenda_str = ", ".join(req.focus_table_agenda)
-                    ft.teacher_action = f"[PTM Agenda Booked for 24 Oct]: {agenda_str}"
-                    ft.updated_at = datetime.datetime.utcnow()
-                    await db.commit()
-
+            slot["meeting_url"] = meeting_url
             return slot
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
@@ -716,6 +829,41 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
     Parent cancels their booked PTM conference slot.
     Immediately frees the slot (status = AVAILABLE) for other parents to book.
     """
+    await _ensure_ptm_slots_seeded(db)
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if not db_slot:
+            raise HTTPException(status_code=404, detail="PTM slot not found")
+        if db_slot:
+            db_slot.status = "AVAILABLE"
+            db_slot.cancellation_reason = req.cancellation_reason
+            db_slot.cancelled_by = "PARENT"
+            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat()
+            db_slot.booked_student_id = None
+            db_slot.booked_student_name = None
+            db_slot.booked_class = None
+            db_slot.booked_parent_id = None
+            db_slot.booked_parent_name = None
+            db_slot.meeting_url = None
+            db_slot.focus_table_agenda = "[]"
+            db_slot.is_sibling_combo = False
+            db_slot.sibling_student_id = None
+            db_slot.sibling_student_name = None
+            await db.commit()
+
+            for s in _ptm_slots:
+                if s["id"] == slot_id:
+                    s.update(_slot_to_dict(db_slot))
+
+            return {
+                "success": True,
+                "message": "Your PTM booking has been cancelled and reopened.",
+                "slot": _slot_to_dict(db_slot)
+            }
+    except Exception as e:
+        print(f"Error cancelling PTMSlot in parent: {e}")
+
     for slot in _ptm_slots:
         if slot["id"] == slot_id:
             slot["status"] = "AVAILABLE"
@@ -741,7 +889,16 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
 @router.get("/notes/{student_id}", response_model=list[ParentTeacherNoteResponse])
-async def get_parent_student_notes(student_id: int):
+async def get_parent_student_notes(student_id: int, db: AsyncSession = Depends(get_db)):
+    await _ensure_parent_notes_seeded(db)
+    try:
+        stmt = select(ParentTeacherNote).where(ParentTeacherNote.student_id == student_id).order_by(ParentTeacherNote.recorded_at.desc())
+        res = await db.execute(stmt)
+        notes = res.scalars().all()
+        if notes:
+            return [_ptn_to_dict(n) for n in notes]
+    except Exception as e:
+        print(f"Error querying ParentTeacherNote in parent: {e}")
     return [n for n in _parent_teacher_notes if n["student_id"] == student_id]
 
 @router.post("/notes", response_model=ParentTeacherNoteResponse)
@@ -768,6 +925,33 @@ async def create_parent_note(req: ParentTeacherNoteCreate, db: AsyncSession = De
         "is_focus_table_evidence": req.is_focus_table_evidence,
         "focus_concept_tag": req.focus_concept_tag
     }
+
+    try:
+        db_n = ParentTeacherNote(
+            id=note_id,
+            interaction_scope=req.interaction_scope,
+            student_id=req.student_id,
+            student_name=req.student_name,
+            student_class=req.student_class,
+            parent_id=req.parent_id,
+            parent_name=req.parent_name,
+            parent_phone=req.parent_phone,
+            teacher_id=req.teacher_id,
+            teacher_name=req.teacher_name,
+            subject_id=req.subject_id,
+            subject_name=req.subject_name,
+            homeroom_teacher_id=req.homeroom_teacher_id,
+            note_type=req.note_type,
+            content=req.content,
+            created_at=created_at_str,
+            is_focus_table_evidence=req.is_focus_table_evidence,
+            focus_concept_tag=req.focus_concept_tag
+        )
+        db.add(db_n)
+        await db.commit()
+    except Exception as e:
+        print(f"Error persisting ParentTeacherNote in parent: {e}")
+
     _parent_teacher_notes.insert(0, new_note)
 
     # Closed-loop telemetry to Focus Table if flagged as evidence

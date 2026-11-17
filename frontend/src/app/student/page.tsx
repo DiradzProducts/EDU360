@@ -57,6 +57,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { ClockProvider } from '@/lib/clock';
 import {
   ClassRecording,
   StudentPortfolio,
@@ -337,6 +338,7 @@ function StandardStudentDashboard() {
       } catch {}
     }
     checkLiveStatus();
+    ClockProvider.syncWithBackend().catch(() => {});
     const iv = setInterval(checkLiveStatus, 3000);
     return () => clearInterval(iv);
   }, []);
@@ -345,7 +347,7 @@ function StandardStudentDashboard() {
   const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
   const [studentHomeworkList, setStudentHomeworkList] = useState<Homework[]>([]);
   const [homeworkWorkstream, setHomeworkWorkstream] = useState<'daily' | 'assignments'>('daily');
-  const [selectedDateKey, setSelectedDateKey] = useState<string>('2026-10-17'); // Saturday (Today)
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(() => ClockProvider.getTodayKey());
   const [showAllDates, setShowAllDates] = useState(false);
   const [homeworkFilter, setHomeworkFilter] = useState<'all' | 'pending' | 'submitted_graded' | 'backlog'>('all');
   const [homeworkSubjectFilter, setHomeworkSubjectFilter] = useState('all');
@@ -365,7 +367,7 @@ function StandardStudentDashboard() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskSubject, setNewTaskSubject] = useState('Mathematics');
   const [newTaskType, setNewTaskType] = useState<TaskType>('DAILY_HOMEWORK');
-  const [newTaskDueDate, setNewTaskDueDate] = useState('2026-10-18');
+  const [newTaskDueDate, setNewTaskDueDate] = useState(() => ClockProvider.getTodayKey());
   const [newTaskDueTime, setNewTaskDueTime] = useState('17:00');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskMarks, setNewTaskMarks] = useState(20);
@@ -611,7 +613,7 @@ function StandardStudentDashboard() {
           api.getAcademicCompliance(currentStudentId),
           api.getReportCards({ student_id: currentStudentId }),
           api.getReExamRequests(currentStudentId),
-          api.getExamSchedules()
+          api.getExamSchedules(user?.class_name, user?.section)
         ]);
         if (schedRes && Array.isArray(schedRes)) {
           setStudentExamSchedules(schedRes);
@@ -644,8 +646,8 @@ function StandardStudentDashboard() {
   // Multi-window role testing sync: automatically update schedules when Exam Coordinator creates new slots in other windows
   useEffect(() => {
     const syncSchedulesFromStorage = () => {
-      api.getExamSchedules().then(res => {
-        if (res && Array.isArray(res) && res.length > 0) {
+      api.getExamSchedules(user?.class_name, user?.section).then(res => {
+        if (res && Array.isArray(res)) {
           setStudentExamSchedules(res);
         }
       }).catch(() => {});
@@ -1096,7 +1098,7 @@ function StandardStudentDashboard() {
                       return null;
                     }
                     const pendingCount = studentHomeworkList.filter(t => t.status === 'PENDING').length;
-                    const overdueCount = studentHomeworkList.filter(t => t.status === 'BACKLOG' || (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING')).length;
+                    const overdueCount = studentHomeworkList.filter(t => ClockProvider.isOverdue(t.due_date, t.status)).length;
                     if (overdueCount > 0) {
                       return (
                         <span className="rounded-full bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200/60 dark:border-red-800/60 px-1.5 py-0.5 text-[9px] font-bold">
@@ -2072,6 +2074,9 @@ function StandardStudentDashboard() {
           {/* VIEW: HOMEWORK & SUBMISSIONS (SCALABLE MULTI-DAY WORKSPACE) */}
           {/* ===================================================== */}
           {activeNav === 'homework' && (() => {
+            const CURRENT_WEEK_DAYS = ClockProvider.getWeekDays();
+            const todayKey = ClockProvider.getTodayKey();
+
             const DEFAULT_FALLBACK_TASKS: Homework[] = [
               {
                 id: 1,
@@ -2080,8 +2085,8 @@ function StandardStudentDashboard() {
                 class_name: 'Class 8-A',
                 description: 'Complete Textbook Exercises 4.2 (Questions 1 to 10). Write out solutions with clear factorization steps and drop below.',
                 task_type: 'DAILY_HOMEWORK',
-                assigned_date: '2026-10-12',
-                due_date: '2026-10-15',
+                assigned_date: CURRENT_WEEK_DAYS[0]?.dateKey || '2026-10-12',
+                due_date: CURRENT_WEEK_DAYS[1]?.dateKey || '2026-10-13',
                 due_time: '17:00',
                 status: 'BACKLOG',
                 max_marks: 20,
@@ -2096,8 +2101,8 @@ function StandardStudentDashboard() {
                 class_name: 'Class 8-A',
                 description: "Write a 300-word critical evaluation of Act IV Scene 1. Contrast Portia's argument on divine mercy against Shylock's legal bond.",
                 task_type: 'DAILY_HOMEWORK',
-                assigned_date: '2026-10-14',
-                due_date: '2026-10-18',
+                assigned_date: CURRENT_WEEK_DAYS[1]?.dateKey || '2026-10-14',
+                due_date: CURRENT_WEEK_DAYS[CURRENT_WEEK_DAYS.length - 1]?.dateKey || '2026-10-18',
                 due_time: '17:00',
                 status: 'PENDING',
                 max_marks: 15,
@@ -2112,8 +2117,8 @@ function StandardStudentDashboard() {
                 class_name: 'Class 8-A',
                 description: 'Complete balancing for 25 redox reactions, decomposition equations, and displacement reactions with stoichiometric coefficient validation.',
                 task_type: 'DAILY_HOMEWORK',
-                assigned_date: '2026-10-16',
-                due_date: '2026-10-17',
+                assigned_date: CURRENT_WEEK_DAYS[2]?.dateKey || '2026-10-16',
+                due_date: todayKey,
                 due_time: '17:00',
                 status: 'PENDING',
                 max_marks: 20,
@@ -2225,15 +2230,6 @@ function StandardStudentDashboard() {
               }
             ];
 
-            const CURRENT_WEEK_DAYS = [
-              { dayName: 'Mon', dayNum: 12, month: 'Oct', dateKey: '2026-10-12', label: '12 Oct 2026' },
-              { dayName: 'Tue', dayNum: 13, month: 'Oct', dateKey: '2026-10-13', label: '13 Oct 2026' },
-              { dayName: 'Wed', dayNum: 14, month: 'Oct', dateKey: '2026-10-14', label: '14 Oct 2026' },
-              { dayName: 'Thu', dayNum: 15, month: 'Oct', dateKey: '2026-10-15', label: '15 Oct 2026' },
-              { dayName: 'Fri', dayNum: 16, month: 'Oct', dateKey: '2026-10-16', label: '16 Oct 2026' },
-              { dayName: 'Sat', dayNum: 17, month: 'Oct', dateKey: '2026-10-17', label: '17 Oct 2026', isToday: true }
-            ];
-
             const getSubjectBadgeStyle = (subject: string) => {
               const s = (subject || '').toLowerCase();
               if (s.includes('math')) return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/70 dark:text-blue-300 dark:border-blue-800';
@@ -2253,11 +2249,9 @@ function StandardStudentDashboard() {
             const dailyTasks = allTasks.filter(t => (t.task_type || 'DAILY_HOMEWORK') === 'DAILY_HOMEWORK');
             const assignmentTasks = allTasks.filter(t => t.task_type === 'ASSIGNMENT');
 
-            // Overall Summary Counts
+            // Overall Summary Counts using Dynamic Clock
             const dueTodayCount = isDemoStudent ? allTasks.filter(t => 
-              t.due_date === '2026-10-17' && 
-              t.status !== 'SUBMITTED' && 
-              t.status !== 'GRADED'
+              ClockProvider.isDueToday(t.due_date, t.status)
             ).length : 0;
 
             const completedCount = isDemoStudent ? allTasks.filter(t => 
@@ -2265,8 +2259,7 @@ function StandardStudentDashboard() {
             ).length : 0;
 
             const backlogCount = isDemoStudent ? allTasks.filter(t => 
-              t.status === 'BACKLOG' || 
-              (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING')
+              ClockProvider.isOverdue(t.due_date, t.status)
             ).length : 0;
 
             // Stream-specific filtered list
@@ -2278,7 +2271,7 @@ function StandardStudentDashboard() {
               if (homeworkFilter === 'pending') return item.status === 'PENDING';
               if (homeworkFilter === 'submitted_graded') return item.status === 'SUBMITTED' || item.status === 'GRADED';
               if (homeworkFilter === 'backlog') {
-                return item.status === 'BACKLOG' || (item.due_date && item.due_date < '2026-10-17' && item.status === 'PENDING');
+                return ClockProvider.isOverdue(item.due_date, item.status);
               }
               return true;
             });
@@ -2506,7 +2499,7 @@ function StandardStudentDashboard() {
                         }`}
                       >
                         <AlertTriangle className="h-3 w-3" />
-                        <span>Backlog ({currentStreamTasks.filter(t => t.status === 'BACKLOG' || (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING')).length})</span>
+                        <span>Backlog ({currentStreamTasks.filter(t => ClockProvider.isOverdue(t.due_date, t.status)).length})</span>
                       </button>
                     </div>
 
@@ -2593,7 +2586,7 @@ function StandardStudentDashboard() {
                           const isSelected = selectedDateKey === day.dateKey && !showAllDates;
                           // Find tasks associated with this day
                           const dayTasks = dailyTasks.filter(t => t.due_date === day.dateKey || t.assigned_date === day.dateKey);
-                          const hasBacklog = dayTasks.some(t => t.status === 'BACKLOG' || (t.due_date && t.due_date < '2026-10-17' && t.status === 'PENDING'));
+                          const hasBacklog = dayTasks.some(t => ClockProvider.isOverdue(t.due_date, t.status));
                           const hasPending = dayTasks.some(t => t.status === 'PENDING');
                           const hasCompleted = dayTasks.some(t => t.status === 'SUBMITTED' || t.status === 'GRADED');
 
@@ -2689,19 +2682,19 @@ function StandardStudentDashboard() {
                         </p>
                         <button
                           onClick={() => {
-                            setSelectedDateKey('2026-10-17');
+                            setSelectedDateKey(ClockProvider.getTodayKey());
                             setShowAllDates(false);
                           }}
                           className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 transition-all cursor-pointer"
                         >
-                          Jump to Today&apos;s Tasks (17 Oct)
+                          Jump to Today&apos;s Tasks ({ClockProvider.formatDateLabel(ClockProvider.getNow())})
                         </button>
                       </div>
                     ) : (
                       <div className={homeworkViewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'space-y-4'}>
                         {finalTasksList.map((task) => {
-                          const isBacklog = task.status === 'BACKLOG' || (task.due_date && task.due_date < '2026-10-17' && task.status === 'PENDING');
-                          const isDueToday = task.due_date === '2026-10-17' && task.status === 'PENDING';
+                          const isBacklog = ClockProvider.isOverdue(task.due_date, task.status);
+                          const isDueToday = ClockProvider.isDueToday(task.due_date, task.status);
                           const isSubmitted = task.status === 'SUBMITTED';
                           const isGraded = task.status === 'GRADED';
 
@@ -3216,66 +3209,137 @@ function StandardStudentDashboard() {
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      /* State A: Not Started / Active Exam Room */
-                      <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="relative flex h-2.5 w-2.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                            </span>
-                            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                              {studentExamSchedules[0]?.exam_mode === 'MODE_HYBRID_SCAN'
-                                ? '📝 Hybrid Scan & Upload Examination'
-                                : studentExamSchedules[0]?.exam_mode === 'MODE_OFFLINE'
-                                ? '🏢 Physical Hall Examination'
-                                : '💻 Live CBT Examination Portal'}
-                            </span>
-                            {studentExamSchedules.length > 0 && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                {studentExamSchedules[0].exam_mode === 'MODE_HYBRID_SCAN' ? 'Hybrid OCR' : studentExamSchedules[0].exam_mode || 'MODE_CBT'}
+                    ) : (() => {
+                      const activeLiveExam = studentExamSchedules.find(s => {
+                        if (s.lifecycle_status === 'LIVE') return true;
+                        if (isDemoStudent && (s.exam_date?.toLowerCase().includes('today') || s.exam_date?.toLowerCase().includes('live'))) return true;
+                        return false;
+                      });
+                      const nextUpcomingExam = studentExamSchedules.find(s => {
+                        if (s === activeLiveExam) return false;
+                        if (s.lifecycle_status === 'UPCOMING') return true;
+                        if (s.lifecycle_status !== 'CONCLUDED') return true;
+                        return false;
+                      });
+
+                      if (activeLiveExam) {
+                        return (
+                          /* State A1: LIVE ACTIVE EXAM */
+                          <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="relative flex h-2.5 w-2.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </span>
+                                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                                  {activeLiveExam.exam_mode === 'MODE_HYBRID_SCAN'
+                                    ? '📝 Hybrid Scan & Upload Examination (Live Now)'
+                                    : activeLiveExam.exam_mode === 'MODE_OFFLINE'
+                                    ? '🏢 Physical Hall Examination'
+                                    : '💻 Live CBT Examination Portal (Active)'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  {activeLiveExam.exam_mode === 'MODE_HYBRID_SCAN' ? 'Hybrid OCR' : activeLiveExam.exam_mode || 'MODE_CBT'}
+                                </span>
+                              </div>
+                              <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                                Active Test: {activeLiveExam.title}
+                              </h3>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Subject: {activeLiveExam.subject} • Hall: {activeLiveExam.hall_name || 'Virtual Room'} • {activeLiveExam.exam_date} ({activeLiveExam.start_time} - {activeLiveExam.end_time}) • Chief Invigilator: {activeLiveExam.chief_invigilator_name || 'Assigned Faculty'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const targetMode = activeLiveExam.exam_mode === 'MODE_CBT' ? 'MODE_CBT' : 'MODE_HYBRID_SCAN';
+                                const prompt = activeLiveExam.question_paper_title
+                                  ? `Official CBSE Board Timetable Exam: ${activeLiveExam.title}. Question Reference: ${activeLiveExam.question_paper_title}. Step-wise handwritten working required on physical paper booklet.`
+                                  : 'Official CBSE Assessment: Solve questions on physical paper booklet under active webcam/YOLO proctoring. Verify and upload final scan with session token.';
+                                handleLaunchExam(
+                                  activeLiveExam.subject || 'Mathematics',
+                                  activeLiveExam.title || 'Term 1 Hybrid Proctored Assessment',
+                                  activeLiveExam.duration_minutes || 180,
+                                  prompt,
+                                  100,
+                                  targetMode
+                                );
+                              }}
+                              className="shrink-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-5 py-3 shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
                               </span>
-                            )}
+                              <Play className="h-3.5 w-3.5 fill-current" />
+                              <span>Join Proctored Exam Room</span>
+                            </button>
                           </div>
-                          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                            {studentExamSchedules.length > 0 
-                              ? `Active Test: ${studentExamSchedules[0].title}`
-                              : 'Active Online Test: Mathematics Quiz (20 mins, 15 MCQs)'}
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {studentExamSchedules.length > 0
-                              ? `Subject: ${studentExamSchedules[0].subject} • Hall: ${studentExamSchedules[0].hall_name || 'Virtual Room'} • ${studentExamSchedules[0].exam_date} (${studentExamSchedules[0].start_time} - ${studentExamSchedules[0].end_time}) • Chief Invigilator: ${studentExamSchedules[0].chief_invigilator_name || 'Assigned Faculty'}`
-                              : 'Topic: Quadratic Equations & Polynomials • Window closes at 05:00 PM'}
-                          </p>
+                        );
+                      }
+
+                      if (nextUpcomingExam) {
+                        return (
+                          /* State A2: UPCOMING SCHEDULED EXAM */
+                          <div className="rounded-2xl border border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-transparent dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-900 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                                  🕒 Upcoming Examination
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                                  {nextUpcomingExam.exam_date}
+                                </span>
+                              </div>
+                              <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                                {nextUpcomingExam.title}
+                              </h3>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Subject: {nextUpcomingExam.subject} • Hall: {nextUpcomingExam.hall_name || 'Examination Hall B'} • Timing: {nextUpcomingExam.start_time} - {nextUpcomingExam.end_time} • Chief Invigilator: {nextUpcomingExam.chief_invigilator_name || 'Assigned Faculty'}
+                              </p>
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium italic">
+                                Room unlocks 10 mins before exam
+                              </span>
+                              <button
+                                onClick={handleOpenAdmitCard}
+                                className="rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs px-4 py-2.5 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              >
+                                <Award className="h-4 w-4 text-purple-600" />
+                                <span>View Admit Card</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        /* State A3: CLEAN ZERO-STATE FOR NEW STUDENTS OR NO ACTIVE EXAMS */
+                        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5">
+                            <div className="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+                              <CalendarCheck2 className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                                No Active Examinations
+                              </h3>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                There are no live exams running right now. When the examination coordinator schedules tests for your class ({user?.class_name || 'Class 8'}), they will appear here.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setExamSubTab('report_card')}
+                            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                          >
+                            View Academic Records
+                          </button>
                         </div>
-                        <button
-                          onClick={() => {
-                            const active = studentExamSchedules[0];
-                            const targetMode = active?.exam_mode === 'MODE_CBT' ? 'MODE_CBT' : 'MODE_HYBRID_SCAN';
-                            const prompt = active?.question_paper_title
-                              ? `Official CBSE Board Timetable Exam: ${active.title}. Question Reference: ${active.question_paper_title}. Step-wise handwritten working required on physical paper booklet.`
-                              : 'Official CBSE Assessment: Solve questions on physical paper booklet under active webcam/YOLO proctoring. Verify and upload final scan with session token.';
-                            handleLaunchExam(
-                              active?.subject || 'Mathematics',
-                              active?.title || 'Term 1 Hybrid Proctored Assessment',
-                              active?.duration_minutes || 180,
-                              prompt,
-                              100,
-                              targetMode
-                            );
-                          }}
-                          className="shrink-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white font-black text-xs px-5 py-3 shadow-lg shadow-purple-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
-                          </span>
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                          <span>Join Proctored Exam Room</span>
-                        </button>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Upcoming Final Exam Seating Card */}
                     {(admitCardData || isDemoStudent) && (
@@ -3438,45 +3502,65 @@ function StandardStudentDashboard() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {(studentExamSchedules.length > 0
-                            ? studentExamSchedules.map((s, idx) => ({
-                                date: s.exam_date,
-                                time: `${s.start_time} – ${s.end_time}`,
-                                code: `SUB-${101 + idx}`,
-                                subject: s.title || `${s.subject} Examination`,
-                                room: s.hall_name || 'Virtual Room A',
-                                format: s.exam_mode === 'MODE_HYBRID_SCAN' ? '📝 Descriptive & Scan' : s.exam_mode === 'MODE_OFFLINE' ? '🏢 Physical Offline Hall' : '💻 CBT Online Test',
-                                required: 'Verified ✓',
-                                mode: s.exam_mode || 'MODE_CBT'
-                              }))
-                            : [
-                                { date: '19 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '041', subject: 'Mathematics (Theory)', room: 'Hall B, Desk #A-14', format: '100 Marks Descriptive', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
-                                { date: '21 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '086', subject: 'Science (Physics, Chem, Bio)', room: 'Hall B, Desk #A-14', format: 'Theory & Practical Lab', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
-                                { date: '23 Oct 2026 (Fri)', time: '09:30 AM – 12:30 PM', code: '184', subject: 'English Language & Literature', room: 'Hall B, Desk #A-14', format: 'Descriptive & Drama Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
-                                { date: '26 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '087', subject: 'Social Science (Hist/Civ/Geo)', room: 'Hall B, Desk #A-14', format: 'Theory & Map Pointing', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
-                                { date: '28 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '085', subject: 'Second Language (Hindi)', room: 'Hall B, Desk #A-14', format: 'Grammar & Long Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
-                              ]
-                          ).map((row, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                              <td className="p-3.5 font-bold text-slate-900 dark:text-white">{row.date}</td>
-                              <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{row.time}</td>
-                              <td className="p-3.5">
-                                <span className="font-bold text-slate-900 dark:text-white block">{row.subject}</span>
-                                <span className="text-[10px] text-slate-400">Code: {row.code}</span>
-                              </td>
-                              <td className="p-3.5">
-                                <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono font-bold text-[11px] border border-blue-200 dark:border-blue-800">
-                                  {row.room}
-                                </span>
-                              </td>
-                              <td className="p-3.5 text-slate-600 dark:text-slate-300">{row.format}</td>
-                              <td className="p-3.5 text-center">
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
-                                  {row.required}
-                                </span>
+                          {studentExamSchedules.length > 0 ? (
+                            studentExamSchedules.map((s, idx) => (
+                              <tr key={s.id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                                <td className="p-3.5 font-bold text-slate-900 dark:text-white">{s.exam_date}</td>
+                                <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{s.start_time} – {s.end_time}</td>
+                                <td className="p-3.5">
+                                  <span className="font-bold text-slate-900 dark:text-white block">{s.title || `${s.subject} Examination`}</span>
+                                  <span className="text-[10px] text-slate-400">Code: SUB-{101 + idx}</span>
+                                </td>
+                                <td className="p-3.5">
+                                  <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono font-bold text-[11px] border border-blue-200 dark:border-blue-800">
+                                    {s.hall_name || 'Virtual Room A'}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                                  {s.exam_mode === 'MODE_HYBRID_SCAN' ? '📝 Descriptive & Scan' : s.exam_mode === 'MODE_OFFLINE' ? '🏢 Physical Offline Hall' : '💻 CBT Online Test'}
+                                </td>
+                                <td className="p-3.5 text-center">
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                                    Verified ✓
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          ) : isDemoStudent ? (
+                            [
+                              { date: '19 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '041', subject: 'Mathematics (Theory)', room: 'Hall B, Desk #A-14', format: '100 Marks Descriptive', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                              { date: '21 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '086', subject: 'Science (Physics, Chem, Bio)', room: 'Hall B, Desk #A-14', format: 'Theory & Practical Lab', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                              { date: '23 Oct 2026 (Fri)', time: '09:30 AM – 12:30 PM', code: '184', subject: 'English Language & Literature', room: 'Hall B, Desk #A-14', format: 'Descriptive & Drama Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                              { date: '26 Oct 2026 (Mon)', time: '09:30 AM – 12:30 PM', code: '087', subject: 'Social Science (Hist/Civ/Geo)', room: 'Hall B, Desk #A-14', format: 'Theory & Map Pointing', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                              { date: '28 Oct 2026 (Wed)', time: '09:30 AM – 12:30 PM', code: '085', subject: 'Second Language (Hindi)', room: 'Hall B, Desk #A-14', format: 'Grammar & Long Essay', required: 'Verified ✓', mode: 'MODE_OFFLINE' },
+                            ].map((row, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                                <td className="p-3.5 font-bold text-slate-900 dark:text-white">{row.date}</td>
+                                <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{row.time}</td>
+                                <td className="p-3.5">
+                                  <span className="font-bold text-slate-900 dark:text-white block">{row.subject}</span>
+                                  <span className="text-[10px] text-slate-400">Code: {row.code}</span>
+                                </td>
+                                <td className="p-3.5">
+                                  <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono font-bold text-[11px] border border-blue-200 dark:border-blue-800">
+                                    {row.room}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-slate-600 dark:text-slate-300">{row.format}</td>
+                                <td className="p-3.5 text-center">
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                                    {row.required}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-400 dark:text-slate-500">
+                                No official examinations scheduled for your class at this time.
                               </td>
                             </tr>
-                          ))}
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -5083,62 +5167,78 @@ function StandardStudentDashboard() {
           {/* ===================================================== */}
           {/* VIEW: TIMETABLE */}
           {/* ===================================================== */}
-          {activeNav === 'timetable' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                <div>
-                  <h1 className="text-xl font-bold text-slate-900">
-                    Weekly Class Timetable (Class 8-A)
-                  </h1>
-                  <p className="text-xs text-slate-500">
-                    Current Period highlighted: Period 3 Mathematics (10:30 AM – 11:15 AM)
-                  </p>
-                </div>
-                <span className="rounded-xl bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold">
-                  Session: Term 1 (Autumn 2026)
-                </span>
-              </div>
+          {activeNav === 'timetable' && (() => {
+            const daysArr = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const todayDay = daysArr[new Date().getDay()];
+            const timetableData = [
+              { day: 'Monday', p1: 'English (Ms. Adams)', p2: 'Physics (Dr. Raman)', p3: 'Mathematics (Mrs. Verma)', p4: 'Chemistry (Mrs. Sen)', p5: 'History (Ms. Roy)', p6: 'Physical Ed. (Coach Anil)' },
+              { day: 'Tuesday', p1: 'Mathematics (Mrs. Verma)', p2: 'Biology (Dr. Gupta)', p3: 'English Literature', p4: 'Geography (Ms. Roy)', p5: 'Art & Craft (Mr. Das)', p6: 'Hindi (Mrs. Trivedi)' },
+              { day: 'Wednesday', p1: 'Physics (Dr. Raman)', p2: 'Chemistry (Mrs. Sen)', p3: 'Mathematics (Mrs. Verma)', p4: 'Computer Science (Mr. Nair)', p5: 'Social Science (Ms. Roy)', p6: 'Music / Western Choir' },
+              { day: 'Thursday', p1: 'Mathematics (Mrs. Verma)', p2: 'English (Ms. Adams)', p3: 'Biology Lab (Dr. Gupta)', p4: 'Physics Lab (Dr. Raman)', p5: 'Library Reading', p6: 'Sports & Games' },
+              { day: 'Friday', p1: 'Chemistry Lab', p2: 'Mathematics (Mrs. Verma)', p3: 'Robotics & STEM Lab', p4: 'History & Civics', p5: 'English Grammar', p6: 'Club Activities' }
+            ];
 
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
-                      <th className="p-3.5">Day</th>
-                      <th className="p-3.5">P1 (08:30-09:15)</th>
-                      <th className="p-3.5">P2 (09:15-10:00)</th>
-                      <th className="p-3.5 bg-blue-50/50 text-blue-900 border-x border-blue-200">
-                        P3 (10:30-11:15) ★ LIVE
-                      </th>
-                      <th className="p-3.5">P4 (11:15-12:00)</th>
-                      <th className="p-3.5">P5 (01:00-01:45)</th>
-                      <th className="p-3.5">P6 (01:45-02:30)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {[
-                      { day: 'Monday', p1: 'English (Ms. Adams)', p2: 'Physics (Dr. Raman)', p3: 'Mathematics (Mrs. Verma)', p4: 'Chemistry (Mrs. Sen)', p5: 'History (Ms. Roy)', p6: 'Physical Ed. (Coach Anil)' },
-                      { day: 'Tuesday', p1: 'Mathematics (Mrs. Verma)', p2: 'Biology (Dr. Gupta)', p3: 'English Literature', p4: 'Geography (Ms. Roy)', p5: 'Art & Craft (Mr. Das)', p6: 'Hindi (Mrs. Trivedi)' },
-                      { day: 'Wednesday (Today)', p1: 'Physics (Dr. Raman)', p2: 'Chemistry (Mrs. Sen)', p3: 'Mathematics (Mrs. Verma)', p4: 'Computer Science (Mr. Nair)', p5: 'Social Science (Ms. Roy)', p6: 'Music / Western Choir' },
-                      { day: 'Thursday', p1: 'Mathematics (Mrs. Verma)', p2: 'English (Ms. Adams)', p3: 'Biology Lab (Dr. Gupta)', p4: 'Physics Lab (Dr. Raman)', p5: 'Library Reading', p6: 'Sports & Games' },
-                      { day: 'Friday', p1: 'Chemistry Lab', p2: 'Mathematics (Mrs. Verma)', p3: 'Robotics & STEM Lab', p4: 'History & Civics', p5: 'English Grammar', p6: 'Club Activities' }
-                    ].map((row, idx) => (
-                      <tr key={idx} className={row.day.includes('Today') ? 'bg-blue-50/20 font-semibold' : 'hover:bg-slate-50/60'}>
-                        <td className="p-3.5 font-bold text-slate-900">{row.day}</td>
-                        <td className="p-3.5 text-slate-700">{row.p1}</td>
-                        <td className="p-3.5 text-slate-700">{row.p2}</td>
-                        <td className="p-3.5 bg-blue-50/40 text-blue-700 font-bold border-x border-blue-100">
-                          {row.p3}
-                        </td>
-                        <td className="p-3.5 text-slate-700">{row.p4}</td>
-                        <td className="p-3.5 text-slate-700">{row.p5}</td>
-                        <td className="p-3.5 text-slate-700">{row.p6}</td>
+            return (
+              <div className="space-y-6 max-w-7xl mx-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+                  <div>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                      Weekly Class Timetable ({user?.class_name || 'Class 8'}-{user?.section || 'A'})
+                    </h1>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Today is <strong>{todayDay}</strong> &bull; Instructional timetable for {user?.name || 'Student'} ({user?.class_name || 'Class 8'})
+                    </p>
+                  </div>
+                  <span className="self-start sm:self-auto rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3 py-1.5 text-xs font-bold">
+                    Session: Term 1 (Autumn 2026)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">
+                        <th className="p-3.5">Day</th>
+                        <th className="p-3.5">P1 (08:30-09:15)</th>
+                        <th className="p-3.5">P2 (09:15-10:00)</th>
+                        <th className="p-3.5 bg-blue-50/50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-300 border-x border-blue-200 dark:border-blue-800">
+                          P3 (10:30-11:15) ★ Focus
+                        </th>
+                        <th className="p-3.5">P4 (11:15-12:00)</th>
+                        <th className="p-3.5">P5 (01:00-01:45)</th>
+                        <th className="p-3.5">P6 (01:45-02:30)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {timetableData.map((row, idx) => {
+                        const isToday = row.day === todayDay;
+                        return (
+                          <tr key={idx} className={isToday ? 'bg-blue-50/40 dark:bg-blue-950/30 font-semibold' : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'}>
+                            <td className="p-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                              {row.day}
+                              {isToday && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-blue-600 text-white font-extrabold uppercase">
+                                  Today
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p1}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p2}</td>
+                            <td className="p-3.5 bg-blue-50/30 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 font-bold border-x border-blue-100 dark:border-blue-900/60">
+                              {row.p3}
+                            </td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p4}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p5}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p6}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ===================================================== */}
           {/* VIEW: MY FOCUS TABLE (PERSONALIZED STUDY PLAN)        */}
@@ -6797,7 +6897,7 @@ function StandardStudentDashboard() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
               <div className="flex items-center gap-3">
                 <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-white shadow-sm ${
-                  selectedTaskForSubmit.status === 'BACKLOG' || (selectedTaskForSubmit.due_date && selectedTaskForSubmit.due_date < '2026-10-17')
+                  ClockProvider.isOverdue(selectedTaskForSubmit.due_date, selectedTaskForSubmit.status)
                     ? 'bg-red-600'
                     : 'bg-blue-600'
                 }`}>
@@ -6805,7 +6905,7 @@ function StandardStudentDashboard() {
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    {selectedTaskForSubmit.status === 'BACKLOG' || (selectedTaskForSubmit.due_date && selectedTaskForSubmit.due_date < '2026-10-17')
+                    {ClockProvider.isOverdue(selectedTaskForSubmit.due_date, selectedTaskForSubmit.status)
                       ? 'Late Submission Dropzone'
                       : 'Submit Homework Worksheet'}
                   </h3>
@@ -6838,7 +6938,7 @@ function StandardStudentDashboard() {
               </div>
 
               {/* Late Submission Warning Banner */}
-              {(selectedTaskForSubmit.status === 'BACKLOG' || (selectedTaskForSubmit.due_date && selectedTaskForSubmit.due_date < '2026-10-17')) && (
+              {ClockProvider.isOverdue(selectedTaskForSubmit.due_date, selectedTaskForSubmit.status) && (
                 <div className="rounded-2xl border-2 border-red-500/50 bg-red-50 dark:bg-red-950/50 p-4 space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 font-black text-red-800 dark:text-red-300">
                     <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
@@ -6893,11 +6993,11 @@ function StandardStudentDashboard() {
                   type="button"
                   disabled={isUploadingHomework}
                   onClick={() => {
-                    const isLate = selectedTaskForSubmit.status === 'BACKLOG' || Boolean(selectedTaskForSubmit.due_date && selectedTaskForSubmit.due_date < '2026-10-17');
+                    const isLate = ClockProvider.isOverdue(selectedTaskForSubmit.due_date, selectedTaskForSubmit.status);
                     handleSubmitTaskWorksheet(selectedTaskForSubmit, isLate);
                   }}
                   className={`rounded-xl font-bold text-xs px-5 py-2 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer ${
-                    selectedTaskForSubmit.status === 'BACKLOG' || (selectedTaskForSubmit.due_date && selectedTaskForSubmit.due_date < '2026-10-17')
+                    ClockProvider.isOverdue(selectedTaskForSubmit.due_date, selectedTaskForSubmit.status)
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-blue-600 hover:bg-blue-700'
                   }`}

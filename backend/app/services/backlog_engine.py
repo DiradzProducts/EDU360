@@ -90,10 +90,8 @@ class BacklogEngine:
         - Create BacklogEvent if not exists
         - Increment student's backlog_count in Focus Table records
         """
-        now = datetime.datetime.utcnow()
-        # In current simulation anchor time is around 2026-10-17
-        simulated_now = datetime.datetime(2026, 10, 17, 21, 57, 0)
-        current_time = simulated_now
+        from app.core.clock import ClockProvider
+        current_time = ClockProvider.get_current_time()
 
         # Fetch all homework items
         hw_query = await db.execute(select(Homework))

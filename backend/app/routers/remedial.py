@@ -192,6 +192,17 @@ async def upload_student_rough_work(req: UploadRoughWorkRequest, db: AsyncSessio
     Student submits rough work scans or notes for the active day in the sprint.
     Persists to RemedialSprint table and synchronized roster.
     """
+    ALLOWED_ROUGH_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+    if req.file_name:
+        clean_target = req.file_name.split("?")[0].strip()
+        import os
+        ext = os.path.splitext(clean_target)[1].lower()
+        if ext and ext not in ALLOWED_ROUGH_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file extension '{ext}'. Only handwritten rough work scans (PDF, PNG, JPG, WEBP) are accepted."
+            )
+
     result = RemedialService.upload_rough_work(
         student_id=req.student_id,
         day_num=req.day_num,

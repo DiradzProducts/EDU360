@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, ClassRecording, Homework, HomeworkSubmission,
@@ -25,8 +25,9 @@ from app.schemas.schemas import (
     BacklogEventResponse, AcademicComplianceResponse
 )
 from app.services.backlog_engine import BacklogEngine, parse_deadline_datetime
+from app.core.rbac import require_role
 
-router = APIRouter(prefix="/api/student", tags=["student"])
+router = APIRouter(prefix="/api/student", tags=["student"], dependencies=[Depends(require_role(["student", "admin", "principal", "super_admin", "teacher", "parent"]))])
 
 # --- 1. Live Classroom & Recordings Library ---
 @router.get("/classes", response_model=list[LiveClassResponse])
@@ -54,10 +55,76 @@ async def list_student_homework(
     class_name: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
+    if student_id:
+        st_res = await db.execute(select(Student).where(Student.id == student_id))
+        st = st_res.scalars().first()
+        if not st:
+            return []
+        if st.id != 1:
+            return []
+
+        # Refactored: Single query with SQLAlchemy OUTER JOIN to project submission status directly in SQL
+        # Eliminates in-memory aggregation, avoids N+1 queries, and leaves session ORM entities un-mutated.
+        eff_status = func.upper(func.coalesce(HomeworkSubmission.status, "PENDING"))
+        stmt = (
+            select(
+                Homework,
+                eff_status.label("effective_status")
+            )
+            .outerjoin(
+                HomeworkSubmission,
+                and_(
+                    HomeworkSubmission.homework_id == Homework.id,
+                    HomeworkSubmission.student_id == student_id
+                )
+            )
+        )
+        if task_type:
+            stmt = stmt.where(Homework.task_type == task_type)
+        if date:
+            stmt = stmt.where(Homework.due_date == date)
+        if class_name:
+            stmt = stmt.where(Homework.class_name.ilike(f"%{class_name}%"))
+        elif st.class_name:
+            class_digits = "".join(filter(str.isdigit, st.class_name))
+            if class_digits:
+                stmt = stmt.where(Homework.class_name.ilike(f"%{class_digits}%"))
+
+        if status:
+            stmt = stmt.where(eff_status == status.upper())
+
+        stmt = stmt.order_by(Homework.id.desc())
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        from app.services.backlog_engine import is_homework_for_student
+        output = []
+        for hw, effective_status in rows:
+            if is_homework_for_student(hw.class_name, st.class_name, st.section):
+                output.append({
+                    "id": hw.id,
+                    "title": hw.title,
+                    "subject": hw.subject,
+                    "class_name": hw.class_name,
+                    "description": hw.description,
+                    "task_type": hw.task_type,
+                    "due_date": hw.due_date,
+                    "due_time": hw.due_time,
+                    "status": effective_status,
+                    "assigned_date": hw.assigned_date,
+                    "teacher_id": hw.teacher_id,
+                    "teacher_name": hw.teacher_name,
+                    "max_marks": hw.max_marks,
+                    "resource_url": hw.resource_url,
+                    "weightage": hw.weightage,
+                    "progress_pct": hw.progress_pct or 0.0
+                })
+        return output
+
     stmt = select(Homework)
     if task_type:
         stmt = stmt.where(Homework.task_type == task_type)
-    if status and not student_id:
+    if status:
         stmt = stmt.where(Homework.status == status)
     if date:
         stmt = stmt.where(Homework.due_date == date)
@@ -65,32 +132,7 @@ async def list_student_homework(
         stmt = stmt.where(Homework.class_name.ilike(f"%{class_name}%"))
     stmt = stmt.order_by(Homework.id.desc())
     result = await db.execute(stmt)
-    all_hw = list(result.scalars().all())
-
-    if student_id:
-        st_res = await db.execute(select(Student).where(Student.id == student_id))
-        st = st_res.scalars().first()
-        if st:
-            # Newly enrolled students (non-demo) start with a clean slate; do not leak past term homework
-            if st.id != 1:
-                return []
-            
-            from app.services.backlog_engine import is_homework_for_student
-            all_hw = [h for h in all_hw if is_homework_for_student(h.class_name, st.class_name, st.section)]
-            
-            # Map student submission statuses to homework items
-            subs_res = await db.execute(select(HomeworkSubmission).where(HomeworkSubmission.student_id == student_id))
-            subs_map = {s.homework_id: s for s in subs_res.scalars().all()}
-            for h in all_hw:
-                sub = subs_map.get(h.id)
-                if sub:
-                    h.status = sub.status.upper() if sub.status else "PENDING"
-                else:
-                    h.status = "PENDING"
-            
-            if status:
-                all_hw = [h for h in all_hw if h.status.lower() == status.lower()]
-    return all_hw
+    return result.scalars().all()
 
 @router.post("/homework", response_model=HomeworkResponse)
 async def create_student_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
@@ -128,10 +170,23 @@ async def submit_homework(
     original_file_url: str = "/samples/math_worksheet.png",
     db: AsyncSession = Depends(get_db)
 ):
+    # Strict file extension validation (CWE-434 mitigation)
+    ALLOWED_HW_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+    if original_file_url:
+        clean_target = original_file_url.split("?")[0].strip()
+        import os
+        ext = os.path.splitext(clean_target)[1].lower()
+        if ext and ext not in ALLOWED_HW_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid homework worksheet format '{ext}'. Only academic worksheets (PDF, PNG, JPG, WEBP) are accepted."
+            )
+
     hw_res = await db.execute(select(Homework).where(Homework.id == homework_id))
     hw = hw_res.scalars().first()
 
-    current_time = datetime.datetime(2026, 10, 17, 21, 57, 0)
+    from app.core.clock import ClockProvider
+    current_time = ClockProvider.get_current_time()
     is_late = False
     if hw:
         deadline = parse_deadline_datetime(hw.due_date, hw.due_time)
@@ -141,7 +196,7 @@ async def submit_homework(
     result = await db.execute(select(HomeworkSubmission).where(
         HomeworkSubmission.homework_id == homework_id,
         HomeworkSubmission.student_id == student_id
-    ))
+    ).with_for_update())
     existing = result.scalars().first()
     if existing:
         existing.original_file_url = original_file_url

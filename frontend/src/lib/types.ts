@@ -177,6 +177,9 @@ export interface User {
   grade_tier?: 'k5' | 'secondary' | string;
   is_junior_k5?: boolean;
   student_id?: number;
+  class_name?: string;
+  section?: string;
+  access_token?: string;
 }
 
 export interface SchoolVerification {
@@ -195,6 +198,9 @@ export interface AuthResponse {
   grade_tier?: 'k5' | 'secondary' | string;
   is_junior_k5?: boolean;
   student_id?: number;
+  class_name?: string;
+  section?: string;
+  access_token?: string;
 }
 
 // --- Junior Gamification Interfaces (K-5 Junior Explorer) ---
@@ -1244,6 +1250,7 @@ export interface ExamScheduleItem {
   capacity?: number;
   total_marks?: number;
   status?: 'draft' | 'scheduled' | 'published';
+  lifecycle_status?: 'UPCOMING' | 'LIVE' | 'CONCLUDED';
   is_published?: boolean;
   published_at?: string;
   hall_ticket_published?: boolean;

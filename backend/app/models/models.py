@@ -902,6 +902,106 @@ class PTMSlot(Base):
 
     focus_table_agenda = Column(Text, nullable=True)
 
+    cancellation_reason = Column(Text, nullable=True)
+
+    cancelled_by = Column(String(50), nullable=True)
+
+    cancelled_at = Column(String(50), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+
+class ParentTeacherNote(Base):
+
+    __tablename__ = "parent_teacher_notes"
+
+    __table_args__ = (
+        Index("idx_ptn_student_id", "student_id"),
+        Index("idx_ptn_teacher_id", "teacher_id"),
+        Index("idx_ptn_parent_id", "parent_id"),
+        Index("idx_ptn_scope", "interaction_scope"),
+    )
+
+    id = Column(String(100), primary_key=True, index=True)
+
+    interaction_scope = Column(String(50), nullable=False, default="HOMEROOM_CLASS")
+
+    student_id = Column(Integer, nullable=False, index=True)
+
+    student_name = Column(String(100), nullable=False)
+
+    student_class = Column(String(30), nullable=False)
+
+    parent_id = Column(String(100), nullable=False, index=True)
+
+    parent_name = Column(String(100), nullable=False)
+
+    parent_phone = Column(String(30), nullable=True)
+
+    teacher_id = Column(String(50), nullable=False, index=True)
+
+    teacher_name = Column(String(100), nullable=False)
+
+    subject_id = Column(String(50), nullable=True)
+
+    subject_name = Column(String(100), nullable=True)
+
+    homeroom_teacher_id = Column(String(50), nullable=True, default="ananya")
+
+    note_type = Column(String(50), nullable=False)
+
+    content = Column(Text, nullable=False)
+
+    created_at = Column(String(50), nullable=False)
+
+    is_focus_table_evidence = Column(Boolean, default=False)
+
+    focus_concept_tag = Column(String(255), nullable=True)
+
+    recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+
+class SubstitutionSlot(Base):
+
+    __tablename__ = "substitution_slots"
+
+    __table_args__ = (
+        Index("idx_sub_slot_status", "status"),
+        Index("idx_sub_slot_period", "date", "period_number"),
+        Index("idx_sub_slot_teacher", "absent_teacher_id"),
+        Index("idx_sub_slot_substitute", "substitute_teacher_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+
+    absent_teacher_id = Column(Integer, nullable=False, index=True)
+
+    absent_teacher_name = Column(String(100), nullable=False)
+
+    absent_reason = Column(String(255), nullable=False)
+
+    date = Column(String(50), nullable=False)
+
+    period_number = Column(Integer, nullable=False)
+
+    time_slot = Column(String(50), nullable=False)
+
+    class_name = Column(String(50), nullable=False)
+
+    subject = Column(String(100), nullable=False)
+
+    substitute_teacher_id = Column(Integer, nullable=True, index=True)
+
+    substitute_teacher_name = Column(String(100), nullable=True)
+
+    status = Column(String(30), default="Unassigned", index=True)
+
+    priority = Column(String(20), default="High")
+
+    notes = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

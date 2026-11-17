@@ -10,7 +10,7 @@ from app.models.models import (
     User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
     StaffMember, InventoryItem, PTMEvent, PaymentTransaction, FeeDefaulter,
-    LeaveRequest, SecurityAuditLog
+    LeaveRequest, SecurityAuditLog, SubstitutionSlot
 )
 from app.routers.notifications import create_system_notification
 from app.core.rbac import require_admin, require_staff, require_role
@@ -34,7 +34,7 @@ from app.schemas.schemas import (
     ExecutivePulseResponse, QuickActionCounts, AdmissionsPulse, AccountsPulse, ExamsPulse, StaffAndPacingPulse
 )
 
-router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_staff)])
 
 # --- 0. Executive Command Center Pulse ---
 @router.get("/executive-pulse", response_model=ExecutivePulseResponse)
@@ -294,7 +294,7 @@ async def create_admin_task(task_in: AdminTaskCreate, db: AsyncSession = Depends
 
     return new_task
 
-@router.delete("/tasks/{task_id}")
+@router.delete("/tasks/{task_id}", dependencies=[Depends(require_admin)])
 async def delete_admin_task(task_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
     task = result.scalars().first()
@@ -514,7 +514,7 @@ async def reject_task_submission(task_id: int, req: RejectTaskRequest, db: Async
     await db.refresh(task)
     return task
 
-@router.post("/tasks/{task_id}/override", response_model=AdminTaskResponse)
+@router.post("/tasks/{task_id}/override", response_model=AdminTaskResponse, dependencies=[Depends(require_admin)])
 async def admin_override_task(task_id: int, req: AdminOverrideTaskRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AdminTask).where(AdminTask.id == task_id))
     task = result.scalars().first()
@@ -1058,10 +1058,12 @@ async def convert_enquiry_to_student(
     payload: Optional[ConvertEnquiryPayload] = None, 
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id))
+    result = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.id == enquiry_id).with_for_update())
     enquiry = result.scalars().first()
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
+    if enquiry.stage == "converted":
+        raise HTTPException(status_code=409, detail="This enquiry has already been converted to an enrolled student.")
     
     section_val = payload.section if payload and payload.section else "A"
     fee_amt = payload.admission_fee if payload and payload.admission_fee is not None else 25000.0
@@ -1765,7 +1767,7 @@ async def initiate_exit_clearance(req: ExitClearanceInitiateRequest, db: AsyncSe
         "clearance": new_clearance
     }
 
-@router.post("/exit-clearances/{clearance_id}/verify-physical")
+@router.post("/exit-clearances/{clearance_id}/verify-physical", dependencies=[Depends(require_admin)])
 async def verify_physical_signature(clearance_id: int, req: ExitClearancePhysicalUpload, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ExitClearance).where(ExitClearance.id == clearance_id))
     clearance = result.scalars().first()
@@ -1929,6 +1931,28 @@ async def review_teacher_permission(perm_id: int, req: dict, db: AsyncSession = 
             # 3. Security Audit Log
             if status == "Approved":
                 new_slot_id = max([s["id"] for s in _substitutions_slots], default=0) + 1
+                try:
+                    db_sub = SubstitutionSlot(
+                        absent_teacher_id=perm_id,
+                        absent_teacher_name=p["teacher_name"],
+                        absent_reason=f"{p['type']} - {p['reason']}",
+                        date="Today, 19 Oct 2026",
+                        period_number=3,
+                        time_slot="10:30 AM - 11:15 AM",
+                        class_name="Class 8-B",
+                        subject="Mathematics" if "Verma" in p["teacher_name"] else "Physics",
+                        substitute_teacher_id=None,
+                        substitute_teacher_name=None,
+                        status="Unassigned",
+                        priority="High"
+                    )
+                    db.add(db_sub)
+                    await db.commit()
+                    await db.refresh(db_sub)
+                    new_slot_id = db_sub.id
+                except Exception as e:
+                    print(f"Error persisting SubstitutionSlot to DB: {e}")
+
                 new_slot = {
                     "id": new_slot_id,
                     "absent_teacher_id": perm_id,
@@ -2199,8 +2223,59 @@ _available_faculty = [
     }
 ]
 
+def _sub_slot_to_dict(s) -> dict:
+    return {
+        "id": s.id,
+        "absent_teacher_id": s.absent_teacher_id,
+        "absent_teacher_name": s.absent_teacher_name,
+        "absent_reason": s.absent_reason,
+        "date": s.date,
+        "period_number": s.period_number,
+        "time_slot": s.time_slot,
+        "class_name": s.class_name,
+        "subject": s.subject,
+        "substitute_teacher_id": s.substitute_teacher_id,
+        "substitute_teacher_name": s.substitute_teacher_name,
+        "status": s.status,
+        "priority": s.priority
+    }
+
+async def _ensure_substitutions_seeded(db: AsyncSession):
+    try:
+        check = await db.execute(select(SubstitutionSlot).limit(1))
+        if not check.scalars().first():
+            for s in _substitutions_slots:
+                db_slot = SubstitutionSlot(
+                    id=s["id"],
+                    absent_teacher_id=s["absent_teacher_id"],
+                    absent_teacher_name=s["absent_teacher_name"],
+                    absent_reason=s["absent_reason"],
+                    date=s["date"],
+                    period_number=s["period_number"],
+                    time_slot=s["time_slot"],
+                    class_name=s["class_name"],
+                    subject=s["subject"],
+                    substitute_teacher_id=s.get("substitute_teacher_id"),
+                    substitute_teacher_name=s.get("substitute_teacher_name"),
+                    status=s["status"],
+                    priority=s.get("priority", "High")
+                )
+                db.add(db_slot)
+            await db.commit()
+    except Exception as e:
+        print(f"Error seeding SubstitutionSlot: {e}")
+
 @router.get("/substitutions", response_model=list[SubstitutionSlotResponse])
-async def list_substitution_slots():
+async def list_substitution_slots(db: AsyncSession = Depends(get_db)):
+    await _ensure_substitutions_seeded(db)
+    try:
+        stmt = select(SubstitutionSlot).order_by(SubstitutionSlot.id.asc())
+        res = await db.execute(stmt)
+        slots = res.scalars().all()
+        if slots:
+            return [_sub_slot_to_dict(s) for s in slots]
+    except Exception as e:
+        print(f"Error querying SubstitutionSlot: {e}")
     return _substitutions_slots
 
 @router.get("/substitutions/available-faculty", response_model=list[AvailableFacultyItem])
@@ -2209,6 +2284,98 @@ async def list_available_faculty():
 
 @router.post("/substitutions/assign")
 async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession = Depends(get_db)):
+    await _ensure_substitutions_seeded(db)
+    try:
+        res = await db.execute(select(SubstitutionSlot).where(SubstitutionSlot.id == req.slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if not db_slot:
+            raise HTTPException(status_code=404, detail="Substitution slot not found")
+
+        # Period collision check: Prevent double-booking proxy teacher in same period
+        if req.substitute_teacher_id:
+            clash_res = await db.execute(
+                select(SubstitutionSlot).where(
+                    SubstitutionSlot.substitute_teacher_id == req.substitute_teacher_id,
+                    SubstitutionSlot.date == db_slot.date,
+                    SubstitutionSlot.period_number == db_slot.period_number,
+                    SubstitutionSlot.id != req.slot_id,
+                    SubstitutionSlot.status == "Assigned"
+                )
+            )
+            if clash_res.scalars().first():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Faculty {req.substitute_teacher_name} is already assigned to another class during Period {db_slot.period_number}."
+                )
+
+        if db_slot:
+            db_slot.substitute_teacher_id = req.substitute_teacher_id
+            db_slot.substitute_teacher_name = req.substitute_teacher_name
+            db_slot.status = "Assigned"
+            if req.notes:
+                db_slot.notes = req.notes
+            await db.commit()
+
+            # Sync in memory
+            for slot in _substitutions_slots:
+                if slot["id"] == req.slot_id:
+                    slot.update(_sub_slot_to_dict(db_slot))
+
+            # Sync to proxy teacher's personal schedule
+            try:
+                from app.routers.teacher import inject_substitution_period
+                inject_substitution_period(
+                    period_num=db_slot.period_number,
+                    class_name=db_slot.class_name,
+                    subject=db_slot.subject,
+                    absent_teacher=db_slot.absent_teacher_name,
+                    time_slot=db_slot.time_slot
+                )
+            except Exception:
+                pass
+
+            # Auto-complete any pending coordinator tasks for this teacher/slot
+            for task in _in_memory_tasks:
+                if task.get("is_auto_generated") and db_slot.absent_teacher_name in task.get("title", ""):
+                    task["status"] = "Completed"
+
+            # 🔔 Dispatch In-App Notification to Assigned Proxy Teacher
+            try:
+                await create_system_notification(
+                    db=db,
+                    recipient_user_id=req.substitute_teacher_id or 2,
+                    recipient_role="teacher",
+                    sender_name="Academic Coordinator",
+                    sender_role="academic_coordinator",
+                    title=f"Proxy Cover Injected: Period {db_slot.period_number} ({db_slot.class_name})",
+                    message=f"Assigned as proxy cover for {db_slot.class_name} {db_slot.subject} replacing absent faculty {db_slot.absent_teacher_name}.",
+                    notification_type="PROXY_ASSIGNED",
+                    priority="CRITICAL",
+                    action_url="/teacher?tab=schedule",
+                    metadata_dict={"period_number": db_slot.period_number, "class_name": db_slot.class_name}
+                )
+            except Exception as e:
+                print(f"Failed to dispatch substitution notification: {e}")
+            
+            _add_audit_log(
+                actor_name="Academic Coordinator",
+                actor_role="academic_coordinator",
+                action_type="SUBSTITUTION_ASSIGN",
+                target_entity=f"Period {db_slot.period_number} ({db_slot.class_name} {db_slot.subject})",
+                status="VERIFIED",
+                details=f"Assigned {req.substitute_teacher_name} as proxy for absent faculty {db_slot.absent_teacher_name}."
+            )
+            return {
+                "success": True,
+                "message": f"Successfully assigned {req.substitute_teacher_name} to {db_slot.class_name} {db_slot.subject} (Period {db_slot.period_number})",
+                "slot": _sub_slot_to_dict(db_slot)
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error assigning substitution in DB: {e}")
+
     for slot in _substitutions_slots:
         if slot["id"] == req.slot_id:
             slot["substitute_teacher_id"] = req.substitute_teacher_id
@@ -2233,24 +2400,6 @@ async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession =
                 if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
                     task["status"] = "Completed"
 
-            # 🔔 Dispatch In-App Notification to Assigned Proxy Teacher
-            try:
-                await create_system_notification(
-                    db=db,
-                    recipient_user_id=req.substitute_teacher_id or 2,
-                    recipient_role="teacher",
-                    sender_name="Academic Coordinator",
-                    sender_role="academic_coordinator",
-                    title=f"Proxy Cover Injected: Period {slot['period_number']} ({slot['class_name']})",
-                    message=f"Assigned as proxy cover for {slot['class_name']} {slot['subject']} replacing absent faculty {slot['absent_teacher_name']}.",
-                    notification_type="PROXY_ASSIGNED",
-                    priority="CRITICAL",
-                    action_url="/teacher?tab=schedule",
-                    metadata_dict={"period_number": slot["period_number"], "class_name": slot["class_name"]}
-                )
-            except Exception as e:
-                print(f"Failed to dispatch substitution notification: {e}")
-            
             _add_audit_log(
                 actor_name="Academic Coordinator",
                 actor_role="academic_coordinator",
@@ -2268,7 +2417,84 @@ async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession =
 
 @router.post("/substitutions/auto-resolve")
 async def auto_resolve_substitutions(db: AsyncSession = Depends(get_db)):
+    await _ensure_substitutions_seeded(db)
     resolved_count = 0
+    try:
+        stmt = select(SubstitutionSlot).where(SubstitutionSlot.status == "Unassigned")
+        res = await db.execute(stmt)
+        unassigned_slots = res.scalars().all()
+        for slot in unassigned_slots:
+            # Find matching available faculty
+            match = next((f for f in _available_faculty if f["is_subject_match"] and f["free_periods_today"] > 0), None)
+            if not match:
+                match = next((f for f in _available_faculty if f["free_periods_today"] > 0), None)
+            if match:
+                slot.substitute_teacher_id = match["id"]
+                slot.substitute_teacher_name = match["name"]
+                slot.status = "Assigned"
+                match["free_periods_today"] -= 1
+                resolved_count += 1
+                
+                try:
+                    from app.routers.teacher import inject_substitution_period
+                    inject_substitution_period(
+                        period_num=slot.period_number,
+                        class_name=slot.class_name,
+                        subject=slot.subject,
+                        absent_teacher=slot.absent_teacher_name,
+                        time_slot=slot.time_slot
+                    )
+                except Exception:
+                    pass
+
+                # Auto-complete matching task
+                for task in _in_memory_tasks:
+                    if task.get("is_auto_generated") and slot.absent_teacher_name in task.get("title", ""):
+                        task["status"] = "Completed"
+
+                # 🔔 Dispatch In-App Notification to Proxy Teacher
+                try:
+                    await create_system_notification(
+                        db=db,
+                        recipient_user_id=match["id"] or 2,
+                        recipient_role="teacher",
+                        sender_name="AI Timetable Governor",
+                        sender_role="system",
+                        title=f"Proxy Cover Auto-Assigned: Period {slot.period_number} ({slot.class_name})",
+                        message=f"Timetable Governor assigned you as proxy cover for {slot.class_name} {slot.subject} replacing {slot.absent_teacher_name}.",
+                        notification_type="PROXY_ASSIGNED",
+                        priority="CRITICAL",
+                        action_url="/teacher?tab=schedule",
+                        metadata_dict={"period_number": slot.period_number, "class_name": slot.class_name}
+                    )
+                except Exception as e:
+                    print(f"Failed to dispatch auto-resolve notification: {e}")
+
+        if resolved_count > 0:
+            await db.commit()
+
+        # Re-fetch all slots from DB to return
+        all_res = await db.execute(select(SubstitutionSlot).order_by(SubstitutionSlot.id.asc()))
+        all_slots = [_sub_slot_to_dict(s) for s in all_res.scalars().all()]
+        _substitutions_slots.clear()
+        _substitutions_slots.extend(all_slots)
+
+        _add_audit_log(
+            actor_name="AI Timetable Governor",
+            actor_role="system",
+            action_type="SUBSTITUTION_AUTO_RESOLVE",
+            target_entity="All Unassigned Slots",
+            status="VERIFIED",
+            details=f"Auto-resolved {resolved_count} timetable proxy gaps based on free-period optimization."
+        )
+        return {
+            "success": True,
+            "message": f"Auto-resolved {resolved_count} unmanned class periods with optimal faculty matches.",
+            "slots": all_slots
+        }
+    except Exception as e:
+        print(f"Error in auto_resolve_substitutions DB logic: {e}")
+
     for slot in _substitutions_slots:
         if slot["status"] == "Unassigned":
             # Find matching available faculty
@@ -2299,24 +2525,6 @@ async def auto_resolve_substitutions(db: AsyncSession = Depends(get_db)):
                     if task.get("is_auto_generated") and slot["absent_teacher_name"] in task.get("title", ""):
                         task["status"] = "Completed"
 
-                # 🔔 Dispatch In-App Notification to Proxy Teacher
-                try:
-                    await create_system_notification(
-                        db=db,
-                        recipient_user_id=match["id"] or 2,
-                        recipient_role="teacher",
-                        sender_name="AI Timetable Governor",
-                        sender_role="system",
-                        title=f"Proxy Cover Auto-Assigned: Period {slot['period_number']} ({slot['class_name']})",
-                        message=f"Timetable Governor assigned you as proxy cover for {slot['class_name']} {slot['subject']} replacing {slot['absent_teacher_name']}.",
-                        notification_type="PROXY_ASSIGNED",
-                        priority="CRITICAL",
-                        action_url="/teacher?tab=schedule",
-                        metadata_dict={"period_number": slot["period_number"], "class_name": slot["class_name"]}
-                    )
-                except Exception as e:
-                    print(f"Failed to dispatch auto-resolve notification: {e}")
-    
     _add_audit_log(
         actor_name="AI Timetable Governor",
         actor_role="system",
@@ -2501,7 +2709,7 @@ _rollover_classes = [
 async def get_rollover_preview():
     return _rollover_classes
 
-@router.post("/rollover/promote")
+@router.post("/rollover/promote", dependencies=[Depends(require_admin)])
 async def execute_academic_rollover(req: ExecuteRolloverRequest):
     for c in _rollover_classes:
         if c["class_id"] == req.class_id:

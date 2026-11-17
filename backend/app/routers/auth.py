@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.models.models import User, Student
+from app.core.security import hash_password, verify_password, create_access_token
 from app.schemas.schemas import (
     UserResponse, 
     SchoolCodeVerifyRequest, 
@@ -82,7 +83,7 @@ async def register_user(req: UserRegisterRequest, db: AsyncSession = Depends(get
         email=req.email.lower().strip(),
         role=role_clean,
         school_code=code_normalized,
-        password=req.password,
+        password=hash_password(req.password),
         phone=req.phone or "+91 98000 00000",
         avatar=f"https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
     )
@@ -97,11 +98,14 @@ async def register_user(req: UserRegisterRequest, db: AsyncSession = Depends(get
         "student": "/student"
     }
 
+    token = create_access_token({"sub": str(new_user.id), "role": new_user.role, "name": new_user.name})
+
     return AuthResponse(
         success=True,
         message=f"Welcome {new_user.name}! Your account has been registered under {code_normalized}.",
         user=new_user,
-        portal_redirect=redirects.get(role_clean, "/student")
+        portal_redirect=redirects.get(role_clean, "/student"),
+        access_token=token
     )
 
 async def resolve_student_tier_details(user: User, db: AsyncSession):
@@ -144,22 +148,15 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
     )
     user = result.scalars().first()
 
-    # Password validation: allow universal 'Password123' (case-insensitive) or existing hash/defaults
-    accepted_passwords = ["Password123", "password123", "admin123", "teacher123", "parent123", "student123", "123456"]
-    is_valid_pwd = (
-        req.password == "Password123" or 
-        req.password.lower() == "password123" or 
-        req.password in accepted_passwords or 
-        (user and user.password == req.password)
-    )
-
     if user:
+        is_valid_pwd = verify_password(req.password, user.password)
         if is_valid_pwd:
             grade_tier, is_junior, student_id = await resolve_student_tier_details(user, db)
             user_dto = UserResponse.model_validate(user)
             user_dto.grade_tier = grade_tier
             user_dto.is_junior_k5 = is_junior
             user_dto.student_id = student_id
+            token = create_access_token({"sub": str(user.id), "role": user.role, "name": user.name})
 
             return AuthResponse(
                 success=True,
@@ -168,7 +165,8 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
                 portal_redirect=PORTAL_REDIRECTS.get(user.role.lower(), "/student"),
                 grade_tier=grade_tier,
                 is_junior_k5=is_junior,
-                student_id=student_id
+                student_id=student_id,
+                access_token=token
             )
         else:
             raise HTTPException(status_code=401, detail="Incorrect password. For all institutional accounts, use 'Password123'.")
@@ -229,12 +227,14 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
             fallback_u = u_res.scalars().first()
 
         if fallback_u:
+            is_valid_pwd = verify_password(req.password, fallback_u.password)
             if is_valid_pwd:
                 grade_tier, is_junior, student_id = await resolve_student_tier_details(fallback_u, db)
                 user_dto = UserResponse.model_validate(fallback_u)
                 user_dto.grade_tier = grade_tier
                 user_dto.is_junior_k5 = is_junior
                 user_dto.student_id = student_id
+                token = create_access_token({"sub": str(fallback_u.id), "role": fallback_u.role, "name": fallback_u.name})
 
                 return AuthResponse(
                     success=True,
@@ -243,7 +243,8 @@ async def login_user(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
                     portal_redirect=PORTAL_REDIRECTS.get(fallback_u.role.lower(), "/student"),
                     grade_tier=grade_tier,
                     is_junior_k5=is_junior,
-                    student_id=student_id
+                    student_id=student_id,
+                    access_token=token
                 )
             else:
                 raise HTTPException(status_code=401, detail="Incorrect password. For all institutional accounts, use 'Password123'.")

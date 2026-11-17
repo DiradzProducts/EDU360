@@ -924,7 +924,7 @@ let fallbackFocusTable: FocusTable = {
 
     compliance_pct: 88.9,
 
-    last_scanned_at: "2026-10-17T21:57:00Z"
+    last_scanned_at: new Date().toISOString()
 
   }),
 
@@ -1316,7 +1316,7 @@ let fallbackBacklogEvents: BacklogEvent[] = [
 
     status: 'UNRESOLVED',
 
-    detected_at: '2026-10-17T17:20:00Z',
+    detected_at: new Date().toISOString(),
 
     late_submission: false,
 
@@ -4094,29 +4094,41 @@ async function fetchWithFallback<T>(url: string, options?: RequestInit, fallback
   const timeoutId = setTimeout(() => controller.abort(), 2000);
 
   try {
+    const activeUserStr = typeof window !== 'undefined' ? (localStorage.getItem('edu360_active_user') || localStorage.getItem('edu360_user')) : null;
+    let activeRole = typeof window !== 'undefined' ? localStorage.getItem('edu360_role') || '' : '';
+    let activeUserId = '0';
+    let activeToken = typeof window !== 'undefined' ? localStorage.getItem('edu360_token') || '' : '';
+
+    if (activeUserStr) {
+      try {
+        const parsed = JSON.parse(activeUserStr);
+        if (!activeRole) activeRole = parsed.role || 'anonymous';
+        activeUserId = String(parsed.id || parsed.student_id || '0');
+        if (!activeToken && parsed.access_token) activeToken = parsed.access_token;
+      } catch {}
+    }
+    if (!activeRole) activeRole = 'anonymous';
 
     const res = await fetch(`${API_BASE}${url}`, {
-
       ...options,
-
       signal: options?.signal || controller.signal,
-
       headers: {
-
         'Content-Type': 'application/json',
-
+        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
+        'X-User-Role': activeRole,
+        'X-User-Id': activeUserId,
         ...(options?.headers || {})
-
       }
-
     });
 
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-
-      throw new Error(`HTTP error ${res.status}`);
-
+      const errJson = await res.json().catch(() => null);
+      const detailMsg = errJson?.detail || errJson?.message || `HTTP error ${res.status}`;
+      const errorObj = new Error(detailMsg);
+      (errorObj as any).status = res.status;
+      throw errorObj;
     }
 
     return await res.json();
@@ -5212,9 +5224,11 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
       if (res.ok) {
-
-        return await res.json();
-
+        const authData = await res.json();
+        if (typeof window !== 'undefined' && authData?.access_token) {
+          localStorage.setItem('edu360_token', authData.access_token);
+        }
+        return authData;
       }
 
 
@@ -7825,15 +7839,13 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     try {
 
       return await fetchWithFallback<PTMSlot>('/api/teacher/ptm/slots/book', {
-
         method: 'POST',
-
         body: JSON.stringify(data)
-
       });
-
-    } catch {
-
+    } catch (err: any) {
+      if (err?.status === 409 || err?.status === 400 || err?.status === 403 || err?.status === 404) {
+        throw err;
+      }
       let targetSlot: PTMSlot | undefined;
 
       fallbackPTMSlots = fallbackPTMSlots.map(s => {
@@ -8079,15 +8091,13 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     try {
 
       return await fetchWithFallback<PTMSlot>('/api/parent/ptm/slots/book', {
-
         method: 'POST',
-
         body: JSON.stringify(data)
-
       });
-
-    } catch {
-
+    } catch (err: any) {
+      if (err?.status === 409 || err?.status === 400 || err?.status === 403 || err?.status === 404) {
+        throw err;
+      }
       let targetSlot: PTMSlot | undefined;
 
       fallbackPTMSlots = fallbackPTMSlots.map(s => {
@@ -8906,9 +8916,11 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       });
 
       if (res.ok) {
-
-        return await res.json();
-
+        const authData = await res.json();
+        if (typeof window !== 'undefined' && authData?.access_token) {
+          localStorage.setItem('edu360_token', authData.access_token);
+        }
+        return authData;
       }
 
     } catch {
@@ -9094,9 +9106,11 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       });
 
       if (res.ok) {
-
-        return await res.json();
-
+        const authData = await res.json();
+        if (typeof window !== 'undefined' && authData?.access_token) {
+          localStorage.setItem('edu360_token', authData.access_token);
+        }
+        return authData;
       }
 
     } catch (err) {
@@ -11996,11 +12010,15 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   // --- Dynamic Exam Schedules ---
 
-  getExamSchedules: async (): Promise<ExamScheduleItem[]> => {
+  getExamSchedules: async (className?: string, section?: string): Promise<ExamScheduleItem[]> => {
     try {
-      const res = await fetchWithFallback<{ success: boolean; schedules: ExamScheduleItem[] }>(`/api/exams/schedules`);
-      if (res && res.schedules && res.schedules.length > 0) {
-        if (typeof window !== 'undefined') {
+      const params = new URLSearchParams();
+      if (className) params.append('class_name', className);
+      if (section) params.append('section', section);
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetchWithFallback<{ success: boolean; schedules: ExamScheduleItem[] }>(`/api/exams/schedules${queryStr}`);
+      if (res && Array.isArray(res.schedules)) {
+        if (typeof window !== 'undefined' && res.schedules.length > 0) {
           try {
             localStorage.setItem('edu360_exam_schedules', JSON.stringify(res.schedules));
           } catch {}
@@ -12014,7 +12032,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       }
-      return fallbackExamSchedules;
+      return [];
     } catch {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('edu360_exam_schedules');
@@ -12025,7 +12043,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
           } catch {}
         }
       }
-      return fallbackExamSchedules;
+      return [];
     }
   },
 

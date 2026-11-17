@@ -78,6 +78,23 @@ async def health_check():
         "mode": "Action & Intelligence Engine Active"
     }
 
+@app.get("/api/system/clock")
+async def get_system_clock():
+    from app.core.clock import ClockProvider
+    return ClockProvider.to_dict()
+
+@app.post("/api/system/clock")
+async def set_system_clock(payload: dict):
+    from app.core.clock import ClockProvider
+    import datetime
+    override_val = payload.get("override_iso")
+    if not override_val or override_val == "REALTIME":
+        ClockProvider.set_override(None)
+    else:
+        clean_val = override_val.replace("Z", "")
+        ClockProvider.set_override(datetime.datetime.fromisoformat(clean_val))
+    return ClockProvider.to_dict()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

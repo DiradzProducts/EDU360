@@ -29,7 +29,14 @@ from app.routers.notifications import create_system_notification
 
 logger = logging.getLogger("edu360.finance")
 
-router = APIRouter(prefix="/api/finance", tags=["finance"], dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "teacher", "parent", "student"]))])
+router = APIRouter(
+    prefix="/api/finance",
+    tags=["finance"],
+    dependencies=[Depends(require_role([
+        "admin", "accounts_coordinator", "principal", "super_admin",
+        "teacher", "inventory_coordinator", "transport_coordinator"
+    ]))]
+)
 
 
 # =========================================================================
@@ -53,7 +60,7 @@ async def log_financial_audit(db: AsyncSession, actor_name: str, actor_role: str
 # 1. DASHBOARD STATS
 # =========================================================================
 
-@router.get("/stats", response_model=FinanceDashboardStats)
+@router.get("/stats", response_model=FinanceDashboardStats, dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
 async def get_finance_dashboard_stats(db: AsyncSession = Depends(get_db)):
     """
     Computes key performance indicators for the Accounts Coordinator:
@@ -122,7 +129,7 @@ async def get_finance_dashboard_stats(db: AsyncSession = Depends(get_db)):
 # 2. FEE DEFAULTERS & AGING ARREARS
 # =========================================================================
 
-@router.get("/defaulters", response_model=List[FeeDefaulterResponse])
+@router.get("/defaulters", response_model=List[FeeDefaulterResponse], dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
 async def get_fee_defaulters(
     aging_tier: Optional[str] = Query(None, description="ALL, 0-15, 16-30, 30+"),
     status: Optional[str] = Query(None, description="Overdue, Partially Paid, Paid, Waived"),
@@ -351,7 +358,7 @@ async def record_fee_payment(
     return defaulter
 
 
-@router.post("/defaulters/{id}/waiver", response_model=FeeDefaulterResponse)
+@router.post("/defaulters/{id}/waiver", response_model=FeeDefaulterResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator"]))])
 async def apply_fee_waiver(
     id: int,
     req: ApplyWaiverRequest,
@@ -952,14 +959,14 @@ async def seed_finance_data(db: AsyncSession = Depends(get_db)):
 # 7. STAFF PAYROLL & SALARY DISBURSEMENT OUTFLOW
 # =========================================================================
 
-@router.get("/payroll/batches", response_model=List[PayrollBatchResponse])
+@router.get("/payroll/batches", response_model=List[PayrollBatchResponse], dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
 async def get_payroll_batches(db: AsyncSession = Depends(get_db)):
     """List historical and active monthly payroll runs."""
     result = await db.execute(select(PayrollBatch).order_by(PayrollBatch.created_at.desc()))
     return result.scalars().all()
 
 
-@router.get("/payroll/batches/{batch_id}/slips", response_model=List[StaffPayslipResponse])
+@router.get("/payroll/batches/{batch_id}/slips", response_model=List[StaffPayslipResponse], dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
 async def get_payroll_batch_slips(batch_id: int, db: AsyncSession = Depends(get_db)):
     """List granular staff salary slips for a specific payroll batch."""
     result = await db.execute(
@@ -1105,7 +1112,7 @@ async def authorize_payroll_batch(
     return batch
 
 
-@router.post("/payroll/batches/{batch_id}/disburse", response_model=PayrollBatchResponse)
+@router.post("/payroll/batches/{batch_id}/disburse", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator"]))])
 async def disburse_payroll_batch(
     batch_id: int,
     req: DisbursePayrollRequest,

@@ -1201,13 +1201,83 @@ class ExamScheduleClearanceRequest(BaseModel):
     academic_clearance: bool
     academic_clearance_notes: Optional[str] = None
 
+def compute_schedule_lifecycle(exam_date_str: str, start_time_str: str, end_time_str: str) -> str:
+    """
+    Computes whether an exam schedule is UPCOMING, LIVE, or CONCLUDED.
+    Handles ISO dates (YYYY-MM-DD), descriptive dates, and 12-hour/24-hour time strings.
+    """
+    try:
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        clean_date = (exam_date_str or "").strip()
+        
+        if not clean_date:
+            return "UPCOMING"
+            
+        if "today" in clean_date.lower() or "live" in clean_date.lower():
+            target_date = now.date()
+        else:
+            try:
+                target_date = datetime.strptime(clean_date.split("T")[0], "%Y-%m-%d").date()
+            except Exception:
+                target_date = None
+
+        if not target_date:
+            return "UPCOMING"
+
+        def parse_time(time_str: str, base_date):
+            if not time_str:
+                return None
+            t_str = time_str.strip().upper()
+            for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M", "%I %p"):
+                try:
+                    t = datetime.strptime(t_str, fmt).time()
+                    return datetime.combine(base_date, t)
+                except Exception:
+                    pass
+            return None
+
+        start_dt = parse_time(start_time_str, target_date)
+        end_dt = parse_time(end_time_str, target_date)
+
+        if not start_dt:
+            if target_date < now.date():
+                return "CONCLUDED"
+            elif target_date > now.date():
+                return "UPCOMING"
+            return "UPCOMING"
+
+        if not end_dt:
+            end_dt = start_dt + timedelta(hours=3)
+
+        # Allow grace buffer (10 minutes before start is active for joining)
+        ready_dt = start_dt - timedelta(minutes=10)
+
+        if now < ready_dt:
+            return "UPCOMING"
+        elif ready_dt <= now <= end_dt:
+            return "LIVE"
+        else:
+            return "CONCLUDED"
+    except Exception:
+        return "UPCOMING"
+
 @router.get("/schedules")
-async def list_exam_schedules(db: AsyncSession = Depends(get_db)):
+async def list_exam_schedules(
+    class_name: Optional[str] = None,
+    section: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
     """
     List all examination schedules with hall deployment & academic clearance status.
     Ordered by latest created first (id desc) so newly scheduled exams appear immediately.
     """
-    res = await db.execute(select(ExamSchedule).order_by(ExamSchedule.id.desc()))
+    query = select(ExamSchedule)
+    if class_name:
+        query = query.where(ExamSchedule.class_name == class_name)
+    if section:
+        query = query.where(ExamSchedule.section == section)
+    res = await db.execute(query.order_by(ExamSchedule.id.desc()))
     schedules = res.scalars().all()
     return {
         "success": True,
@@ -1218,6 +1288,7 @@ async def list_exam_schedules(db: AsyncSession = Depends(get_db)):
                 "question_paper_id": s.question_paper_id,
                 "question_paper_title": s.question_paper_title,
                 "status": getattr(s, "status", "Scheduled"),
+                "lifecycle_status": compute_schedule_lifecycle(s.exam_date, s.start_time, s.end_time),
                 "title": s.title,
                 "subject": s.subject,
                 "class_name": s.class_name,

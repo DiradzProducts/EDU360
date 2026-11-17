@@ -6,7 +6,8 @@ from sqlalchemy import select, update
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, AttendanceRecord, Student, Homework, HomeworkSubmission,
-    FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint, SecurityAuditLog
+    FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint, SecurityAuditLog,
+    PTMSlot, ParentTeacherNote
 )
 from app.schemas.schemas import (
     LiveClassResponse, AttendanceRecordResponse, AttendanceJoinSimulate, AttendanceOverride,
@@ -22,8 +23,9 @@ from app.schemas.schemas import (
 )
 from app.services.ai_analytics import evaluate_attendance_rule
 from app.routers.notifications import create_system_notification
+from app.core.rbac import require_role
 
-router = APIRouter(prefix="/api/teacher", tags=["teacher"])
+router = APIRouter(prefix="/api/teacher", tags=["teacher"], dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
 
 # --- 1. Live Class & 10-Minute Auto-Attendance Rule ---
 @router.get("/live-classes", response_model=list[LiveClassResponse])
@@ -921,15 +923,80 @@ _parent_teacher_notes = [
     }
 ]
 
+def _ptn_to_dict(n) -> dict:
+    return {
+        "id": n.id,
+        "interaction_scope": n.interaction_scope,
+        "student_id": n.student_id,
+        "student_name": n.student_name,
+        "student_class": n.student_class,
+        "parent_id": n.parent_id,
+        "parent_name": n.parent_name,
+        "parent_phone": n.parent_phone or "",
+        "teacher_id": n.teacher_id,
+        "teacher_name": n.teacher_name,
+        "subject_id": n.subject_id,
+        "subject_name": n.subject_name,
+        "homeroom_teacher_id": n.homeroom_teacher_id or "ananya",
+        "note_type": n.note_type,
+        "content": n.content,
+        "created_at": n.created_at,
+        "is_focus_table_evidence": bool(n.is_focus_table_evidence),
+        "focus_concept_tag": n.focus_concept_tag
+    }
+
+async def _ensure_parent_notes_seeded(db: AsyncSession):
+    try:
+        check = await db.execute(select(ParentTeacherNote).limit(1))
+        if not check.scalars().first():
+            for n in _parent_teacher_notes:
+                db_n = ParentTeacherNote(
+                    id=n["id"],
+                    interaction_scope=n["interaction_scope"],
+                    student_id=n["student_id"],
+                    student_name=n["student_name"],
+                    student_class=n["student_class"],
+                    parent_id=n["parent_id"],
+                    parent_name=n["parent_name"],
+                    parent_phone=n.get("parent_phone"),
+                    teacher_id=n["teacher_id"],
+                    teacher_name=n["teacher_name"],
+                    subject_id=n.get("subject_id"),
+                    subject_name=n.get("subject_name"),
+                    homeroom_teacher_id=n.get("homeroom_teacher_id", "ananya"),
+                    note_type=n["note_type"],
+                    content=n["content"],
+                    created_at=n["created_at"],
+                    is_focus_table_evidence=n.get("is_focus_table_evidence", False),
+                    focus_concept_tag=n.get("focus_concept_tag")
+                )
+                db.add(db_n)
+            await db.commit()
+    except Exception as e:
+        print(f"Error seeding ParentTeacherNote: {e}")
+
 @router.get("/parent-notes", response_model=list[ParentTeacherNoteResponse])
-async def get_parent_teacher_notes(scope: str = None):
+async def get_parent_teacher_notes(scope: str = None, db: AsyncSession = Depends(get_db)):
+    await _ensure_parent_notes_seeded(db)
+    try:
+        stmt = select(ParentTeacherNote)
+        if scope and scope != "ALL":
+            stmt = stmt.where(ParentTeacherNote.interaction_scope == scope)
+        stmt = stmt.order_by(ParentTeacherNote.recorded_at.desc())
+        res = await db.execute(stmt)
+        notes = res.scalars().all()
+        if notes:
+            return [_ptn_to_dict(n) for n in notes]
+    except Exception as e:
+        print(f"Error querying ParentTeacherNote in teacher: {e}")
     if scope and scope != "ALL":
         return [n for n in _parent_teacher_notes if n["interaction_scope"] == scope]
     return _parent_teacher_notes
 
 @router.post("/parent-notes", response_model=ParentTeacherNoteResponse)
 async def create_parent_teacher_note(req: ParentTeacherNoteCreate, db: AsyncSession = Depends(get_db)):
-    note_id = f"note-{len(_parent_teacher_notes) + 101}"
+    note_id = f"note-{int(datetime.datetime.utcnow().timestamp())}"
+    created_at_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
     new_note = {
         "id": note_id,
         "interaction_scope": req.interaction_scope,
@@ -946,10 +1013,37 @@ async def create_parent_teacher_note(req: ParentTeacherNoteCreate, db: AsyncSess
         "homeroom_teacher_id": req.homeroom_teacher_id,
         "note_type": req.note_type,
         "content": req.content,
-        "created_at": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p"),
+        "created_at": created_at_str,
         "is_focus_table_evidence": req.is_focus_table_evidence,
         "focus_concept_tag": req.focus_concept_tag
     }
+
+    try:
+        db_n = ParentTeacherNote(
+            id=note_id,
+            interaction_scope=req.interaction_scope,
+            student_id=req.student_id,
+            student_name=req.student_name,
+            student_class=req.student_class,
+            parent_id=req.parent_id,
+            parent_name=req.parent_name,
+            parent_phone=req.parent_phone,
+            teacher_id=req.teacher_id,
+            teacher_name=req.teacher_name,
+            subject_id=req.subject_id,
+            subject_name=req.subject_name,
+            homeroom_teacher_id=req.homeroom_teacher_id,
+            note_type=req.note_type,
+            content=req.content,
+            created_at=created_at_str,
+            is_focus_table_evidence=req.is_focus_table_evidence,
+            focus_concept_tag=req.focus_concept_tag
+        )
+        db.add(db_n)
+        await db.commit()
+    except Exception as e:
+        print(f"Error persisting ParentTeacherNote: {e}")
+
     _parent_teacher_notes.insert(0, new_note)
 
     # Closed-loop sync: If marked as Focus Table evidence, sync to Focus Table DB!
@@ -957,7 +1051,7 @@ async def create_parent_teacher_note(req: ParentTeacherNoteCreate, db: AsyncSess
         ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.student_id))
         ft = ft_res.scalars().first()
         if ft:
-            ft.teacher_action = f"[Telemetry Evidence {new_note['created_at']}]: {req.content}"
+            ft.teacher_action = f"[Telemetry Evidence {created_at_str}]: {req.content}"
             ft.updated_at = datetime.datetime.utcnow()
             await db.commit()
 
@@ -1255,16 +1349,50 @@ def _slot_to_dict(s) -> dict:
         "sibling_student_id": s.sibling_student_id,
         "sibling_student_name": s.sibling_student_name,
         "meeting_url": s.meeting_url,
-        "focus_table_agenda": agenda
+        "focus_table_agenda": agenda,
+        "cancellation_reason": getattr(s, "cancellation_reason", None),
+        "cancelled_by": getattr(s, "cancelled_by", None),
+        "cancelled_at": getattr(s, "cancelled_at", None),
     }
+
+async def _ensure_ptm_slots_seeded(db: AsyncSession):
+    try:
+        check = await db.execute(select(PTMSlot).limit(1))
+        if not check.scalars().first():
+            import json
+            for s in _ptm_slots:
+                db_slot = PTMSlot(
+                    id=s["id"],
+                    event_id=s["event_id"],
+                    teacher_id=s["teacher_id"],
+                    start_time=s["start_time"],
+                    end_time=s["end_time"],
+                    status=s["status"],
+                    interaction_scope=s["interaction_scope"],
+                    booked_student_id=s.get("booked_student_id"),
+                    booked_student_name=s.get("booked_student_name"),
+                    booked_class=s.get("booked_class"),
+                    booked_parent_id=s.get("booked_parent_id"),
+                    booked_parent_name=s.get("booked_parent_name"),
+                    subject_name=s.get("subject_name"),
+                    is_sibling_combo=s.get("is_sibling_combo", False),
+                    sibling_student_id=s.get("sibling_student_id"),
+                    sibling_student_name=s.get("sibling_student_name"),
+                    meeting_url=s.get("meeting_url"),
+                    focus_table_agenda=json.dumps(s.get("focus_table_agenda", []))
+                )
+                db.add(db_slot)
+            await db.commit()
+    except Exception as e:
+        print(f"Error seeding PTMSlot: {e}")
 
 @router.get("/ptm/slots", response_model=list[PTMSlotResponse])
 async def get_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
     try:
-        from app.models.models import PTMSlot
+        from sqlalchemy import or_
         stmt = select(PTMSlot)
         if scope and scope != "ALL":
-            from sqlalchemy import or_
             stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
         stmt = stmt.order_by(PTMSlot.start_time.asc())
         res = await db.execute(stmt)
@@ -1278,7 +1406,24 @@ async def get_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
     return _ptm_slots
 
 @router.post("/ptm/slots/{slot_id}/hold")
-async def hold_ptm_slot(slot_id: str):
+async def hold_ptm_slot(slot_id: str, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id))
+        slot = res.scalars().first()
+        if slot:
+            if slot.status != "AVAILABLE":
+                raise HTTPException(status_code=400, detail="Slot is not available")
+            slot.status = "HELD"
+            await db.commit()
+            for s in _ptm_slots:
+                if s["id"] == slot_id:
+                    s["status"] = "HELD"
+            return {"success": True, "message": "Slot held for 5 minutes", "slot": _slot_to_dict(slot)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error holding PTMSlot in DB: {e}")
     for slot in _ptm_slots:
         if slot["id"] == slot_id:
             if slot["status"] != "AVAILABLE":
@@ -1289,6 +1434,52 @@ async def hold_ptm_slot(slot_id: str):
 
 @router.post("/ptm/slots/book", response_model=PTMSlotResponse)
 async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_db)):
+    await _ensure_ptm_slots_seeded(db)
+    meeting_url = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if not db_slot:
+            raise HTTPException(status_code=404, detail="PTM slot not found")
+        if db_slot.status == "BOOKED":
+            raise HTTPException(status_code=409, detail="This PTM slot has already been booked.")
+        if db_slot:
+            db_slot.status = "BOOKED"
+            db_slot.booked_student_id = req.booked_student_id
+            db_slot.booked_student_name = req.booked_student_name
+            db_slot.booked_class = req.booked_class
+            db_slot.booked_parent_id = req.booked_parent_id
+            db_slot.booked_parent_name = req.booked_parent_name
+            db_slot.interaction_scope = req.interaction_scope
+            db_slot.subject_name = req.subject_name
+            db_slot.is_sibling_combo = req.is_sibling_combo
+            db_slot.sibling_student_id = req.sibling_student_id
+            db_slot.sibling_student_name = req.sibling_student_name
+            db_slot.meeting_url = meeting_url
+            db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
+            await db.commit()
+
+            # Closed-loop sync: If focus table agenda provided, log to Focus Table!
+            if req.focus_table_agenda and req.booked_student_id:
+                ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.booked_student_id))
+                ft = ft_res.scalars().first()
+                if ft:
+                    agenda_str = ", ".join(req.focus_table_agenda)
+                    ft.teacher_action = f"[PTM Agenda Booked for 24 Oct]: {agenda_str}"
+                    ft.updated_at = datetime.datetime.utcnow()
+                    await db.commit()
+
+            # sync in memory
+            for slot in _ptm_slots:
+                if slot["id"] == req.slot_id:
+                    slot.update(_slot_to_dict(db_slot))
+            return _slot_to_dict(db_slot)
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error booking PTMSlot in DB: {e}")
+
     for slot in _ptm_slots:
         if slot["id"] == req.slot_id:
             slot["status"] = "BOOKED"
@@ -1303,41 +1494,7 @@ async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_
             slot["sibling_student_id"] = req.sibling_student_id
             slot["sibling_student_name"] = req.sibling_student_name
             slot["focus_table_agenda"] = req.focus_table_agenda or []
-            slot["meeting_url"] = f"https://meet.google.com/edu-ptm-{req.slot_id}-{req.booked_student_id}"
-            # DB Persistence
-            try:
-                from app.models.models import PTMSlot
-                import json
-                db_slot_res = await db.execute(select(PTMSlot).where(PTMSlot.id == req.slot_id))
-                db_slot = db_slot_res.scalars().first()
-                if db_slot:
-                    db_slot.status = "BOOKED"
-                    db_slot.booked_student_id = req.booked_student_id
-                    db_slot.booked_student_name = req.booked_student_name
-                    db_slot.booked_class = req.booked_class
-                    db_slot.booked_parent_id = req.booked_parent_id
-                    db_slot.booked_parent_name = req.booked_parent_name
-                    db_slot.interaction_scope = req.interaction_scope
-                    db_slot.subject_name = req.subject_name
-                    db_slot.is_sibling_combo = req.is_sibling_combo
-                    db_slot.sibling_student_id = req.sibling_student_id
-                    db_slot.sibling_student_name = req.sibling_student_name
-                    db_slot.meeting_url = slot["meeting_url"]
-                    db_slot.focus_table_agenda = json.dumps(req.focus_table_agenda or [])
-                    await db.commit()
-            except Exception as dbe:
-                print(f"DB slot persist error: {dbe}")
-
-            # Closed-loop sync: If focus table agenda provided, log to Focus Table!
-            if req.focus_table_agenda and req.booked_student_id:
-                ft_res = await db.execute(select(FocusTable).where(FocusTable.student_id == req.booked_student_id))
-                ft = ft_res.scalars().first()
-                if ft:
-                    agenda_str = ", ".join(req.focus_table_agenda)
-                    ft.teacher_action = f"[PTM Agenda Booked for 24 Oct]: {agenda_str}"
-                    ft.updated_at = datetime.datetime.utcnow()
-                    await db.commit()
-
+            slot["meeting_url"] = meeting_url
             return slot
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
@@ -1349,6 +1506,63 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
     Optionally re-opens slot as AVAILABLE for other parents or blocks as BREAK.
     Notifies parent with the reason.
     """
+    await _ensure_ptm_slots_seeded(db)
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if db_slot:
+            prev_snapshot = _slot_to_dict(db_slot)
+            student_name = db_slot.booked_student_name or "Student"
+            slot_time = f"{db_slot.start_time} - {db_slot.end_time}"
+            db_slot.cancellation_reason = req.cancellation_reason
+            db_slot.cancelled_by = req.cancelled_by
+            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat()
+
+            if req.reopen_as_free:
+                db_slot.status = "AVAILABLE"
+                db_slot.booked_student_id = None
+                db_slot.booked_student_name = None
+                db_slot.booked_class = None
+                db_slot.booked_parent_id = None
+                db_slot.booked_parent_name = None
+                db_slot.meeting_url = None
+                db_slot.focus_table_agenda = "[]"
+                db_slot.is_sibling_combo = False
+                db_slot.sibling_student_id = None
+                db_slot.sibling_student_name = None
+            else:
+                db_slot.status = "BREAK"
+
+            await db.commit()
+
+            if req.notify_parent:
+                try:
+                    await create_system_notification(
+                        user_id=1,
+                        title=f"PTM Conference Update: {slot_time}",
+                        message=f"Your PTM conference for {student_name} was cancelled by {req.cancelled_by.lower()}. Reason: {req.cancellation_reason}. You may re-book an available slot.",
+                        category="ptm",
+                        db=db
+                    )
+                except Exception:
+                    pass
+
+            for s in _ptm_slots:
+                if s["id"] == slot_id:
+                    s.update(_slot_to_dict(db_slot))
+
+            return {
+                "success": True,
+                "message": f"PTM Slot {slot_id} cancelled successfully.",
+                "slot": _slot_to_dict(db_slot),
+                "previous_state": prev_snapshot
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error cancelling PTMSlot in DB: {e}")
+
     for slot in _ptm_slots:
         if slot["id"] == slot_id:
             prev_snapshot = dict(slot)
@@ -1374,18 +1588,6 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
             else:
                 slot["status"] = "BREAK"
 
-            if req.notify_parent and db is not None:
-                try:
-                    await create_system_notification(
-                        user_id=1,
-                        title=f"PTM Conference Update: {slot_time}",
-                        message=f"Your PTM conference for {student_name} was cancelled by {req.cancelled_by.lower()}. Reason: {req.cancellation_reason}. You may re-book an available slot.",
-                        category="ptm",
-                        db=db
-                    )
-                except Exception:
-                    pass
-
             return {
                 "success": True,
                 "message": f"PTM Slot {slot_id} cancelled successfully.",
@@ -1399,6 +1601,45 @@ async def restore_ptm_slot(slot_id: str, req: PTMSlotRestoreRequest, db: AsyncSe
     """
     Restores a cancelled PTM slot to its previous booked state (Undo action).
     """
+    await _ensure_ptm_slots_seeded(db)
+    try:
+        res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id).with_for_update())
+        db_slot = res.scalars().first()
+        if db_slot:
+            prev = req.previous_state or {}
+            db_slot.status = prev.get("status", "BOOKED")
+            db_slot.booked_student_id = prev.get("booked_student_id")
+            db_slot.booked_student_name = prev.get("booked_student_name")
+            db_slot.booked_class = prev.get("booked_class")
+            db_slot.booked_parent_id = prev.get("booked_parent_id")
+            db_slot.booked_parent_name = prev.get("booked_parent_name")
+            db_slot.interaction_scope = prev.get("interaction_scope", "HOMEROOM_CLASS")
+            db_slot.subject_name = prev.get("subject_name")
+            db_slot.is_sibling_combo = prev.get("is_sibling_combo", False)
+            db_slot.sibling_student_id = prev.get("sibling_student_id")
+            db_slot.sibling_student_name = prev.get("sibling_student_name")
+            db_slot.meeting_url = prev.get("meeting_url")
+            agenda_val = prev.get("focus_table_agenda", [])
+            db_slot.focus_table_agenda = json.dumps(agenda_val) if isinstance(agenda_val, list) else str(agenda_val)
+            db_slot.cancellation_reason = None
+            db_slot.cancelled_by = None
+            db_slot.cancelled_at = None
+            await db.commit()
+
+            for idx, slot in enumerate(_ptm_slots):
+                if slot["id"] == slot_id:
+                    _ptm_slots[idx] = _slot_to_dict(db_slot)
+            return {
+                "success": True,
+                "message": f"PTM Slot {slot_id} booking restored.",
+                "slot": _slot_to_dict(db_slot)
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error restoring PTMSlot in DB: {e}")
+
     for idx, slot in enumerate(_ptm_slots):
         if slot["id"] == slot_id:
             restored = dict(req.previous_state)

@@ -414,6 +414,28 @@ export default function AcademicCoordinatorPage() {
     triggerToast(`Period substitution confirmed: ${fac.name} assigned to ${selectedSubSlot.class_name}`);
   };
 
+  const [autoResolving, setAutoResolving] = useState(false);
+
+  const handleAutoResolveSubstitutions = async () => {
+    setAutoResolving(true);
+    try {
+      const res = await api.autoResolveSubstitutions();
+      if (res && res.success) {
+        const updated = await api.getSubstitutions();
+        setSubstitutions(updated);
+        const updatedTasks = await api.getAdminTasks('academic');
+        setTasks(updatedTasks);
+        triggerToast(res.message || 'AI Timetable Governor auto-resolved unmanned classes!');
+      } else {
+        triggerToast('All class periods are already covered!');
+      }
+    } catch (e: any) {
+      triggerToast(e.message || 'Failed to auto-resolve substitutions');
+    } finally {
+      setAutoResolving(false);
+    }
+  };
+
   const handleLogLesson = async (itemId: number) => {
     const res = await api.logCurriculumLesson(itemId, 1);
     if (res.success) {
@@ -1399,6 +1421,16 @@ export default function AcademicCoordinatorPage() {
                   <h2 className="text-sm font-bold text-slate-900 dark:text-white">Daily Period Coverage &amp; Substitutions</h2>
                   <p className="text-xs text-slate-500">Auto-interlocked with Admin leave approvals to ensure zero unmanned classrooms</p>
                 </div>
+                {substitutions.some(s => s.status === 'Unassigned') && (
+                  <button
+                    onClick={handleAutoResolveSubstitutions}
+                    disabled={autoResolving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white px-3.5 py-2 text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
+                    <span>{autoResolving ? 'Matching Free Faculty...' : '⚡ AI Auto-Match & Cover All'}</span>
+                  </button>
+                )}
               </div>
 
               {/* Status Alert Banner */}

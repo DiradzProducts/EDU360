@@ -54,6 +54,8 @@ class AuthResponse(BaseModel):
     grade_tier: Optional[str] = "secondary"
     is_junior_k5: Optional[bool] = False
     student_id: Optional[int] = None
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
 
 # --- Student Schemas ---
 class StudentBase(BaseModel):
