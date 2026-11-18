@@ -149,6 +149,7 @@ export default function AccountsCoordinatorPage() {
   const [waiverAmount, setWaiverAmount] = useState<number>(0);
   const [waiverReason, setWaiverReason] = useState('');
   const [waiverApprover, setWaiverApprover] = useState('Dr. Sunita Kapoor (Principal)');
+  const [isApplyingWaiver, setIsApplyingWaiver] = useState(false);
 
   // History Inspector Modal
   const [historyModalDefaulter, setHistoryModalDefaulter] = useState<FeeDefaulter | null>(null);
@@ -321,21 +322,33 @@ export default function AccountsCoordinatorPage() {
 
   const handleApplyWaiverSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waiverModalDefaulter || waiverAmount <= 0) return;
+    if (!waiverModalDefaulter) return;
+    if (waiverAmount <= 0) {
+      triggerToast('⚠️ Please enter a valid concession amount greater than ₹0.');
+      return;
+    }
+    if (waiverAmount > waiverModalDefaulter.amount_due) {
+      triggerToast(`⚠️ Concession amount (₹${waiverAmount.toLocaleString('en-IN')}) cannot exceed current outstanding balance (₹${waiverModalDefaulter.amount_due.toLocaleString('en-IN')}).`);
+      return;
+    }
+    setIsApplyingWaiver(true);
     try {
       await api.applyFeeWaiver(waiverModalDefaulter.id, {
         waiver_amount: waiverAmount,
-        reason: waiverReason,
-        approved_by: waiverApprover
+        reason: waiverReason.trim() || 'Institutional Hardship & Board Concession',
+        approved_by: waiverApprover.trim() || 'Dr. Sunita Kapoor (Principal)'
       });
-      triggerToast(`Fee concession of ₹${waiverAmount.toLocaleString('en-IN')} approved for ${waiverModalDefaulter.student_name}`);
+      const remainingDue = Math.max(0, waiverModalDefaulter.amount_due - waiverAmount);
+      triggerToast(`✓ Fee concession of ₹${waiverAmount.toLocaleString('en-IN')} approved for ${waiverModalDefaulter.student_name}. Remaining due: ₹${remainingDue.toLocaleString('en-IN')}`);
       setWaiverModalDefaulter(null);
       setWaiverAmount(0);
       setWaiverReason('');
       loadData();
-    } catch (err) {
-      triggerToast('Fee waiver updated.');
-      setWaiverModalDefaulter(null);
+    } catch (err: any) {
+      console.error('Fee concession submission error:', err);
+      triggerToast(err?.message || 'Failed to authorize fee concession. Please verify details and retry.');
+    } finally {
+      setIsApplyingWaiver(false);
     }
   };
 
@@ -660,8 +673,9 @@ export default function AccountsCoordinatorPage() {
 
   // Filtered Defaulters
   const filteredDefaulters = defaulters.filter(d => {
-    if (defaulterCategoryFilter === 'NEW_ADMISSION' && !d.is_admission_fee) return false;
-    if (defaulterCategoryFilter === 'EXISTING' && d.is_admission_fee) return false;
+    const isNewAdm = Boolean(d.is_admission_fee);
+    if (defaulterCategoryFilter === 'NEW_ADMISSION' && !isNewAdm) return false;
+    if (defaulterCategoryFilter === 'EXISTING' && isNewAdm) return false;
     if (defaulterTierFilter === '0-15' && d.days_overdue > 15) return false;
     if (defaulterTierFilter === '16-30' && (d.days_overdue <= 15 || d.days_overdue > 30)) return false;
     if (defaulterTierFilter === '30+' && d.days_overdue <= 30) return false;
@@ -1090,12 +1104,12 @@ export default function AccountsCoordinatorPage() {
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-                    {defaulters.filter(d => d.is_admission_fee).length} Enrolled
+                    {defaulters.filter(d => Boolean(d.is_admission_fee)).length} Enrolled
                   </span>
                 </div>
                 <div className="my-3">
                   <div className="text-2xl font-black text-teal-600 dark:text-teal-400">
-                    ₹{defaulters.filter(d => d.is_admission_fee).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
+                    ₹{defaulters.filter(d => Boolean(d.is_admission_fee)).reduce((s, c) => s + c.amount_due, 0).toLocaleString('en-IN')}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
                     First-term kit, admission registration &amp; tuition
@@ -1408,7 +1422,7 @@ export default function AccountsCoordinatorPage() {
                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
                       defaulterCategoryFilter === 'NEW_ADMISSION' ? 'bg-purple-700 text-white' : 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
                     }`}>
-                      {defaulters.filter(d => d.is_admission_fee).length}
+                      {defaulters.filter(d => Boolean(d.is_admission_fee)).length}
                     </span>
                   </button>
                 </div>
@@ -1454,7 +1468,7 @@ export default function AccountsCoordinatorPage() {
             </div>
 
             {/* New Admissions Pop-In Alert Banner */}
-            {defaulters.filter(d => d.is_admission_fee).length > 0 && (
+            {defaulters.filter(d => Boolean(d.is_admission_fee)).length > 0 && (
               <div className="rounded-2xl border-2 border-purple-300 dark:border-purple-800 bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 p-4 shadow-sm animate-in fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
@@ -1464,7 +1478,7 @@ export default function AccountsCoordinatorPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-black text-purple-950 dark:text-purple-200">
-                          Active Enrolment Intake Queue: {defaulters.filter(d => d.is_admission_fee).length} New Admission(s) Converted by Admissions Desk
+                          Active Enrolment Intake Queue: {defaulters.filter(d => Boolean(d.is_admission_fee)).length} New Admission(s) Converted by Admissions Desk
                         </span>
                         <span className="text-[10px] font-bold bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full animate-pulse">
                           Auto-Synced from CRM
@@ -1480,7 +1494,7 @@ export default function AccountsCoordinatorPage() {
                     onClick={() => setDefaulterCategoryFilter('NEW_ADMISSION')}
                     className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 self-start sm:self-auto"
                   >
-                    <span>Inspect Intake Queue ({defaulters.filter(d => d.is_admission_fee).length})</span>
+                    <span>Inspect Intake Queue ({defaulters.filter(d => Boolean(d.is_admission_fee)).length})</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -1516,7 +1530,7 @@ export default function AccountsCoordinatorPage() {
                           <td className="p-3.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-900 dark:text-white">{d.student_name}</span>
-                              {d.is_admission_fee && (
+                              {Boolean(d.is_admission_fee) && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                   ★ New Admission
                                 </span>
@@ -1616,12 +1630,14 @@ export default function AccountsCoordinatorPage() {
                                 <span>Mock Pay</span>
                               </button>
                               <button
+                                disabled={d.amount_due <= 0}
                                 onClick={() => {
+                                  if (d.amount_due <= 0) return;
                                   setWaiverModalDefaulter(d);
                                   setWaiverAmount(Math.min(5000, d.amount_due));
                                 }}
-                                className="rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer"
-                                title="Grant Hardship Concession"
+                                className="rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                title={d.amount_due <= 0 ? "No balance due" : "Grant Hardship Concession"}
                               >
                                 Concession
                               </button>
@@ -2688,49 +2704,171 @@ export default function AccountsCoordinatorPage() {
       {/* ── MODAL: APPLY CONCESSION / WAIVER ── */}
       {waiverModalDefaulter && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Apply Fee Concession / Waiver</h3>
-                <span className="text-[11px] text-slate-500">{waiverModalDefaulter.student_name} (Current Due: ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')})</span>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Apply Fee Concession / Hardship Waiver</h3>
+                  <span className="text-[11px] text-slate-500">Institutional Board Approval &amp; Ledger Adjustment</span>
+                </div>
               </div>
-              <button onClick={() => setWaiverModalDefaulter(null)}><X className="h-4 w-4 text-slate-400" /></button>
+              <button 
+                type="button"
+                onClick={() => setWaiverModalDefaulter(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <form onSubmit={handleApplyWaiverSubmit} className="space-y-3 text-xs">
+
+            {/* Overdue Balance Summary Card */}
+            <div className="p-3.5 rounded-2xl bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-between text-xs">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Concession Amount (₹)</label>
+                <span className="text-[10px] font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider block">Student &amp; Class</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {waiverModalDefaulter.student_name} ({waiverModalDefaulter.class_name})
+                </span>
+                <span className="text-[11px] text-slate-500 block">{waiverModalDefaulter.milestone_title}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider block">Total Balance Due</span>
+                <span className="text-lg font-black text-purple-950 dark:text-purple-200 tabular-nums">
+                  ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleApplyWaiverSubmit} className="space-y-3.5 text-xs">
+              {/* Concession Input with Quick Shortcuts */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Concession Amount (₹) *
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(Math.round(waiverModalDefaulter.amount_due * 0.25))}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                    >
+                      25%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(Math.round(waiverModalDefaulter.amount_due * 0.50))}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(waiverModalDefaulter.amount_due)}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 hover:bg-purple-200 dark:bg-purple-950 text-purple-700 dark:text-purple-300 cursor-pointer transition-colors"
+                    >
+                      100% Full Waiver
+                    </button>
+                  </div>
+                </div>
                 <input 
                   type="number" 
                   required
-                  value={waiverAmount} 
+                  min={1}
+                  max={waiverModalDefaulter.amount_due}
+                  value={waiverAmount || ''} 
                   onChange={e => setWaiverAmount(Number(e.target.value))} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm"
+                  placeholder={`Enter amount (Max: ₹${waiverModalDefaulter.amount_due.toLocaleString('en-IN')})`}
+                  className={`w-full rounded-xl border p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm transition-colors ${
+                    waiverAmount > waiverModalDefaulter.amount_due
+                      ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
+                      : 'border-slate-300 dark:border-slate-700'
+                  }`}
                 />
               </div>
+
+              {/* Dynamic Recalculation / Limit Alert */}
+              {waiverAmount > waiverModalDefaulter.amount_due ? (
+                <div className="p-3 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                  <div>
+                    <span className="block">Concession Exceeds Overdue Balance!</span>
+                    <span className="text-[11px] font-normal block mt-0.5">
+                      You entered ₹{waiverAmount.toLocaleString('en-IN')}, which is ₹{(waiverAmount - waiverModalDefaulter.amount_due).toLocaleString('en-IN')} higher than the student&apos;s total debt. Maximum allowed concession is ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')}.
+                    </span>
+                  </div>
+                </div>
+              ) : waiverAmount > 0 ? (
+                <div className="p-2.5 rounded-xl border border-emerald-300/60 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Net Balance After Concession:</span>
+                  </div>
+                  <span className="font-bold text-sm tabular-nums">
+                    ₹{Math.max(0, waiverModalDefaulter.amount_due - waiverAmount).toLocaleString('en-IN')}
+                    {waiverModalDefaulter.amount_due - waiverAmount === 0 && ' (Account Cleared ✓)'}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Approval Authority */}
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Approval Authority</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Approval Authority *</label>
                 <input 
                   type="text" 
                   required
                   value={waiverApprover} 
                   onChange={e => setWaiverApprover(e.target.value)} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
+
+              {/* Predefined Category + Justification */}
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Reason / Board Justification</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Standard Concession Policy</label>
+                <select 
+                  onChange={e => {
+                    if (e.target.value) setWaiverReason(e.target.value);
+                  }}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white mb-2"
+                >
+                  <option value="">Select standard policy category...</option>
+                  <option value="Single Parent / Family Hardship Concession">Single Parent / Family Hardship Concession</option>
+                  <option value="Academic Merit &amp; Scholarship Board Waiver">Academic Merit &amp; Scholarship Board Waiver</option>
+                  <option value="State/National Sports Championship Concession">State/National Sports Championship Concession</option>
+                  <option value="Sibling Enrollment Institutional Concession">Sibling Enrollment Institutional Concession</option>
+                  <option value="Executive Management Discretionary Hardship Waiver">Executive Management Discretionary Hardship Waiver</option>
+                </select>
+
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Board Justification / Reason *</label>
                 <textarea 
                   rows={2}
                   required
                   value={waiverReason} 
                   onChange={e => setWaiverReason(e.target.value)} 
                   placeholder="e.g. Sports scholarship hardship concession approved in Board Meeting" 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
-              <button type="submit" className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2.5 font-bold mt-2 shadow-md">
-                Authorize Concession
-              </button>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setWaiverModalDefaulter(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isApplyingWaiver || waiverAmount <= 0 || waiverAmount > waiverModalDefaulter.amount_due}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isApplyingWaiver ? 'Authorizing Concession...' : 'Authorize Concession'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

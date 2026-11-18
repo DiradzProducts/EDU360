@@ -593,11 +593,21 @@ export interface LeaveRequest {
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   teacher_notes?: string;
+  admin_notes?: string;
+  is_admin_override?: boolean;
+  overridden_at?: string;
+  overridden_by?: string;
   is_medical?: boolean;
   attachment_name?: string;
   attachment_url?: string;
   approval_stage?: 'Submitted' | 'Under Review' | 'Principal Approved' | 'Attendance Adjusted' | string;
   applied_at: string;
+}
+
+export interface AdminStudentLeaveOverridePayload {
+  status: 'Approved' | 'Rejected';
+  admin_notes: string;
+  admin_name?: string;
 }
 
 export interface FeeMilestone {
@@ -1759,3 +1769,47 @@ export interface LiveKitTokenResponse {
   role: string;
   is_cloud_active: boolean;
 }
+
+// --- Granular Subject-Wise Attendance Ledger Types ---
+export interface SubjectIncidentLog {
+  id?: number;
+  date: string;
+  time: string;
+  elapsed: number;
+  status: 'Present' | 'Late' | 'Absent' | 'Excused';
+  note: string;
+  action: string;
+  approved_by?: string;
+}
+
+export interface SubjectAttendanceData {
+  subject: string;
+  code: string;
+  faculty: string;
+  period: string;
+  total: number;
+  onTime: number;
+  lateCount: number;
+  avgLateMins: number;
+  excused: number;
+  unexcused: number;
+  healthPct: number | null;
+  statusTier: 'perfect' | 'healthy' | 'warning' | 'critical' | 'unrated';
+  incidents: SubjectIncidentLog[];
+}
+
+export interface StudentPunctualityLedgerResponse {
+  student_id: number;
+  student_name: string;
+  class_name: string;
+  section: string;
+  admission_no: string;
+  admission_date?: string;
+  total_classes: number;
+  late_marks: number;
+  excused_leaves: number;
+  unexcused_bunks: number;
+  punctuality_compliance_pct: number;
+  subjects: SubjectAttendanceData[];
+}
+

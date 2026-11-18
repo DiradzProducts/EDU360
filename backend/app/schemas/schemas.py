@@ -403,6 +403,8 @@ class AttendanceRecordResponse(BaseModel):
     minutes_late: float
     status: str
     teacher_override: bool
+    admin_override: Optional[bool] = False
+    override_by_role: Optional[str] = "NONE"
     date: str
     class Config:
         from_attributes = True
@@ -537,6 +539,11 @@ class LeaveRequestReview(BaseModel):
     status: str  # Approved or Rejected
     teacher_notes: Optional[str] = None
 
+class AdminStudentLeaveOverrideRequest(BaseModel):
+    status: str  # Approved or Rejected
+    admin_notes: str
+    admin_name: Optional[str] = "Principal Dr. Rajesh Sharma"
+
 class LeaveRequestResponse(BaseModel):
     id: int
     student_id: int
@@ -547,6 +554,10 @@ class LeaveRequestResponse(BaseModel):
     reason: str
     status: str
     teacher_notes: Optional[str] = None
+    admin_notes: Optional[str] = None
+    is_admin_override: Optional[bool] = False
+    overridden_at: Optional[datetime.datetime] = None
+    overridden_by: Optional[str] = None
     is_medical: Optional[bool] = False
     attachment_name: Optional[str] = None
     attachment_url: Optional[str] = None
@@ -1628,5 +1639,83 @@ class StaffPermissionReviewRequest(BaseModel):
     status: str = "Approved"  # "Approved" | "Rejected"
     notes: Optional[str] = None
     assign_substitute: bool = True
+
+
+# --- Phase 1: Granular Subject-Wise Punctuality Ledger Schemas ---
+
+class AcademicSubjectResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    faculty_name: str
+    period_slot: str
+    class_name: str
+    section: str
+    planned_sessions: int
+    room: Optional[str] = "Room 204"
+
+    class Config:
+        from_attributes = True
+
+
+class AttendanceIncidentLogItem(BaseModel):
+    id: Optional[int] = None
+    date: str
+    time: str
+    elapsed: float
+    status: str  # 'Present', 'Late', 'Absent', 'Excused'
+    note: str
+    action: str
+    approved_by: Optional[str] = None
+
+
+class SubjectAttendanceLedgerItem(BaseModel):
+    subject: str
+    code: str
+    faculty: str
+    period: str
+    total: int
+    onTime: int
+    lateCount: int
+    avgLateMins: float
+    excused: int
+    unexcused: int
+    healthPct: Optional[float] = None
+    statusTier: str  # 'perfect', 'healthy', 'warning', 'critical', 'unrated'
+    incidents: list[AttendanceIncidentLogItem] = []
+
+
+class SubjectAttendanceLedgerResponse(BaseModel):
+    student_id: int
+    student_name: str
+    class_name: str
+    section: str
+    admission_no: str
+    admission_date: Optional[str] = None
+    total_classes: int
+    late_marks: int
+    excused_leaves: int
+    unexcused_bunks: int
+    punctuality_compliance_pct: float
+    subjects: list[SubjectAttendanceLedgerItem]
+
+
+class PeriodAttendanceRecordInput(BaseModel):
+    student_id: int
+    status: str = "Present"  # Present, Late, Absent, Excused
+    elapsed_minutes: float = 0.0
+    note: Optional[str] = None
+
+
+class MarkPeriodAttendancePayload(BaseModel):
+    subject_code: str
+    class_name: str
+    section: str
+    period_no: int = 1
+    session_date: str
+    time_slot: str
+    topic_covered: Optional[str] = None
+    records: list[PeriodAttendanceRecordInput]
+
 
 

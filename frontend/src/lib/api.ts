@@ -6,7 +6,7 @@ import {
 
   LiveClass, AttendanceRecord, Homework, HomeworkSubmission,
 
-  FocusTable, LeaveRequest, FeeMilestone, BusRoute,
+  FocusTable, LeaveRequest, AdminStudentLeaveOverridePayload, FeeMilestone, BusRoute,
 
   StudentPortfolio, ClassRecording,
 
@@ -60,7 +60,9 @@ import {
 
   ExecutivePulseResponse,
 
-  ParentTeacherChatMessage, TaxCertificateData
+  ParentTeacherChatMessage, TaxCertificateData,
+
+  SubjectAttendanceData, StudentPunctualityLedgerResponse
 
 } from './types';
 
@@ -2247,17 +2249,13 @@ let fallbackExamSubmissions: Record<number, ExamSubmissionItem[]> = {
 
 
 let fallbackFeeDefaulters: FeeDefaulter[] = [
-
-  { id: 101, student_name: "Aarav Sharma", class_name: "Class 8-B", roll_no: "ADM-2026-0819", parent_name: "Mr. Rajesh Sharma", parent_phone: "+91 98450 12345", milestone_title: "Admission & Term 1 Tuition (INV-2026-ADM-0819)", amount_due: 25000, days_overdue: 2, reminder_sent: false, is_admission_fee: true, exam_clearance: false, status: 'Overdue' },
-
-  { id: 1, student_name: "Kabir Mehta", class_name: "Class 8A", roll_no: "15", parent_name: "Mr. Suresh Mehta", parent_phone: "+91 98111 00015", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 18, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' },
-
+  { id: 101, student_name: "Aarav Sharma", class_name: "Class 8-B", roll_no: "ADM-2026-0819", parent_name: "Mr. Rajesh Sharma", parent_phone: "+91 98450 12345", milestone_title: "Admission & Term 1 Tuition (INV-2026-ADM-0819)", amount_due: 25000, days_overdue: 2, reminder_sent: false, is_admission_fee: true, exam_clearance: true, status: 'Overdue' },
+  { id: 102, student_name: "Rahul Rehaman", class_name: "Class 8-A", roll_no: "ADM-2026-0811", parent_name: "Mr. Rehaman", parent_phone: "+91 95467 89812", milestone_title: "One-Time Admission Fee (INV-2026-ADM-0811)", amount_due: 25000, days_overdue: 1, reminder_sent: false, is_admission_fee: true, exam_clearance: true, status: 'Overdue' },
+  { id: 103, student_name: "Siddharth Rao", class_name: "Class 8-B", roll_no: "ADM-2026-0801", parent_name: "Mrs. Meera Rao", parent_phone: "+91 98450 99881", milestone_title: "One-Time Admission & Registration Fee", amount_due: 25000, days_overdue: 3, reminder_sent: false, is_admission_fee: true, exam_clearance: true, status: 'Overdue' },
+  { id: 1, student_name: "Kabir Mehta", class_name: "Class 8-A", roll_no: "15", parent_name: "Mr. Suresh Mehta", parent_phone: "+91 98111 00015", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 18, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' },
   { id: 2, student_name: "Vivaan Sen", class_name: "Class 8-B", roll_no: "22", parent_name: "Mrs. Ritu Sen", parent_phone: "+91 98111 00022", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 34, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' },
-
   { id: 3, student_name: "Tanvi Deshmukh", class_name: "Class 8-A", roll_no: "08", parent_name: "Dr. Amit Deshmukh", parent_phone: "+91 98450 99882", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 16000, days_overdue: 5, reminder_sent: true, is_admission_fee: false, exam_clearance: true, status: 'Overdue' },
-
   { id: 4, student_name: "Rohan Iyer", class_name: "Class 9-A", roll_no: "18", parent_name: "Mr. S. Iyer", parent_phone: "+91 98111 00018", milestone_title: "Milestone 2 (Term 2 Tuition)", amount_due: 18500, days_overdue: 8, reminder_sent: false, is_admission_fee: false, exam_clearance: false, status: 'Overdue' }
-
 ];
 
 
@@ -5861,34 +5859,41 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   }) => {
 
-    const enq = fallbackEnquiries.find(e => e.id === id);
+    let enq = fallbackEnquiries.find(e => e.id === id || String(e.id) === String(id));
+    if (!enq) {
+      // Check if candidate is available from any other fallback or synthetic registration
+      enq = {
+        id: Number(id),
+        student_name: "Candidate Student",
+        parent_name: "Parent / Guardian",
+        email: "parent@edu360.internal",
+        phone: "+91 98450 12345",
+        target_grade: "Class 8",
+        stage: "converted",
+        lead_temperature: "warm",
+        source: "Direct Registration",
+        doc_report_card: true,
+        doc_birth_cert: true,
+        doc_transfer_cert: false,
+        created_at: new Date().toISOString()
+      };
+      fallbackEnquiries.unshift(enq);
+    }
 
-    const studentName = enq ? enq.student_name : 'New Student';
-
+    const studentName = enq.student_name;
     const rollNo = `ADM-2026-08${String(id).padStart(2, '0')}`;
-
-    const targetGrade = enq?.target_grade || 'Class 8';
-
-    const sectionName = options?.section ? `${targetGrade}-${options.section}` : `${targetGrade}-B`;
-
+    const targetGrade = enq.target_grade || 'Class 8';
+    const cleanSection = (options?.section || 'A').replace(/Section\s*/i, '').trim() || 'A';
+    const sectionName = `${targetGrade}-${cleanSection}`;
     const invoiceNo = `INV-2026-ADM-${id}84`;
-
     const feeAmt = options?.feeAmount ?? 25000;
-
     const feeStatus = options?.feeStatus ?? 'Pending';
-
     const payMethod = options?.paymentMethod ?? 'UPI';
 
-
-
-    fallbackEnquiries = fallbackEnquiries.map(e => e.id === id ? { 
-
+    fallbackEnquiries = fallbackEnquiries.map(e => (e.id === id || String(e.id) === String(id)) ? { 
       ...e, 
-
       stage: 'converted', 
-
       notes: `${e.notes || ''} | Enrolled as ${rollNo} in ${sectionName}. Admission Fee ₹${feeAmt} (${feeStatus}).` 
-
     } : e);
 
 
@@ -6050,93 +6055,126 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     } else {
 
       const newAdmissionDefaulter: FeeDefaulter = {
-
         id: fallbackFeeDefaulters.length + 100,
-
         student_id: id + 100,
-
         student_name: studentName,
-
         class_name: sectionName,
-
         roll_no: rollNo,
-
         parent_name: enq?.parent_name || `Parent of ${studentName}`,
-
         parent_phone: enq?.phone || '+91 98450 12345',
-
         milestone_title: `One-Time Admission Fee (${invoiceNo})`,
-
         amount_due: feeAmt,
-
         days_overdue: 0,
-
         reminder_sent: false,
-
         is_admission_fee: true,
-
         exam_clearance: true,
-
         status: 'Overdue'
-
       };
-
-      fallbackFeeDefaulters.unshift(newAdmissionDefaulter);
-
+      fallbackFeeDefaulters = [
+        newAdmissionDefaulter,
+        ...fallbackFeeDefaulters.filter(d => d.student_name.toLowerCase() !== studentName.toLowerCase())
+      ];
     }
+
+    // Register Student into SIS and Teacher Live Roster with 100% Onboarding Baseline
+    const newStudentId = id + 100;
+    const newStudentObj: Student = {
+      id: newStudentId,
+      name: studentName,
+      roll_no: rollNo,
+      class_name: enq?.target_grade || 'Class 8',
+      section: sectionName,
+      admission_no: `EDU-2026-${newStudentId}`,
+      guardian_name: enq?.parent_name || `Parent of ${studentName}`,
+      guardian_phone: enq?.phone || '+91 98450 12345',
+      guardian_email: enq?.email || 'parent@edu360.internal',
+      attendance_pct: 100.0,
+      academic_average_pct: 85.0,
+      status: 'Active'
+    };
+    fallbackStudents = [newStudentObj, ...fallbackStudents];
+
+    const newTeacherStudent: TeacherStudentRosterItem = {
+      id: newStudentId,
+      name: studentName,
+      roll_no: rollNo,
+      class_name: `${enq?.target_grade || 'Class 8'}-${sectionName}`,
+      raw_class: enq?.target_grade || 'Class 8',
+      section: sectionName,
+      attendance_pct: 100.0,
+      missed_classes_count: 0,
+      academic_average_pct: 85.0,
+      guardian_name: enq?.parent_name || `Parent of ${studentName}`,
+      guardian_phone: enq?.phone || '+91 98450 12345',
+      has_focus_table: false,
+      focus_concept: null,
+      homework_status: 'Submitted',
+      last_active: 'Just enrolled • Today',
+      is_on_leave: false,
+      is_leave_pending: false,
+      today_attendance_status: 'Present',
+      attendance_flag: 'PRESENT'
+    };
+    fallbackTeacherStudents = [newTeacherStudent, ...fallbackTeacherStudents];
+
+    const newAttRecord: AttendanceRecord = {
+      id: fallbackAttendance.length + 10,
+      class_id: 1,
+      student_id: newStudentId,
+      student_name: studentName,
+      join_timestamp: "+2.0m (10:02 AM)",
+      minutes_late: 2.0,
+      status: "Present",
+      teacher_override: false,
+      date: new Date().toISOString().split('T')[0]
+    };
+    fallbackAttendance = [...fallbackAttendance, newAttRecord];
 
 
 
     try {
-
       return await fetchWithFallback(`/api/admin/crm/enquiries/${id}/convert`, {
-
         method: 'POST',
-
         body: JSON.stringify({
-
-          section: options?.section || 'B',
-
+          section: cleanSection,
           admission_fee: feeAmt,
-
           fee_status: feeStatus,
-
           payment_method: payMethod,
-
           uploaded_docs: options?.uploadedDocs,
-
           tc_undertaking: options?.tcUndertaking
-
         })
-
       });
-
     } catch {
 
+      const cleanStudent = studentName.toLowerCase().replace(/\s+/g, '_');
+      const cleanParent = (enq?.parent_name || 'parent').toLowerCase().replace(/\s+/g, '_');
+
       return {
-
         success: true,
-
         student_name: studentName,
-
         roll_no: rollNo,
-
         allocated_section: sectionName,
-
         admission_fee_invoice: invoiceNo,
-
         fee_amount: feeAmt,
-
         fee_status: feeStatus,
-
-        parent_user: enq?.email || 'parent.portal@edu360.internal',
-
+        parent_user: enq?.email || `${cleanParent}@edu360.internal`,
         temp_password: `Edu360@${new Date().getFullYear()}`,
-
         parent_phone: enq?.phone || '+91 98450 12345',
-
-        message: `Student enrolled successfully as ${rollNo}! Admission Fee ₹${feeAmt} (${feeStatus}) dispatched to Accounts Desk.`
-
+        message: `Student enrolled successfully as ${rollNo}! Admission Fee ₹${feeAmt} (${feeStatus}) dispatched to Accounts Desk.`,
+        credentials: {
+          student_name: studentName,
+          student_username: `${cleanStudent}_${id + 30}`,
+          student_password: 'Password123',
+          student_roll: rollNo,
+          student_class: sectionName,
+          student_admission_no: `EDU-2026-${id + 100}`,
+          student_portal: '/student',
+          parent_name: enq?.parent_name || 'Parent / Guardian',
+          parent_username: `parent_${cleanParent}_${id + 30}`,
+          parent_password: 'Password123',
+          parent_phone: enq?.phone || '+91 98450 12345',
+          parent_portal: '/parent'
+        }
       };
 
     }
@@ -6427,6 +6465,59 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         };
 
         fallbackDocuments = [newDoc, ...fallbackDocuments];
+
+        // Register Student into SIS & Teacher Live Roster with 100% Onboarding Baseline
+        const newStudentObj: Student = {
+          id: randId,
+          name: payload.student_name,
+          roll_no: `${payload.target_grade.replace(/\D/g, '') || '8'}${payload.section || 'B'}-${(randId % 40 + 1).toString().padStart(2, '0')}`,
+          class_name: payload.target_grade || 'Class 8',
+          section: payload.section || 'B',
+          admission_no: admNo,
+          guardian_name: payload.parent_name,
+          guardian_phone: payload.phone,
+          guardian_email: payload.email || 'parent@edu360.internal',
+          attendance_pct: 100.0,
+          academic_average_pct: 85.0,
+          status: 'Active'
+        };
+        fallbackStudents = [newStudentObj, ...fallbackStudents];
+
+        const newTeacherStudent: TeacherStudentRosterItem = {
+          id: randId,
+          name: payload.student_name,
+          roll_no: (randId % 40 + 1).toString().padStart(2, '0'),
+          class_name: `${payload.target_grade || 'Class 8'}-${payload.section || 'B'}`,
+          raw_class: payload.target_grade || 'Class 8',
+          section: payload.section || 'B',
+          attendance_pct: 100.0,
+          missed_classes_count: 0,
+          academic_average_pct: 85.0,
+          guardian_name: payload.parent_name,
+          guardian_phone: payload.phone,
+          has_focus_table: false,
+          focus_concept: null,
+          homework_status: 'Submitted',
+          last_active: 'Just enrolled • Today',
+          is_on_leave: false,
+          is_leave_pending: false,
+          today_attendance_status: 'Present',
+          attendance_flag: 'PRESENT'
+        };
+        fallbackTeacherStudents = [newTeacherStudent, ...fallbackTeacherStudents];
+
+        const newAttRecord: AttendanceRecord = {
+          id: fallbackAttendance.length + 10,
+          class_id: 1,
+          student_id: randId,
+          student_name: payload.student_name,
+          join_timestamp: "+2.0m (10:02 AM)",
+          minutes_late: 2.0,
+          status: "Present",
+          teacher_override: false,
+          date: new Date().toISOString().split('T')[0]
+        };
+        fallbackAttendance = [...fallbackAttendance, newAttRecord];
 
         return {
 
@@ -7451,9 +7542,85 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       }
 
       return fallbackLeaveRequests.find(lr => lr.id === requestId);
-
     }
+  },
 
+  getAdminStudentLeaves: async (status?: string, studentId?: number): Promise<LeaveRequest[]> => {
+    let url = '/api/admin/student-leaves';
+    const params = new URLSearchParams();
+    if (status && status !== 'All') params.append('status', status);
+    if (studentId) params.append('student_id', studentId.toString());
+    if (params.toString()) url += `?${params.toString()}`;
+    return fetchWithFallback<LeaveRequest[]>(url, undefined, fallbackLeaveRequests);
+  },
+
+  overrideStudentLeave: async (requestId: number, payload: AdminStudentLeaveOverridePayload): Promise<LeaveRequest> => {
+    try {
+      const res = await fetchWithFallback<LeaveRequest>(`/api/admin/student-leaves/${requestId}/override`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      // Synchronize in-memory fallback state so offline and hybrid flows stay 100% synced
+      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? {
+        ...lr,
+        status: payload.status,
+        admin_notes: payload.admin_notes,
+        is_admin_override: true,
+        overridden_by: payload.admin_name || 'Principal Dr. Rajesh Sharma',
+        overridden_at: new Date().toISOString(),
+        approval_stage: `Overridden by Admin (${payload.status})`
+      } : lr);
+
+      const targetStudentId = fallbackLeaveRequests.find(lr => lr.id === requestId)?.student_id || 1;
+      if (payload.status === 'Approved') {
+        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
+          ...st,
+          is_on_leave: true,
+          is_leave_pending: false,
+          leave_status: 'Approved Leave',
+          today_attendance_status: 'Excused Leave',
+          attendance_flag: 'EXCUSED_LEAVE',
+          last_active: 'On Approved Leave (Admin Override)'
+        } : st);
+        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
+          ...a,
+          status: 'Leave',
+          teacher_override: true,
+          join_timestamp: 'Excused Leave (Admin Override)'
+        } : a);
+      } else {
+        fallbackTeacherStudents = fallbackTeacherStudents.map(st => st.id === targetStudentId ? {
+          ...st,
+          is_on_leave: false,
+          is_leave_pending: false,
+          leave_status: 'None',
+          today_attendance_status: 'Absent',
+          attendance_flag: 'ABSENT',
+          last_active: 'Absent'
+        } : st);
+        fallbackAttendance = fallbackAttendance.map(a => a.student_id === targetStudentId ? {
+          ...a,
+          status: 'Absent',
+          teacher_override: true,
+          join_timestamp: undefined
+        } : a);
+      }
+
+      return res || fallbackLeaveRequests.find(lr => lr.id === requestId)!;
+    } catch (e) {
+      console.warn("overrideStudentLeave API error, updating fallback:", e);
+      fallbackLeaveRequests = fallbackLeaveRequests.map(lr => lr.id === requestId ? {
+        ...lr,
+        status: payload.status,
+        admin_notes: payload.admin_notes,
+        is_admin_override: true,
+        overridden_by: payload.admin_name || 'Principal Dr. Rajesh Sharma',
+        overridden_at: new Date().toISOString(),
+        approval_stage: `Overridden by Admin (${payload.status})`
+      } : lr);
+      return fallbackLeaveRequests.find(lr => lr.id === requestId)!;
+    }
   },
 
   getTeacherSchedule: async () => {
@@ -14305,6 +14472,250 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
     }
 
+  },
+
+  // --- Granular Subject-Wise Punctuality Ledger (Phase 2) ---
+  getStudentPunctualityLedger: async (studentId: number): Promise<StudentPunctualityLedgerResponse> => {
+    try {
+      const res = await fetchWithFallback<StudentPunctualityLedgerResponse>(`/api/student/${studentId}/punctuality-ledger`);
+      if (res && res.subjects && res.subjects.length > 0) {
+        return res;
+      }
+    } catch {
+      // fallback to dynamic generator below
+    }
+
+    // Dynamic Fallback Generator for any student ID
+    const isDemo = (studentId === 1);
+    if (isDemo) {
+      return {
+        student_id: 1,
+        student_name: 'Aarav Sharma',
+        class_name: 'Class 8',
+        section: 'B',
+        admission_no: 'EDU-2024-082',
+        admission_date: '2024-06-15',
+        total_classes: 110,
+        late_marks: 8,
+        excused_leaves: 3,
+        unexcused_bunks: 1,
+        punctuality_compliance_pct: 94.2,
+        subjects: [
+          {
+            subject: 'Mathematics',
+            code: 'MATH-801',
+            faculty: 'Mrs. Ananya Verma',
+            period: 'Period 1 (08:30 AM)',
+            total: 26,
+            onTime: 18,
+            lateCount: 5,
+            avgLateMins: 14.2,
+            excused: 2,
+            unexcused: 1,
+            healthPct: 76.9,
+            statusTier: 'warning',
+            incidents: [
+              { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
+              { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
+              { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
+              { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
+              { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
+            ]
+          },
+          {
+            subject: 'Physics',
+            code: 'PHYS-802',
+            faculty: 'Dr. Rajesh Rao',
+            period: 'Period 2 (09:30 AM)',
+            total: 24,
+            onTime: 21,
+            lateCount: 2,
+            avgLateMins: 12.5,
+            excused: 1,
+            unexcused: 0,
+            healthPct: 91.7,
+            statusTier: 'healthy',
+            incidents: [
+              { date: 'Oct 30, 2026', time: '09:43 AM', elapsed: 13.0, status: 'Late', note: 'Optics lab prep delay.', action: 'Logged Late (+13m)' },
+              { date: 'Oct 23, 2026', time: '09:41 AM', elapsed: 11.0, status: 'Present', note: 'Teacher approved: Library science journal return.', action: 'Excused by Dr. Rao' }
+            ]
+          },
+          {
+            subject: 'Chemistry',
+            code: 'CHEM-803',
+            faculty: 'Mr. Vikram Seth',
+            period: 'Period 4 (11:30 AM)',
+            total: 22,
+            onTime: 20,
+            lateCount: 1,
+            avgLateMins: 12.0,
+            excused: 1,
+            unexcused: 0,
+            healthPct: 95.5,
+            statusTier: 'perfect',
+            incidents: [
+              { date: 'Nov 03, 2026', time: '11:42 AM', elapsed: 12.0, status: 'Late', note: 'Joined at +12m. Titration bench reassigned.', action: 'Warning Issued (+12m)' }
+            ]
+          },
+          {
+            subject: 'English Literature',
+            code: 'ENG-804',
+            faculty: 'Ms. Priya Sen',
+            period: 'Period 5 (01:15 PM)',
+            total: 24,
+            onTime: 22,
+            lateCount: 1,
+            avgLateMins: 12.0,
+            excused: 1,
+            unexcused: 0,
+            healthPct: 95.8,
+            statusTier: 'healthy',
+            incidents: [
+              { date: 'Oct 21, 2026', time: '01:27 PM', elapsed: 12.0, status: 'Present', note: 'Debate council duty clearance.', action: 'Approved by Ms. Sen' }
+            ]
+          },
+          {
+            subject: 'Computer Science',
+            code: 'CS-805',
+            faculty: 'Mrs. Neha Gupta',
+            period: 'Period 6 (02:15 PM)',
+            total: 18,
+            onTime: 18,
+            lateCount: 0,
+            avgLateMins: 0,
+            excused: 0,
+            unexcused: 0,
+            healthPct: 100.0,
+            statusTier: 'perfect',
+            incidents: []
+          }
+        ]
+      };
+    }
+
+    // Dynamic Newly Enrolled Student
+    const targetStudent = fallbackStudents.find(s => s.id === studentId);
+    const studentName = targetStudent?.name || `Student Enrollee #${studentId}`;
+    const className = targetStudent?.class_name || 'Class 8';
+    const section = targetStudent?.section || 'B';
+    const admNo = targetStudent?.admission_no || `EDU-2026-${studentId.toString().padStart(3, '0')}`;
+
+    return {
+      student_id: studentId,
+      student_name: studentName,
+      class_name: className,
+      section: section,
+      admission_no: admNo,
+      admission_date: '2026-11-01',
+      total_classes: 30,
+      late_marks: 0,
+      excused_leaves: 0,
+      unexcused_bunks: 0,
+      punctuality_compliance_pct: 100.0,
+      subjects: [
+        {
+          subject: 'Mathematics',
+          code: 'MATH-801',
+          faculty: 'Mrs. Ananya Verma',
+          period: 'Period 1 (08:30 AM)',
+          total: 8,
+          onTime: 8,
+          lateCount: 0,
+          avgLateMins: 0,
+          excused: 0,
+          unexcused: 0,
+          healthPct: 100.0,
+          statusTier: 'perfect',
+          incidents: []
+        },
+        {
+          subject: 'Physics',
+          code: 'PHYS-802',
+          faculty: 'Dr. Rajesh Rao',
+          period: 'Period 2 (09:30 AM)',
+          total: 6,
+          onTime: 6,
+          lateCount: 0,
+          avgLateMins: 0,
+          excused: 0,
+          unexcused: 0,
+          healthPct: 100.0,
+          statusTier: 'perfect',
+          incidents: []
+        },
+        {
+          subject: 'Chemistry',
+          code: 'CHEM-803',
+          faculty: 'Mr. Vikram Seth',
+          period: 'Period 4 (11:30 AM)',
+          total: 6,
+          onTime: 6,
+          lateCount: 0,
+          avgLateMins: 0,
+          excused: 0,
+          unexcused: 0,
+          healthPct: 100.0,
+          statusTier: 'perfect',
+          incidents: []
+        },
+        {
+          subject: 'English Literature',
+          code: 'ENG-804',
+          faculty: 'Ms. Priya Sen',
+          period: 'Period 5 (01:15 PM)',
+          total: 6,
+          onTime: 6,
+          lateCount: 0,
+          avgLateMins: 0,
+          excused: 0,
+          unexcused: 0,
+          healthPct: 100.0,
+          statusTier: 'perfect',
+          incidents: []
+        },
+        {
+          subject: 'Computer Science',
+          code: 'CS-805',
+          faculty: 'Mrs. Neha Gupta',
+          period: 'Period 6 (02:15 PM)',
+          total: 4,
+          onTime: 4,
+          lateCount: 0,
+          avgLateMins: 0,
+          excused: 0,
+          unexcused: 0,
+          healthPct: 100.0,
+          statusTier: 'perfect',
+          incidents: []
+        }
+      ]
+    };
+  },
+
+  getAcademicSubjects: async (className: string = 'Class 8', section: string = 'B') => {
+    try {
+      return await fetchWithFallback<any[]>(`/api/teacher/subjects?class_name=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`);
+    } catch {
+      return [
+        { id: 1, code: 'MATH-801', name: 'Mathematics', faculty_name: 'Mrs. Ananya Verma', period_slot: 'Period 1 (08:30 AM)' },
+        { id: 2, code: 'PHYS-802', name: 'Physics', faculty_name: 'Dr. Rajesh Rao', period_slot: 'Period 2 (09:30 AM)' },
+        { id: 3, code: 'CHEM-803', name: 'Chemistry', faculty_name: 'Mr. Vikram Seth', period_slot: 'Period 4 (11:30 AM)' },
+        { id: 4, code: 'ENG-804', name: 'English Literature', faculty_name: 'Ms. Priya Sen', period_slot: 'Period 5 (01:15 PM)' },
+        { id: 5, code: 'CS-805', name: 'Computer Science', faculty_name: 'Mrs. Neha Gupta', period_slot: 'Period 6 (02:15 PM)' }
+      ];
+    }
+  },
+
+  markPeriodAttendance: async (payload: any) => {
+    try {
+      return await fetchWithFallback<any>('/api/teacher/attendance/mark-period', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      return { success: true, message: `Period ${payload.period_no} attendance recorded locally.` };
+    }
   },
 
 };

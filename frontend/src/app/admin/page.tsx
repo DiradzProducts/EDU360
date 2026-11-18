@@ -72,6 +72,7 @@ import {
   ExitClearance, 
   StaffMemberItem,
   Student,
+  LeaveRequest,
   ReExamRequestItem,
   TeacherPermissionRequest,
   InventoryRecord,
@@ -91,6 +92,7 @@ import { CRMBoard } from '@/components/crm-board';
 import { ExitClearanceView } from '@/components/exit-clearance-modal';
 import { RoleGuard } from '@/components/role-guard';
 import { UnifiedSISView } from '@/components/unified-sis-view';
+import { ConfirmEnrollmentModal } from '@/components/admissions/confirm-enrollment-modal';
 import { Footer } from '@/components/footer';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
 import { useTheme } from '@/lib/theme-context';
@@ -102,6 +104,7 @@ type AdminTab =
   | 'tasks'
   | 'crm' 
   | 'sis' 
+  | 'student_leaves'
   | 'substitutions'
   | 'staff' 
   | 'permissions'
@@ -130,6 +133,15 @@ export default function AdminPage() {
   const [feeDefaulters, setFeeDefaulters] = useState<FeeDefaulter[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Student Leaves & Administrative Override State
+  const [studentLeaves, setStudentLeaves] = useState<LeaveRequest[]>([]);
+  const [studentLeaveFilter, setStudentLeaveFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'MEDICAL'>('ALL');
+  const [studentLeaveSearch, setStudentLeaveSearch] = useState('');
+  const [overrideModalLeave, setOverrideModalLeave] = useState<LeaveRequest | null>(null);
+  const [overrideStatus, setOverrideStatus] = useState<'Approved' | 'Rejected'>('Approved');
+  const [overrideNotes, setOverrideNotes] = useState('');
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
 
   // Modern Enterprise Admin Modules State
   const [substitutions, setSubstitutions] = useState<SubstitutionSlot[]>([]);
@@ -388,7 +400,8 @@ export default function AdminPage() {
           api.getTaskExecutiveCockpit(),
           api.getRemedialAdminOverview(),
           api.getStudents(),
-          api.getReExamRequests()
+          api.getReExamRequests(),
+          api.getAdminStudentLeaves()
         ]);
 
         if (results[0].status === 'fulfilled') setTriageAlerts(results[0].value);
@@ -409,6 +422,7 @@ export default function AdminPage() {
         if (results[15].status === 'fulfilled' && results[15].value) setRemedialOverview(results[15].value);
         if (results[16] && results[16].status === 'fulfilled') setStudentsList(results[16].value as Student[]);
         if (results[17] && results[17].status === 'fulfilled') setReExamRequests(results[17].value as ReExamRequestItem[]);
+        if (results[18] && results[18].status === 'fulfilled') setStudentLeaves(results[18].value as LeaveRequest[]);
       } catch (err) {
         console.error("Error loading admin dashboard", err);
       } finally {
@@ -434,6 +448,31 @@ export default function AdminPage() {
       triggerToast(`Notification dispatched to Class Teacher Mrs. Ananya Verma with 12h SLA.`);
     } finally {
       setNotifyingStudentId(null);
+    }
+  };
+
+  const handleExecuteLeaveOverride = async () => {
+    if (!overrideModalLeave) return;
+    if (!overrideNotes.trim()) {
+      triggerToast('Please provide an administrative justification note for the statutory audit log.');
+      return;
+    }
+    setOverrideSubmitting(true);
+    try {
+      const updated = await api.overrideStudentLeave(overrideModalLeave.id, {
+        status: overrideStatus,
+        admin_notes: overrideNotes.trim(),
+        admin_name: 'Principal Dr. Rajesh Sharma'
+      });
+      setStudentLeaves(prev => prev.map(l => l.id === overrideModalLeave.id ? updated : l));
+      triggerToast(`✓ Administrative Override Enforced: Leave #${overrideModalLeave.id} set to '${overrideStatus}'. Attendance synchronized.`);
+      setOverrideModalLeave(null);
+      setOverrideNotes('');
+    } catch (e: any) {
+      console.error(e);
+      triggerToast(e?.message || 'Failed to submit administrative override.');
+    } finally {
+      setOverrideSubmitting(false);
     }
   };
 
@@ -856,7 +895,15 @@ export default function AdminPage() {
 
   const handleApplyFeeConcession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waiverModalDefaulter || waiverAmount <= 0) return;
+    if (!waiverModalDefaulter) return;
+    if (waiverAmount <= 0) {
+      triggerToast('⚠️ Please enter a valid concession amount greater than ₹0.');
+      return;
+    }
+    if (waiverAmount > waiverModalDefaulter.amount_due) {
+      triggerToast(`⚠️ Concession amount (₹${waiverAmount.toLocaleString('en-IN')}) cannot exceed current outstanding overdue balance (₹${waiverModalDefaulter.amount_due.toLocaleString('en-IN')}).`);
+      return;
+    }
     setIsApplyingWaiver(true);
     try {
       await api.applyFeeWaiver(waiverModalDefaulter.id, {
@@ -864,7 +911,8 @@ export default function AdminPage() {
         reason: waiverReason || 'Principal Discretionary Concession',
         approved_by: 'Dr. Sunita Kapoor (Principal)',
       });
-      triggerToast(`Granted ₹${waiverAmount.toLocaleString('en-IN')} concession for ${waiverModalDefaulter.student_name}`);
+      const remainingDue = Math.max(0, waiverModalDefaulter.amount_due - waiverAmount);
+      triggerToast(`✓ Granted ₹${waiverAmount.toLocaleString('en-IN')} concession for ${waiverModalDefaulter.student_name}. Remaining due: ₹${remainingDue.toLocaleString('en-IN')}`);
       setWaiverModalDefaulter(null);
       setWaiverAmount(0);
       setWaiverReason('');
@@ -876,8 +924,8 @@ export default function AdminPage() {
       setFeeDefaulters(updatedDefaulters);
       setFeeAnalytics(updatedAnalytics);
     } catch (err: any) {
-      triggerToast('Fee concession recorded.');
-      setWaiverModalDefaulter(null);
+      console.error('Fee concession submission error:', err);
+      triggerToast(err?.message || 'Failed to authorize fee concession. Please verify details and retry.');
     } finally {
       setIsApplyingWaiver(false);
     }
@@ -1171,6 +1219,31 @@ export default function AdminPage() {
                 {!sidebarCollapsed && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                     Roster
+                  </span>
+                )}
+              </button>
+
+              {/* Student Leaves & Overrides */}
+              <button
+                onClick={() => { setActiveTab('student_leaves'); setMobileDrawerOpen(false); }}
+                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                  activeTab === 'student_leaves'
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                }`}
+                title="Student Leaves & Attendance Overrides"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <UserCheck className={`h-4 w-4 shrink-0 ${activeTab === 'student_leaves' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  {!sidebarCollapsed && <span className="truncate">Student Leaves</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                    studentLeaves.filter(l => l.status === 'Pending').length > 0
+                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 font-mono'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {studentLeaves.length}
                   </span>
                 )}
               </button>
@@ -1476,6 +1549,7 @@ export default function AdminPage() {
                 <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
                   {activeTab === 'crm' ? 'Admissions & Inquiries'
                     : activeTab === 'sis' ? (selectedStudentForSIS ? `Student Dossier • Roll #${selectedStudentForSIS.roll_no}` : 'Student Directory & Records (SIS)')
+                    : activeTab === 'student_leaves' ? 'Student Leaves & Administrative Overrides'
                     : activeTab === 'triage' ? "Today's Action Alerts"
                     : activeTab === 'substitutions' ? 'Teacher Attendance & Class Cover'
                     : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
@@ -1494,6 +1568,7 @@ export default function AdminPage() {
                 <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
                   {activeTab === 'crm' ? <UserPlus className="h-5 w-5" />
                     : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" />
+                    : activeTab === 'student_leaves' ? <UserCheck className="h-5 w-5" />
                     : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" />
                     : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" />
                     : activeTab === 'fees' ? <CreditCard className="h-5 w-5" />
@@ -1510,6 +1585,7 @@ export default function AdminPage() {
                   <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                     {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
                       : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
+                      : activeTab === 'student_leaves' ? 'Student Leave Applications & Administrative Overrides'
                       : activeTab === 'triage' ? "Today's School Action Alerts"
                       : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
                       : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
@@ -1525,6 +1601,7 @@ export default function AdminPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
                     : activeTab === 'sis' ? (selectedStudentForSIS ? `Complete academic standing, biometrics, legal documents vault, and fee ledger for ${selectedStudentForSIS.name}.` : 'Complete student roster, class and section filters, 360° student records, and certificates')
+                    : activeTab === 'student_leaves' ? 'Executive governance over parent student leave applications: audit medical certificates, evaluate teacher determinations, and exercise Principal attendance overrides.'
                       : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
                       : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
                       : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
@@ -1543,6 +1620,21 @@ export default function AdminPage() {
 
             {/* Quick Action in Header (NO Dashboard Button) */}
             <div className="flex items-center gap-2 shrink-0">
+
+              {activeTab === 'student_leaves' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const leaves = await api.getAdminStudentLeaves();
+                    setStudentLeaves(leaves);
+                    triggerToast('✓ Refreshed student leave applications from central database.');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Refresh Queue</span>
+                </button>
+              )}
 
               {activeTab === 'crm' && (
                 <button
@@ -1712,7 +1804,7 @@ export default function AdminPage() {
                 enquiries={enquiries}
                 onStageChange={handleEnquiryStageChange}
                 onConvertToStudent={async (id: number) => {
-                  const enq = enquiries.find(e => e.id === id);
+                  const enq = enquiries.find(e => e.id === id || String(e.id) === String(id));
                   if (enq) {
                     setConvertModalEnquiry(enq);
                     setConvertSection(enq.target_grade?.includes('B') ? 'B' : 'A');
@@ -1922,6 +2014,486 @@ export default function AdminPage() {
               )}
             </div>
           )}
+
+          {/* ===================================================== */}
+          {/* TAB: STUDENT LEAVES & ADMINISTRATIVE OVERRIDES        */}
+          {/* ===================================================== */}
+          {activeTab === 'student_leaves' && (() => {
+            const totalLeaves = studentLeaves.length;
+            const pendingLeaves = studentLeaves.filter(l => l.status === 'Pending').length;
+            const approvedLeaves = studentLeaves.filter(l => l.status === 'Approved').length;
+            const rejectedLeaves = studentLeaves.filter(l => l.status === 'Rejected').length;
+            const adminOverriddenLeaves = studentLeaves.filter(l => Boolean(l.is_admin_override)).length;
+            const medicalLeaves = studentLeaves.filter(l => Boolean(l.is_medical)).length;
+
+            const filteredLeaves = studentLeaves.filter(lr => {
+              const matchesSearch = 
+                lr.student_name.toLowerCase().includes(studentLeaveSearch.toLowerCase()) ||
+                lr.parent_name.toLowerCase().includes(studentLeaveSearch.toLowerCase()) ||
+                lr.reason.toLowerCase().includes(studentLeaveSearch.toLowerCase());
+              
+              if (!matchesSearch) return false;
+              if (studentLeaveFilter === 'PENDING') return lr.status === 'Pending';
+              if (studentLeaveFilter === 'APPROVED') return lr.status === 'Approved';
+              if (studentLeaveFilter === 'REJECTED') return lr.status === 'Rejected';
+              if (studentLeaveFilter === 'MEDICAL') return Boolean(lr.is_medical);
+              return true;
+            });
+
+            return (
+              <div className="space-y-6">
+                {/* 1. TOP METRICS STRIP */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+                  <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Applications</span>
+                      <FileText className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">{totalLeaves}</p>
+                    <span className="text-[11px] font-medium text-slate-400">Parent Submissions</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Pending Review</span>
+                      <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse" />
+                    </div>
+                    <p className="text-2xl font-black text-amber-900 dark:text-amber-300 mt-2">{pendingLeaves}</p>
+                    <span className="text-[11px] font-semibold text-amber-600/80 dark:text-amber-400/80">Awaiting Action</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Excused Leaves</span>
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <p className="text-2xl font-black text-emerald-900 dark:text-emerald-300 mt-2">{approvedLeaves}</p>
+                    <span className="text-[11px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">Attendance Adjusted</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-rose-700 dark:text-rose-400">Rejected / Absent</span>
+                      <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <p className="text-2xl font-black text-rose-900 dark:text-rose-300 mt-2">{rejectedLeaves}</p>
+                    <span className="text-[11px] font-semibold text-rose-600/80 dark:text-rose-400/80">Unexcused Absences</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 shadow-xs col-span-2 sm:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-400">Admin Overrides</span>
+                      <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <p className="text-2xl font-black text-purple-900 dark:text-purple-300 mt-2">{adminOverriddenLeaves}</p>
+                    <span className="text-[11px] font-semibold text-purple-600/80 dark:text-purple-400/80">Principal Interventions</span>
+                  </div>
+                </div>
+
+                {/* 2. STATUTORY CBES GOVERNANCE BANNER */}
+                <div className="rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 sm:p-5 shadow-lg border border-blue-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-white/10 border border-white/20 shrink-0">
+                      <ShieldAlert className="h-5 w-5 text-blue-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        Institutional Attendance &amp; Medical Exemption Authority
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                          Sovereign Admin Lock
+                        </span>
+                      </h4>
+                      <p className="text-xs text-blue-100/90 mt-1 leading-relaxed max-w-3xl">
+                        Class teachers manage day-to-day attendance. When disputed medical requests, prolonged absences (&gt;3 days), or examination term exemptions arise, School Administration has sovereign authority to override decisions, lock the attendance ledger, and dispatch certified compliance receipts.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-blue-200 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 font-mono">
+                      {medicalLeaves} Medical Certificates Attached
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. SEARCH & FILTER TOOLBAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search student, parent, or medical reason..."
+                      value={studentLeaveSearch}
+                      onChange={(e) => setStudentLeaveSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setStudentLeaveFilter(tab)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                          studentLeaveFilter === tab
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : tab === 'APPROVED' ? 'Approved' : tab === 'REJECTED' ? 'Rejected' : 'Medical Slips'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. LEAVE APPLICATION QUEUE TABLE */}
+                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Student Leave Master Queue</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Showing {filteredLeaves.length} of {totalLeaves} applications across all grades</p>
+                    </div>
+                  </div>
+
+                  {filteredLeaves.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <UserCheck className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No student leave applications match your criteria</p>
+                      <p className="text-xs text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                            <th className="py-3 px-4">Student &amp; Parent</th>
+                            <th className="py-3 px-4">Dates &amp; Duration</th>
+                            <th className="py-3 px-4">Type &amp; Medical Slip</th>
+                            <th className="py-3 px-4">Parent Justification</th>
+                            <th className="py-3 px-4">Current Decision Status</th>
+                            <th className="py-3 px-4">Admin Override Status</th>
+                            <th className="py-3 px-4 text-right">Adjudication Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredLeaves.map((lr) => (
+                            <tr key={lr.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                              {/* Student & Parent */}
+                              <td className="py-3.5 px-4">
+                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                  <span>{lr.student_name}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                  <span>Parent: <b className="text-slate-600 dark:text-slate-300">{lr.parent_name}</b></span>
+                                  <span>&bull;</span>
+                                  <span>ID #{lr.student_id}</span>
+                                </div>
+                              </td>
+
+                              {/* Dates & Duration */}
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <div className="font-mono text-slate-700 dark:text-slate-300 font-semibold">
+                                  {lr.from_date} &rarr; {lr.to_date}
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  Applied {new Date(lr.applied_at).toLocaleDateString()}
+                                </div>
+                              </td>
+
+                              {/* Type & Certificate */}
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                {lr.is_medical ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Medical Leave
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    Casual Leave
+                                  </span>
+                                )}
+                                {lr.attachment_name && (
+                                  <div className="mt-1">
+                                    <span 
+                                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                      onClick={() => triggerToast(`Verified Medical Certificate on file: ${lr.attachment_name}`)}
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      {lr.attachment_name}
+                                    </span>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Reason */}
+                              <td className="py-3.5 px-4 max-w-xs">
+                                <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed" title={lr.reason}>
+                                  &ldquo;{lr.reason}&rdquo;
+                                </p>
+                              </td>
+
+                              {/* Current Decision Status */}
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <div className="flex flex-col gap-1 items-start">
+                                  {lr.status === 'Approved' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Approved (Excused)
+                                    </span>
+                                  ) : lr.status === 'Rejected' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                      <X className="h-3 w-3" />
+                                      Rejected (Absent)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
+                                      <Clock className="h-3 w-3" />
+                                      Pending Teacher
+                                    </span>
+                                  )}
+                                  {lr.teacher_notes && (
+                                    <span className="text-[10px] text-slate-500 italic max-w-xs truncate" title={lr.teacher_notes}>
+                                      Teacher: &quot;{lr.teacher_notes}&quot;
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Admin Override Status */}
+                              <td className="py-3.5 px-4">
+                                {lr.is_admin_override ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 w-fit">
+                                      <ShieldCheck className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                                      Admin Overridden
+                                    </span>
+                                    {lr.admin_notes && (
+                                      <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium line-clamp-1" title={lr.admin_notes}>
+                                        Note: {lr.admin_notes}
+                                      </span>
+                                    )}
+                                    {lr.overridden_by && (
+                                      <span className="text-[9px] text-slate-400 font-mono">
+                                        By {lr.overridden_by}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 font-medium">Standard Teacher Evaluation</span>
+                                )}
+                              </td>
+
+                              {/* Action */}
+                              <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOverrideModalLeave(lr);
+                                    setOverrideStatus(lr.status === 'Approved' ? 'Rejected' : 'Approved');
+                                    setOverrideNotes('');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                  <span>{lr.is_admin_override ? 'Modify Override' : 'Admin Override'}</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. ADMINISTRATIVE OVERRIDE MODAL */}
+                {overrideModalLeave && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+                    <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl animate-in zoom-in-95 space-y-5">
+                      {/* Modal Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200/60 dark:border-purple-800/60 text-purple-600 dark:text-purple-400">
+                            <ShieldCheck className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">
+                              Administrative Leave Adjudication
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Exercising Principal &amp; Board Supervisory Override
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOverrideModalLeave(null)}
+                          className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      {/* Student & Leave Info Summary */}
+                      <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200/80 dark:border-slate-700 space-y-2 text-xs">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Student</span>
+                            <span className="font-bold text-slate-900 dark:text-white text-sm">{overrideModalLeave.student_name}</span>
+                            <span className="text-slate-400 block">Roll / ID: #{overrideModalLeave.student_id}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{overrideModalLeave.parent_name}</span>
+                            <span className="text-slate-400 block">Dates: {overrideModalLeave.from_date} &rarr; {overrideModalLeave.to_date}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent's Stated Reason</span>
+                          <p className="text-slate-700 dark:text-slate-300 italic mt-0.5">&ldquo;{overrideModalLeave.reason}&rdquo;</p>
+                          {overrideModalLeave.is_medical && (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                              <AlertCircle className="h-3 w-3" />
+                              Medical Exemption Request {overrideModalLeave.attachment_name ? `(${overrideModalLeave.attachment_name})` : ''}
+                            </span>
+                          )}
+                        </div>
+
+                        {overrideModalLeave.teacher_notes && (
+                          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Class Teacher Feedback</span>
+                            <p className="text-slate-600 dark:text-slate-400 font-medium mt-0.5">{overrideModalLeave.teacher_notes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Override Action Selection */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                          Select Administrative Adjudication Decision:
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setOverrideStatus('Approved')}
+                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                              overrideStatus === 'Approved'
+                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-bold text-xs text-emerald-700 dark:text-emerald-400">
+                              <CheckCircle2 className="h-4 w-4" />
+                              Grant Official Approval
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                              Marks attendance as &lsquo;Excused Leave&rsquo;. Removes from unexcused absence radar.
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setOverrideStatus('Rejected')}
+                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                              overrideStatus === 'Rejected'
+                                ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500/20'
+                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-bold text-xs text-rose-700 dark:text-rose-400">
+                              <X className="h-4 w-4" />
+                              Enforce Disciplinary Rejection
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                              Marks attendance as &lsquo;Absent&rsquo;. Flags for welfare phone check if consecutive.
+                            </p>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Required Justification & Predefined Chips */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                          <span>Statutory Justification / Audit Remarks:</span>
+                          <span className="text-[10px] text-rose-500">* Required for CBSE Audit</span>
+                        </label>
+
+                        {/* Quick justification chips */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {[
+                            'Principal Medical Waiver (CBSE Reg 14)',
+                            'Doctor Certificate Authenticated & Excused',
+                            'Unexcused Absence During Scheduled Term Exam',
+                            'Disciplinary Action: Attendance Shortage Not Condoned'
+                          ].map(chip => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setOverrideNotes(chip)}
+                              className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+
+                        <textarea
+                          rows={3}
+                          value={overrideNotes}
+                          onChange={(e) => setOverrideNotes(e.target.value)}
+                          placeholder="Provide the administrative rationale for overriding this leave request (e.g. medical board clearance, compassionate grounds, or exam unreadiness)..."
+                          className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-purple-500 resize-none"
+                        />
+                      </div>
+
+                      {/* Legal & Cascade Warning Box */}
+                      <div className="rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 p-3.5 border border-purple-200/80 dark:border-purple-800/80 text-[11px] text-purple-900 dark:text-purple-300 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                          <span>Administrative Closed-Loop Invariant:</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-0.5 text-purple-800/90 dark:text-purple-300/90 pl-1">
+                          <li>Synchronizes attendance records across all dates: {overrideModalLeave.from_date} to {overrideModalLeave.to_date}.</li>
+                          <li>Generates an immutable entry in <code className="font-mono text-[10px] bg-purple-100 dark:bg-purple-900/60 px-1 py-0.5 rounded">SecurityAuditLog</code> under Principal Dr. Rajesh Sharma.</li>
+                          <li>Dispatches automated notification alerts to both Parent and Class Teacher.</li>
+                        </ul>
+                      </div>
+
+                      {/* Modal Footer Buttons */}
+                      <div className="flex items-center justify-end gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setOverrideModalLeave(null)}
+                          disabled={overrideSubmitting}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExecuteLeaveOverride}
+                          disabled={overrideSubmitting || !overrideNotes.trim()}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
+                        >
+                          {overrideSubmitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Enforcing Override...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="h-4 w-4" />
+                              <span>Enforce Admin Override</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB 5: FEE COLLECTIONS, AGING & MILESTONE REALIZATION */}
           {/* ===================================================== */}
@@ -4892,243 +5464,24 @@ export default function AdminPage() {
         </main>
       
       {/* ========================================================= */}
-      {/* MODAL: 1-CLICK SIS ENROLLMENT & DOSSIER (ADMISSIONS CRM)  */}
+      {/* MODAL: OFFICIAL SIS ENROLLMENT (IMAGE 1 PARITY)           */}
       {/* ========================================================= */}
-      {convertModalEnquiry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
-                  🎓
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">1-Click SIS Enrollment &amp; Dossier</h3>
-                  <p className="text-[11px] text-slate-500">Verify documents and promote lead to active Student Profile</p>
-                </div>
-              </div>
-              <button onClick={() => setConvertModalEnquiry(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Student Name:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.student_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Grade / Target Class:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.target_grade}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Parent &amp; Phone:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.parent_name} ({convertModalEnquiry.phone})</span>
-                </div>
-              </div>
-
-              {/* Mandatory Document Verification & TC Upload Vault */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 text-blue-600" />
-                    Document Verification &amp; TC Upload Vault
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
-                    3/4 Documents Ready
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-[11px]">
-                  {/* Transfer Certificate (TC / SLC) */}
-                  <div className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="h-4 w-4 text-blue-600 shrink-0" />
-                      <div>
-                        <span className="font-bold text-slate-900 dark:text-white block">Transfer Certificate (TC / SLC) *</span>
-                        <span className="text-[10px] text-slate-500">Official migration slip from previous recognized school</span>
-                      </div>
-                    </div>
-                    <label className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] cursor-pointer shadow-xs transition-all flex items-center gap-1">
-                      <Upload className="h-3 w-3" />
-                      <span>Attach TC</span>
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) {
-                            triggerToast(`Transfer Certificate attached: ${e.target.files[0].name}`);
-                          }
-                        }} 
-                      />
-                    </label>
-                  </div>
-
-                  {/* Other Vital Documents */}
-                  <div className="grid grid-cols-3 gap-1.5 text-center">
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Birth Certificate</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Marks Card</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Aadhaar Card</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Assign Classroom Section</label>
-                <select 
-                  value={convertSection} 
-                  onChange={e => setConvertSection(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs"
-                >
-                  <option value="A">{convertModalEnquiry.target_grade}-A (Section A)</option>
-                  <option value="B">{convertModalEnquiry.target_grade}-B (Section B)</option>
-                </select>
-              </div>
-
-              {/* Admission Fee & Accounts Handoff Controls */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    One-Time Admission Fee Structure
-                  </span>
-                  <span className="text-[10px] text-blue-600 font-bold bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
-                    Accounts Auto-Sync
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Fee Amount (₹)</label>
-                    <input
-                      type="number"
-                      value={convertAdmissionFee}
-                      onChange={e => setConvertAdmissionFee(Number(e.target.value))}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-black text-slate-900 dark:text-white bg-white dark:bg-slate-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Collection Status</label>
-                    <select
-                      value={convertFeeStatus}
-                      onChange={e => setConvertFeeStatus(e.target.value as 'Paid' | 'Pending')}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
-                    >
-                      <option value="Paid">✓ Paid Now (Immediate Receipt)</option>
-                      <option value="Pending">⏳ Pending (Queue in Accounts)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dynamic Payment Method: Disabled when Pending, Enabled/Popped when Paid */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                      Payment Method
-                    </label>
-                    {convertFeeStatus === 'Pending' ? (
-                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">
-                        Disabled (Pending Status)
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                        Active Immediate Receipt
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    disabled={convertFeeStatus === 'Pending'}
-                    value={convertPaymentMethod}
-                    onChange={e => setConvertPaymentMethod(e.target.value)}
-                    className={`w-full rounded-xl border p-2 text-xs font-bold transition-all ${
-                      convertFeeStatus === 'Pending'
-                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-400 cursor-not-allowed opacity-50'
-                        : 'border-emerald-500/60 dark:border-emerald-500/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white ring-2 ring-emerald-500/20 animate-in fade-in zoom-in-95'
-                    }`}
-                  >
-                    <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
-                    <option value="Net Banking / NEFT">Net Banking / NEFT</option>
-                    <option value="Debit / Credit Card">Debit / Credit Card (POS Counter)</option>
-                    <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
-                    <option value="Cash Payment">Cash Payment at Counter</option>
-                  </select>
-                  {convertFeeStatus === 'Pending' ? (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-1">
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                      Mode of payment is locked because collection status is set to Pending. Accounts team will collect later.
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-1">
-                      <CheckCircle2 className="h-3 w-3 shrink-0" />
-                      Immediate official fee receipt will be generated and auto-synced with Accounts.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setConvertModalEnquiry(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const res: any = await api.convertEnquiryToStudent(convertModalEnquiry.id, {
-                      section: convertSection,
-                      feeAmount: convertAdmissionFee,
-                      feeStatus: convertFeeStatus,
-                      paymentMethod: convertPaymentMethod
-                    });
-                    const updatedEnq = await api.getEnquiries();
-                    setEnquiries(updatedEnq);
-                    const updatedStudents = await api.getStudents();
-                    setStudentsList(updatedStudents);
-
-                    // Form institutional credentials object
-                    const cleanStudent = convertModalEnquiry.student_name.toLowerCase().replace(/\s+/g, '_');
-                    const cleanParent = convertModalEnquiry.parent_name.toLowerCase().replace(/\s+/g, '_');
-                    const creds = res?.credentials || {
-                      student_name: convertModalEnquiry.student_name,
-                      student_username: `${cleanStudent}_${convertModalEnquiry.id + 30}`,
-                      student_password: 'Password123',
-                      student_roll: `${convertModalEnquiry.id + 30}`,
-                      student_class: `${convertModalEnquiry.target_grade}-${convertSection}`,
-                      student_admission_no: `EDU-2026-${convertModalEnquiry.id + 100}`,
-                      parent_name: convertModalEnquiry.parent_name,
-                      parent_username: `parent_${cleanStudent}_${convertModalEnquiry.id + 30}`,
-                      parent_password: 'Password123',
-                      parent_phone: convertModalEnquiry.phone || ''
-                    };
-
-                    setConvertModalEnquiry(null);
-                    setEnrolledCredentials(creds);
-                    triggerToast(`🎉 ${convertModalEnquiry.student_name} officially enrolled! Institutional credentials generated.`);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-md cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>Confirm Enrollment</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmEnrollmentModal
+        isOpen={!!convertModalEnquiry}
+        onClose={() => setConvertModalEnquiry(null)}
+        enquiry={convertModalEnquiry}
+        onSuccess={async (creds, msg) => {
+          const updatedEnq = await api.getEnquiries();
+          setEnquiries(updatedEnq);
+          const updatedStudents = await api.getStudents();
+          setStudentsList(updatedStudents);
+          setConvertModalEnquiry(null);
+          if (creds) {
+            setEnrolledCredentials(creds);
+          }
+          triggerToast(msg || `🎉 ${convertModalEnquiry?.student_name} officially enrolled! Institutional credentials generated.`);
+        }}
+      />
 
       {/* ── MODAL: REGISTER NEW ADMISSION / ENQUIRY (ADMIN PRIVILEGED INTAKE) ── */}
       {showRegisterEnquiryModal && (
@@ -6045,9 +6398,36 @@ export default function AdminPage() {
               </span>
             </div>
 
-            <form onSubmit={handleApplyFeeConcession} className="space-y-3 text-xs">
+            <form onSubmit={handleApplyFeeConcession} className="space-y-3.5 text-xs">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Concession Amount (₹) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Concession Amount (₹) *
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(Math.round(waiverModalDefaulter.amount_due * 0.25))}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                    >
+                      25%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(Math.round(waiverModalDefaulter.amount_due * 0.50))}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWaiverAmount(waiverModalDefaulter.amount_due)}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 hover:bg-purple-200 dark:bg-purple-950 text-purple-700 dark:text-purple-300 cursor-pointer transition-colors"
+                    >
+                      100% Full Waiver
+                    </button>
+                  </div>
+                </div>
                 <input 
                   type="number" 
                   required
@@ -6055,10 +6435,38 @@ export default function AdminPage() {
                   max={waiverModalDefaulter.amount_due}
                   value={waiverAmount || ''} 
                   onChange={e => setWaiverAmount(Number(e.target.value))} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm"
-                  placeholder="e.g. 5000"
+                  placeholder={`Max ₹${waiverModalDefaulter.amount_due.toLocaleString('en-IN')}`}
+                  className={`w-full rounded-xl border p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm transition-colors ${
+                    waiverAmount > waiverModalDefaulter.amount_due
+                      ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
+                      : 'border-slate-300 dark:border-slate-700'
+                  }`}
                 />
               </div>
+
+              {/* Dynamic Calculation & Validation Feedback */}
+              {waiverAmount > waiverModalDefaulter.amount_due ? (
+                <div className="p-3 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                  <div>
+                    <span className="block">Concession Exceeds Overdue Balance!</span>
+                    <span className="text-[11px] font-normal block mt-0.5">
+                      You entered ₹{waiverAmount.toLocaleString('en-IN')}, which exceeds the student&apos;s total balance due of ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')}. Maximum concession is ₹{waiverModalDefaulter.amount_due.toLocaleString('en-IN')}.
+                    </span>
+                  </div>
+                </div>
+              ) : waiverAmount > 0 ? (
+                <div className="p-2.5 rounded-xl border border-emerald-300/60 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Net Balance After Concession:</span>
+                  </div>
+                  <span className="font-bold text-sm tabular-nums">
+                    ₹{Math.max(0, waiverModalDefaulter.amount_due - waiverAmount).toLocaleString('en-IN')}
+                    {waiverModalDefaulter.amount_due - waiverAmount === 0 && ' (Account Cleared ✓)'}
+                  </span>
+                </div>
+              ) : null}
 
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason / Board Justification *</label>
@@ -6082,8 +6490,8 @@ export default function AdminPage() {
                 </button>
                 <button 
                   type="submit" 
-                  disabled={isApplyingWaiver || waiverAmount <= 0}
-                  className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 font-bold shadow-sm cursor-pointer disabled:opacity-50"
+                  disabled={isApplyingWaiver || waiverAmount <= 0 || waiverAmount > waiverModalDefaulter.amount_due}
+                  className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 font-bold shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {isApplyingWaiver ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   <span>Authorize Concession</span>

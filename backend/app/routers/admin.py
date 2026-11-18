@@ -10,7 +10,8 @@ from app.models.models import (
     User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
     StaffMember, InventoryItem, PTMEvent, PaymentTransaction, FeeDefaulter,
-    LeaveRequest, SecurityAuditLog, SubstitutionSlot
+    LeaveRequest, SecurityAuditLog, SubstitutionSlot, AttendanceRecord,
+    SubjectAttendanceEntry, AcademicSubject
 )
 from app.routers.notifications import create_system_notification
 from app.core.rbac import require_admin, require_staff, require_role
@@ -31,7 +32,8 @@ from app.schemas.schemas import (
     CurriculumPacingItem, LogLessonRequest,
     TaskReliefRequest, ApproveReliefRequest, ExtendSlaRequest, PTMGovernanceStatus,
     PTMEventCreate, PTMEventResponse,
-    ExecutivePulseResponse, QuickActionCounts, AdmissionsPulse, AccountsPulse, ExamsPulse, StaffAndPacingPulse
+    ExecutivePulseResponse, QuickActionCounts, AdmissionsPulse, AccountsPulse, ExamsPulse, StaffAndPacingPulse,
+    AdminStudentLeaveOverrideRequest, LeaveRequestResponse
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_staff)])
@@ -1065,7 +1067,8 @@ async def convert_enquiry_to_student(
     if enquiry.stage == "converted":
         raise HTTPException(status_code=409, detail="This enquiry has already been converted to an enrolled student.")
     
-    section_val = payload.section if payload and payload.section else "A"
+    raw_section = payload.section if payload and payload.section else "A"
+    clean_section = raw_section.replace("Section", "").replace("section", "").strip() or "A"
     fee_amt = payload.admission_fee if payload and payload.admission_fee is not None else 25000.0
     if payload and payload.is_sibling_link:
         disc = payload.sibling_discount_pct or 15.0
@@ -1080,24 +1083,28 @@ async def convert_enquiry_to_student(
         action_type="LEAD_CONVERTED_TO_SIS",
         target_entity=f"Enquiry #{enquiry_id} -> Student: {enquiry.student_name}",
         status="VERIFIED",
-        details=f"Lead converted to enrolled student. Grade: {enquiry.target_grade}, Section: {section_val}, Fee: {fee_amt} ({fee_status})"
+        details=f"Lead converted to enrolled student. Grade: {enquiry.target_grade}, Section: {clean_section}, Fee: {fee_amt} ({fee_status})"
     )
-    enquiry.notes = (enquiry.notes or "") + f" | Converted to SIS ({section_val}). Admission Fee: ₹{fee_amt:,.0f} ({fee_status})"
+    enquiry.notes = (enquiry.notes or "") + f" | Converted to SIS ({clean_section}). Admission Fee: ₹{fee_amt:,.0f} ({fee_status})"
     
     # Generate Admission Number and create Student record
     adm_no = f"EDU-{datetime.datetime.utcnow().year}-{enquiry_id + 100:03d}"
+    clean_student = "".join(ch for ch in (enquiry.student_name or "student").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_") or "student"
+    safe_guardian_email = enquiry.email.strip() if (enquiry.email and enquiry.email.strip()) else f"{clean_student}.parent@edu360.internal"
+    
     new_student = Student(
         name=enquiry.student_name,
         roll_no=str(enquiry_id + 30),
-        class_name=enquiry.target_grade,
-        section=section_val,
+        class_name=enquiry.target_grade or "Class 8",
+        section=clean_section,
         admission_no=adm_no,
-        guardian_name=enquiry.parent_name,
-        guardian_phone=enquiry.phone,
-        guardian_email=enquiry.email,
-        attendance_pct=0.0,
+        guardian_name=enquiry.parent_name or f"Parent of {enquiry.student_name}",
+        guardian_phone=enquiry.phone or "+91 90000 00000",
+        guardian_email=safe_guardian_email,
+        attendance_pct=100.0,
         bus_route_id=4,
-        academic_average_pct=0.0,
+        academic_average_pct=85.0,
+        admission_date=datetime.date.today().isoformat(),
         status="Active"
     )
     db.add(new_student)
@@ -1197,11 +1204,11 @@ async def convert_enquiry_to_student(
         new_defaulter = FeeDefaulter(
             student_id=new_student.id,
             student_name=new_student.name,
-            class_name=f"{new_student.class_name}-{new_student.section}",
+            class_name=f"{new_student.class_name}-{clean_section}",
             roll_no=new_student.roll_no,
             parent_name=new_student.guardian_name,
             parent_phone=new_student.guardian_phone,
-            milestone_title="One-Time Admission & Registration Fee",
+            milestone_title=f"One-Time Admission & Registration Fee (INV-2026-ADM-{new_student.id:04d})",
             amount_due=fee_amt,
             days_overdue=0,
             reminder_sent=False,
@@ -1221,10 +1228,14 @@ async def convert_enquiry_to_student(
     st_user_res = await db.execute(select(User).where(User.username == student_uname))
     student_user = st_user_res.scalars().first()
     if not student_user:
+        target_st_email = f"{student_uname}@student.edu360.internal"
+        existing_st_email = (await db.execute(select(User).where(User.email == target_st_email))).scalars().first()
+        if existing_st_email:
+            target_st_email = f"{student_uname}_{new_student.id}@student.edu360.internal"
         student_user = User(
             name=new_student.name,
             username=student_uname,
-            email=f"{student_uname}@student.edu360.internal",
+            email=target_st_email,
             role="student",
             school_code="EDU-GLOBAL-360",
             password="Password123",
@@ -1240,10 +1251,14 @@ async def convert_enquiry_to_student(
     pr_user_res = await db.execute(select(User).where(User.username == parent_uname))
     parent_user = pr_user_res.scalars().first()
     if not parent_user:
+        target_pr_email = safe_guardian_email
+        existing_pr_email = (await db.execute(select(User).where(User.email == target_pr_email))).scalars().first()
+        if existing_pr_email:
+            target_pr_email = f"parent_{clean_parent}_{new_student.id}@edu360.internal"
         parent_user = User(
             name=new_student.guardian_name or f"Parent of {new_student.name}",
             username=parent_uname,
-            email=new_student.guardian_email or f"{parent_uname}@example.com",
+            email=target_pr_email,
             role="parent",
             school_code="EDU-GLOBAL-360",
             password="Password123",
@@ -1379,9 +1394,10 @@ async def direct_enroll_or_forward_vip(
             guardian_name=payload.parent_name,
             guardian_phone=payload.phone,
             guardian_email=payload.email or "parent@edu360.internal",
-            attendance_pct=0.0,
+            attendance_pct=100.0,
             bus_route_id=4,
-            academic_average_pct=0.0,
+            academic_average_pct=85.0,
+            admission_date=datetime.date.today().isoformat(),
             status="Active"
         )
         db.add(new_student)
@@ -3048,5 +3064,197 @@ async def remind_unready_ptm_teachers(db: AsyncSession = Depends(get_db)):
         details="Dispatched urgent 6-hour SLA task to publish PTM slots before parent booking deadline."
     )
     return {"success": True, "message": "Dispatched urgent 6-hour SLA task to 2 defaulting teachers"}
+
+
+# --- 19. Student Leave Applications & Administrative Overrides ---
+@router.get("/student-leaves", response_model=List[LeaveRequestResponse])
+async def list_admin_student_leaves(
+    status: Optional[str] = None,
+    student_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Administrative oversight queue for all student leave applications submitted by parents.
+    Enables Principal & Administrative Executives to monitor, inspect attachments, and override teacher decisions.
+    """
+    query = select(LeaveRequest)
+    if status and status != "All":
+        query = query.where(LeaveRequest.status == status)
+    if student_id:
+        query = query.where(LeaveRequest.student_id == student_id)
+    query = query.order_by(LeaveRequest.applied_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/student-leaves/{request_id}/override", response_model=LeaveRequestResponse)
+async def admin_override_student_leave(
+    request_id: int,
+    req: AdminStudentLeaveOverrideRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Executive authority override for student leave requests.
+    Enforces sovereign Principal / Admin decision over teacher determinations.
+    Synchronizes multi-day student attendance records, records immutable audit trails,
+    and cascades notifications to both Parents and Class Teachers.
+    """
+    result = await db.execute(select(LeaveRequest).where(LeaveRequest.id == request_id))
+    lr = result.scalars().first()
+    if not lr:
+        raise HTTPException(status_code=404, detail="Student leave request not found")
+
+    old_status = lr.status
+    lr.status = req.status
+    lr.is_admin_override = True
+    lr.overridden_by = req.admin_name or "Principal Dr. Rajesh Sharma"
+    lr.overridden_at = datetime.datetime.utcnow()
+    lr.admin_notes = req.admin_notes
+    lr.approval_stage = f"Overridden by Admin ({req.status})"
+
+    # Multi-day Attendance Synchronization
+    dates_to_sync = []
+
+    def try_parse_date(d_str: str) -> Optional[datetime.date]:
+        for fmt in ("%Y-%m-%d", "%d %b %Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+            try:
+                return datetime.datetime.strptime(d_str.strip(), fmt).date()
+            except Exception:
+                pass
+        return None
+
+    start_d = try_parse_date(lr.from_date) if lr.from_date else None
+    end_d = try_parse_date(lr.to_date) if lr.to_date else None
+    today_d = datetime.date.today()
+
+    if start_d and end_d and start_d <= end_d:
+        day_count = min((end_d - start_d).days + 1, 30)
+        for i in range(day_count):
+            cur = start_d + datetime.timedelta(days=i)
+            dates_to_sync.append(cur.isoformat())
+    elif start_d:
+        dates_to_sync.append(start_d.isoformat())
+    else:
+        dates_to_sync.append(today_d.isoformat())
+
+    # Batch Synchronize AttendanceRecords across all covered days (N+1 query optimization)
+    existing_atts_res = await db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.student_id == lr.student_id,
+            AttendanceRecord.date.in_(dates_to_sync)
+        )
+    )
+    existing_att_map = {att.date: att for att in existing_atts_res.scalars().all()}
+
+    for d_str in dates_to_sync:
+        att_rec = existing_att_map.get(d_str)
+        if req.status == "Approved":
+            if att_rec:
+                att_rec.status = "Leave"
+                att_rec.admin_override = True
+                att_rec.teacher_override = True
+                att_rec.override_by_role = "ADMIN"
+                att_rec.join_timestamp = "Excused Leave (Admin Override)"
+                att_rec.minutes_late = 0.0
+            else:
+                att_rec = AttendanceRecord(
+                    class_id=1,
+                    student_id=lr.student_id,
+                    student_name=lr.student_name,
+                    date=d_str,
+                    status="Leave",
+                    admin_override=True,
+                    teacher_override=True,
+                    override_by_role="ADMIN",
+                    join_timestamp="Excused Leave (Admin Override)",
+                    minutes_late=0.0
+                )
+                db.add(att_rec)
+        elif req.status == "Rejected":
+            if att_rec:
+                att_rec.status = "Absent"
+                att_rec.admin_override = True
+                att_rec.teacher_override = True
+                att_rec.override_by_role = "ADMIN"
+                att_rec.join_timestamp = None
+            else:
+                att_rec = AttendanceRecord(
+                    class_id=1,
+                    student_id=lr.student_id,
+                    student_name=lr.student_name,
+                    date=d_str,
+                    status="Absent",
+                    admin_override=True,
+                    teacher_override=True,
+                    override_by_role="ADMIN",
+                    join_timestamp=None,
+                    minutes_late=0.0
+                )
+                db.add(att_rec)
+
+    # Architectural Bridge: Synchronize Period-Wise SubjectAttendanceEntry
+    if req.status == "Approved":
+        sub_entries_res = await db.execute(
+            select(SubjectAttendanceEntry).where(
+                SubjectAttendanceEntry.student_id == lr.student_id,
+                SubjectAttendanceEntry.date.in_(dates_to_sync)
+            )
+        )
+        for sub_entry in sub_entries_res.scalars().all():
+            sub_entry.status = "Excused"
+            sub_entry.rule_stipulation = "PARENT_EXCUSED"
+            sub_entry.leave_request_id = lr.id
+            sub_entry.approved_by = req.admin_name or "Principal Dr. Rajesh Sharma"
+            sub_entry.action_taken = f"Excused by Principal Override ({req.admin_notes[:80] if req.admin_notes else 'Executive Sanction'})"
+
+    # 1. Statutory Security Audit Log
+    audit_rec = SecurityAuditLog(
+        actor_name=req.admin_name or "Principal Dr. Rajesh Sharma",
+        actor_role="ADMIN",
+        action_type="ADMIN_STUDENT_LEAVE_OVERRIDE",
+        target_entity=f"Student #{lr.student_id} - {lr.student_name} (Leave #{lr.id})",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Overrode leave status from '{old_status}' to '{req.status}'. Justification: {req.admin_notes}. Attendance locked across {lr.from_date} - {lr.to_date}."
+    )
+    db.add(audit_rec)
+
+    # 2. Dual Notification Cascade: Notify Parent
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.admin_name or "Principal Dr. Rajesh Sharma",
+            sender_role="ADMIN",
+            title=f"Leave {req.status} by Administration: {lr.student_name}",
+            message=f"Administration has reviewed and overridden the leave application for {lr.student_name} ({lr.from_date} to {lr.to_date}) to '{req.status}'. Decision Note: {req.admin_notes}",
+            notification_type="LEAVE_OVERRIDE",
+            priority="HIGH",
+            recipient_role="PARENT",
+            action_url="/parent?nav=leave",
+            metadata_dict={"student_id": lr.student_id, "status": req.status, "leave_id": lr.id, "overridden_by": req.admin_name}
+        )
+    except Exception as e:
+        print(f"Warning: could not dispatch parent leave override notification: {e}")
+
+    # 3. Dual Notification Cascade: Notify Class Teacher
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.admin_name or "Principal Dr. Rajesh Sharma",
+            sender_role="ADMIN",
+            title=f"Admin Leave Override: {lr.student_name}",
+            message=f"Principal Dr. Rajesh Sharma has overridden the leave decision for student {lr.student_name} ({lr.from_date} to {lr.to_date}) to '{req.status}'. Admin Remarks: {req.admin_notes}",
+            notification_type="ADMIN_OVERRIDE_ALERT",
+            priority="HIGH",
+            recipient_role="TEACHER",
+            action_url="/teacher?tab=leave_approvals",
+            metadata_dict={"student_id": lr.student_id, "status": req.status, "leave_id": lr.id, "overridden_by": req.admin_name}
+        )
+    except Exception as e:
+        print(f"Warning: could not dispatch teacher leave override notification: {e}")
+
+    await db.commit()
+    await db.refresh(lr)
+    return lr
 
 

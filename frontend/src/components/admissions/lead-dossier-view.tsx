@@ -40,7 +40,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
-import { AdmissionEnquiry, DocumentUploadItem } from '@/lib/types';
+import { AdmissionEnquiry } from '@/lib/types';
+import { ConfirmEnrollmentModal } from '@/components/admissions/confirm-enrollment-modal';
 
 interface LeadDossierViewProps {
   enquiryId: number;
@@ -76,21 +77,8 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
 
   // Conversion / Enrollment Modal State
   const [showEnrollModal, setShowEnrollModal] = useState<boolean>(false);
-  const [enrollSection, setEnrollSection] = useState<string>('Section A');
-  const [enrollFeeStatus, setEnrollFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
-  const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<string>('UPI Transfer');
-  const [isEnrolling, setIsEnrolling] = useState<boolean>(false);
   const [showCredentialsModal, setShowCredentialsModal] = useState<boolean>(false);
   const [enrolmentCredentials, setEnrolmentCredentials] = useState<any>(null);
-
-  // Intake Documents Verification & Upload State
-  const [enrollDocReportCard, setEnrollDocReportCard] = useState<boolean>(true);
-  const [reportCardFileName, setReportCardFileName] = useState<string>('');
-  const [enrollDocBirthCert, setEnrollDocBirthCert] = useState<boolean>(true);
-  const [birthCertFileName, setBirthCertFileName] = useState<string>('');
-  const [enrollDocTransferCert, setEnrollDocTransferCert] = useState<boolean>(false);
-  const [tcFileName, setTcFileName] = useState<string>('');
-  const [tcUndertaking, setTcUndertaking] = useState<boolean>(false);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -162,7 +150,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
 
     try {
       await api.updateEnquiryTemperature(enquiry.id, nextTemp);
-      setEnquiry(prev => prev ? { ...prev, lead_temperature: nextTemp } : null);
+      setEnquiry((prev: AdmissionEnquiry | null) => prev ? { ...prev, lead_temperature: nextTemp } : null);
       triggerToast(`Lead priority updated to ${nextTemp.toUpperCase()}`);
     } catch (err) {
       console.error('Failed to update temperature:', err);
@@ -227,91 +215,6 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
     }
   };
 
-  // Confirm Official SIS Enrollment
-  const handleConfirmEnrollment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!enquiry) return;
-    setIsEnrolling(true);
-
-    try {
-      // 1. Save document intake verification on inquiry
-      await api.updateEnquiryDocs(enquiry.id, {
-        doc_report_card: enrollDocReportCard,
-        doc_birth_cert: enrollDocBirthCert,
-        doc_transfer_cert: enrollDocTransferCert || tcUndertaking
-      });
-
-      // 2. Construct uploaded intake documents list for SIS Registry Vault
-      const uploadedDocs: DocumentUploadItem[] = [];
-      const docSlug = enquiry.student_name.toLowerCase().replace(/\s+/g, '_');
-
-      if (enrollDocReportCard) {
-        uploadedDocs.push({
-          title: `Previous Grade Academic Record - ${enquiry.student_name}`,
-          doc_type: 'Marks Card',
-          filename: reportCardFileName || `report_card_${docSlug}.pdf`,
-          file_url: `/documents/report_card_${docSlug}.pdf`
-        });
-      }
-
-      if (enrollDocBirthCert) {
-        uploadedDocs.push({
-          title: `Government Birth Certificate & Identity Proof - ${enquiry.student_name}`,
-          doc_type: 'Birth Certificate',
-          filename: birthCertFileName || `birth_cert_${docSlug}.pdf`,
-          file_url: `/documents/birth_cert_${docSlug}.pdf`
-        });
-      }
-
-      if (enrollDocTransferCert) {
-        uploadedDocs.push({
-          title: `Transfer Certificate (Incoming TC Deposited) - ${enquiry.student_name}`,
-          doc_type: 'Transfer Certificate',
-          filename: tcFileName || `tc_${docSlug}.pdf`,
-          file_url: `/documents/tc_${docSlug}.pdf`
-        });
-      }
-
-      // 3. Convert to student in SIS - route fee to Accounts Desk & docs to Admin Vault
-      const res: any = await api.convertEnquiryToStudent(enquiry.id, {
-        section: enrollSection,
-        feeStatus: enrollFeeStatus,
-        paymentMethod: enrollFeeStatus === 'Paid' ? enrollPaymentMethod : undefined,
-        uploadedDocs,
-        tcUndertaking
-      });
-
-      setShowEnrollModal(false);
-      if (res && res.credentials) {
-        setEnrolmentCredentials(res.credentials);
-        setShowCredentialsModal(true);
-      } else {
-        try {
-          const credsRes = await api.getEnquiryCredentials(enquiry.id);
-          if (credsRes && credsRes.credentials) {
-            setEnrolmentCredentials(credsRes.credentials);
-            setShowCredentialsModal(true);
-          }
-        } catch {}
-      }
-      try {
-        confetti({
-          particleCount: 100,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
-      } catch {}
-
-      await loadEnquiry();
-      triggerToast(res?.message || `${enquiry.student_name} officially enrolled into SIS! Documents routed to Admin Vault.`);
-    } catch (err) {
-      console.error('Enrollment failed:', err);
-      triggerToast('Failed to enroll student into SIS.');
-    } finally {
-      setIsEnrolling(false);
-    }
-  };
-
   // Parse notes string into structured chronological timeline
   const interactionHistory: ParsedCallLog[] = useMemo(() => {
     if (!enquiry?.notes) return [];
@@ -319,7 +222,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
     const segments = enquiry.notes.split(/\n|\|(?=\s*\[)/);
     const parsed: ParsedCallLog[] = [];
 
-    segments.forEach((seg, idx) => {
+    segments.forEach((seg: string, idx: number) => {
       const trimmed = seg.trim();
       if (!trimmed) return;
 
@@ -327,7 +230,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
       if (bracketMatch) {
         const meta = bracketMatch[1];
         const body = bracketMatch[2];
-        const parts = meta.split('|').map(s => s.trim());
+        const parts = meta.split('|').map((s: string) => s.trim());
         const timestamp = parts[0] || 'Earlier Interaction';
         const outcome = parts[1] || 'Call Note';
 
@@ -496,17 +399,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
 
               <button
                 type="button"
-                onClick={() => {
-                  const slug = enquiry.student_name.toLowerCase().replace(/\s+/g, '_');
-                  setEnrollDocReportCard(true);
-                  setReportCardFileName(`report_card_${slug}.pdf`);
-                  setEnrollDocBirthCert(true);
-                  setBirthCertFileName(`birth_cert_${slug}.pdf`);
-                  setEnrollDocTransferCert(!!enquiry.doc_transfer_cert);
-                  setTcFileName(enquiry.doc_transfer_cert ? `tc_${slug}.pdf` : '');
-                  setTcUndertaking(!enquiry.doc_transfer_cert);
-                  setShowEnrollModal(true);
-                }}
+                onClick={() => setShowEnrollModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md shadow-emerald-600/25 transition-all cursor-pointer"
               >
                 <UserCheck className="h-4 w-4" />
@@ -929,289 +822,28 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
       </div>
 
       {/* =========================================================================
-          MODAL: 1-CLICK SIS ENROLLMENT CONFIRMATION (RESPONSIVE 2-COLUMN ERGONOMIC LAYOUT)
+          MODAL: OFFICIAL SIS ENROLLMENT (UNIFIED REUSABLE COMPONENT)
           ========================================================================= */}
-      {showEnrollModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="relative w-full max-w-3xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            
-            {/* FIXED STICKY HEADER */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100 dark:border-emerald-900/50">
-                  <UserCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    Confirm Official SIS Enrollment
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Enrolling <span className="font-bold text-slate-800 dark:text-slate-200">{enquiry.student_name}</span> • {enquiry.target_grade} • Generated Roll No: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">ADM-2026-08{String(enquiry.id).padStart(2, '0')}</span>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowEnrollModal(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* SCROLLABLE FORM BODY */}
-            <form onSubmit={handleConfirmEnrollment} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-6 overflow-y-auto space-y-5 flex-1">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  
-                  {/* LEFT COLUMN: Section Allocation & Fee Setup */}
-                  <div className="space-y-4">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                      <span>1. Academic &amp; Fee Allocation</span>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Allocated Section *
-                        </label>
-                        <select
-                          value={enrollSection}
-                          onChange={(e) => setEnrollSection(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
-                        >
-                          <option value="Section A">Section A (Room 201)</option>
-                          <option value="Section B">Section B (Room 202)</option>
-                          <option value="Section C">Section C (Room 203)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Admission Fee Status (₹25,000) *
-                        </label>
-                        <select
-                          value={enrollFeeStatus}
-                          onChange={(e) => setEnrollFeeStatus(e.target.value as any)}
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
-                        >
-                          <option value="Paid">Term 1 Fee Paid ✓</option>
-                          <option value="Pending">Payment Pending Invoice</option>
-                        </select>
-                      </div>
-
-                      {/* Dynamic Payment Mode */}
-                      {enrollFeeStatus === 'Paid' ? (
-                        <div className="space-y-1 animate-in fade-in duration-150">
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Payment Mode Recorded *
-                          </label>
-                          <select
-                            value={enrollPaymentMethod}
-                            onChange={(e) => setEnrollPaymentMethod(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:border-blue-600 focus:outline-none"
-                          >
-                            <option value="UPI Transfer">Direct Bank UPI (Instant Receipt)</option>
-                            <option value="Cheque / DD">Bank Demand Draft / Cheque</option>
-                            <option value="Card Payment">Campus Card Terminal</option>
-                            <option value="Cash at Front Desk">Cash Received at Front Desk</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 space-y-1 animate-in fade-in duration-150">
-                          <span className="font-bold flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5 text-amber-600" />
-                            Fee Invoice Dispatched to Accounts Desk
-                          </span>
-                          <span className="text-[10.5px] leading-relaxed block">
-                            Payment mode is hidden because payment is pending. An invoice (₹25,000) will be routed to Accounts Coordinator for follow-up.
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Compact System Actions Pill */}
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">✓ Automated System Actions:</span>
-                        <div className="text-[10.5px] space-y-0.5">
-                          <div>• Generates permanent SIS record &amp; Timetable access</div>
-                          <div>• Stage automatically shifts to &apos;converted&apos;</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* RIGHT COLUMN: Intake Documents Vault */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-blue-600" />
-                        <span>2. Mandatory Intake Documents</span>
-                      </div>
-                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
-                        Requires Admin Seal
-                      </span>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      {/* 1. Academic Report Card */}
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-800 dark:text-slate-200">
-                            <input
-                              type="checkbox"
-                              checked={enrollDocReportCard}
-                              onChange={(e) => setEnrollDocReportCard(e.target.checked)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-                            />
-                            <span>Previous Academic Report Card</span>
-                          </label>
-                          <span className="text-[9px] font-bold text-slate-500 uppercase">Mandatory</span>
-                        </div>
-                        {enrollDocReportCard && (
-                          <div className="flex items-center justify-between gap-2 pt-1 pl-5">
-                            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-mono truncate">
-                              <Paperclip className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{reportCardFileName || `report_card_${enquiry.student_name.toLowerCase().replace(/\s+/g, '_')}.pdf`}</span>
-                            </div>
-                            <label className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1 shrink-0">
-                              <Upload className="h-2.5 w-2.5" />
-                              <span>Browse</span>
-                              <input
-                                type="file"
-                                accept=".pdf,.png,.jpg,.jpeg"
-                                className="hidden"
-                                onChange={(e) => {
-                                  if (e.target.files?.[0]) setReportCardFileName(e.target.files[0].name);
-                                }}
-                              />
-                            </label>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 2. Birth Certificate */}
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-800 dark:text-slate-200">
-                            <input
-                              type="checkbox"
-                              checked={enrollDocBirthCert}
-                              onChange={(e) => setEnrollDocBirthCert(e.target.checked)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-                            />
-                            <span>Government Birth Certificate / ID</span>
-                          </label>
-                          <span className="text-[9px] font-bold text-slate-500 uppercase">Statutory</span>
-                        </div>
-                        {enrollDocBirthCert && (
-                          <div className="flex items-center justify-between gap-2 pt-1 pl-5">
-                            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-mono truncate">
-                              <Paperclip className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{birthCertFileName || `birth_cert_${enquiry.student_name.toLowerCase().replace(/\s+/g, '_')}.pdf`}</span>
-                            </div>
-                            <label className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1 shrink-0">
-                              <Upload className="h-2.5 w-2.5" />
-                              <span>Browse</span>
-                              <input
-                                type="file"
-                                accept=".pdf,.png,.jpg,.jpeg"
-                                className="hidden"
-                                onChange={(e) => {
-                                  if (e.target.files?.[0]) setBirthCertFileName(e.target.files[0].name);
-                                }}
-                              />
-                            </label>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 3. Transfer Certificate */}
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-800 dark:text-slate-200">
-                            <input
-                              type="checkbox"
-                              checked={enrollDocTransferCert}
-                              onChange={(e) => {
-                                setEnrollDocTransferCert(e.target.checked);
-                                if (e.target.checked) setTcUndertaking(false);
-                              }}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-                            />
-                            <span>Original Transfer Certificate (TC) Deposited</span>
-                          </label>
-                        </div>
-
-                        {enrollDocTransferCert ? (
-                          <div className="flex items-center justify-between gap-2 pt-1 pl-5">
-                            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-mono truncate">
-                              <Paperclip className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{tcFileName || `tc_${enquiry.student_name.toLowerCase().replace(/\s+/g, '_')}.pdf`}</span>
-                            </div>
-                            <label className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1 shrink-0">
-                              <Upload className="h-2.5 w-2.5" />
-                              <span>Browse</span>
-                              <input
-                                type="file"
-                                accept=".pdf,.png,.jpg,.jpeg"
-                                className="hidden"
-                                onChange={(e) => {
-                                  if (e.target.files?.[0]) setTcFileName(e.target.files[0].name);
-                                }}
-                              />
-                            </label>
-                          </div>
-                        ) : (
-                          <div className="pl-5 pt-0.5 space-y-1">
-                            <label className="flex items-center gap-2 cursor-pointer text-amber-700 dark:text-amber-400 font-medium">
-                              <input
-                                type="checkbox"
-                                checked={tcUndertaking}
-                                onChange={(e) => setTcUndertaking(e.target.checked)}
-                                className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
-                              />
-                              <span>Parent signed 30-Day Provisional TC Undertaking</span>
-                            </label>
-                            <span className="text-[10px] text-slate-500 block leading-tight">
-                              Allows provisional admission while previous school processes TC dispatch. Flagged for Admin registry tracking.
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 pt-1">
-                        <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Dual-Gate: Forwarded to Admin Vault for Principal Inspection &amp; Seal.</span>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* STICKY FOOTER */}
-              <div className="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowEnrollModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isEnrolling}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-600/20"
-                >
-                  <UserCheck className="h-4 w-4" />
-                  <span>{isEnrolling ? 'Enrolling...' : 'Confirm & Issue SIS Roll Number'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ConfirmEnrollmentModal
+        isOpen={showEnrollModal}
+        onClose={() => setShowEnrollModal(false)}
+        enquiry={enquiry}
+        onSuccess={async (creds, msg) => {
+          if (creds) {
+            setEnrolmentCredentials(creds);
+            setShowCredentialsModal(true);
+          }
+          try {
+            confetti({
+              particleCount: 100,
+              spread: 80,
+              origin: { y: 0.6 }
+            });
+          } catch {}
+          await loadEnquiry();
+          triggerToast(msg || `${enquiry?.student_name} officially enrolled into SIS! Documents routed to Admin Vault.`);
+        }}
+      />
 
 <Footer />
 

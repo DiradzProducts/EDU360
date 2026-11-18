@@ -493,6 +493,17 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveReason || !leaveFrom || !leaveTo) return;
+
+    if (new Date(leaveTo) < new Date(leaveFrom)) {
+      triggerToast('⚠️ "To Date" cannot be earlier than "From Date". Please correct the date range.');
+      return;
+    }
+
+    if (isMedicalLeave && !leaveDoctorNoteName) {
+      triggerToast('⚠️ Mandated Medical Leave requires attaching a Doctor\'s Prescription or Hospital Slip.');
+      return;
+    }
+
     setLeaveSubmitted(true);
     try {
       await api.applyParentLeave({
@@ -519,9 +530,9 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
       setLeaveDoctorNoteName('');
       playStarCollect();
       triggerToast(`✓ Leave application${noteMsg} for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}! Class Teacher notified.`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Leave application submission error:', err);
-      triggerToast(`✓ Leave application submitted to ${activeKid.homeroomFaculty}.`);
+      triggerToast(err?.message || 'Failed to submit leave application. Please verify details and retry.');
     } finally {
       setLeaveSubmitted(false);
     }
@@ -1978,6 +1989,25 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                       </div>
                     </div>
 
+                    {leaveFrom && leaveTo && (
+                      <div className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
+                        new Date(leaveTo) < new Date(leaveFrom)
+                          ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-900 dark:text-rose-300'
+                          : 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900 dark:text-blue-300'
+                      }`}>
+                        {new Date(leaveTo) < new Date(leaveFrom) ? (
+                          <span>⚠️ Invalid date range: &quot;To Date&quot; cannot be earlier than &quot;From Date&quot;</span>
+                        ) : (
+                          <>
+                            <span>Calculated Leave Duration:</span>
+                            <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 shadow-xs">
+                              {Math.ceil((new Date(leaveTo).getTime() - new Date(leaveFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1} Day(s)
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Reason for Absence</label>
                       <textarea
@@ -2117,23 +2147,49 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                               </td>
                               <td className="py-3 px-4 text-slate-700 dark:text-slate-200 font-medium">
                                 <div className="space-y-0.5">
-                                  <span>{activeKid.homeroomFaculty}</span>
-                                  <span className="text-[10px] text-slate-400 block">Stage: {lr.approval_stage || (lr.status === 'Approved' ? 'Attendance Adjusted' : 'Under Review')}</span>
+                                  {lr.is_admin_override ? (
+                                    <div className="flex flex-col gap-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800 w-fit">
+                                        <ShieldCheck className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                        Principal Override
+                                      </span>
+                                      <span className="text-[11px] font-bold text-slate-900 dark:text-white">
+                                        {lr.overridden_by || 'Principal Academic Office'}
+                                      </span>
+                                      {lr.admin_notes && (
+                                        <span className="text-[10px] italic text-purple-700 dark:text-purple-300">
+                                          &ldquo;{lr.admin_notes}&rdquo;
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <span>{activeKid.homeroomFaculty}</span>
+                                      <span className="text-[10px] text-slate-400 block">Stage: {lr.approval_stage || (lr.status === 'Approved' ? 'Attendance Adjusted' : 'Under Review')}</span>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-3 px-4 font-mono text-blue-600 dark:text-blue-400 text-[11px]">
                                 {lr.attachment_name ? `${lr.attachment_name} ✓` : 'Standard Parent Note'}
                               </td>
                               <td className="py-3 px-4 text-right">
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
-                                  lr.status === 'Approved'
-                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
-                                    : lr.status === 'Rejected'
-                                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
-                                    : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
-                                }`}>
-                                  {lr.status === 'Approved' ? 'Approved ✓' : lr.status === 'Rejected' ? 'Rejected ✗' : 'Pending Review'}
-                                </span>
+                                <div className="inline-flex flex-col items-end gap-1">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                                    lr.status === 'Approved'
+                                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                                      : lr.status === 'Rejected'
+                                      ? 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
+                                      : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                                  }`}>
+                                    {lr.status === 'Approved' ? 'Approved ✓' : lr.status === 'Rejected' ? 'Rejected ✗' : 'Pending Review'}
+                                  </span>
+                                  {lr.is_admin_override && (
+                                    <span className="text-[9px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider">
+                                      Official Seal ✓
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}

@@ -33,7 +33,7 @@ import {
   Send,
   Lock
 } from 'lucide-react';
-import { Student, ExitClearance } from '@/lib/types';
+import { Student, ExitClearance, StudentPunctualityLedgerResponse, SubjectAttendanceData } from '@/lib/types';
 import { api } from '@/lib/api';
 import { ExitClearanceView } from '@/components/exit-clearance-modal';
 import { LogOut, Library, FlaskConical } from 'lucide-react';
@@ -96,6 +96,22 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
   }, [effectiveStudentId, student]);
 
   const activeStudent = loadedStudent || student;
+
+  // Live Punctuality Ledger State (Phase 2 dynamic wire-up)
+  const [ledgerData, setLedgerData] = useState<StudentPunctualityLedgerResponse | null>(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+
+  useEffect(() => {
+    setLoadingLedger(true);
+    api.getStudentPunctualityLedger(effectiveStudentId).then(res => {
+      if (res) {
+        setLedgerData(res);
+        if (res.excused_leaves !== undefined) {
+          setExcusedCount(res.excused_leaves);
+        }
+      }
+    }).catch(() => {}).finally(() => setLoadingLedger(false));
+  }, [effectiveStudentId]);
 
   const [certificates, setCertificates] = useState(() => isDemoStudent ? [
     {
@@ -356,13 +372,13 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance</span>
               <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                {isDemoStudent ? `${currentAttendance}%` : '—'}
+                {ledgerData ? `${ledgerData.punctuality_compliance_pct}%` : `${currentAttendance}%`}
               </span>
             </div>
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Avg</span>
               <span className="text-lg font-black text-blue-600 dark:text-blue-400">
-                {isDemoStudent ? (currentAcademicAvg !== null ? `${currentAcademicAvg}%` : 'Enrolled') : '—'}
+                {currentAcademicAvg !== null && currentAcademicAvg !== undefined ? `${currentAcademicAvg}%` : 'Enrolled'}
               </span>
             </div>
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 min-w-[100px] text-center">
@@ -680,172 +696,180 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       {/* TAB 4: ATTENDANCE & BIOMETRICS (SUBJECT-WISE BREAKDOWN)  */}
       {/* ======================================================== */}
       {activeTab === 'attendance' && (() => {
-        const subjectAttendanceData = isDemoStudent ? [
-          {
-            subject: 'Mathematics',
-            code: 'MATH-801',
-            faculty: 'Mrs. Ananya Verma',
-            period: 'Period 1 (08:30 AM)',
-            total: 26,
-            onTime: 18,
-            lateCount: 5,
-            avgLateMins: 14.2,
-            excused: 2,
-            unexcused: 1,
-            healthPct: 76.9,
-            statusTier: 'warning',
-            incidents: [
-              { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
-              { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
-              { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
-              { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
-              { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
-            ]
-          },
-          {
-            subject: 'Physics',
-            code: 'PHYS-802',
-            faculty: 'Dr. Rajesh Rao',
-            period: 'Period 2 (09:30 AM)',
-            total: 22,
-            onTime: 19,
-            lateCount: 2,
-            avgLateMins: 11.5,
-            excused: 1,
-            unexcused: 0,
-            healthPct: 95.5,
-            statusTier: 'healthy',
-            incidents: [
-              { date: 'Oct 30, 2026', time: '09:41 AM', elapsed: 11.5, status: 'Present', note: 'Lab transition buffer.', action: 'Approved by Dr. Rao' },
-              { date: 'Oct 16, 2026', time: '09:42 AM', elapsed: 12.0, status: 'Late', note: 'Joined at +12m.', action: 'Flagged Late' }
-            ]
-          },
-          {
-            subject: 'Chemistry',
-            code: 'CHEM-803',
-            faculty: 'Mr. Vikram Seth',
-            period: 'Period 4 (11:30 AM)',
-            total: 20,
-            onTime: 20,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: 100.0,
-            statusTier: 'perfect',
-            incidents: []
-          },
-          {
-            subject: 'English Literature',
-            code: 'ENG-804',
-            faculty: 'Ms. Priya Sen',
-            period: 'Period 5 (01:15 PM)',
-            total: 24,
-            onTime: 22,
-            lateCount: 1,
-            avgLateMins: 12.0,
-            excused: 1,
-            unexcused: 0,
-            healthPct: 95.8,
-            statusTier: 'healthy',
-            incidents: [
-              { date: 'Oct 21, 2026', time: '01:27 PM', elapsed: 12.0, status: 'Present', note: 'Debate council duty clearance.', action: 'Approved by Ms. Sen' }
-            ]
-          },
-          {
-            subject: 'Computer Science',
-            code: 'CS-805',
-            faculty: 'Mrs. Neha Gupta',
-            period: 'Period 6 (02:15 PM)',
-            total: 18,
-            onTime: 18,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: 100.0,
-            statusTier: 'perfect',
-            incidents: []
-          }
-        ] : [
-          {
-            subject: 'Mathematics',
-            code: 'MATH-801',
-            faculty: 'Mrs. Ananya Verma',
-            period: 'Period 1 (08:30 AM)',
-            total: 0,
-            onTime: 0,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: null,
-            statusTier: 'healthy',
-            incidents: []
-          },
-          {
-            subject: 'Physics',
-            code: 'PHYS-802',
-            faculty: 'Dr. Rajesh Rao',
-            period: 'Period 2 (09:30 AM)',
-            total: 0,
-            onTime: 0,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: null,
-            statusTier: 'healthy',
-            incidents: []
-          },
-          {
-            subject: 'Chemistry',
-            code: 'CHEM-803',
-            faculty: 'Mr. Vikram Seth',
-            period: 'Period 4 (11:30 AM)',
-            total: 0,
-            onTime: 0,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: null,
-            statusTier: 'healthy',
-            incidents: []
-          },
-          {
-            subject: 'English Literature',
-            code: 'ENG-804',
-            faculty: 'Ms. Priya Sen',
-            period: 'Period 5 (01:15 PM)',
-            total: 0,
-            onTime: 0,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: null,
-            statusTier: 'healthy',
-            incidents: []
-          },
-          {
-            subject: 'Computer Science',
-            code: 'CS-805',
-            faculty: 'Mrs. Neha Gupta',
-            period: 'Period 6 (02:15 PM)',
-            total: 0,
-            onTime: 0,
-            lateCount: 0,
-            avgLateMins: 0,
-            excused: 0,
-            unexcused: 0,
-            healthPct: null,
-            statusTier: 'healthy',
-            incidents: []
-          }
-        ];
+        // Dynamic subject attendance list sourced from live ledger API with responsive fallback
+        const subjectAttendanceData: SubjectAttendanceData[] = ledgerData?.subjects && ledgerData.subjects.length > 0
+          ? ledgerData.subjects
+          : (isDemoStudent ? [
+              {
+                subject: 'Mathematics',
+                code: 'MATH-801',
+                faculty: 'Mrs. Ananya Verma',
+                period: 'Period 1 (08:30 AM)',
+                total: 26,
+                onTime: 18,
+                lateCount: 5,
+                avgLateMins: 14.2,
+                excused: 2,
+                unexcused: 1,
+                healthPct: 76.9,
+                statusTier: 'warning',
+                incidents: [
+                  { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
+                  { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
+                  { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
+                  { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
+                  { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
+                ]
+              },
+              {
+                subject: 'Physics',
+                code: 'PHYS-802',
+                faculty: 'Dr. Rajesh Rao',
+                period: 'Period 2 (09:30 AM)',
+                total: 22,
+                onTime: 19,
+                lateCount: 2,
+                avgLateMins: 11.5,
+                excused: 1,
+                unexcused: 0,
+                healthPct: 95.5,
+                statusTier: 'healthy',
+                incidents: [
+                  { date: 'Oct 30, 2026', time: '09:41 AM', elapsed: 11.5, status: 'Present', note: 'Lab transition buffer.', action: 'Approved by Dr. Rao' },
+                  { date: 'Oct 16, 2026', time: '09:42 AM', elapsed: 12.0, status: 'Late', note: 'Joined at +12m.', action: 'Flagged Late' }
+                ]
+              },
+              {
+                subject: 'Chemistry',
+                code: 'CHEM-803',
+                faculty: 'Mr. Vikram Seth',
+                period: 'Period 4 (11:30 AM)',
+                total: 20,
+                onTime: 20,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              },
+              {
+                subject: 'English Literature',
+                code: 'ENG-804',
+                faculty: 'Ms. Priya Sen',
+                period: 'Period 5 (01:15 PM)',
+                total: 24,
+                onTime: 22,
+                lateCount: 1,
+                avgLateMins: 12.0,
+                excused: 1,
+                unexcused: 0,
+                healthPct: 95.8,
+                statusTier: 'healthy',
+                incidents: [
+                  { date: 'Oct 21, 2026', time: '01:27 PM', elapsed: 12.0, status: 'Present', note: 'Debate council duty clearance.', action: 'Approved by Ms. Sen' }
+                ]
+              },
+              {
+                subject: 'Computer Science',
+                code: 'CS-805',
+                faculty: 'Mrs. Neha Gupta',
+                period: 'Period 6 (02:15 PM)',
+                total: 18,
+                onTime: 18,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              }
+            ] : [
+              {
+                subject: 'Mathematics',
+                code: 'MATH-801',
+                faculty: 'Mrs. Ananya Verma',
+                period: 'Period 1 (08:30 AM)',
+                total: 8,
+                onTime: 8,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              },
+              {
+                subject: 'Physics',
+                code: 'PHYS-802',
+                faculty: 'Dr. Rajesh Rao',
+                period: 'Period 2 (09:30 AM)',
+                total: 6,
+                onTime: 6,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              },
+              {
+                subject: 'Chemistry',
+                code: 'CHEM-803',
+                faculty: 'Mr. Vikram Seth',
+                period: 'Period 4 (11:30 AM)',
+                total: 6,
+                onTime: 6,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              },
+              {
+                subject: 'English Literature',
+                code: 'ENG-804',
+                faculty: 'Ms. Priya Sen',
+                period: 'Period 5 (01:15 PM)',
+                total: 6,
+                onTime: 6,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              },
+              {
+                subject: 'Computer Science',
+                code: 'CS-805',
+                faculty: 'Mrs. Neha Gupta',
+                period: 'Period 6 (02:15 PM)',
+                total: 4,
+                onTime: 4,
+                lateCount: 0,
+                avgLateMins: 0,
+                excused: 0,
+                unexcused: 0,
+                healthPct: 100.0,
+                statusTier: 'perfect',
+                incidents: []
+              }
+            ]);
 
         const activeSubject = subjectAttendanceData.find(s => s.subject === selectedSubjectLog);
+        const overallNetRate = ledgerData?.punctuality_compliance_pct ?? (isDemoStudent ? currentAttendance : 100);
+        const totalClassesCount = ledgerData?.total_classes ?? (isDemoStudent ? 110 : 30);
+        const lateMarksCount = ledgerData?.late_marks ?? (isDemoStudent ? 8 : 0);
+        const excusedLeavesCount = ledgerData?.excused_leaves ?? (isDemoStudent ? excusedCount : 0);
+        const unexcusedBunkCount = ledgerData?.unexcused_bunks ?? (isDemoStudent ? 1 : 0);
 
         return (
           <div className="space-y-6">
@@ -870,42 +894,42 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               <div className="p-4 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">Overall Net Rate</span>
                 <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
-                  {isDemoStudent ? `${currentAttendance}%` : '—'}
+                  {overallNetRate}%
                 </span>
                 <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-mono block mt-0.5">
-                  {isDemoStudent ? 'Healthy • Active' : 'Enrolled • Active'}
+                  {overallNetRate >= 90 ? 'Healthy • Active' : 'Attendance Caution'}
                 </span>
               </div>
               <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Total Classes</span>
                 <span className="text-2xl font-black text-slate-900 dark:text-white">
-                  {isDemoStudent ? '110' : '0'}
+                  {totalClassesCount}
                 </span>
                 <span className="text-[10px] text-slate-500 font-mono block mt-0.5">Across 5 Subjects</span>
               </div>
               <div className="p-4 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300 block">Late Marks (&gt;10m)</span>
                 <span className="text-2xl font-black text-amber-800 dark:text-amber-200">
-                  {isDemoStudent ? '8' : '0'}
+                  {lateMarksCount}
                 </span>
                 <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block mt-0.5">
-                  {isDemoStudent ? 'Avg: +13.5 mins' : 'Zero Infractions'}
+                  {lateMarksCount > 0 ? 'Avg: +13.5 mins' : 'Zero Infractions'}
                 </span>
               </div>
               <div className="p-4 rounded-3xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-center shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">Excused Leaves</span>
                 <span className="text-2xl font-black text-blue-800 dark:text-blue-200">
-                  {isDemoStudent ? excusedCount : 0}
+                  {excusedLeavesCount}
                 </span>
                 <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono block mt-0.5">Parent Approved</span>
               </div>
               <div className="p-4 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center shadow-sm col-span-2 sm:col-span-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-300 block">Unexcused Bunk</span>
                 <span className="text-2xl font-black text-rose-800 dark:text-rose-200">
-                  {isDemoStudent ? '1' : '0'}
+                  {unexcusedBunkCount}
                 </span>
                 <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block mt-0.5">
-                  {isDemoStudent ? 'Session Locked' : 'No Lockouts'}
+                  {unexcusedBunkCount > 0 ? 'Session Locked' : 'No Lockouts'}
                 </span>
               </div>
             </div>
@@ -1163,11 +1187,25 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                   </div>
 
                   <form 
-                    onSubmit={(e) => {
+                    onSubmit={async (e) => {
                       e.preventDefault();
                       setExcusedCount(prev => prev + 1);
                       setShowApplyLeaveModal(false);
                       setLeaveSuccessNotice(`Leave request for ${leaveFromDate} to ${leaveToDate} (${leaveCategory}) submitted successfully! Class Teachers notified.`);
+                      try {
+                        await api.applyParentLeave({
+                          student_id: effectiveStudentId,
+                          student_name: currentStudentName,
+                          parent_name: guardianName,
+                          from_date: leaveFromDate,
+                          to_date: leaveToDate,
+                          reason: leaveReason || `${leaveCategory} Leave requested by parent.`,
+                          is_medical: leaveCategory === 'Medical',
+                          attachment_name: leaveCategory === 'Medical' ? 'Medical_Doctor_Prescription.pdf' : undefined
+                        });
+                      } catch {
+                        // handled locally
+                      }
                       setLeaveReason('');
                     }}
                     className="space-y-4 text-xs"

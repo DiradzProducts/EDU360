@@ -135,12 +135,16 @@ async def get_fee_defaulters(
     status: Optional[str] = Query(None, description="Overdue, Partially Paid, Paid, Waived"),
     class_name: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    is_admission_fee: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
     List student fee defaulters with real-time aging, payment history, and waiver state.
     """
     query = select(FeeDefaulter)
+
+    if is_admission_fee is not None:
+        query = query.where(FeeDefaulter.is_admission_fee == is_admission_fee)
 
     if status and status != "ALL":
         query = query.where(FeeDefaulter.status == status)
@@ -358,7 +362,7 @@ async def record_fee_payment(
     return defaulter
 
 
-@router.post("/defaulters/{id}/waiver", response_model=FeeDefaulterResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator"]))])
+@router.post("/defaulters/{id}/waiver", response_model=FeeDefaulterResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
 async def apply_fee_waiver(
     id: int,
     req: ApplyWaiverRequest,
@@ -366,25 +370,105 @@ async def apply_fee_waiver(
 ):
     """
     Grants a management fee concession / hardship waiver.
-    Reduces amount due and logs approval trail.
+    Enforces that concession amount cannot exceed current overdue balance.
+    Maintains concurrency safety via row-locking, appends to the payment history ledger,
+    records a balanced transaction entry, and synchronizes student fee milestones.
     """
-    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id))
+    if req.waiver_amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Concession amount must be greater than zero."
+        )
+
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id).with_for_update())
     defaulter = res.scalars().first()
     if not defaulter:
         raise HTTPException(status_code=404, detail="Defaulter record not found")
 
-    defaulter.waiver_amount += req.waiver_amount
-    defaulter.waiver_reason = req.reason
-    defaulter.waiver_approved_by = req.approved_by
+    if defaulter.amount_due <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Student {defaulter.student_name} has no outstanding overdue balance (Balance is ₹0.00). Concession cannot be applied."
+        )
+
+    if req.waiver_amount > defaulter.amount_due:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Concession amount (₹{req.waiver_amount:,.2f}) cannot exceed current outstanding overdue balance (₹{defaulter.amount_due:,.2f})."
+        )
+
+    # Apply concession mathematically
+    defaulter.waiver_amount = round((defaulter.waiver_amount or 0.0) + req.waiver_amount, 2)
+    defaulter.waiver_reason = req.reason.strip()
+    defaulter.waiver_approved_by = req.approved_by.strip()
     defaulter.waiver_approved_at = datetime.datetime.utcnow()
 
-    remaining = max(0.0, defaulter.amount_due - req.waiver_amount)
-    defaulter.amount_due = remaining
+    new_amount_due = round(defaulter.amount_due - req.waiver_amount, 2)
+    defaulter.amount_due = max(0.0, new_amount_due)
 
-    if remaining == 0:
+    if defaulter.amount_due == 0:
         defaulter.status = "Waived"
     else:
         defaulter.status = "Partially Paid"
+
+    # Append to student's payment history JSON
+    history = []
+    if defaulter.payment_history_json:
+        try:
+            history = json.loads(defaulter.payment_history_json)
+        except Exception:
+            history = []
+
+    tx_date_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+    concession_code = f"CONCESSION-{int(datetime.datetime.utcnow().timestamp())}"
+
+    history.append({
+        "date": tx_date_str,
+        "amount": req.waiver_amount,
+        "method": "Management Concession",
+        "utr_or_cheque": concession_code,
+        "received_by": req.approved_by,
+        "notes": f"Concession/Waiver: {req.reason}"
+    })
+    defaulter.payment_history_json = json.dumps(history)
+
+    # Insert an auto-reconciled ledger entry into payment_transactions
+    new_tx = PaymentTransaction(
+        utr_number=concession_code,
+        student_name=defaulter.student_name,
+        class_name=defaulter.class_name,
+        parent_name=defaulter.parent_name,
+        amount=req.waiver_amount,
+        payment_method="Management Concession",
+        bank_name="Management Board / Waiver",
+        milestone_title=f"Fee Concession: {defaulter.milestone_title}",
+        status="Success",
+        reconciled=True,
+        reconciled_at=datetime.datetime.utcnow(),
+        reconciled_by=req.approved_by,
+        notes=f"Concession Authorized: {req.reason} (Approved by: {req.approved_by})"
+    )
+    db.add(new_tx)
+
+    # Synchronize matching student fee milestone if present
+    if defaulter.student_id:
+        m_res = await db.execute(
+            select(FeeMilestone)
+            .where(
+                FeeMilestone.student_id == defaulter.student_id,
+                FeeMilestone.status.in_(["Overdue", "Upcoming"])
+            )
+        )
+        milestones = m_res.scalars().all()
+        for m in milestones:
+            if m.title.strip().lower() == defaulter.milestone_title.strip().lower() or len(milestones) == 1:
+                if defaulter.amount_due == 0:
+                    m.status = "Paid"
+                    m.receipt_no = f"REC-CONCESSION-{int(datetime.datetime.utcnow().timestamp())}"
+                    m.paid_at = tx_date_str
+                else:
+                    m.amount = defaulter.amount_due
+                break
 
     await log_financial_audit(
         db=db,
@@ -393,8 +477,23 @@ async def apply_fee_waiver(
         action_type="FEE_WAIVER_APPLIED",
         target=f"Student #{defaulter.student_id} ({defaulter.student_name})",
         status="VERIFIED",
-        details=f"Fee waiver of ₹{req.waiver_amount:,.2f} applied. Reason: {req.reason}. Approved by: {req.approved_by}."
+        details=f"Fee concession of ₹{req.waiver_amount:,.2f} applied. Reason: {req.reason}. Approved by: {req.approved_by}. Remaining Balance: ₹{defaulter.amount_due:,.2f}."
     )
+
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.approved_by or "Accounts Office",
+            sender_role="accounts_coordinator",
+            title="Fee Concession Approved",
+            message=f"An official fee concession of ₹{req.waiver_amount:,.2f} has been approved for {defaulter.student_name} ({defaulter.class_name}) by {req.approved_by}. Reason: {req.reason}. Remaining due: ₹{defaulter.amount_due:,.2f}.",
+            notification_type="fee",
+            recipient_role="parent",
+            action_url="/parent"
+        )
+    except Exception as notif_err:
+        logger.warning(f"Failed to dispatch concession notification: {notif_err}")
+
     await db.commit()
     await db.refresh(defaulter)
     return defaulter

@@ -7,7 +7,8 @@ from app.core.database import get_db
 from app.models.models import (
     LiveClass, AttendanceRecord, Student, Homework, HomeworkSubmission,
     FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint, SecurityAuditLog,
-    PTMSlot, ParentTeacherNote
+    PTMSlot, ParentTeacherNote,
+    AcademicSubject, SubjectAttendanceSession, SubjectAttendanceEntry
 )
 from app.schemas.schemas import (
     LiveClassResponse, AttendanceRecordResponse, AttendanceJoinSimulate, AttendanceOverride,
@@ -19,7 +20,8 @@ from app.schemas.schemas import (
     ParentTeacherNoteCreate, ParentTeacherNoteResponse,
     PTMEventConfigResponse, PTMSlotResponse, PTMSlotBookRequest,
     PTMSlotCancelRequest, PTMSlotRestoreRequest,
-    ParentTeacherChatMessageCreate, ParentTeacherChatMessageResponse
+    ParentTeacherChatMessageCreate, ParentTeacherChatMessageResponse,
+    AcademicSubjectResponse, MarkPeriodAttendancePayload
 )
 from app.services.ai_analytics import evaluate_attendance_rule
 from app.routers.notifications import create_system_notification
@@ -238,6 +240,13 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
     lr = result.scalars().first()
     if not lr:
         raise HTTPException(status_code=404, detail="Leave request not found")
+
+    if lr.is_admin_override:
+        raise HTTPException(
+            status_code=403,
+            detail=f"This leave application was officially overridden by School Administration ({lr.overridden_by}). Class teachers cannot overwrite administrative decisions. Please contact the Principal's office."
+        )
+
     lr.status = req.status
     if req.teacher_notes:
         lr.teacher_notes = req.teacher_notes
@@ -272,6 +281,20 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
                 minutes_late=0.0
             )
             db.add(att_rec)
+
+        # Synchronize Period-Wise SubjectAttendanceEntry for today / dates
+        sub_entries_res = await db.execute(
+            select(SubjectAttendanceEntry).where(
+                SubjectAttendanceEntry.student_id == lr.student_id,
+                SubjectAttendanceEntry.date == today_iso
+            )
+        )
+        for sub_entry in sub_entries_res.scalars().all():
+            sub_entry.status = "Excused"
+            sub_entry.rule_stipulation = "PARENT_EXCUSED"
+            sub_entry.leave_request_id = lr.id
+            sub_entry.approved_by = "Mrs. Ananya Verma"
+            sub_entry.action_taken = "Excused by Class Teacher Approval"
 
         # 2. Dispatch persistent notification to Parent
         try:
@@ -1781,3 +1804,109 @@ async def mark_teacher_chat_read(student_id: int, db: AsyncSession = Depends(get
     )
     await db.commit()
     return {"success": True, "message": "Messages marked as read by teacher"}
+
+
+# --- Phase 2: Teacher Period Attendance Register Endpoints ---
+
+@router.get("/subjects", response_model=list[AcademicSubjectResponse])
+async def list_academic_subjects(
+    class_name: str = "Class 8",
+    section: str = "B",
+    db: AsyncSession = Depends(get_db)
+):
+    """List academic subjects for class and section with assigned faculty."""
+    result = await db.execute(
+        select(AcademicSubject).where(
+            AcademicSubject.class_name == class_name,
+            AcademicSubject.section == section
+        ).order_by(AcademicSubject.id.asc())
+    )
+    subjects = result.scalars().all()
+    if not subjects:
+        result = await db.execute(select(AcademicSubject).order_by(AcademicSubject.id.asc()))
+        subjects = result.scalars().all()
+    return subjects
+
+
+@router.post("/attendance/mark-period")
+async def mark_period_attendance(
+    payload: MarkPeriodAttendancePayload,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Teacher records period attendance for the class roster.
+    Inserts master session and student punctuality logs with automated 10m/20m stipulation rules.
+    """
+    # 1. Create or register master period session
+    sess = SubjectAttendanceSession(
+        subject_code=payload.subject_code,
+        class_name=payload.class_name,
+        section=payload.section,
+        period_no=payload.period_no,
+        session_date=payload.session_date,
+        time_slot=payload.time_slot,
+        faculty_name="Class Teacher",
+        status="COMPLETED",
+        topic_covered=payload.topic_covered or "Curriculum Period Delivery"
+    )
+    db.add(sess)
+    await db.flush()
+
+    # 2. Iterate and record each student's punctuality status
+    for rec in payload.records:
+        rule = "ON_TIME"
+        action = "Present on Time"
+        status_val = rec.status
+
+        if rec.status == "Late" or rec.elapsed_minutes > 10.0:
+            if rec.elapsed_minutes > 20.0:
+                status_val = "Absent"
+                rule = "LOCKED_GT_20M"
+                action = "Session Locked (Unexcused >20m)"
+            else:
+                status_val = "Late"
+                rule = "LATE_GT_10M"
+                action = f"Flagged Late (+{rec.elapsed_minutes:.1f}m)"
+        elif rec.status == "Absent":
+            rule = "UNEXCUSED_BUNK"
+            action = "Marked Absent"
+        elif rec.status == "Excused":
+            rule = "PARENT_EXCUSED"
+            action = "Parent/Medical Leave Excused"
+
+        entry = SubjectAttendanceEntry(
+            session_id=sess.id,
+            student_id=rec.student_id,
+            subject_code=payload.subject_code,
+            date=payload.session_date,
+            time_joined="08:35 AM" if status_val != "Absent" else "—",
+            elapsed_minutes=rec.elapsed_minutes,
+            status=status_val,
+            rule_stipulation=rule,
+            note=rec.note or f"Period {payload.period_no} attendance logged by faculty.",
+            action_taken=action
+        )
+        db.add(entry)
+
+    # 3. Recalculate each student's overall attendance_pct
+    student_ids = list(set(r.student_id for r in payload.records))
+    for s_id in student_ids:
+        all_entries_res = await db.execute(
+            select(SubjectAttendanceEntry).where(SubjectAttendanceEntry.student_id == s_id)
+        )
+        all_e = all_entries_res.scalars().all()
+        if all_e:
+            valid_present = sum(1 for e in all_e if e.status in ["Present", "Excused", "Late"])
+            calc_pct = round((valid_present / len(all_e)) * 100.0, 1)
+            st_update_res = await db.execute(select(Student).where(Student.id == s_id))
+            st_obj = st_update_res.scalars().first()
+            if st_obj:
+                st_obj.attendance_pct = calc_pct
+
+    await db.commit()
+    return {
+        "success": True,
+        "message": f"Period {payload.period_no} attendance recorded for {len(payload.records)} students.",
+        "session_id": sess.id
+    }
+

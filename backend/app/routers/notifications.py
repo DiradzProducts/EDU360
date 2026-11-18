@@ -50,6 +50,7 @@ async def create_system_notification(
         five_mins_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
         conditions = [
             Notification.notification_type == notification_type,
+            Notification.title == title,
             Notification.is_read == False,
             Notification.created_at >= five_mins_ago
         ]

@@ -13,7 +13,8 @@ from app.models.models import (
     QuestionPaper, ExamSchedule, ReportCard, Notification,
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
     PayrollBatch, StaffPayslip, PurchaseOrder, FleetExpenseRecord,
-    InventoryMovement, AssetCustodyLog
+    InventoryMovement, AssetCustodyLog,
+    AcademicSubject, SubjectAttendanceSession, SubjectAttendanceEntry
 )
 
 async def seed_data():
@@ -1995,6 +1996,40 @@ async def seed_data():
                 last_reminder_at=datetime.datetime.utcnow() - datetime.timedelta(days=4),
                 status="Overdue",
                 notes="Pending UPI clearance from parent side."
+            ),
+            FeeDefaulter(
+                student_id=9,
+                student_name="Siddharth Rao",
+                class_name="Class 8-B",
+                roll_no="31",
+                parent_name="Mrs. Meera Rao",
+                parent_phone="+91 98450 99881",
+                milestone_title="One-Time Admission & Registration Fee (INV-2026-ADM-0009)",
+                amount_due=25000.0,
+                days_overdue=2,
+                reminder_sent=False,
+                reminder_count=0,
+                is_admission_fee=True,
+                exam_clearance=True,
+                status="Overdue",
+                notes="Converted from Admissions CRM with pending fee schedule. Awaiting front desk / online collection."
+            ),
+            FeeDefaulter(
+                student_id=11,
+                student_name="Rahul Rehaman",
+                class_name="Class 8-A",
+                roll_no="ADM-2026-0811",
+                parent_name="Mr. Rehaman",
+                parent_phone="+91 95467 89812",
+                milestone_title="One-Time Admission Fee (INV-2026-ADM-0811)",
+                amount_due=25000.0,
+                days_overdue=1,
+                reminder_sent=False,
+                reminder_count=0,
+                is_admission_fee=True,
+                exam_clearance=True,
+                status="Overdue",
+                notes="Converted from Admissions CRM with pending fee schedule. Invoice dispatched to Accounts Desk for recovery."
             )
         ]
         db.add_all(initial_defaulters)
@@ -2631,6 +2666,34 @@ async def seed_data():
             )
         ]
         db.add_all(initial_custody)
+
+        # --- Phase 1: Academic Subjects (Class 8-B Timetable Curriculum) ---
+        subjects_data = [
+            AcademicSubject(id=1, code="MATH-801", name="Mathematics", faculty_name="Mrs. Ananya Verma", period_slot="Period 1 (08:30 AM)", class_name="Class 8", section="B", planned_sessions=26, room="Room 204"),
+            AcademicSubject(id=2, code="PHYS-802", name="Physics", faculty_name="Dr. Rajesh Rao", period_slot="Period 2 (09:30 AM)", class_name="Class 8", section="B", planned_sessions=24, room="Physics Lab 1"),
+            AcademicSubject(id=3, code="CHEM-803", name="Chemistry", faculty_name="Mr. Vikram Seth", period_slot="Period 4 (11:30 AM)", class_name="Class 8", section="B", planned_sessions=22, room="Chemistry Lab"),
+            AcademicSubject(id=4, code="ENG-804", name="English Literature", faculty_name="Ms. Priya Sen", period_slot="Period 5 (01:15 PM)", class_name="Class 8", section="B", planned_sessions=24, room="Room 204"),
+            AcademicSubject(id=5, code="CS-805", name="Computer Science", faculty_name="Mrs. Neha Gupta", period_slot="Period 6 (02:15 PM)", class_name="Class 8", section="B", planned_sessions=18, room="Computer Lab 2")
+        ]
+        db.add_all(subjects_data)
+
+        # --- Seed Aarav Sharma (ID=1) Historical Incidents & Attendance Entries ---
+        seed_entries = [
+            # Mathematics
+            SubjectAttendanceEntry(student_id=1, subject_code="MATH-801", date="Nov 04, 2026", time_joined="08:44 AM", elapsed_minutes=14.2, status="Late", rule_stipulation="LATE_GT_10M", note="Joined at +14.2m (>10m rule exceeded).", action_taken="Pending Faculty Review"),
+            SubjectAttendanceEntry(student_id=1, subject_code="MATH-801", date="Nov 02, 2026", time_joined="08:52 AM", elapsed_minutes=22.0, status="Absent", rule_stipulation="LOCKED_GT_20M", note="Session locked at +22m (>20m limit). Video recording available in portal.", action_taken="Session Locked (Unexcused)"),
+            SubjectAttendanceEntry(student_id=1, subject_code="MATH-801", date="Oct 28, 2026", time_joined="08:42 AM", elapsed_minutes=12.0, status="Present", rule_stipulation="ON_TIME", note="Route #4 school bus mechanical delay.", action_taken="Approved by Mrs. Verma"),
+            SubjectAttendanceEntry(student_id=1, subject_code="MATH-801", date="Oct 24, 2026", time_joined="08:45 AM", elapsed_minutes=15.0, status="Late", rule_stipulation="LATE_GT_10M", note="Device Wi-Fi reconnect lag.", action_taken="Flagged Late (+15m)"),
+            SubjectAttendanceEntry(student_id=1, subject_code="MATH-801", date="Oct 19, 2026", time_joined="—", elapsed_minutes=0.0, status="Excused", rule_stipulation="PARENT_EXCUSED", note="Parent Medical Slip #MED-891 approved.", action_taken="Excused Leave (Doctor Note)"),
+            # Physics
+            SubjectAttendanceEntry(student_id=1, subject_code="PHYS-802", date="Oct 30, 2026", time_joined="09:43 AM", elapsed_minutes=13.0, status="Late", rule_stipulation="LATE_GT_10M", note="Optics lab prep delay.", action_taken="Logged Late (+13m)"),
+            SubjectAttendanceEntry(student_id=1, subject_code="PHYS-802", date="Oct 23, 2026", time_joined="09:41 AM", elapsed_minutes=11.0, status="Present", rule_stipulation="ON_TIME", note="Teacher approved: Library science journal return.", action_taken="Excused by Dr. Rao"),
+            # Chemistry
+            SubjectAttendanceEntry(student_id=1, subject_code="CHEM-803", date="Nov 03, 2026", time_joined="11:42 AM", elapsed_minutes=12.0, status="Late", rule_stipulation="LATE_GT_10M", note="Joined at +12m. Titration bench reassigned.", action_taken="Warning Issued (+12m)"),
+            # English Literature
+            SubjectAttendanceEntry(student_id=1, subject_code="ENG-804", date="Oct 21, 2026", time_joined="01:27 PM", elapsed_minutes=12.0, status="Present", rule_stipulation="ON_TIME", note="Debate council duty clearance.", action_taken="Approved by Ms. Sen")
+        ]
+        db.add_all(seed_entries)
 
         await db.commit()
         print("EDU360 seed data populated successfully!")

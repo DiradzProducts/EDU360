@@ -24,6 +24,7 @@ docs/
 │   └── EDU360_MASTER_PRD_SPECIFICATION_v7.md
 │
 ├── architecture/                           <-- System Architecture Specifications
+│   ├── ROLE_WISE_ARCHITECTURE_AND_WORKFLOWS.md (Master 8-Role Architecture & Workflow Specs)
 │   ├── ADMIN_ARCHITECTURE.md               (Admin Nerve Center & Vitals)
 │   ├── COORDINATOR_ROLES_SPECIFICATION.md  (The 6 Operational Coordinator Interlocks)
 │   └── AGENTS.md                           (Agent guidelines & workspace directives)

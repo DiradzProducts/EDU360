@@ -43,6 +43,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AdmissionEnquiry } from '@/lib/types';
 import { exportToCsv } from '@/lib/export-utils';
 import { DocumentViewerModal, DocumentPreviewData } from '@/components/document-viewer-modal';
+import { ConfirmEnrollmentModal } from '@/components/admissions/confirm-enrollment-modal';
 
 type CrmFilter = 'all' | 'due_today' | 'active' | 'passive' | 'converted' | 'dropped';
 
@@ -1597,210 +1598,18 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
         </div>
       )}
 
-      {/* ── MODAL 3: 1-CLICK SIS CONVERT ── */}
-      {convertModalEnquiry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
-                  🎓
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">1-Click SIS Enrollment &amp; Dossier</h3>
-                  <p className="text-[11px] text-slate-500">Verify documents and promote lead to active Student Profile</p>
-                </div>
-              </div>
-              <button onClick={() => setConvertModalEnquiry(null)} className="cursor-pointer text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Student Name:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.student_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Grade / Target Class:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.target_grade}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Parent &amp; Phone:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{convertModalEnquiry.parent_name} ({convertModalEnquiry.phone})</span>
-                </div>
-              </div>
-
-              {/* Mandatory Document Verification & TC Upload Vault */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                    Document Verification &amp; TC Upload Vault
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
-                    3/4 Documents Ready
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-[11px]">
-                  {/* Transfer Certificate (TC / SLC) */}
-                  <div className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="h-4 w-4 text-blue-600 shrink-0" />
-                      <div>
-                        <span className="font-bold text-slate-900 dark:text-white block">Transfer Certificate (TC / SLC) *</span>
-                        <span className="text-[10px] text-slate-500">Official migration slip from previous recognized school</span>
-                      </div>
-                    </div>
-                    <label className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] cursor-pointer shadow-xs transition-all flex items-center gap-1">
-                      <Upload className="h-3 w-3" />
-                      <span>Attach TC</span>
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) {
-                            alert(`Transfer Certificate attached: ${e.target.files[0].name}`);
-                          }
-                        }} 
-                      />
-                    </label>
-                  </div>
-
-                  {/* Other Vital Documents */}
-                  <div className="grid grid-cols-3 gap-1.5 text-center">
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Birth Certificate</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Marks Card</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <span className="text-[9px] font-bold text-emerald-600 block">✓ Verified</span>
-                      <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Aadhaar Card</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Assign Classroom Section</label>
-                <select 
-                  value={convertSection} 
-                  onChange={e => setConvertSection(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs"
-                >
-                  <option value="A">{convertModalEnquiry.target_grade}-A (Section A)</option>
-                  <option value="B">{convertModalEnquiry.target_grade}-B (Section B)</option>
-                </select>
-              </div>
-
-              {/* Admission Fee & Accounts Handoff Controls */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    One-Time Admission Fee Structure
-                  </span>
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
-                    Accounts Auto-Sync
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Fee Amount (₹)</label>
-                    <input
-                      type="number"
-                      value={convertAdmissionFee}
-                      onChange={e => setConvertAdmissionFee(Number(e.target.value))}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-black text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">Collection Status</label>
-                    <select
-                      value={convertFeeStatus}
-                      onChange={e => setConvertFeeStatus(e.target.value as 'Paid' | 'Pending')}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
-                    >
-                      <option value="Paid">✓ Paid Now (Immediate Collection)</option>
-                      <option value="Pending">⏳ Pending (Queue in Accounts)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dynamic Payment Method: Disabled when Pending, Enabled/Popped when Paid */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                      Payment Method
-                    </label>
-                    {convertFeeStatus === 'Pending' ? (
-                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">
-                        Disabled (Pending Status)
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                        Active Immediate Receipt
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    disabled={convertFeeStatus === 'Pending'}
-                    value={convertPaymentMethod}
-                    onChange={e => setConvertPaymentMethod(e.target.value)}
-                    className={`w-full rounded-xl border p-2 text-xs font-bold transition-all ${
-                      convertFeeStatus === 'Pending'
-                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-400 cursor-not-allowed opacity-50'
-                        : 'border-emerald-500/60 dark:border-emerald-500/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white ring-2 ring-emerald-500/20 animate-in fade-in zoom-in-95'
-                    }`}
-                  >
-                    <option value="UPI (Google Pay)">UPI (Google Pay / PhonePe)</option>
-                    <option value="Bank POS Card">Bank POS Debit/Credit Card</option>
-                    <option value="Cash Counter">Cash Counter Settlement</option>
-                    <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
-                  </select>
-                  {convertFeeStatus === 'Pending' ? (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-1">
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                      Mode of payment is locked because collection status is set to Pending. Accounts team will collect later.
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-1">
-                      <CheckCircle2 className="h-3 w-3 shrink-0" />
-                      Instant receipt will be issued &amp; forwarded to Accounts Coordinator for bank reconciliation.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setConvertModalEnquiry(null)}
-                  className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmConvert}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Confirm &amp; Enroll in SIS</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── MODAL 3: OFFICIAL SIS ENROLLMENT (IMAGE 1 PARITY) ── */}
+      <ConfirmEnrollmentModal
+        isOpen={!!convertModalEnquiry}
+        onClose={() => setConvertModalEnquiry(null)}
+        enquiry={convertModalEnquiry}
+        onSuccess={async (creds, msg) => {
+          const updated = await api.getEnquiries();
+          setEnquiries(updated);
+          setConvertModalEnquiry(null);
+          triggerToast(msg || `✓ ${convertModalEnquiry?.student_name} enrolled in SIS!`);
+        }}
+      />
 
       {/* Document Viewer / Preview & Download Modal */}
       <DocumentViewerModal

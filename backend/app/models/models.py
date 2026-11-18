@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, Index, UniqueConstraint, CheckConstraint
 
 from sqlalchemy.orm import relationship
 
@@ -63,6 +63,8 @@ class Student(Base):
     academic_average_pct = Column(Float, default=78.4)
 
     status = Column(String(20), default="Active")
+
+    admission_date = Column(String(30), default="2026-11-01", nullable=True)
 
     grade_tier = Column(String(20), default="secondary")  # 'k5' or 'secondary'
 
@@ -446,6 +448,10 @@ class AttendanceRecord(Base):
 
     teacher_override = Column(Boolean, default=False)
 
+    admin_override = Column(Boolean, default=False)
+
+    override_by_role = Column(String(20), default="NONE")  # NONE, TEACHER, ADMIN
+
     date = Column(String(30), nullable=False)
 
 
@@ -598,6 +604,11 @@ class LeaveRequest(Base):
 
     __tablename__ = "leave_requests"
 
+    __table_args__ = (
+        Index("ix_leave_status_applied", "status", "applied_at"),
+        Index("ix_leave_student_status_applied", "student_id", "status", "applied_at"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
 
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
@@ -615,6 +626,14 @@ class LeaveRequest(Base):
     status = Column(String(20), default="Pending", index=True)  # Pending, Approved, Rejected
 
     teacher_notes = Column(Text, nullable=True)
+
+    admin_notes = Column(Text, nullable=True)
+
+    is_admin_override = Column(Boolean, default=False)
+
+    overridden_at = Column(DateTime, nullable=True)
+
+    overridden_by = Column(String(100), nullable=True)
 
     is_medical = Column(Boolean, default=False)
 
@@ -1575,6 +1594,10 @@ class FeeDefaulter(Base):
 
         Index("ix_fee_defaulter_aging_status", "days_overdue", "status"),
 
+        CheckConstraint("amount_due >= 0", name="chk_fee_defaulter_amount_due_non_negative"),
+
+        CheckConstraint("waiver_amount >= 0", name="chk_fee_defaulter_waiver_non_negative"),
+
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -2259,4 +2282,63 @@ class SecurityAuditLog(Base):
         Index("ix_audit_logs_actor_role", "actor_role"),
         Index("ix_audit_logs_timestamp", "timestamp"),
     )
+
+
+# --- Phase 1: Academic Subjects & Granular Subject-Wise Attendance Ledger Models ---
+
+class AcademicSubject(Base):
+    __tablename__ = "academic_subjects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(30), unique=True, nullable=False, index=True)  # e.g., "MATH-801"
+    name = Column(String(100), nullable=False)                         # e.g., "Mathematics"
+    faculty_name = Column(String(100), nullable=False)                 # e.g., "Mrs. Ananya Verma"
+    period_slot = Column(String(50), nullable=False)                   # e.g., "Period 1 (08:30 AM)"
+    class_name = Column(String(30), nullable=False, default="Class 8") # e.g., "Class 8"
+    section = Column(String(10), nullable=False, default="B")          # e.g., "B"
+    planned_sessions = Column(Integer, default=26)
+    room = Column(String(50), default="Room 204")
+
+
+class SubjectAttendanceSession(Base):
+    __tablename__ = "subject_attendance_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subject_code = Column(String(30), ForeignKey("academic_subjects.code"), nullable=False, index=True)
+    class_name = Column(String(30), nullable=False)
+    section = Column(String(10), nullable=False)
+    period_no = Column(Integer, default=1)
+    session_date = Column(String(30), nullable=False, index=True)       # e.g., "2026-11-17"
+    time_slot = Column(String(50), nullable=False)                      # e.g., "08:30 AM - 09:15 AM"
+    faculty_name = Column(String(100), nullable=False)
+    status = Column(String(20), default="COMPLETED")                   # COMPLETED, CANCELLED, ACTIVE
+    topic_covered = Column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index("ix_att_session_class_date", "class_name", "section", "session_date"),
+    )
+
+
+class SubjectAttendanceEntry(Base):
+    __tablename__ = "subject_attendance_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("subject_attendance_sessions.id", ondelete="CASCADE"), nullable=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject_code = Column(String(30), nullable=False, index=True)
+    date = Column(String(30), nullable=False, index=True)
+    time_joined = Column(String(30), nullable=True)                     # e.g., "08:44 AM"
+    elapsed_minutes = Column(Float, default=0.0)                        # minutes after period start
+    status = Column(String(20), default="Present")                      # Present, Late, Absent, Excused
+    rule_stipulation = Column(String(50), default="ON_TIME")            # ON_TIME, LATE_GT_10M, LOCKED_GT_20M, PARENT_EXCUSED
+    note = Column(String(255), nullable=True)
+    action_taken = Column(String(255), nullable=True)                   # e.g., "Pending Faculty Review", "Approved by Mrs. Verma"
+    approved_by = Column(String(100), nullable=True)
+    leave_request_id = Column(Integer, ForeignKey("leave_requests.id"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_sub_att_student_code", "student_id", "subject_code"),
+        Index("ix_sub_att_student_date", "student_id", "date"),
+    )
+
 
