@@ -1,333 +1,155 @@
 # ABOUT EDU360 — Master Product Requirements Document (PRD)
-**Unified Multi-Portal Institutional Management, Live Education, and Student Information System (SIS)**
+## Unified Multi-Portal Institutional Management, Live Education, and Student Information System (SIS)
 
----
-
-## Document Control & Metadata
-- **Document Title**: ABOUT EDU360 — Product Requirements & Architectural Specification
-- **Product Name**: EDU360
-- **Version**: 7.2 (Production Baseline)
-- **Status**: Approved & Architecturally Validated
-- **Target Audience**: Executive Leadership, Product Managers, Full-Stack Engineers, UI/UX Designers, System Administrators
-- **Canonical Files**:
-  - Word Document: [`docs/ABOUT_EDU360.docx`](file:///e:/Diradz/EDU360/docs/ABOUT_EDU360.docx)
-  - Markdown Reference: [`docs/ABOUT_EDU360.md`](file:///e:/Diradz/EDU360/docs/ABOUT_EDU360.md)
+**Document Version:** 2.0 (Production Architecture Baseline)  
+**Target Segment:** K–12 Education (Nursery to Class 12)  
+**Platforms:** Web Application (Admin, Coordinators, Teachers, Secondary Students) & Mobile Application (Parents, Companion PWA for Students/Teachers)  
+**Target Audience:** Executive Leadership, System Architects, Full-Stack Engineers, UI/UX Designers, QA Engineers  
+**Canonical File Locations:**
+- Primary PRD: [`docs/prd/PRD.md`](file:///e:/Diradz/EDU360/docs/prd/PRD.md)
+- About EDU360 Markdown: [`docs/ABOUT_EDU360.md`](file:///e:/Diradz/EDU360/docs/ABOUT_EDU360.md)
+- Architectural Reference: [`docs/architecture/ROLE_WISE_ARCHITECTURE_AND_WORKFLOWS.md`](file:///e:/Diradz/EDU360/docs/architecture/ROLE_WISE_ARCHITECTURE_AND_WORKFLOWS.md)
 
 ---
 
 ## 1. Executive Summary & Product Vision
 
-### 1.1 Vision Statement
-EDU360 is an enterprise-grade, cloud-native educational management ecosystem designed to eliminate software fragmentation in K-12 and higher-education institutions. Conventional school management systems operate as disconnected silos — disparate tools for admissions CRM, fee accounting, attendance registers, timetable allocation, learning management (LMS), and video conferencing. 
+**EDU360** is an enterprise-grade, cloud-native **Educational Operating System & Student Outcomes Platform** engineered for K–12 institutions. Traditional School ERPs operate as disconnected, static digital registers that spam users with notifications and leave leadership blind to operational risks. 
 
-EDU360 unifies all stakeholders into a single, high-concurrency operating system featuring **8 purpose-built role portals**, real-time WebRTC live classrooms, AI-assisted pedagogical workflows, and pessimistic-locking transactional integrity.
+EDU360 functions as a **Unified Action & Intelligence System** connecting **Administration, 4 Specialized Coordinators, Teachers, Parents, and Students** around four foundational product principles:
 
-### 1.2 Three Core Product Principles
-
-1. **Principle 1 — Unified Single Source of Truth (Zero Silos)**:
-   Every student, faculty member, parent, and administrative staff member operates on an integrated PostgreSQL schema. Actions in one portal propagate deterministically across all others: when a teacher concludes a live class, attendance logs immediately reflect in the student dossier, trigger parent push notifications, and feed the administrative compliance dashboard.
-
-2. **Principle 2 — Low Friction, High Automation**:
-   Administrative overhead is systematically minimized. Attendance is logged automatically via WebRTC connection telemetry; timetable substitution clashes are algorithmically resolved; homework is graded using visual side-by-side annotations; and fee reconciliation occurs instantly via webhook-verified milestone settlement.
-
-3. **Principle 3 — Defense-in-Depth & Data Sovereign Security**:
-   Role-Based Access Control (RBAC) is enforced at the ASGI router layer via cryptographic token verification. Sensitive financial datasets, student health records, and document vaults are physically segmented and guarded against Broken Object Level Authorization (BOLA) and Broken Function Level Authorization (BFLA).
-
-### 1.3 Market Differentiation (Where EDU360 Stands Out)
-- **Embedded WebRTC Video Engine**: Built-in LiveKit conferencing eliminates external Zoom/Google Meet links, automatically recording sessions and tracking attendance without third-party redirects.
-- **Side-by-Side SpeedGrader with OCR**: Teachers grade submissions directly against question rubrics, leveraging Gemini AI for multimodal diagram recognition and handwriting extraction.
-- **Pessimistic Concurrency Hardening**: PTM slot scheduling and fee milestone settlements employ `SELECT ... FOR UPDATE` database row locks to guarantee zero double-bookings or payment race conditions.
-- **Dual-Signature Exit & Clearance Engine**: Digital Transfer Certificate (TC) workflows require cryptographic sign-offs from both Library and Finance before clearance issuance.
+1. **Actionable Management Intelligence:** Instead of forcing school leaders to sift through static reports, EDU360 highlights *what needs attention today, why it matters, and who needs to take action* via a real-time **Red / Orange / Green Priority Triage Engine**.
+2. **Outcome-Oriented Parent Involvement:** Instead of spamming parents with 15 disconnected notifications a day, EDU360 provides an **anti-spam moving-slider dashboard** on mobile for routine updates, coupled with a shared **Student Focus Table** for targeted weak-subject improvement.
+3. **Zero Extra Burden for Teachers:** Routine administrative toil is automated—online class attendance is captured via a **10-minute WebRTC telemetry rule**, period-wise subject attendance is auto-excused upon approved leave, and homework is evaluated directly inside a browser-based **SpeedGrader canvas** without downloading or re-uploading files.
+4. **Deterministic Time-Alignment & Governance-First Security:** The entire platform operates against a centralized **ClockProvider** simulation engine, synchronizing timetables, period bells, and exam lifecycles across all 8 portals. Cryptographic HMAC-SHA256 tokens and pessimistic row locks (`SELECT ... FOR UPDATE`) ensure zero double-bookings, zero payment race conditions, and complete auditability.
 
 ---
 
 ## 2. Platform Strategy & Multi-Portal Architecture
 
-EDU360 delivers dedicated, tailored user experiences across desktop web workstations and mobile devices based on task complexity and user mobility.
+EDU360 follows a **Role-Optimized Platform Strategy** tailored to ergonomic workstation needs, user mobility, and task complexity across all **8 Canonical Roles**:
 
-| User Group | Primary Platform | Secondary Platform | Justification & Usage Strategy |
-| :--- | :--- | :--- | :--- |
-| **Students** | Mobile App / Tablet (PWA) | Desktop Web | Mobile-first for reviewing class schedules, timetable alerts, homework submission photos, and LiveKit classes; desktop web for exams and essays. |
-| **Teachers** | Desktop Web Workstation | Mobile App | Desktop web optimized for high-throughput SpeedGrader marking, live class hosting, and attendance registers; mobile app for push notices and PTM chats. |
-| **Parents** | Native Mobile App (iOS / Android) | Responsive Web | Mobile-first for push alerts (bus tracking, attendance alerts, exam reports), 1-click UPI fee payments, and 1-tap PTM slot bookings. |
-| **Administrators & Staff** | Desktop Web Console (1080p+) | Tablet Web | Dense, data-rich operational dashboards for fee audits, timetable builder grids, payroll approval batches, and CRM funnel triage. |
+| User Role | Route / Portal | Primary Platform | Secondary Platform | Operational Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| **Super Admin / Principal** | `/admin` | **Web App (Desktop 1080p+)** | Mobile Web (Urgent alerts only) | High-density priority triage, institutional task delegation, statutory document vault locking, and administrative override governance. |
+| **Academic Coordinator** | `/academic_coordinator` | **Web App (Desktop/Laptop)** | Tablet Web | Curriculum pacing audit, conflict-free teacher timetable substitutions, and faculty workload balancing. |
+| **Exam Coordinator** | `/exam_coordinator` | **Web App (Desktop/Laptop)** | Tablet Web | Atomic batch class exam scheduling, hall deployment, seat allocation, academic clearance gating, and dynamic admit card generation. |
+| **Accounts Coordinator** | `/accounts_coordinator` | **Web App (Desktop/Laptop)** | Tablet Web | Real-time 3-tier fee aging, physical counter cash/cheque collection, fee waivers, and monthly staff payroll with LOP deductions (Maker role). |
+| **Admissions Coordinator** | `/admissions_coordinator` | **Web App (Desktop/Laptop)** | Mobile App / Tablet | 24/7 AI chatbot lead capture CRM, follow-up call tracking, and 1-click atomic conversion into SIS profiles with sibling discounts. |
+| **Teachers** | `/teacher` | **Web App (Desktop/Laptop)** | Mobile App / Tablet | Desktop displays optimal for LiveKit classroom hosting, browser-based SpeedGrader annotation, and staff leave/permission applications. |
+| **Parents** | `/parent` | **Mobile App (Android / iOS)** | Responsive Web | Mobile-first for on-the-go push notifications, 1-tap UPI fee payments, moving slider notices, live bus GPS tracking, and PTM booking. |
+| **Students (Secondary)** | `/student` | **Web App (Desktop/Laptop)** | Mobile App / Tablet (PWA) | Full-width displays for distraction-free LiveKit classes, digital notes, dynamic admit cards, online exams, and homework uploads. |
 
 ---
 
-## 3. User Roles & Permission Matrix (RBAC)
+## 3. User Roles & Permission Matrix (RBAC & Governance)
 
-> 📌 **Security Architecture Guardrail**:
-> System enforces zero-trust identity verification via HMAC-SHA256 signed bearer tokens paired with role verification headers (`X-User-Role`, `X-User-Id`). All API endpoints reject unauthorized invocations with HTTP 401/403. Fallback to unauthenticated defaults is strictly prohibited.
+> ⚠️ **Strict Document Security & Administrative Override Rule**:  
+> 1. Official student documents in the **Student Information System (SIS)** can **ONLY** be uploaded, edited, or replaced by **Administration**. Teachers, Parents, and Students have strictly **View/Download-Only** access.  
+> 2. The **Administrative Override Engine** grants Principal/Super Admin ultimate executive authority over student leaves, institutional SLAs, exam moderation, and fee overrides. When an executive override is stamped (`is_admin_override=True`), downstream roles (Teachers/Coordinators) are locked out (`403 Forbidden`) from reversing the action.
 
-| System Capability / Feature Module | Super Admin | School Admin | Principal | Academic Coordinator | Teacher | Student | Parent | Accountant |
+| Module / System Capability | Super Admin / Principal | Academic Coordinator | Exam Coordinator | Accounts Coordinator | Admissions Coordinator | Teacher | Student | Parent |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Global School Configuration & Audits** | ✅ Full | ✅ Full | 👁️ Read | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied |
-| **Admissions CRM & Enquiry Pipeline** | ✅ Full | ✅ Full | 👁️ Read | ✅ Edit | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied |
-| **Fee Structure, Invoices & Defaulters** | ✅ Full | ✅ Full | 👁️ Read | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ✅ Full |
-| **Payroll Processing & Staff Compensation** | ✅ Full | ✅ Full | 👁️ Read | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ✅ Full |
-| **Timetable Generation & Substitution** | ✅ Full | ✅ Full | 👁️ Read | ✅ Full | 👁️ Read | 👁️ Read | ❌ Denied | ❌ Denied |
-| **Class Schedule & LiveKit Class Hosting** | ✅ Full | ✅ Full | 👁️ Read | ✅ Full | ✅ Host | 👁️ Join | ❌ Denied | ❌ Denied |
-| **SpeedGrader Homework Evaluation** | ✅ Full | ✅ Full | 👁️ Read | ✅ Audit | ✅ Grade | ❌ Denied | ❌ Denied | ❌ Denied |
-| **Student Homework & Project Submission**| ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | 👁️ Read | ✅ Submit | 👁️ Read | ❌ Denied |
-| **PTM Slot Creation & Schedule Mgmt** | ✅ Full | ✅ Full | 👁️ Read | ✅ Full | ✅ Create | ❌ Denied | ❌ Denied | ❌ Denied |
-| **PTM Slot Booking & Lock Management** | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ✅ Manage | ❌ Denied | ✅ Book | ❌ Denied |
-| **Fee Milestones Online Payment (UPI)** | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied | ✅ Pay | 👁️ Audit |
-| **Transfer Certificate (TC) Dual Clearance**| ✅ Full | ✅ Full | ✅ Sign | ❌ Denied | ❌ Denied | ❌ Denied | 👁️ Track | ✅ Sign |
+| **Institutional Priority Triage & Tasks** | **Full (Executive)** | View / Action | View / Action | View / Action | View / Action | None | None | None |
+| **SIS Official Document Vault Control** | **Full (Exclusive)** | View Only | View Only | View Only | View Only | View Only | View Only | View Only |
+| **Administrative Override Engine** | **Full (Tier-3 Bypass)**| None | None | None | None | None | None | None |
+| **Admissions CRM & SIS Conversion** | Full (Audit) | View Only | View Only | Fee Handshake | **Full (Lead CRM)** | None | None | None |
+| **Batch Exam Scheduling & Hall Alloc.** | Full (Audit) | Sync Pacing | **Full (Batch Eng)**| Fee Clearance | None | View Duty | View Admit | View Admit |
+| **Dynamic Admit Card Generation** | Full (Audit) | View Only | **Full (Publish)** | Fee Clearance | None | View Only | **Download (Live)**| View Only |
+| **3-Tier Fee Aging & Counter Payment** | Full (Audit) | None | Clearance Lock | **Full (Counter Pay)**| None | None | View Status | **Pay (Online)**|
+| **Staff Payroll & LOP Deductions** | **Authorize (Checker)**| Workload Sync| None | **Draft Batch (Maker)**| None | View Payslip | None | None |
+| **Live Online Class Hosting (WebRTC)** | Full (Audit) | Monitor Class | None | None | None | **Full (Host)** | Join / Replay | None |
+| **Auto-Attendance (10-Min Rule)** | Full (Audit) | View Register | None | None | None | **Live Roster** | Status Stamp | View Child |
+| **SpeedGrader Inline Canvas Correction** | Full (Audit) | Audit Pacing | None | None | None | **Grade & Mark** | Submit / View| View Child |
+| **Shared Student 'Focus Table'** | Full (Audit) | Audit Focus | Sync Blueprint | None | None | **Create / Edit** | View & Execute| **Co-Track** |
+| **Staff Leave (CL/SL/EL/LOP) Application**| **Approve / Reject** | Substitute Match| None | Payroll LOP Sync | None | **Apply / Track**| None | None |
+| **Student Leave Approval & Override** | **Executive Override**| View Only | Attendance Sync| None | None | **First Approver**| Apply / Track| Apply for Child|
+| **PTM Slot Concurrency Booking (Locks)**| Full (Audit) | Monitor Slots | None | None | None | **Create Slots** | None | **Hold & Book** |
+| **Dual-Signature Student Exit / TC** | **Sign & Seal** | Inventory Sync| None | Dues Clearance | None | View Only | View Status | **Digital Sign** |
+| **Live School Bus GPS Tracking** | Full (Routes) | None | None | Transport Fees | None | None | Live Tracking| **Live Tracking**|
 
 ---
 
 ## 4. Detailed Functional Requirements by Role
 
-### 4.1 Student Portal & Mobile App
-- **Live Classroom Cockpit**: Direct in-browser LiveKit WebRTC connection with adaptive bitrate, screen share reception, and live chat.
-- **10-Minute Auto-Attendance Tracker**: Background websocket telemetry verifying student presence throughout instructional periods.
-- **Homework Vault & Camera Capture**: Mobile upload supporting high-resolution image compression, multi-page PDFs, and submission history.
-- **Academic Portfolio & Gradebook**: Real-time grade tracking, exam answer sheet review, and AI-powered remedial learning recommendations.
-- **Timetable & Daily Schedule**: Visual schedule showing room assignments, teacher substitutions, and countdown timers to upcoming periods.
+### 4.1 Role 1: Student Portal (`/student` — Web-First)
+1. **Live Classroom Cockpit (LMS):** 1-click in-browser LiveKit WebRTC connection with active speaker spotlighting, screen share reception, and live doubts chat.
+2. **Dynamic 10-Minute Auto-Attendance Tracker:** Periodic background telemetry automatically logs attendance status. Students joining within 10 minutes receive `Present`; joining after 10 minutes marks `Late`; non-attendees mark `Absent`.
+3. **Period-Wise Subject Attendance Ledger:** Real-time visibility into period-level statuses across all subjects (`MATH-801`, `PHY-802`, etc.) with automatic parent-excused annotations.
+4. **Dynamic Admit Cards & Exam Seating Roster:** Students receive live, dynamic examination hall tickets pulling directly from the Exam Coordinator's batch database. Displays exam series name, designated examination hall, assigned seat number, chief invigilator name, QR verification code, and academic/fee clearance verification.
+5. **Homework Vault & Submission Engine:** Multi-file upload dropzone with mobile camera capture and compression. Displays the teacher-evaluated SpeedGrader document with vector pen annotations and private remarks.
+6. **Side-by-Side Portfolio (Participations & Achievements):** 2-pane portfolio separating institutional event participation from student-uploaded merit awards and competition certificates.
+7. **Personalized 'Focus Table' & Remedial Drills:** Actionable weekly study timetable highlighting low-scoring subject concepts co-tracked with parents and teachers.
 
-### 4.2 Teacher Portal & SpeedGrader
-- **SpeedGrader Visual Interface**: 2-pane evaluation workspace displaying student submissions alongside grading rubrics, with built-in annotation tools, OCR text extraction, and private remarks.
-- **Class Attendance Register**: 1-click bulk attendance marker (Present, Absent, Late, Excused) with automatic sync to parent push notifications.
-- **Live Lecture Studio**: Integrated LiveKit broadcaster with whiteboard controls, mute-all capabilities, and automatic cloud recording triggers.
-- **PTM Schedule Manager**: Slot generator with configurable buffer times, automated parent calendar syncing, and video conference links.
-- **Curriculum & Lesson Planner**: Syllabus milestone tracker with automated progress reporting to Academic Coordinators.
+### 4.2 Role 2: Teacher Portal (`/teacher` — Web-First)
+1. **Teacher Home Dashboard & Class Timetable:** Dynamic schedule ticker driven by `ClockProvider` highlighting active period, upcoming lectures, pending homework submissions, and duty assignments.
+2. **Live Lecture Broadcaster Studio:** Integrated LiveKit WebRTC room broadcaster with digital whiteboard controls, mute-all capability, and automatic cloud recording.
+3. **SpeedGrader Studio (Browser Canvas):** 2-pane evaluation workspace displaying student submissions alongside grading rubrics. Teachers draw freehand stylus corrections, write remarks, and assign scores directly in the browser—automatically replacing the student file without manual re-uploading.
+4. **Staff Leave & Short-Permission Management:** Apply for categorized leaves (*Casual Leave - CL*, *Sick Leave - SL*, *Earned Leave - EL*, or *Loss of Pay - LOP*) specifying affected teaching periods. Approved LOP leaves automatically feed into Accounts Coordinator payroll deductions.
+5. **Period-Wise Attendance Register:** Fast-key bulk attendance marker (`P`, `A`, `L`, `E`) with instant sync to parent notifications. Approved student leaves automatically backfill and excuse period sessions.
+6. **Student Focus Table Builder:** Generate personalized concept recovery plans for students scoring below benchmark thresholds in unit exams.
+7. **Parental Connection Hub:** 1-on-1 parent messaging, online PTM slot generation with buffer intervals, and student leave recommendation reviews.
 
-### 4.3 Parent Portal & Family Engagement
-- **Moving Academic Sliders**: Dynamic visual progress gauges tracking real-time performance across STEM, Humanities, and Language arts.
-- **Concurrency-Safe PTM Booking**: Interactive slot selection with 5-minute temporary holds, pessimistic row locks, and instant SMS/Email confirmations.
-- **Fee Milestones & Digital Cashier**: Itemized term fee breakdown, installment plans, instant UPI/NetBanking settlement, and automated PDF tax receipts.
-- **Live Transport Radar**: Real-time GPS bus tracking with ETA countdowns, route deviation alerts, and morning pickup notifications.
-- **Digital Clearance & Leave Requests**: 1-click sick leave submission and Transfer Certificate tracking with live departmental clearance updates.
+### 4.3 Role 3: Parent Application (`/parent` — Mobile-First)
+1. **Anti-Spam 'Moving Slider' Carousel:** Routine announcements, holiday notices, and event banners glide as top interactive slides, onboarding parents to open the app once daily without notification fatigue.
+2. **High-Signal Push Alerts & Notification Center:** Push notifications reserved exclusively for urgent alerts: Teacher Remarks, updates to Child's Focus Table, 3-day consecutive absence warnings, and administrative fee alerts.
+3. **Dynamic Child Admit Card Viewer:** Parents inspect their child's official exam admit card, hall location, seat allocation, and academic clearance status before term exams.
+4. **Concurrency-Safe PTM Booking:** Interactive 15-minute slot selector with a 5-minute temporary reservation timer backed by pessimistic database row locks (`SELECT ... FOR UPDATE`).
+5. **3-Tier Fee Milestones & Digital Cashier:** Installment breakdown, instant UPI/Card settlements, counter payment history receipts, and automated PDF tax receipts delivered to registered email.
+6. **Live Transport Radar:** Real-time school bus GPS tracking showing live map route, current stop, morning pickup ETA, and evening drop countdown.
 
-### 4.4 Admin, Principal & Coordinator Management Console
-- **Institutional Triage Dashboard**: Red/Orange/Green priority status indicators highlighting fee defaulters, teacher absenteeism, and critical compliance items.
-- **Automated Timetable & Substitution Engine**: Conflict-free schedule generator with instant emergency substitution matching based on teacher availability.
-- **Admissions CRM Pipeline**: Kanban lead funnel managing student inquiries from initial contact through document verification to enrollment conversion.
-- **Financial Accounting & Payroll Engine**: Comprehensive fee reconciliation, payroll batch execution, salary slip generation, and institutional expense tracking.
-- **Document Vault & Compliance Lock**: Secure storage for student transcripts, medical certificates, and government filings with role-restricted audit trails.
+### 4.4 Role 4: Super Admin / Principal Console (`/admin` — Web-First)
+1. **Priority Triage Command Center (Red / Orange / Green Action Engine):** Highlights top institutional issues by priority, explains root cause, and provides 1-click administrative resolution buttons (Consecutive student absences, fee defaults, teacher absence).
+2. **Administrative Override & Governance Engine:** Five concrete executive bypass domains enabling the Principal to override student leave rejections, force-close stalled SLA tasks, decouple exam moderation freezes, and clear fee hall-ticket blocks with downstream lockout (`403 Forbidden`).
+3. **Four-Eye Payroll Authorization (Checker Role):** Principal reviews monthly salary batch computed by Accounts Coordinator (net wire, tax deductions, LOP penalties) and applies executive authorization signature before bank disbursement.
+4. **Dual-Signature Student Exit / TC Clearance:** Orchestrates institutional sign-offs across Library, Labs, Sports, and Finance. Requires both Parent Digital Approval (OTP) and Principal Scanned Physical Signature before permanent vault sealing.
+5. **Conflict-Free Timetable & Substitution Engine:** Algorithmic schedule builder with automatic emergency substitution matching based on teacher subject qualifications and free periods.
+
+### 4.5 Role 5: Exam Coordinator Portal (`/exam_coordinator` — Web-First)
+1. **Atomic Batch Class Exam Scheduling:** Coordinators schedule all subjects for a class in one atomic transaction, generating a unique `batch_id` and `series_name`.
+2. **Hall Deployment & Seating Allocation:** Manages halls, capacities, and assigns Chief Invigilators per session.
+3. **Dynamic Admit Card Generation Engine:** Automates hall ticket publishing with fee clearance gates and verification QR codes.
+4. **Academic Moderation Ledger & Secrecy Vault:** Normalizes exam marks across sections and applies cryptographic moderation locks.
+5. **AI-Assisted Hybrid Answer Script Scanning:** Integrates Gemini Flash Vision API to process scanned paper answer scripts and auto-populate marks.
+
+### 4.6 Role 6: Accounts Coordinator Portal (`/accounts_coordinator` — Web-First)
+1. **3-Tier Fee Aging Ledger & Defaulter Triage:** Tracks receivables categorized into Aging Tiers (1–30d, 31–60d, 60+d) with 1-click reminders.
+2. **Physical Counter Collection Engine:** Point-of-sale cashier modal for recording manual cash, cheque, Demand Draft, or POS card payments with zero-overpayment guards and pessimistic row locks.
+3. **Staff Payroll & LOP Deduction Engine (Maker Role):** Computes monthly payroll cross-referencing staff attendance and approved Loss of Pay (LOP) leaves.
+4. **Four-Eye Separation of Duties Workflow:** Submits draft payroll batches to the Principal for executive authorization before executing disbursement wire.
+5. **Fee Waiver & Concession Approvals:** Evaluates economic hardship and merit scholarship fee waivers within predefined administrative delegation limits.
+
+### 4.7 Role 7: Admissions Coordinator Portal (`/admissions_coordinator` — Web-First)
+1. **24/7 AI Chatbot & Lead Ingestion CRM:** Captures incoming parent inquiries and routes high-intent prospects to counselors.
+2. **Follow-Up Call Tracker:** Logs tele-counseling notes and tracks lead conversion velocity.
+3. **Single-Click Atomic SIS Conversion:** Converts admitted candidates directly into enrolled students (`POST /api/admin/crm/enquiries/{id}/convert`).
+4. **Sibling Linking & Automated Discount Engine:** Detects enrolled siblings and applies a 15% tuition fee waiver automatically.
+
+### 4.8 Role 8: Academic Coordinator Portal (`/academic_coordinator` — Web-First)
+1. **Curriculum Pacing & Syllabus Tracker:** Monitors chapter completion percentages against lesson plans across all sections.
+2. **Teacher Substitution & Workload Balancing:** Real-time substitution engine that recommends qualified replacement teachers without period collisions.
+3. **Student Focus Table Oversight:** Audits teacher-student recovery timetables and tracks remedial score progression.
+4. **Classroom Quality & Observation Log:** Conducts structured teacher reviews and logs lesson feedback.
 
 ---
 
 ## 5. Key System Workflows & Flow Diagrams
 
-### 5.1 Workflow 1: Live Online Class & Automated Webhook Attendance
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Teacher as Teacher
-    participant FE as Frontend Portal
-    participant API as FastAPI Backend
-    participant LK as LiveKit WebRTC
-    actor Student as Student
-    participant DB as PostgreSQL DB
-    actor Parent as Parent
-
-    Teacher->>FE: Click "Start Live Class" (Class 10-A, Physics)
-    FE->>API: POST /api/v1/livekit/create-room
-    API->>LK: Provision WebRTC Room with Token
-    LK-->>FE: Return Teacher Broadcaster Token
-    FE->>Student: Emit Class Active Notification via WebSocket
-    Student->>FE: Click "Join Live Class"
-    FE->>API: GET /api/v1/livekit/join-token
-    API->>LK: Validate & Return Viewer Token
-    LK-->>FE: Stream Audio/Video/Screen to Student
-    Note over LK,API: Webhook: participant_joined (Record timestamp)
-    Note over Student,LK: Student remains active for >= 10 minutes
-    LK->>API: POST /api/v1/livekit/webhook (Heartbeat telemetry)
-    API->>DB: INSERT INTO attendance (status='Present', method='auto_livekit')
-    Teacher->>FE: Click "End Class"
-    FE->>API: POST /api/v1/livekit/end-room
-    API->>LK: Terminate Room & Trigger Cloud Recording
-    API->>DB: UPDATE student_dossier (physics_hours += duration)
-    API->>Parent: Push Notification ("Attendance Confirmed: Physics 10-A")
-```
-
-| Step | Actor / System | Rule / Action Executed | System Output & State Transition |
-| :---: | :--- | :--- | :--- |
-| **1** | Teacher | Authenticated teacher triggers `Start Live Class` for assigned timetable period. | System checks teacher timetable assignment and creates active room record. |
-| **2** | FastAPI Backend | Invokes LiveKit REST API to initialize room with deterministic naming convention. | LiveKit room provisioned; returns encrypted HMAC broadcaster token. |
-| **3** | Student Portal | Student receives real-time WebSocket invitation and clicks `Join Class`. | Authenticates student role and issues scoped viewer token. |
-| **4** | LiveKit Engine | Monitors continuous connection telemetry and tracks active duration. | Triggers `participant_joined` and heartbeat webhooks to backend. |
-| **5** | Attendance Engine | Evaluates total active duration against minimum threshold (default: 10 mins). | If duration $\ge$ 10 mins, marks `Present`; otherwise flags as `Late` or `Incomplete`. |
-| **6** | PostgreSQL DB | Executes transactional update to daily attendance register. | Attendance row written with foreign keys to student, class, and room ID. |
-| **7** | Notification Worker | Dispatches async notification to registered parent mobile devices. | Parent portal updates with timestamped attendance confirmation. |
+*All workflows include detailed Mermaid sequence diagrams and execution matrices in [`docs/prd/PRD.md`](file:///e:/Diradz/EDU360/docs/prd/PRD.md):*
+- **Workflow 5.1**: Online Class Auto-Attendance & Consecutive Absence Triage
+- **Workflow 5.2**: Homework Submission, SpeedGrader Inline Canvas & Focus Table
+- **Workflow 5.3**: Parent-Teacher Meeting (PTM) Concurrency-Safe Booking
+- **Workflow 5.4**: Student Exit & Dual-Signature Legal Clearance
+- **Workflow 5.5**: Batch Class Examination Scheduling & Dynamic Admit Card Delivery
+- **Workflow 5.6**: Four-Eye Staff Payroll Generation & LOP Deduction Clearance
+- **Workflow 5.7**: Administrative Override & Governance Cascade
 
 ---
 
-### 5.2 Workflow 2: Homework Submission & Side-by-Side SpeedGrader Evaluation
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Student as Student
-    participant S_UI as Student App
-    participant API as FastAPI Backend
-    participant S3 as Storage Vault
-    participant DB as PostgreSQL DB
-    actor Teacher as Teacher
-    participant T_UI as Teacher SpeedGrader
-    actor Parent as Parent
-
-    Student->>S_UI: Select Assignment ("Thermodynamics Lab")
-    S_UI->>Student: Prompt for Camera / PDF File Upload
-    Student->>S_UI: Upload 3-page solution images
-    S_UI->>API: POST /api/v1/student/homework/submit (FOR UPDATE)
-    API->>S3: Stream compressed images to object storage
-    S3-->>API: Return secure presigned asset URLs
-    API->>DB: UPSERT INTO homework_submissions (status='Submitted')
-    DB-->>S_UI: 200 OK (Submission confirmed)
-    Teacher->>T_UI: Open SpeedGrader for Class 10-A
-    T_UI->>API: GET /api/v1/teacher/submissions/{id}
-    API->>DB: SELECT submission, rubric, student_profile
-    DB-->>T_UI: Render 2-Pane Split Canvas (Work on Left, Rubric on Right)
-    Teacher->>T_UI: Annotate diagrams, enter marks (45/50) & private audio note
-    T_UI->>API: POST /api/v1/teacher/grade-submission
-    API->>DB: UPDATE homework_submissions (status='Graded', score=45)
-    API->>DB: UPDATE student_portfolio (remedial_trigger=False)
-    API->>S_UI: WebSocket: Homework evaluated toast
-    API->>Parent: Push Notification: "New Grade Posted: 45/50 in Physics"
-```
-
-| Step | Actor / System | Rule / Action Executed | System Output & State Transition |
-| :---: | :--- | :--- | :--- |
-| **1** | Student | Captures assignment photos or attaches multi-page PDF solution. | Client performs image auto-orientation, cropping, and gzip compression. |
-| **2** | FastAPI Backend | Acquires row lock via `SELECT ... FOR UPDATE` to prevent double-submit collisions. | Validates deadline timestamp against centralized ClockProvider. |
-| **3** | Storage Engine | Stores encrypted submission assets in object storage with SHA-256 integrity hash. | Returns secure presigned storage URLs; marks submission as `Submitted`. |
-| **4** | Teacher | Accesses SpeedGrader workstation for pending assignment queue. | Frontend renders side-by-side workspace: document viewer and interactive rubric. |
-| **5** | SpeedGrader UI | Teacher adds vector pen annotations, highlights text, and enters numerical score. | Optional Gemini OCR extracts handwritten equations for automated rubric matching. |
-| **6** | Backend API | Commits final grade, feedback comments, and audio memo to database. | Submission status transitions to `Graded`; recalculates student GPA. |
-| **7** | Notification Svc | Pushes grade release alerts simultaneously to student and parent portals. | Grade appears in student portfolio; parent view shows score and feedback. |
+## 6. UI/UX Screen Checklist & Technology Stack
+- Full Screen checklist for all 8 Portals + Notification Center & Dynamic Admit Cards.
+- Production Tech Stack: Next.js 14/16 (React 18/19), FastAPI, PostgreSQL 15+ Async, LiveKit WebRTC, Centralized ClockProvider, Google Gemini Flash Vision API.
 
 ---
 
-### 5.3 Workflow 3: Parent-Teacher Meeting (PTM) Concurrency-Safe Booking
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Teacher as Teacher
-    participant T_UI as Teacher Portal
-    participant API as FastAPI Backend
-    participant DB as PostgreSQL DB
-    actor ParentA as Parent A (Mobile)
-    actor ParentB as Parent B (Web)
-
-    Teacher->>T_UI: Define PTM Session (15-min slots, 10:00 to 12:00)
-    T_UI->>API: POST /api/v1/teacher/ptm/slots/generate
-    API->>DB: Bulk INSERT 8 slots (status='AVAILABLE')
-    Note over ParentA,ParentB: Both parents view 10:15 AM slot simultaneously
-    ParentA->>API: POST /api/v1/parent/ptm/slots/hold (10:15 AM)
-    API->>DB: SELECT * FROM ptm_slots WHERE id=4 FOR UPDATE
-    Note over DB: Row 4 LOCKED by Parent A transaction
-    ParentB->>API: POST /api/v1/parent/ptm/slots/hold (10:15 AM)
-    Note over API,ParentB: Parent B waits or fails lock acquisition
-    API->>DB: UPDATE ptm_slots SET status='HELD', held_by='ParentA', expires_at=NOW()+5m
-    DB-->>API: 200 OK (Slot Held)
-    API-->>ParentA: 200 OK (5-Minute Hold Timer Started)
-    API-->>ParentB: 409 Conflict ("Slot currently held by another parent")
-    ParentA->>API: POST /api/v1/parent/ptm/slots/confirm (id=4, agenda="Physics Progress")
-    API->>DB: UPDATE ptm_slots SET status='BOOKED', parent_id='ParentA'
-    API->>Teacher: WebSocket: "New PTM Confirmed: Parent A @ 10:15 AM"
-    API->>ParentA: Push Confirmation + ICS Calendar File
-```
-
-| Step | Actor / System | Rule / Action Executed | System Output & State Transition |
-| :---: | :--- | :--- | :--- |
-| **1** | Teacher | Generates batch of meeting slots with custom duration and buffer intervals. | System inserts availability slots in `AVAILABLE` state linked to teacher ID. |
-| **2** | Parent App | Parents browse available slots on interactive schedule grid. | UI displays real-time slot statuses fetched via cached query. |
-| **3** | Concurrency Lock | Parent A initiates hold; backend queries slot with `SELECT ... FOR UPDATE`. | Row lock acquired; prevents competing transactions from reading stale availability. |
-| **4** | Conflict Check | Parent B attempts hold on same slot while lock is active. | Lock detects existing hold; returns immediate HTTP `409 Conflict` to Parent B. |
-| **5** | Temporary Hold | Slot marked `HELD` for 5 minutes with holding parent identifier and expiration time. | UI starts countdown timer; slot visually grays out for other users. |
-| **6** | Booking Finalize | Holding parent enters discussion topics and confirms booking before timer expires. | Slot transitions to `BOOKED`; row lock released; generates LiveKit video link. |
-| **7** | Calendar Sync | Dispatches confirmation emails with embedded ICS calendar invitations. | Teacher and parent calendars updated; automated reminder scheduled for T-1 hour. |
-
----
-
-### 5.4 Workflow 4: Student Exit / Transfer Certificate (TC) Dual-Signature Clearance
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Parent as Parent / Student
-    participant API as FastAPI Backend
-    participant DB as PostgreSQL DB
-    actor Lib as Librarian / Inventory
-    actor Fin as Finance Officer
-    actor Admin as Principal / Head of School
-
-    Parent->>API: POST /api/v1/student/exit-request (Reason: Relocation)
-    API->>DB: INSERT INTO exit_clearance (status='PENDING_CLEARANCE')
-    API->>Lib: Emit Notification ("Book Clearance Required")
-    API->>Fin: Emit Notification ("Fee Clearance Required")
-    Lib->>API: POST /api/v1/admin/exit/library-signoff (Books returned: YES)
-    API->>DB: UPDATE exit_clearance SET library_cleared=TRUE, lib_sign=HMAC(...)
-    Fin->>API: POST /api/v1/admin/exit/finance-signoff (Dues cleared: YES)
-    API->>DB: UPDATE exit_clearance SET finance_cleared=TRUE, fin_sign=HMAC(...)
-    Note over DB: Evaluates: library_cleared AND finance_cleared == TRUE
-    API->>Admin: Escalate to Principal ("Ready for Digital TC Generation")
-    Admin->>API: POST /api/v1/admin/exit/generate-tc (Principal Digital Seal)
-    API->>DB: UPDATE exit_clearance SET status='COMPLETED', tc_issued=TRUE
-    API->>Parent: Deliver Cryptographically Signed PDF Transfer Certificate
-```
-
-| Step | Actor / System | Rule / Action Executed | System Output & State Transition |
-| :---: | :--- | :--- | :--- |
-| **1** | Parent / Student | Submits formal withdrawal application citing official reason and effective date. | Creates exit clearance record in `PENDING_CLEARANCE` status. |
-| **2** | System Router | Automatically fans out clearance tasks to Library, Lab, Sports, and Finance depts. | Pending clearance badges appear in respective department staff consoles. |
-| **3** | Department Sign-Off | Officers verify returned physical assets and record cryptographic approval. | Department clearance flag set to `TRUE` with audit trail (officer ID, timestamp). |
-| **4** | Finance Audit | Finance officer verifies complete fee settlement and deposits refund if applicable. | Finance clearance flag set to `TRUE`; blocks progression if balance remains. |
-| **5** | Principal Seal | Principal reviews consolidated clearance dossier and applies institutional digital seal. | System transitions exit record to `APPROVED`; generates unique TC serial number. |
-| **6** | PDF Engine | Generates tamper-evident Transfer Certificate with embedded verification QR code. | PDF signed with school's digital certificate and archived in permanent record vault. |
-| **7** | Parent Delivery | Certificate made available for instant download in parent portal and emailed. | Student status transitions from `Active` to `Alumni / Withdrawn`. |
-
----
-
-## 6. UI/UX Screen Checklist (Figma Design Specifications)
-
-| Portal / Module | Target Screen Name & Layout | Essential UI Components & Micro-Interactions |
-| :--- | :--- | :--- |
-| **Student Portal** | `Live Classroom Cockpit` (Full-Screen Responsive) | 1. LiveKit video stage with active speaker spotlighting.<br>2. Dynamic 10-Minute Auto-Attendance badge.<br>3. Collapsible in-class chat & doubts panel.<br>4. Interactive digital whiteboard with annotation tools. |
-| **Student Portal** | `Homework Vault & Upload` (Mobile-Optimized) | 1. Assignment deadline countdown badge.<br>2. Multi-file upload dropzone with mobile camera capture.<br>3. Document thumbnail previewer with reordering.<br>4. Real-time submission receipt with cryptographic timestamp. |
-| **Teacher Portal** | `SpeedGrader Studio` (Split-Pane Desktop 1080p+) | 1. Left pane: High-resolution PDF/image canvas with zoom/pan.<br>2. Right pane: Weighted criteria grading rubric.<br>3. In-line text annotation and freehand stylus tools.<br>4. Voice-recorded feedback memo player and private note box. |
-| **Teacher Portal** | `Class Attendance Register` (Dense Grid Table) | 1. Fast-key bulk attendance marker (`P`, `A`, `L`, `E`).<br>2. Live presence counters with percentage graphs.<br>3. Daily medical & excuse slip attachment viewer.<br>4. Instant parent push alert trigger button on submission. |
-| **Parent Portal** | `Moving Academic Sliders` (Native Mobile Card) | 1. Dynamic slider cards showing real-time subject performance.<br>2. Subject score drill-down with teacher comments.<br>3. Term-over-term velocity graphs.<br>4. Recommended remedial focus topics. |
-| **Parent Portal** | `PTM Booking Modal` (Mobile Bottom-Sheet) | 1. Date selector carousel with teacher availability indicators.<br>2. Interactive 15-minute slot grid with live status indicators.<br>3. 5-minute reservation timer bar with countdown.<br>4. Meeting agenda input field with instant confirmation button. |
-| **Admin Console** | `Institutional Triage Dashboard` (Dense Grid) | 1. Red/Orange/Green institutional health indicators.<br>2. Urgent compliance task queue with 1-click reassignment.<br>3. Live fee collection vs defaulter pipeline gauges.<br>4. Real-time campus safety and bus route tracker. |
-| **Admin Console** | `Automated Timetable Builder` (Interactive Matrix) | 1. Drag-and-drop schedule matrix with teacher period limits.<br>2. Real-time conflict detector (room and teacher collisions).<br>3. Emergency substitution recommender with 1-click push.<br>4. Master print-ready PDF export generator. |
-
----
-
-## 7. Recommended Technology Stack & Architecture
-
-| Architecture Layer | Production Technology | Operational Role & Justification |
-| :--- | :--- | :--- |
-| **Web Frontend** | Next.js 14.2.15 (React 18) | Server-Side Rendering (SSR) for fast initial loads paired with client components for interactive real-time portals. |
-| **Language & Typing** | TypeScript (Strict Mode) | Complete compile-time type safety across all 8 portals (0 errors on `tsc --noEmit`). |
-| **Styling & Design** | Tailwind CSS + Lucide Icons | Institutional design system with responsive layouts, consistent color tokens, and micro-interactions. |
-| **Backend API** | FastAPI (Python 3.11+) | High-throughput asynchronous ASGI runtime handling all SIS, Attendance, and Fees endpoints. |
-| **Primary Database** | PostgreSQL 15+ (asyncpg) | Enterprise relational database with ACID compliance, JSON column indexing, and foreign key integrity. |
-| **ORM & Concurrency** | SQLAlchemy 2.0 Async | Single-pass OUTER JOIN queries combined with pessimistic row locking (`SELECT ... FOR UPDATE`). |
-| **Live Video & Audio** | LiveKit WebRTC Server & SDK | Embedded in-browser live classrooms, screen sharing, automatic recording, and attendance webhooks. |
-| **Security & Auth** | HMAC-SHA256 Signed Tokens | Dual-mode authentication (Bearer Tokens + Scoped Role Headers) with zero unauthorized bypasses. |
-| **Artificial Intelligence** | Google Gemini 1.5/2.0 Flash API | Multimodal remedial sprint generation, student notebook OCR analysis, and Socratic doubt solving. |
-| **Dynamic Timekeeping** | Centralized ClockProvider | Decouples time calculations from physical server clock for deterministic testing and audit logs. |
-
----
-
-## 8. Phased Implementation Roadmap
-
-| Phase / Milestone | Timeline | Core Deliverables & Production Gates |
-| :--- | :--- | :--- |
-| **Milestone 1: Core SIS & Governance** | Weeks 1–5 *(Completed)* | • Cryptographic Role-Based Auth (HMAC tokens + scoped guards)<br>• Central Student Information System (SIS) Profile Engine<br>• Admin-Only Document Vault security lockdown<br>• Admissions CRM Inquiry Funnel & Conversion Pipeline<br>• Fee Milestones with instant receipt generation<br>• Staff Payroll Management & Salary Slips<br>• Dual-Signature Exit / Transfer Certificate (TC) Clearance |
-| **Milestone 2: Classroom, Grading & App** | Weeks 6–10 *(Completed)* | • Live Online Classes via embedded LiveKit WebRTC<br>• 10-Minute Automated Attendance Engine via webhooks<br>• Student Homework Upload with mobile camera support<br>• Teacher SpeedGrader Studio with split-pane rubric evaluation<br>• Side-by-Side Student Portfolio & Academic Radar<br>• Parent Mobile Portal with Moving Academic Sliders<br>• PTM Slot Concurrency Row Locks (`SELECT ... FOR UPDATE`) |
-| **Milestone 3: Intelligence & Pilot** | Weeks 11–14 *(Active)* | • Admin Red/Orange/Green Priority Triage Engine<br>• Urgent Institutional Tasks Manager & Escalations<br>• Shared Student Focus Table Generator for faculty<br>• Centralized ClockProvider for deterministic testing<br>• Live GPS School Bus Route Tracking on Leaflet/OSM<br>• Production Pilot School Onboarding & Benchmark Audits |
-
----
-
-## Document Sign-Off & Verification
-- **Lead System Architect**: Approved
-- **Lead Backend Engineer**: Approved
-- **Lead Frontend Engineer**: Approved
-- **Lead Security & Compliance Officer**: Approved
-- **Head of Product**: Approved
+*Verified & Synchronized for EDU360 Engineering, Design, and Product Operations.*

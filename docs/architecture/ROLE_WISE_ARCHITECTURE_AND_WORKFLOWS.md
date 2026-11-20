@@ -1,14 +1,14 @@
 # EDU360 Master System Architecture & Role-Wise Workflow Specification
 **Enterprise Cloud-Native Institutional Management, WebRTC Live Education & Unified SIS Ecosystem**  
-**Document Classification:** Production Architectural Baseline (v8.2)  
-**Authors:** Principal Software Architect (`/Software Architect`) & Lead Technical Documentation Architect (`/Technical Writer`)  
-**Scope:** The 8 Canonical Roles (Excluding Junior K–5 as specified) + Administrative Override Governance Engine
+**Document Classification:** Production Architectural Baseline (v8.5 — Synchronized with Latest Hardening)  
+**Authors:** Principal Software Architect (`/Software Architect`), Backend Architect (`/Backend Architect`), Database Optimizer (`/Database Optimizer`), Frontend Developer (`/Frontend Developer`), Lead Technical Writer (`/Technical Writer`)  
+**Scope:** The 8 Canonical Roles (Excluding Junior K–5 as specified) + Administrative Override & Governance Engine + Cross-Role Synchronization
 
 ---
 
 ## 1. System Topology & Macro Architecture
 
-EDU360 operates as a **modular monolith** with domain-driven bounded contexts. The system runs an asynchronous **FastAPI (Python 3.11+)** ASGI service, a **Next.js 14/16 (React 18/19 SSR/Client)** multi-portal frontend, a **PostgreSQL 15+** transactional relational store with asynchronous connection pooling via `asyncpg`, a distributed **LiveKit WebRTC** cluster for live video classroom instruction, and an S3-compatible encrypted **Object Vault** for homework and document compliance records.
+EDU360 operates as a **modular monolith** with domain-driven bounded contexts. The system runs an asynchronous **FastAPI (Python 3.11+)** ASGI service, a **Next.js 14/16 (React 18/19 SSR/Client)** multi-portal frontend, a **PostgreSQL 15+** transactional relational store with asynchronous connection pooling via `asyncpg`, a distributed **LiveKit WebRTC** cluster for live video classroom instruction, a centralized **ClockProvider** simulation engine, a real-time **In-App Notification Center**, and an S3-compatible encrypted **Object Vault** for homework and document compliance records.
 
 ### 1.1 Master C4 Container Architecture Diagram
 
@@ -25,10 +25,15 @@ graph TD
         UI_PAR["Parent Mobile Portal<br/><code>/parent</code> (Mobile-First / PWA)"]
     end
 
+    subgraph CrossCuttingEdge ["Cross-Cutting Edge Services"]
+        NOTIF_BELL["Unified In-App Notification Center<br/>(Live Sound, Unread Counts & Action Deep-Links)"]
+        DYNAMIC_CLOCK["Dynamic ClockProvider Reactive Hook<br/>(30-Second Timetable & Exam Lifecycle Ticker)"]
+    end
+
     subgraph GatewayTier ["Security, Ingress & ASGI Middleware"]
         INGRESS["FastAPI ASGI Gateway / Reverse Proxy (:8000)"]
         AUTH_RBAC["Cryptographic RBAC Guard<br/>(HMAC-SHA256 Token + Scoped Headers)"]
-        CLOCK["Centralized ClockProvider<br/>(Deterministic Time & Simulation Overrides)"]
+        CLOCK_SVC["Centralized ClockProvider Service<br/>(Deterministic Time & Simulation Overrides)"]
     end
 
     subgraph ServiceEngines ["Domain Services & Business Logic Engines"]
@@ -38,7 +43,9 @@ graph TD
         CONCURRENCY_MGR["Pessimistic Concurrency Manager (SELECT ... FOR UPDATE)"]
         SUB_MATCHER["Conflict-Free Substitution & Workload Balance Matcher"]
         EXIT_CLEARANCE["Dual-Signature Exit & Vault Sealing Engine"]
-        FEE_AGING["3-Tier Fee Aging & Automated Broadcast Engine"]
+        FEE_AGING["3-Tier Fee Aging & Counter Payment Engine"]
+        PAYROLL_ENG["Staff Salaries & Payroll Engine (LOP Deductions & Four-Eye Maker-Checker)"]
+        BATCH_EXAM_ENG["Batch Class Exam Scheduling & Admit Card Engine"]
         MODERATION_LEDGER["Assessment Normalization & Secrecy Vault Engine"]
     end
 
@@ -48,13 +55,14 @@ graph TD
         S3_VAULT[("Encrypted Asset & Document Vault<br/>(S3 / MinIO Object Storage)")]
     end
 
-    UI_ADMIN & UI_ACAD & UI_EXAM & UI_ACC & UI_ADM & UI_TEACH & UI_STUD & UI_PAR --> INGRESS
+    UI_ADMIN & UI_ACAD & UI_EXAM & UI_ACC & UI_ADM & UI_TEACH & UI_STUD & UI_PAR --> NOTIF_BELL & DYNAMIC_CLOCK
+    NOTIF_BELL & DYNAMIC_CLOCK --> INGRESS
     INGRESS --> AUTH_RBAC
-    AUTH_RBAC --> CLOCK
-    CLOCK --> OVERRIDE_ENG & LIVEKIT_WORKER & SPEEDGRADER_ENG & CONCURRENCY_MGR & SUB_MATCHER & EXIT_CLEARANCE & FEE_AGING & MODERATION_LEDGER
+    AUTH_RBAC --> CLOCK_SVC
+    CLOCK_SVC --> OVERRIDE_ENG & LIVEKIT_WORKER & SPEEDGRADER_ENG & CONCURRENCY_MGR & SUB_MATCHER & EXIT_CLEARANCE & FEE_AGING & PAYROLL_ENG & BATCH_EXAM_ENG & MODERATION_LEDGER
 
-    OVERRIDE_ENG --> AUDIT_CHAIN
-    OVERRIDE_ENG & LIVEKIT_WORKER & SPEEDGRADER_ENG & CONCURRENCY_MGR & SUB_MATCHER & EXIT_CLEARANCE & FEE_AGING & MODERATION_LEDGER --> PG_MASTER
+    OVERRIDE_ENG & PAYROLL_ENG --> AUDIT_CHAIN
+    OVERRIDE_ENG & LIVEKIT_WORKER & SPEEDGRADER_ENG & CONCURRENCY_MGR & SUB_MATCHER & EXIT_CLEARANCE & FEE_AGING & PAYROLL_ENG & BATCH_EXAM_ENG & MODERATION_LEDGER --> PG_MASTER
     SPEEDGRADER_ENG & EXIT_CLEARANCE --> S3_VAULT
 ```
 
@@ -102,11 +110,17 @@ graph TD
 ### Role 1: Teacher Portal (`/teacher`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Pedagogical Delivery & Assessment Context*
+* **Bounded Context:** *Pedagogical Delivery, Assessment & Faculty Workforce Context*
 * **Core Invariants:**
   1. A teacher can only grade submissions for sections and subjects explicitly mapped to them in `teacher_assignments`.
   2. The teacher cannot overturn an active Principal Administrative Override on student leaves or attendance.
   3. AI-suggested scores (via Gemini OCR) are strictly recommendations; **the teacher retains final evaluation authority** and must explicitly verify and commit grades.
+  4. **Leave Categorization Invariant**: Teacher leave requests must declare a formal category:
+     * `Casual Leave (CL)`
+     * `Medical Leave (ML)` (with required medical documentation)
+     * `On-Duty (OD)` (academic/exam proctoring duties)
+     * `Loss of Pay / Unpaid (LOP)` (direct interlock with Accounts Coordinator payroll deductions)
+  5. **Attendance Integrity**: Teachers log daily check-in and check-out via `StaffAttendanceDaily` (`staff_attendance_daily`), providing ground truth for substitute allocation and daily on-campus verification.
 
 #### 2. Architecture Diagram
 
@@ -116,7 +130,8 @@ graph TD
         UI_LIVE_STUDIO["Live Lecture Studio (Broadcaster Stage)"]
         UI_SPEEDGRADER["2-Pane SpeedGrader Studio (PDF/OCR Canvas)"]
         UI_ATT_REGISTER["Bulk Attendance Register (P/A/L/E Fastkeys)"]
-        UI_LEAVE_DESK["Student Leave & Sick Note Desk"]
+        UI_LEAVE_DESK["Staff Leave Desk (CL, ML, OD, LOP Types)"]
+        UI_DAILY_CLOCK["Daily Faculty Check-In / Check-Out Widget"]
         UI_FOCUS_TABLE["1-Week Shared Focus Table Generator"]
     end
 
@@ -125,19 +140,23 @@ graph TD
         GRADING_ENG["Rubric & Annotation Evaluation Service"]
         GEMINI_OCR["Gemini Multimodal OCR Ingestion Worker"]
         ATT_RECON["Attendance Register Reconciliation Service"]
+        STAFF_LEAVE_SVC["Faculty Leave & On-Duty Dispatch Service"]
     end
 
     subgraph TeacherEntities ["Database Aggregates & Entities"]
         TBL_ROOMS[("rooms")]
         TBL_HW_SUB[("homework_submissions")]
         TBL_ATT[("attendance")]
+        TBL_STAFF_PERM[("staff_permissions (leave_category, total_days)")]
+        TBL_STAFF_ATT[("staff_attendance_daily")]
         TBL_FOCUS[("student_focus_tables")]
     end
 
     UI_LIVE_STUDIO --> ROOM_MGR --> TBL_ROOMS
     UI_SPEEDGRADER --> GEMINI_OCR --> GRADING_ENG --> TBL_HW_SUB
     UI_ATT_REGISTER --> ATT_RECON --> TBL_ATT
-    UI_LEAVE_DESK --> ATT_RECON
+    UI_LEAVE_DESK --> STAFF_LEAVE_SVC --> TBL_STAFF_PERM
+    UI_DAILY_CLOCK --> STAFF_LEAVE_SVC --> TBL_STAFF_ATT
     UI_FOCUS_TABLE --> TBL_FOCUS
 ```
 
@@ -146,6 +165,8 @@ graph TD
   * `teachers` (`id` PK, `user_id` FK, `department`, `max_daily_periods`)
   * `homework_submissions` (`id` PK, `homework_id` FK, `student_id` FK, `file_url`, `score`, `teacher_feedback`, `status`, `annotated_pdf_url`)
   * `attendance` (`id` PK, `student_id` FK, `date`, `status`, `method`, `minutes_late`, `teacher_override`, `admin_override`, `override_by_role`)
+  * `staff_permissions` (`id` PK, `staff_id` FK, `leave_category`, `total_days`, `affected_periods`, `reason`, `status`, `approved_by`, `reviewed_at`)
+  * `staff_attendance_daily` (`id` PK, `staff_id` FK, `attendance_date`, `check_in_time`, `check_out_time`, `status`, `notes`)
   * `student_focus_tables` (`id` PK, `student_id` FK, `weak_subjects`, `target_goals`, `teacher_id` FK, `parent_acknowledged`)
 
 #### 4. End-to-End Workflow: SpeedGrader Submission Evaluation with OCR Assist
@@ -182,11 +203,20 @@ sequenceDiagram
 ### Role 2: Secondary Student Cockpit (`/student`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Learning Execution & Academic Portfolio Context*
+* **Bounded Context:** *Learning Execution, Examination & Academic Portfolio Context*
 * **Core Invariants:**
   1. Multi-tab concurrent homework submissions are locked via pessimistic transaction row locks (`SELECT ... FOR UPDATE`).
-  2. Submissions uploaded after 05:00 PM are rejected unless a medical excuse exists.
+  2. Submissions uploaded after 05:00 PM are rejected unless an approved medical excuse exists.
   3. Student attendance is verified deterministically through LiveKit WebRTC connection telemetry ($T \ge 10\text{ mins}$).
+  4. **Dynamic Admit Card Invariant**: Hall tickets / Admit cards are generated dynamically from database batch schedules (`ExamSchedule`), rendering seat capacity, chief invigilator name, room code, and a tamper-evident verification QR code.
+  5. **Conditional Live Exam Mounting Engine**: The live online exam view **strictly mounts only when**:
+     * An exam schedule exists for the student's class and section on the current system date (`cleanDate === todayYMD`).
+     * The schedule lifecycle status is currently `LIVE` ($T_{\text{start}} \le \text{CurrentMinutes} < T_{\text{end}}$).
+     * The student has not already completed/submitted the exam (`examSubmissionState !== 'completed'`).
+  6. **Real-Time Dynamic Timetable Lifecycle**: Evaluates every 30 seconds against the centralized `ClockProvider`:
+     * Periods before start time render as `upcoming` with countdown timers.
+     * Active periods render as `live`, illuminating the "Join Active Class Now" WebRTC button.
+     * Concluded periods render as `completed`, rendering the "Watch Recording" link navigating to the lesson video vault.
 
 #### 2. Architecture Diagram
 
@@ -194,36 +224,44 @@ sequenceDiagram
 graph LR
     subgraph StudentUI ["Secondary Student Cockpit (/student)"]
         UI_STAGE["LiveKit Video Stage & Active Speaker Spotlight"]
+        UI_DYNAMIC_PERIODS["Real-Time Period Lifecycle Grid (Live / Upcoming / Done)"]
+        UI_COND_EXAM["Conditional Live Exam Mounting Engine"]
         UI_VAULT["Homework Camera Capture & Multi-PDF Vault"]
-        UI_HALL["Hall Ticket & Admit Card Download Desk"]
+        UI_HALL["Dynamic Hall Ticket & Admit Card Desk"]
         UI_PORTFOLIO["Side-by-Side Participations & Achievements"]
+        UI_NOTIF["In-App Notification Center (Sound & Badges)"]
     end
 
     subgraph StudentPorts ["Application Services"]
         MEDIA_CONSUMER["WebRTC Media Ingestion Port"]
+        TIMETABLE_TICKER["Dynamic Clock Lifecycle Evaluator (30s)"]
         VAULT_LOCKER["Pessimistic Submission Handler (FOR UPDATE)"]
-        TICKET_GEN["Hall Ticket Stamping Service"]
+        EXAM_DISPATCHER["Exam Schedule & Hall Ticket Stamping Service"]
     end
 
     subgraph StudentStorage ["Persistence"]
         DB_STU_SUB[("homework_submissions")]
+        DB_EXAM_SCHED[("exam_schedules (batch_id, series_name)")]
         DB_HALL_TICKETS[("exam_hall_tickets")]
         S3_HOMEWORK[("s3://student-homework-vault")]
     end
 
     UI_STAGE --> MEDIA_CONSUMER
+    UI_DYNAMIC_PERIODS --> TIMETABLE_TICKER
+    UI_COND_EXAM --> EXAM_DISPATCHER --> DB_EXAM_SCHED
     UI_VAULT --> VAULT_LOCKER --> DB_STU_SUB
     VAULT_LOCKER --> S3_HOMEWORK
-    UI_HALL --> TICKET_GEN --> DB_HALL_TICKETS
+    UI_HALL --> EXAM_DISPATCHER --> DB_HALL_TICKETS
 ```
 
 #### 3. Database Schema Mapping
 * **Primary Tables:**
   * `students` (`id` PK, `admission_no` UNIQUE, `roll_no`, `class_id` FK, `status`, `health_flags`)
   * `homework_submissions` (`id` PK, `homework_id` FK, `student_id` FK, `submitted_at`, `status`, `sha256_hash`)
+  * `exam_schedules` (`id` PK, `exam_id` FK, `series_name`, `batch_id`, `schedule_type`, `class_name`, `section`, `exam_date`, `start_time`, `end_time`, `hall_name`, `chief_invigilator_name`)
   * `exam_hall_tickets` (`id` PK, `student_id` FK, `exam_id` FK, `qr_code_hash`, `issued_at`, `is_unlocked`)
 
-#### 4. End-to-End Workflow: Live Video Learning & Telemetry Auto-Attendance
+#### 4. End-to-End Workflow: Dynamic Exam Schedule $\to$ Admit Card & Live Mounting
 
 ```mermaid
 sequenceDiagram
@@ -231,21 +269,24 @@ sequenceDiagram
     actor Student as Student
     participant UI as Student Web Portal
     participant API as FastAPI Backend
-    participant LK as LiveKit WebRTC Server
     participant DB as PostgreSQL DB
-    actor Parent as Parent Mobile
+    participant CLOCK as ClockProvider
 
-    Student->>UI: Click "Join Live Class" (Class 10-A, Period 1)
-    UI->>API: GET /api/v1/livekit/join-token?room=room_10A_period1
-    API->>LK: Issue Scoped Viewer Token
-    LK-->>UI: Return JWT Token; Client Establishes WebRTC PeerConnection
-    Note over LK,API: Webhook: participant_joined (Record Join Timestamp T0)
-    Note over Student,LK: Student stays connected in class
-    LK->>API: Webhook (Duration Telemetry >= 10 minutes)
-    API->>DB: INSERT INTO attendance (status='Present', method='auto_livekit', minutes_late=0)
-    Teacher->>API: Conclude Period Class
-    API->>DB: UPDATE student_dossier SET total_class_hours = total_class_hours + duration
-    API->>Parent: Push Notification: "Attendance Confirmed: Physics 10-A"
+    Student->>UI: Open Portal (Secondary Dashboard)
+    UI->>API: GET /api/student/exam-schedules?class_name=10th+Standard&section=A
+    API->>DB: SELECT * FROM exam_schedules WHERE class_name='10th Standard' ORDER BY exam_date ASC
+    DB-->>API: Return Batch Schedules (Series: "Term 1 Finals", Batch: "BATCH-10AB-TERM1")
+    API-->>UI: Deliver Dynamic Schedules with Hall Numbers & Chief Invigilators
+    
+    UI->>CLOCK: Query Current Synchronized Time
+    CLOCK-->>UI: Current System Time: 10:45 AM, Today: 2026-11-20
+    
+    Note over UI: Evaluates Exam: Date == Today AND 10:30 <= 10:45 < 12:00 AND status != 'completed'
+    alt Condition TRUE
+        UI->>UI: Mount Live Exam Stage (Illuminates "Join Exam Proctor Session")
+    else Condition FALSE
+        UI->>UI: Render Downloadable Dynamic Admit Card with QR Code Verification
+    end
 ```
 
 ---
@@ -253,11 +294,12 @@ sequenceDiagram
 ### Role 3: Parent Portal (`/parent`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Guardian Oversight & Family Engagement Context*
+* **Bounded Context:** *Guardian Oversight, Family Engagement & Financial Settlement Context*
 * **Core Invariants:**
   1. Anti-spam delivery: Push alerts are restricted to urgent items; routine announcements are displayed exclusively on the **Moving Slider Banners**.
   2. PTM slot reservations use pessimistic row locking with a 5-minute temporary hold to prevent double-booking.
   3. Parent fee cashier supports instant dummy QR/UPI, NetBanking, and credit card interfaces with real-time UTR transaction settlement.
+  4. **Immediate Counter Fee Reflection**: When a fee payment is collected offline at the school counter by the Accounts Coordinator, the parent's fee ledger status transitions immediately from `OVERDUE` to `PAID` via the synchronized payment webhook.
 
 #### 2. Architecture Diagram
 
@@ -269,11 +311,12 @@ graph TD
         UI_PTM["PTM Booking Slot Grid (5-Min Countdown)"]
         UI_LEAVE["Leave & Medical Excuse Uploader"]
         UI_RADAR["Live School Bus GPS Radar"]
+        UI_NOTIF["Notification Center (Fee, Grade & Bus Cues)"]
     end
 
     subgraph ParentServices ["Backend Gateway Handlers"]
         SLIDER_SVC["Daily Notice Aggregator"]
-        PAYMENT_RECON["Payment Gateway Webhook Reconciler"]
+        PAYMENT_RECON["Payment Gateway & Counter Webhook Reconciler"]
         PTM_PESSIMISTIC["Pessimistic Hold Engine (SELECT FOR UPDATE)"]
         LEAVE_ROUTER["Leave Workflow Ingestion Service"]
     end
@@ -330,11 +373,13 @@ sequenceDiagram
 ### Role 4: Super Admin / Principal Console (`/admin`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Institutional Supervision & Governance Context*
+* **Bounded Context:** *Institutional Supervision, Executive Governance & Compliance Context*
 * **Core Invariants:**
   1. Priority Triage Cockpit (🔴 Red / 🟠 Orange / 🟢 Green) auto-updates every 60 seconds; students with approved leaves are excluded from unexcused absence red flags.
   2. Administrative Overrides are cryptographically stamped with SHA-256 seals.
   3. Student Exit Certificates (TC) require a dual-signature handshake (Library + Accounts clearance) followed by Principal digital seal verification.
+  4. **Executive Staff Leave Pop-Up**: Pending faculty leave applications (`staff_permissions`) display prominently on the executive dashboard with urgent action badges and a review pop-up.
+  5. **Four-Eye Maker-Checker Payroll Authorization**: Large-scale financial outflows (monthly staff salary wire) require mandatory executive sign-off from the Principal (`POST /api/finance/payroll/batches/{id}/authorize`) before the Accounts Coordinator can execute disbursements.
 
 #### 2. Architecture Diagram
 
@@ -343,27 +388,32 @@ graph TD
     subgraph AdminConsole ["Principal Executive Console (/admin)"]
         UI_TRIAGE["Priority Triage Cockpit (Red / Orange / Green)"]
         UI_OVERRIDE_PANEL["Administrative Override Control Center"]
-        UI_TASK_COCKPIT["Institutional Task Delegation & Escalation Deck"]
+        UI_LEAVE_WIDGET["Faculty Staff Leave Review Pop-Up & Badges"]
+        UI_PAYROLL_AUTH["Four-Eye Payroll Batch Sign-Off Desk"]
         UI_TC_VAULT["Dual-Signature TC Clearance & Vault Desk"]
-        UI_ROLLOVER_ENG["Annual Class Promotion & Rollover Pipeline"]
+        UI_CLOCK_SIM["Institutional Clock Simulation Controller"]
     end
 
     subgraph AdminEngines ["Governance Engines"]
         TRIAGE_CALC["Triage Health Calculator Worker"]
         OVERRIDE_EXEC["Admin Override Routing Controller"]
+        PAYROLL_SIGNER["Executive Financial Authorization Engine"]
         SEAL_SERVICE["Cryptographic Certificate Sealing Engine"]
         AUDIT_LOGGER["SHA-256 Immutability Audit Logger"]
     end
 
     subgraph AdminLedgers ["Master Ledgers"]
         DB_AUDIT[("security_audit_trail")]
-        DB_TASKS[("admin_tasks")]
+        DB_STAFF_LEAVES[("staff_permissions")]
+        DB_PAYROLL[("payroll_batches")]
         DB_CLEARANCE[("exit_clearances")]
     end
 
     UI_TRIAGE --> TRIAGE_CALC
     UI_OVERRIDE_PANEL --> OVERRIDE_EXEC --> AUDIT_LOGGER --> DB_AUDIT
-    UI_TASK_COCKPIT --> DB_TASKS
+    UI_LEAVE_WIDGET --> DB_STAFF_LEAVES
+    UI_PAYROLL_AUTH --> PAYROLL_SIGNER --> DB_PAYROLL
+    PAYROLL_SIGNER --> AUDIT_LOGGER
     UI_TC_VAULT --> SEAL_SERVICE --> DB_CLEARANCE
 ```
 
@@ -371,6 +421,7 @@ graph TD
 * **Primary Tables:**
   * `admin_tasks` (`id` PK, `domain`, `title`, `status`, `assigned_to` FK, `escalated_to_principal`, `is_admin_override`, `admin_override_reason`)
   * `security_audit_trail` (`id` PK, `action_type`, `actor_id` FK, `actor_role`, `target_entity`, `target_id`, `sha256_seal`, `timestamp`)
+  * `payroll_batches` (`id` PK, `payroll_month`, `total_staff_count`, `net_payable`, `status`, `authorized_by`, `authorized_at`)
   * `exit_clearances` (`id` PK, `student_id` FK, `library_cleared`, `finance_cleared`, `parent_otp_verified`, `principal_digital_seal`, `tc_serial_no`)
 
 #### 4. End-to-End Workflow: Executive Admin Override on Disciplinary Leave & Attendance
@@ -404,23 +455,26 @@ sequenceDiagram
 ### Role 5: Exam Coordinator (`/exam_coordinator`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Assessment Operations & Secrecy Context*
+* **Bounded Context:** *Assessment Operations, Secrecy Vault & Examination Logistics Context*
 * **Core Invariants:**
   1. Once the Exam Coordinator clicks **Verify & Lock Marks**, grade entries are frozen and teachers cannot edit scores.
   2. Report card batch compilation generates official CBSE-compliant marks memos with institutional headers and digital signatures.
   3. Exportable official CSV adheres directly to the CBSE Pariksha Sangam specification.
+  4. **Atomic Batch Class Scheduling**: The Exam Coordinator schedules comprehensive exam timetables via `POST /api/exams/schedules/batch-class`. The engine tags slots with a unique `batch_id` (e.g. `BATCH-10AB-TERM1FINAL`), series name, and sets `schedule_type = 'BATCH'`.
+  5. **Dynamic Hall & Invigilator Deployment**: Replaces all legacy static tables. Room allocation calculates seating density, room capacity limits, and assigns verified Chief Invigilators.
 
 #### 2. Architecture Diagram
 
 ```mermaid
 graph LR
     subgraph ExamDesk ["Exam Coordinator Portal (/exam_coordinator)"]
-        UI_SCHED_GRID["Master Exam Timetable & Seating Allocator"]
+        UI_BATCH_SCHED["Batch Class Exam Timetable Allocator"]
         UI_MOD_LEDGER["Marks Moderation & Statistical Normalization Desk"]
         UI_LOC_GEN["CBSE Board LOC & Batch PDF Marks Memo Generator"]
     end
 
     subgraph ExamCore ["Assessment Domain Engines"]
+        BATCH_SCHED_ENG["Atomic Batch Examination Scheduler"]
         SEATING_ALG["Conflict-Free Seating & Room Allocator"]
         MOD_VALIDATOR["Statistical Grade Distribution & Outlier Detector"]
         PDF_BATCH_ENG["Deterministic PDF Marks Memo Compiler"]
@@ -428,11 +482,13 @@ graph LR
 
     subgraph ExamData ["Assessment Ledger"]
         DB_EXAMS[("exams & terms")]
+        DB_SCHEDS[("exam_schedules (batch_id, series_name, schedule_type)")]
         DB_MOD[("exam_moderations")]
         DB_MARKS[("exam_marks")]
     end
 
-    UI_SCHED_GRID --> SEATING_ALG --> DB_EXAMS
+    UI_BATCH_SCHED --> BATCH_SCHED_ENG --> DB_SCHEDS
+    BATCH_SCHED_ENG --> SEATING_ALG --> DB_EXAMS
     UI_MOD_LEDGER --> MOD_VALIDATOR --> DB_MOD
     UI_LOC_GEN --> PDF_BATCH_ENG --> DB_MARKS
 ```
@@ -440,6 +496,7 @@ graph LR
 #### 3. Database Schema Mapping
 * **Primary Tables:**
   * `exams` (`id` PK, `name`, `academic_year`, `term`, `start_date`, `end_date`, `is_published`)
+  * `exam_schedules` (`id` PK, `exam_id` FK, `title`, `series_name`, `batch_id`, `schedule_type`, `subject`, `class_name`, `section`, `exam_date`, `start_time`, `end_time`, `hall_name`, `capacity`, `chief_invigilator_name`)
   * `exam_marks` (`id` PK, `exam_id` FK, `student_id` FK, `subject_id` FK, `marks_obtained`, `max_marks`, `grade`, `is_locked`)
   * `exam_moderations` (`id` PK, `exam_id` FK, `subject_id` FK, `class_id` FK, `average_score`, `std_deviation`, `is_locked`, `locked_by` FK)
 
@@ -475,10 +532,11 @@ sequenceDiagram
 ### Role 6: Admissions Coordinator (`/admissions_coordinator`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Student Enrollment & CRM Pipeline Context*
+* **Bounded Context:** *Student Outreach, Enrollment CRM & Identity Inception Context*
 * **Core Invariants:**
   1. No online diagnostic test module required (handled through in-person campus evaluation).
-  2. Converting an applicant to an enrolled student executes an atomic, single-pass database transaction initializing SIS profile, roll number, fee milestones, and class rosters.
+  2. **Multi-Step Enrollment Handshake**: Enrolling an applicant utilizes `ConfirmEnrollmentModal`, validating guardian KYC documents, emergency contacts, roll number assignment, and fee category.
+  3. Converting an applicant to an enrolled student executes an atomic, single-pass database transaction initializing SIS profile, roll number, fee milestones, and class rosters.
 
 #### 2. Architecture Diagram
 
@@ -488,7 +546,7 @@ graph TD
         UI_KANBAN["Applicant Pipeline Funnel (New -> Tour -> Cleared -> Enrolled)"]
         UI_TOURS["Campus Walk-In & Tour Schedule Desk"]
         UI_INQUIRY["AI Web Chatbot Lead Feed"]
-        UI_CONVERT["1-Click SIS Student Provisioner"]
+        UI_ENROLL_MODAL["Multi-Step Confirm Enrollment Modal"]
     end
 
     subgraph AdmissionsServices ["Enrollment Services"]
@@ -504,7 +562,7 @@ graph TD
     end
 
     UI_KANBAN & UI_TOURS & UI_INQUIRY --> LEAD_ORCH --> DB_LEADS
-    UI_CONVERT --> PROVISION_ENGINE
+    UI_ENROLL_MODAL --> PROVISION_ENGINE
     PROVISION_ENGINE --> DB_STUDENTS & DB_PARENTS & DB_FEES
 ```
 
@@ -530,7 +588,7 @@ sequenceDiagram
     AdmCoord->>API: POST /api/v1/admissions/leads/{id}/stage-update
     Note over AdmCoord,API: Advances lead: Tour Completed -> Document Verified -> Fee Paid
     API->>DB: UPDATE admissions_leads SET stage='Fee_Paid'
-    AdmCoord->>API: POST /api/v1/admissions/convert-to-sis (lead_id=142, class_id="10-A")
+    AdmCoord->>API: Open ConfirmEnrollmentModal -> POST /api/v1/admissions/convert-to-sis
     API->>DB: BEGIN ATOMIC TRANSACTION
     API->>DB: INSERT INTO students (admission_no='ADM-2026-1042', class_id='10-A')
     API->>DB: INSERT INTO parents (linked_student_id=new_student.id)
@@ -546,11 +604,13 @@ sequenceDiagram
 ### Role 7: Accounts Coordinator (`/accounts_coordinator`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Bursar Operations & Fee Realization Context*
+* **Bounded Context:** *Bursar Operations, Fee Realization & Staff Payroll Engine*
 * **Core Invariants:**
   1. Defaulter aging calculations run continuously across three risk tiers (Tier 1: 0–15d, Tier 2: 16–30d, Tier 3: 30+d).
-  2. Counter fee payments require a unique, non-null bank UTR number to prevent reconciliation leaks.
-  3. Digital receipts are cryptographically sealed with a SHA-256 hash immediately upon transaction capture.
+  2. **Hardened Counter Fee Collection**: `POST /api/finance/defaulters/{id}/pay` executes pessimistic row locking (`with_for_update()`). The payment amount must be greater than zero and **cannot exceed the current overdue balance** (cannot collect on a ₹0 balance). Automatically inserts an auto-reconciled transaction and marks linked student fee milestones as `PAID`.
+  3. **Staff Payroll & Automated LOP Deductions**: When generating monthly staff payroll batches (`POST /api/finance/payroll/batches/generate`), the engine queries all approved `StaffPermission` records for the month. Any leave declared under `"Loss of Pay"` or `"Unpaid"` triggers automatic pro-rated deduction:
+     $$\text{LOP Deduction} = \left(\frac{\text{Basic Salary}}{30}\right) \times \text{LOP Days}$$
+  4. **Four-Eye Maker-Checker Workflow**: The Accounts Coordinator can only generate a draft payroll batch. The batch enters `Draft` status until executive authorization is signed by the Principal/Super Admin (`POST /api/finance/payroll/batches/{id}/authorize`). Only then can Accounts execute corporate bank disbursement wire (`Disbursed`).
 
 #### 2. Architecture Diagram
 
@@ -558,23 +618,30 @@ sequenceDiagram
 graph LR
     subgraph AccountsConsole ["Accounts Coordinator Portal (/accounts_coordinator)"]
         UI_AGING_GRID["3-Tier Fee Defaulter Aging Register (0-15d, 16-30d, 30+d)"]
+        UI_COUNTER_POS["Counter Fee Collection Modal (Overdue Balance Cap)"]
+        UI_PAYROLL_STUDIO["Staff Payroll Studio (LOP Salary Engine)"]
         UI_DISPATCH["1-Click WhatsApp & SMS Payment Link Dispatcher"]
         UI_RECON["Online Gateway & Counter UTR Reconciliation"]
-        UI_MILESTONES["Term Milestone Schedule & Fee Structure Modeling"]
     end
 
     subgraph AccountsEngines ["Bursar Processing Services"]
         AGING_CALC["Defaulter Aging Engine"]
+        PAYROLL_ENG["Staff Salaries & Payroll Calculation Service"]
+        COUNTER_COLLECT["Counter Fee Pessimistic Settlement Service"]
         BROADCAST_SVC["Batch Multi-Channel Communication Worker"]
         GATEWAY_RECON["Payment Gateway Webhook Ingestion Engine"]
     end
 
     subgraph AccountsLedgers ["Financial Database"]
-        DB_FEE_LEDGER[("student_fee_ledger")]
-        DB_RECEIPTS[("fee_receipts")]
+        DB_FEE_LEDGER[("student_fee_ledger & fee_defaulters")]
+        DB_RECEIPTS[("fee_receipts & payment_transactions")]
+        DB_PAYROLL_BATCH[("payroll_batches (status: Draft, Authorized, Disbursed)")]
+        DB_PAYSLIPS[("staff_payslips (lop_deduction, net_salary)")]
     end
 
     UI_AGING_GRID --> AGING_CALC --> DB_FEE_LEDGER
+    UI_COUNTER_POS --> COUNTER_COLLECT --> DB_FEE_LEDGER & DB_RECEIPTS
+    UI_PAYROLL_STUDIO --> PAYROLL_ENG --> DB_PAYROLL_BATCH & DB_PAYSLIPS
     UI_DISPATCH --> BROADCAST_SVC
     UI_RECON --> GATEWAY_RECON --> DB_FEE_LEDGER & DB_RECEIPTS
 ```
@@ -582,31 +649,37 @@ graph LR
 #### 3. Database Schema Mapping
 * **Primary Tables:**
   * `fee_structures` (`id` PK, `class_id` FK, `academic_year`, `total_tuition`, `lab_fee`, `sports_fee`)
-  * `fee_milestones` (`id` PK, `student_id` FK, `term_number`, `due_date`, `due_amount`, `paid_amount`, `status`, `concession_amount`, `is_admin_override`)
-  * `fee_receipts` (`id` PK, `milestone_id` FK, `utr_number` UNIQUE, `payment_mode`, `amount_paid`, `sha256_hash`, `issued_at`)
+  * `fee_defaulters` (`id` PK, `student_id` FK, `student_name`, `amount_due`, `status`, `payment_history_json`)
+  * `payment_transactions` (`id` PK, `utr_number` UNIQUE, `amount`, `payment_method`, `reconciled`, `reconciled_by`)
+  * `payroll_batches` (`id` PK, `payroll_month`, `total_staff_count`, `gross_salaries`, `total_deductions`, `net_payable`, `status`, `authorized_by`, `authorized_at`)
+  * `staff_payslips` (`id` PK, `batch_id` FK, `staff_id` FK, `staff_name`, `basic_salary`, `hra_allowance`, `lop_deduction`, `provident_fund`, `professional_tax`, `tds_tax`, `total_deductions`, `net_salary`, `bank_account_no`, `bank_ifsc`)
 
-#### 4. End-to-End Workflow: 3-Tier Aging Audit, 1-Click Reminder & UTR Reconciliation
+#### 4. End-to-End Workflow: Staff Payroll Generation, LOP Deductions & Four-Eye Authorization
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor AccCoord as Accounts Coordinator
+    actor Accounts as Accounts Coordinator (Maker)
     participant API as FastAPI Backend
     participant DB as PostgreSQL DB
-    actor Parent as Parent Mobile
-    participant PG as Payment Gateway (Razorpay/Stripe)
+    actor Admin as Principal / Super Admin (Checker)
+    actor Teacher as Staff Members
 
-    AccCoord->>API: GET /api/v1/accounts/defaulters/aging
-    API->>DB: Query Overdue Balances Categorized by Days Past Due
-    DB-->>AccCoord: Render Aging Register (Tier 1: 18, Tier 2: 7, Tier 3: 3 Defaulters)
-    AccCoord->>API: POST /api/v1/accounts/reminders/dispatch-batch (target_tier="Tier_3")
-    API->>Parent: Push Notification + WhatsApp ("Fee Milestone 2 Overdue - Click to Pay")
-    Parent->>PG: Complete Payment via UPI Intent / NetBanking
-    PG->>API: Webhook: payment.captured (payload: {utr: 'UTR7721831', amount: 35000})
-    API->>DB: SELECT * FROM fee_milestones WHERE id=:id FOR UPDATE
-    API->>DB: UPDATE fee_milestones SET status='PAID', paid_amount=35000
-    API->>DB: INSERT INTO fee_receipts (utr_number='UTR7721831', sha256_hash=HMAC(...))
-    API->>Parent: Deliver Cryptographically Signed PDF Tax Receipt
+    Accounts->>API: POST /api/finance/payroll/batches/generate (payroll_month='November 2026')
+    API->>DB: Query Active Staff Members & Base Salaries
+    API->>DB: Query Approved staff_permissions WHERE leave_category LIKE '%Loss of Pay%'
+    Note over API: Computes LOP Deduction for each teacher. Net = Gross - (PF + PT + TDS + LOP)
+    API->>DB: INSERT INTO payroll_batches (status='Draft', net_payable=1480000.00)
+    API->>DB: INSERT INTO staff_payslips (batch_id, staff_id, lop_deduction, net_salary)
+    API->>Admin: High-Priority Notification ("Payroll Batch Draft Ready for Sign-Off")
+    
+    Admin->>API: POST /api/finance/payroll/batches/{id}/authorize (authorized_by='Dr. Sunita Kapoor')
+    API->>DB: UPDATE payroll_batches SET status='Authorized', authorized_by='Dr. Sunita Kapoor'
+    API->>Accounts: Notification ("Payroll Authorized. Corporate Bank Wire Unlocked")
+    
+    Accounts->>API: POST /api/finance/payroll/batches/{id}/disburse
+    API->>DB: UPDATE payroll_batches SET status='Disbursed'
+    API->>Teacher: In-App Notification ("Monthly Salary Slip Available for Download")
 ```
 
 ---
@@ -614,10 +687,11 @@ sequenceDiagram
 ### Role 8: Academic Coordinator (`/academic_coordinator`)
 
 #### 1. Architectural Responsibility & Bounded Context
-* **Bounded Context:** *Curriculum Surveillance & Faculty Logistics Context*
+* **Bounded Context:** *Curriculum Surveillance, Pedagogical Auditing & Faculty Coverage Context*
 * **Core Invariants:**
-  1. Period substitutions automatically filter faculty based on three mandatory conditions: teacher is present on campus, has zero teaching periods assigned in that slot, and has not exceeded their daily proxy load cap.
+  1. Period substitutions automatically filter faculty based on three mandatory conditions: teacher is present on campus (verified via `staff_attendance_daily`), has zero teaching periods assigned in that slot, and has not exceeded their daily proxy load cap.
   2. Curriculum pacing compares completed syllabus units against the statutory academic calendar; pacing deviations $>2$ chapters trigger automated remedial alerts to the Principal.
+  3. **Faculty Leave Interlock**: Whenever a teacher's leave request (`staff_permissions`) is submitted or approved, the affected teaching periods automatically generate open `SubstitutionSlot` records in the Academic Coordinator's coverage dashboard.
 
 #### 2. Architecture Diagram
 
@@ -639,10 +713,14 @@ graph TD
     subgraph AcadData ["Operational Persistence"]
         DB_TIMETABLE[("timetables")]
         DB_SUBS[("substitution_slots")]
+        DB_STAFF_LEAVES[("staff_permissions")]
+        DB_STAFF_ATT[("staff_attendance_daily")]
         DB_SYLLABUS[("curriculum_milestones")]
     end
 
     UI_SUB_MATRIX --> VACANCY_DETECT --> PROXY_FILTER --> DB_SUBS
+    DB_STAFF_LEAVES --> VACANCY_DETECT
+    DB_STAFF_ATT --> PROXY_FILTER
     UI_PACING_RADAR --> PACING_CALC --> DB_SYLLABUS
     UI_FACULTY_ROSTER --> DB_TIMETABLE
 ```
@@ -651,6 +729,8 @@ graph TD
 * **Primary Tables:**
   * `timetables` (`id` PK, `class_id` FK, `day_of_week`, `period_number`, `subject_id` FK, `teacher_id` FK, `room_number`)
   * `substitution_slots` (`id` PK, `date`, `period_number`, `class_id` FK, `absent_teacher_id` FK, `substitute_teacher_id` FK, `status`, `is_admin_override`)
+  * `staff_permissions` (`id` PK, `staff_id` FK, `leave_category`, `affected_periods`, `status`)
+  * `staff_attendance_daily` (`id` PK, `staff_id` FK, `attendance_date`, `status`)
   * `curriculum_milestones` (`id` PK, `subject_id` FK, `class_id` FK, `expected_units_completed`, `actual_units_completed`, `variance_status`)
 
 #### 4. End-to-End Workflow: Period Vacancy Detection & 1-Click Conflict-Free Substitution
@@ -665,16 +745,17 @@ sequenceDiagram
     actor TeacherB as Available Substitute
     actor Students as Class Students
 
-    TeacherA->>API: POST /api/v1/teacher/leaves/apply (Casual Leave Today)
-    API->>DB: INSERT INTO substitution_slots (status='PENDING', period=3, class_id='10-A')
-    API->>AcadCoord: Push Alert: "Unmanned Class Alert: Period 3, Class 10-A (Mathematics)"
-    AcadCoord->>API: GET /api/v1/admin/substitutions/available-faculty?period=3&date=Today
-    API->>DB: Query Active Faculty (Excludes absent teachers, period 3 clashes, and overload)
+    TeacherA->>API: POST /api/v1/teacher/leaves/apply (Casual Leave Today, Periods: "P2, P3")
+    API->>DB: INSERT INTO staff_permissions (leave_category='Casual Leave', affected_periods='P2, P3', status='Pending')
+    API->>DB: INSERT INTO substitution_slots (status='PENDING', period=2, class_id='10-A')
+    API->>AcadCoord: Push Alert: "Unmanned Class Alert: Period 2, Class 10-A (Mathematics)"
+    AcadCoord->>API: GET /api/v1/admin/substitutions/available-faculty?period=2&date=Today
+    API->>DB: Query Active Faculty (Cross-checks staff_attendance_daily='Present', 0 period clashes)
     DB-->>AcadCoord: Return Qualified Candidates (e.g., Dr. Suresh Babu - Math Dept)
     AcadCoord->>API: POST /api/v1/admin/substitutions/assign (slot_id=45, sub_id=12)
     API->>DB: UPDATE substitution_slots SET status='Assigned', substitute_teacher_id=12
-    API->>TeacherB: Push Notification: "Assigned Proxy Coverage: Period 3, Class 10-A"
-    API->>Students: Timetable Refresh: "Period 3 Mathematics: Substitute Dr. Suresh Babu"
+    API->>TeacherB: Push Notification: "Assigned Proxy Coverage: Period 2, Class 10-A"
+    API->>Students: Timetable Refresh: "Period 2 Mathematics: Substitute Dr. Suresh Babu"
 ```
 
 ---
@@ -687,9 +768,10 @@ stateDiagram-v2
 
     state AdmissionsDesk {
         NewInquiry --> CampusTour
-        CampusTour --> EntranceEvaluation
-        EntranceEvaluation --> FeePaid
-        FeePaid --> SISPushed: Atomic Transaction
+        CampusTour --> InPersonEvaluation
+        InPersonEvaluation --> FeePaid
+        FeePaid --> ConfirmEnrollmentModal: Counselor Review
+        ConfirmEnrollmentModal --> SISPushed: Atomic Transaction
     }
 
     state OperationalLifeCycle {
@@ -702,16 +784,29 @@ stateDiagram-v2
         LiveWebRTCClass --> SpeedGraderMarking: Homework Upload
         SpeedGraderMarking --> RemedialFocusTable: Score < 50%
         
-        RemedialFocusTable --> ExamSchedule
-        ExamSchedule --> MarksModeration: Teacher Grades
+        RemedialFocusTable --> BatchExamSchedule: Exam Coord Action
+        BatchExamSchedule --> StudentAdmitCardReady: Dynamic DB Schedule
+        StudentAdmitCardReady --> LiveExamProctorStage: Today + Live + Unsubmitted
+        LiveExamProctorStage --> MarksModeration: Teacher Scores Entered
         MarksModeration --> BoardLOCExport: Exam Coord Lock
+    }
+
+    state FacultyAndPayrollCycle {
+        TeacherLeaveApplied --> LeaveCategorized: CL, ML, OD, or LOP
+        LeaveCategorized --> AdminDashboardPopUp: Principal Approval
+        AdminDashboardPopUp --> VacancyCreated: Auto-Feeds Academic Coord
+        AdminDashboardPopUp --> PayrollBatchGenerated: End of Month Run
+        PayrollBatchGenerated --> LOPDeductionsComputed: (Basic/30)*LOP Days
+        LOPDeductionsComputed --> FourEyePrincipalReview: High-Value Gate
+        FourEyePrincipalReview --> CorporateWireDisbursed: Accounts Action
     }
 
     state FinancialCycle {
         SISPushed --> FeeInvoicing
         FeeInvoicing --> DefaulterAging: Milestone Overdue
         DefaulterAging --> ReminderBroadcast: 1-Click WhatsApp
-        ReminderBroadcast --> FeeSettled: Webhook UTR Lock
+        DefaulterAging --> CounterPaymentCollected: Balance Cap Validated
+        CounterPaymentCollected --> FeeSettled: Webhook UTR Lock
     }
 
     state ExitClearance {
@@ -725,6 +820,7 @@ stateDiagram-v2
     Inactive --> AdmissionsDesk: Lead Capture
     AdmissionsDesk --> OperationalLifeCycle
     AdmissionsDesk --> FinancialCycle
+    OperationalLifeCycle --> FacultyAndPayrollCycle
     OperationalLifeCycle --> ExitClearance: Withdrawal Request
     FinancialCycle --> ExitClearance
     PrincipalSealedTC --> [*]: Archived in Vault
@@ -758,17 +854,35 @@ stateDiagram-v2
 * **Decision:** LiveKit participant connection telemetry webhooks are ingested asynchronously by a dedicated background telemetry worker. The worker buffers presence heartbeats, applies the 10-minute active attendance rule, and flushes updates to PostgreSQL in batched windows.
 * **Consequences:** Decouples video conferencing performance from database persistence; introduces a minor 30- to 60-second eventual consistency window for parent attendance push notifications.
 
+### ADR-005: Four-Eye Principle (Separation of Duties) for Institutional Payroll & Capital Outflows
+* **Status:** Accepted
+* **Context:** Unilateral payroll generation and disbursement by accounting personnel creates severe financial fraud, miscalculation risk, and audit exposure.
+* **Decision:** Enforce a strict Maker-Checker architectural boundary. The Accounts Coordinator functions as the **Maker** (`status='Draft'`), computing pro-rated Loss of Pay (LOP) deductions from approved `StaffPermission` leaves, PF, PT, and TDS. The Super Admin / Principal functions as the **Checker** (`status='Authorized'`), inspecting financial totals and issuing cryptographic sign-off. Only after Principal authorization can the Accounts Officer trigger the bank disbursement wire (`status='Disbursed'`).
+* **Consequences:** Fully satisfies corporate governance and statutory financial compliance standards; prevents unauthorized salary disbursements while maintaining complete audit traceability.
+
+### ADR-006: Atomic Batch Examination Scheduling & Dynamic Admit Card Delivery
+* **Status:** Accepted
+* **Context:** Scheduling individual subject exams manually led to fragmented timetable tables, missing room capacity validations, and hardcoded mock student admit cards that failed to reflect changes in hall allocations or chief invigilators.
+* **Decision:** Implement atomic batch scheduling (`POST /api/exams/schedules/batch-class`) tagging slots with unique `batch_id`, series metadata, and `schedule_type = 'BATCH'`. Student admit cards query live database schedules chronologically (`GET /api/student/exam-schedules`), dynamically rendering seat codes, hall invigilator seals, and timetable matrices.
+* **Consequences:** Eliminates hardcoded client artifacts; guarantees that schedule adjustments made by the Exam Coordinator propagate instantly to Student and Parent portals.
+
+### ADR-007: Real-Time Dynamic Timetable Lifecycle Driven by ClockProvider
+* **Status:** Accepted
+* **Context:** Disconnect between client device wall-clock time and school instructional periods caused premature class terminations, incorrect attendance tardiness marks, and out-of-sync proctored examinations.
+* **Decision:** Bind all period lifecycles and exam mountings to a centralized `ClockProvider` service synchronized via client hooks running on 30-second heartbeats. Timetable periods transition autonomously through `upcoming`, `live`, and `completed`, illuminating active WebRTC broadcaster and viewer stages only during valid period intervals.
+* **Consequences:** Creates a deterministic, testable simulation environment where academic schedules operate reliably across global timezones and daylight savings shifts.
+
 ---
 
 ## 6. Verification & Port Access Matrix
 
 | Role | Portal Route | Primary Test Procedure | Expected System Outcome |
 | :--- | :--- | :--- | :--- |
-| **Super Admin** | `http://localhost:3000/admin` | Execute Admin Override on student leave request #402. | Leave status flips to `Approved`; attendance register updates to `Leave` (`admin_override=True`); teacher rejection disabled. |
-| **Academic Coord** | `http://localhost:3000/academic_coordinator` | Click **Assign Substitute Teacher** on Period 3 vacancy. | Engine filters out busy/absent staff; assign Dr. Suresh Babu; schedule updates across teacher and student portals. |
-| **Exam Coord** | `http://localhost:3000/exam_coordinator` | Click **Verify & Lock Marks** on Class 10 Math moderation. | Grade set freezes; unlocks batch report card PDF generation and official CBSE LOC CSV export. |
-| **Accounts Coord** | `http://localhost:3000/accounts_coordinator` | Open **Defaulters & Aging**; click **Dispatch 1-Click Reminder**. | Dispatches templated WhatsApp reminders with direct UPI deep-links to all Tier 3 overdue accounts. |
-| **Admissions Coord**| `http://localhost:3000/admissions_coordinator` | Advance lead to `Fee Paid`; click **Convert to Enrolled Student**. | Single-pass ACID transaction seeds student record, parent account, class roster placement, and fee milestones. |
-| **Teacher** | `http://localhost:3000/teacher` | Open **SpeedGrader Studio**; run OCR; adjust score; save. | Side-by-side canvas records annotated PDF; updates student portfolio; delivers parent push notification. |
-| **Secondary Student**| `http://localhost:3000/student` | Join LiveKit live lecture; verify connected duration. | Background telemetry verifies connection duration $\ge 10$ mins; automatically logs student as `Present`. |
-| **Parent** | `http://localhost:3000/parent` | Reserve 10:15 AM PTM slot; open fee cashier dummy QR. | Acquires 5-minute pessimistic row lock (`SELECT FOR UPDATE`); payment webhook updates milestone to `PAID`. |
+| **Super Admin** | `http://localhost:3000/admin` | Inspect staff leave pop-up; authorize pending monthly payroll batch. | Approves teacher LOP leave; signs off payroll batch (transitions from `Draft` to `Authorized`), unblocking bank wire. |
+| **Academic Coord** | `http://localhost:3000/academic_coordinator` | Open **Period Substitutions** after teacher leave submission. | Vacant period appears automatically; available faculty query cross-checks `staff_attendance_daily` to find conflict-free proxy. |
+| **Exam Coord** | `http://localhost:3000/exam_coordinator` | Create batch exam schedule for Class 10 ("Term 1 Finals", 5 slots). | Atomic creation assigns `batch_id`; dynamic admit cards become immediately queryable by students in Class 10. |
+| **Accounts Coord** | `http://localhost:3000/accounts_coordinator` | Generate payroll batch; test counter fee payment on defaulter. | Computes LOP salary deductions automatically; counter fee payment caps payment at balance due and updates student fee milestone. |
+| **Admissions Coord**| `http://localhost:3000/admissions_coordinator` | Advance lead to `Fee Paid`; open `ConfirmEnrollmentModal`. | Atomic single-pass transaction seeds student profile, roll number, parent account, and initial tuition fee milestones. |
+| **Teacher** | `http://localhost:3000/teacher` | Apply for 3-day Unpaid Leave (LOP); check daily attendance. | `staff_permissions` records `leave_category='Unpaid LOP'`; daily check-in logs timestamp in `staff_attendance_daily`. |
+| **Secondary Student**| `http://localhost:3000/student` | Verify dynamic admit card and period status ticker. | Hall ticket renders Chief Invigilator and seat code; periods evaluate dynamically (`completed`/`live`/`upcoming`). |
+| **Parent** | `http://localhost:3000/parent` | Inspect fee cashier after school counter payment. | Milestone reflects immediate transition to `PAID` with verified counter collection receipt. |
