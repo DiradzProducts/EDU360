@@ -19,7 +19,9 @@ import {
   Clock, 
   UserPlus,
   Flame,
-  FileText
+  FileText,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { AdmissionEnquiry } from '@/lib/types';
 
@@ -116,8 +118,8 @@ export function CRMBoard({
             })}
           </div>
 
-          {/* Target Grade Selector & Quick Register */}
-          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          {/* Target Grade Selector & Clear Filters */}
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
             <span className="text-xs font-bold text-slate-400">Class:</span>
             <select
               value={classFilter}
@@ -134,20 +136,45 @@ export function CRMBoard({
               <option value="Class 12">Class 12</option>
             </select>
 
+            {(selectedStage !== 'all' || classFilter !== 'ALL' || Boolean(searchQuery.trim())) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStage('all');
+                  setClassFilter('ALL');
+                  setSearchQuery('');
+                }}
+                className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                title="Reset all filters"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Clear Filters</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Search Bar */}
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
           <div className="relative w-full">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Search candidate name, parent name, mobile number, or target grade..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -155,12 +182,28 @@ export function CRMBoard({
       {/* ── Candidate Roster ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
         {filteredEnquiries.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
-            <Users className="h-8 w-8 text-slate-400 mx-auto" />
+          <div className="p-12 text-center space-y-3 flex flex-col items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+              <Filter className="h-6 w-6" />
+            </div>
             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">No candidate leads found</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
               Try adjusting your search criteria or switch to another stage filter.
             </p>
+            {(selectedStage !== 'all' || classFilter !== 'ALL' || Boolean(searchQuery.trim())) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStage('all');
+                  setClassFilter('ALL');
+                  setSearchQuery('');
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Reset All Filters</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">

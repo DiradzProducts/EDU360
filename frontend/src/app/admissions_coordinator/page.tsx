@@ -840,23 +840,51 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
             </span>
           </div>
 
-          {/* Search Box */}
-          <div className="relative min-w-[260px] sm:min-w-[320px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search student, parent, phone, grade..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search Box */}
+            <div className="relative min-w-[220px] sm:min-w-[280px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search student, parent, phone, grade..."
+                className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Clear Filters Button */}
+            {(crmFilter !== 'all' || Boolean(searchQuery.trim())) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCrmFilter('all');
+                  setSearchQuery('');
+                }}
+                className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                title="Reset all filters"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Clear Filters</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* ── Enquiry Cards Grid ── */}
         {filteredEnquiries.length === 0 ? (
-          <div className="text-center py-14 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8">
-            <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
+          <div className="text-center py-14 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 flex flex-col items-center justify-center">
+            <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3">
               <Users className="h-6 w-6" />
             </div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -865,14 +893,19 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
               {crmFilter === 'due_today' 
                 ? "You have finished all scheduled calls for today, or no calls are due right now." 
-                : "No student records matched this filter."}
+                : "No student records matched this filter criteria."}
             </p>
-            {crmFilter !== 'active' && (
+            {(crmFilter !== 'all' || Boolean(searchQuery.trim())) && (
               <button
-                onClick={() => setCrmFilter('active')}
-                className="mt-4 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setCrmFilter('all');
+                  setSearchQuery('');
+                }}
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
               >
-                View All Active Leads
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Reset All Filters</span>
               </button>
             )}
           </div>

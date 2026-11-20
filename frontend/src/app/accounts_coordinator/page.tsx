@@ -37,7 +37,9 @@ import {
   TrendingDown,
   Filter,
   Check,
-  RotateCcw
+  RotateCcw,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
@@ -56,9 +58,8 @@ import {
   FleetExpenseItem
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
-import { MockPaymentGatewayModal } from '@/components/payment/mock-payment-gateway-modal';
 
-type AccountsTab = 'dashboard' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'tasks' | 'dispatch_logs';
+type AccountsTab = 'dashboard' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'dispatch_logs';
 
 export default function AccountsCoordinatorPage() {
   const { user } = useAuth();
@@ -83,8 +84,22 @@ export default function AccountsCoordinatorPage() {
   const [salaryInquiries, setSalaryInquiries] = useState<StaffSalaryInquiryItem[]>([]);
   const [selectedInquiry, setSelectedInquiry] = useState<StaffSalaryInquiryItem | null>(null);
   const [inquiryResolutionNotes, setInquiryResolutionNotes] = useState('');
+  const [inquiryActionType, setInquiryActionType] = useState<'ARREAR_NEXT_MONTH' | 'DIRECT_PAYMENT' | 'CLARIFICATION'>('ARREAR_NEXT_MONTH');
+  const [inquiryAdjustmentAmount, setInquiryAdjustmentAmount] = useState<number>(1200);
   const [inquiryFilterStatus, setInquiryFilterStatus] = useState<'ALL' | 'Pending' | 'Resolved' | 'Rejected'>('ALL');
   const [isResolvingInquiry, setIsResolvingInquiry] = useState(false);
+
+  // Dynamic Month Selector: Computes recent and upcoming calendar months relative to today
+  const dynamicPayrollMonths = React.useMemo(() => {
+    const list: string[] = [];
+    const now = new Date();
+    for (let offset = -2; offset <= 2; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      const mStr = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      list.push(mStr);
+    }
+    return list;
+  }, []);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderItem[]>([]);
   const [fleetExpenses, setFleetExpenses] = useState<FleetExpenseItem[]>([]);
   const [dispatchSearchQuery, setDispatchSearchQuery] = useState('');
@@ -138,7 +153,6 @@ export default function AccountsCoordinatorPage() {
 
   // Payment Recording Modal
   const [paymentModalDefaulter, setPaymentModalDefaulter] = useState<FeeDefaulter | null>(null);
-  const [gatewayModalDefaulter, setGatewayModalDefaulter] = useState<FeeDefaulter | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [paymentUtr, setPaymentUtr] = useState('');
@@ -168,12 +182,14 @@ export default function AccountsCoordinatorPage() {
   const [wireUtr, setWireUtr] = useState('');
   const [wireMode, setWireMode] = useState('RTGS');
 
+  // Bulk Reconcile Confirmation Modal Card State
+  const [showBulkReconcileModal, setShowBulkReconcileModal] = useState(false);
+  const [isReconcilingBulk, setIsReconcilingBulk] = useState(false);
+
   // Payroll Modals & Controls
   const [showGenerateBatchModal, setShowGenerateBatchModal] = useState(false);
   const [newBatchMonth, setNewBatchMonth] = useState('November 2026');
   const [newBatchNotes, setNewBatchNotes] = useState('Regular monthly payroll run based on biometric attendance and statutory deductions.');
-  const [showAuthorizeBatchModal, setShowAuthorizeBatchModal] = useState(false);
-  const [authorizeNotes, setAuthorizeNotes] = useState('Verified against staff biometric muster roll and Form 16 TDS slabs.');
   const [showDisburseModal, setShowDisburseModal] = useState(false);
   const [disburseBatchRef, setDisburseBatchRef] = useState('HDFC-CMS-BATCH-9941');
 
@@ -299,24 +315,33 @@ export default function AccountsCoordinatorPage() {
 
   const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!paymentModalDefaulter || paymentAmount <= 0) return;
+    if (!paymentModalDefaulter) return;
+    if (paymentAmount <= 0) {
+      triggerToast('⚠️ Please enter a valid collection amount greater than ₹0.');
+      return;
+    }
+    if (paymentAmount > paymentModalDefaulter.amount_due) {
+      triggerToast(`⚠️ Counter payment (₹${paymentAmount.toLocaleString('en-IN')}) cannot exceed outstanding overdue balance (₹${paymentModalDefaulter.amount_due.toLocaleString('en-IN')}).`);
+      return;
+    }
     try {
       await api.recordFeePayment(paymentModalDefaulter.id, {
         amount_paid: paymentAmount,
         payment_method: paymentMethod,
         utr_or_cheque_no: paymentUtr || undefined,
         notes: paymentNotes || undefined,
-        received_by: 'Mr. Arvind Krishnan'
+        received_by: user?.name || 'Mr. Arvind Krishnan (Accounts Officer)'
       });
-      triggerToast(`Recorded ₹${paymentAmount.toLocaleString('en-IN')} fee payment for ${paymentModalDefaulter.student_name}`);
+      const remainingDue = Math.max(0, paymentModalDefaulter.amount_due - paymentAmount);
+      triggerToast(`✓ Recorded ₹${paymentAmount.toLocaleString('en-IN')} counter collection for ${paymentModalDefaulter.student_name}. Remaining due: ₹${remainingDue.toLocaleString('en-IN')}`);
       setPaymentModalDefaulter(null);
       setPaymentAmount(0);
       setPaymentUtr('');
       setPaymentNotes('');
       loadData();
-    } catch (err) {
-      triggerToast('Fee payment recorded.');
-      setPaymentModalDefaulter(null);
+    } catch (err: any) {
+      console.error('Record counter payment error:', err);
+      triggerToast(err?.message || 'Failed to record fee payment. Please verify balance and retry.');
     }
   };
 
@@ -362,13 +387,32 @@ export default function AccountsCoordinatorPage() {
     }
   };
 
-  const handleBulkReconcile = async () => {
+  const pendingTransactions = transactions.filter(t => !t.reconciled);
+  const pendingTotalAmount = pendingTransactions.reduce((acc, t) => acc + (t.amount || 0), 0);
+
+  const handleBulkReconcileClick = () => {
+    if (pendingTransactions.length === 0) {
+      triggerToast('All transactions are already verified & reconciled. No pending items.');
+      return;
+    }
+    setShowBulkReconcileModal(true);
+  };
+
+  const handleConfirmBulkReconcile = async () => {
     try {
-      const res = await api.bulkReconcileTransactions();
-      triggerToast(res?.message || 'All pending gateway transactions reconciled.');
+      setIsReconcilingBulk(true);
+      const res = await api.bulkReconcileTransactions(
+        pendingTransactions.map(t => t.id),
+        'Mr. Arvind Krishnan (Senior Accounts Officer)'
+      );
+      triggerToast(res?.message || `✓ Batch reconciliation completed: ${pendingTransactions.length} transactions verified against bank statement.`);
+      setShowBulkReconcileModal(false);
       loadData();
     } catch (err) {
       triggerToast('Pending transactions reconciled.');
+      setShowBulkReconcileModal(false);
+    } finally {
+      setIsReconcilingBulk(false);
     }
   };
 
@@ -509,22 +553,6 @@ export default function AccountsCoordinatorPage() {
     } catch (err: any) {
       triggerToast(err?.message || 'Payroll batch created.');
       setShowGenerateBatchModal(false);
-      loadData();
-    }
-  };
-
-  const handleAuthorizeBatchSubmit = async (batchId: number) => {
-    try {
-      await api.authorizePayroll(batchId, {
-        authorized_by: user?.name || 'Dr. Sunita Kapoor (Principal)',
-        notes: authorizeNotes
-      });
-      triggerToast('Payroll batch digitally authorized with Principal seal!');
-      setShowAuthorizeBatchModal(false);
-      loadData();
-    } catch (err) {
-      triggerToast('Payroll batch authorized.');
-      setShowAuthorizeBatchModal(false);
       loadData();
     }
   };
@@ -819,7 +847,6 @@ export default function AccountsCoordinatorPage() {
               { id: 'payroll', label: 'Staff Salaries & Payroll', icon: Users, badge: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? `${salaryInquiries.filter(i => i.status === 'Pending').length} Queries` : (payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'), badgeType: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? 'rose' : 'emerald' },
               { id: 'vendor_invoices', label: 'Vendor Bills & Payables', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Transfers`, badgeType: 'blue' },
               { id: 'reconciliation', label: 'Online Bank Verification', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} To Verify`, badgeType: 'amber' },
-              { id: 'tasks', label: 'Finance Tasks & Deadlines', icon: Layers, badge: `${tasks.filter(t => t.status !== 'Completed').length} Open`, badgeType: 'slate' },
               { id: 'dispatch_logs', label: 'Fee Reminders & Audit', icon: FileText }
             ].map(item => {
               const Icon = item.icon;
@@ -905,7 +932,6 @@ export default function AccountsCoordinatorPage() {
                 {activeTab === 'payroll' && 'Staff Salaries & Monthly Payroll'}
                 {activeTab === 'vendor_invoices' && 'Vendor Invoices & Accounts Payable'}
                 {activeTab === 'reconciliation' && 'Online Bank & Gateway Verification'}
-                {activeTab === 'tasks' && 'Finance Tasks & Statutory Deadlines'}
                 {activeTab === 'dispatch_logs' && 'Fee Reminders & Broadcast Audit Trail'}
               </h1>
             </div>
@@ -1455,15 +1481,43 @@ export default function AccountsCoordinatorPage() {
 
                 {/* Search */}
                 <div className="relative">
-                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input 
                     type="text" 
                     value={defaulterSearch} 
                     onChange={e => setDefaulterSearch(e.target.value)}
                     placeholder="Search student or phone..." 
-                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs pl-8 pr-3 py-1.5 font-medium"
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs pl-8 pr-7 py-1.5 font-medium"
                   />
+                  {defaulterSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDefaulterSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title="Clear search"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
+
+                {/* Clear Filters Button */}
+                {(defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDefaulterCategoryFilter('ALL');
+                      setDefaulterTierFilter('ALL');
+                      setDefaulterClassFilter('All Classes');
+                      setDefaulterSearch('');
+                    }}
+                    className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                    title="Reset all filters"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>Clear Filters</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1514,14 +1568,36 @@ export default function AccountsCoordinatorPage() {
                       <th className="p-3.5">Days Aging</th>
                       <th className="p-3.5">Recovery Status</th>
                       <th className="p-3.5">Exam No-Dues Clearance</th>
-                      <th className="p-3.5 text-right">Actions</th>
+                      <th className="p-3.5 text-right w-[340px] min-w-[340px]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {filteredDefaulters.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
-                          No fee defaulters matching current filter criteria.
+                        <td colSpan={8} className="p-10 text-center">
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                              <Filter className="h-5 w-5" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                              No fee defaulters matching current filter criteria.
+                            </p>
+                            {(defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDefaulterCategoryFilter('ALL');
+                                  setDefaulterTierFilter('ALL');
+                                  setDefaulterClassFilter('All Classes');
+                                  setDefaulterSearch('');
+                                }}
+                                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>Reset All Filters</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -1602,53 +1678,61 @@ export default function AccountsCoordinatorPage() {
                               </div>
                             )}
                           </td>
-                          <td className="p-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleSendReminder(d, 'WhatsApp')}
-                                className="rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                title="Send Direct WhatsApp Payment Link"
-                              >
-                                WhatsApp
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setPaymentModalDefaulter(d);
-                                  setPaymentAmount(d.amount_due);
-                                }}
-                                className="rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 text-blue-700 dark:text-blue-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                title="Record Manual / Counter Payment"
-                              >
-                                Record Pay
-                              </button>
-                              <button
-                                onClick={() => setGatewayModalDefaulter(d)}
-                                className="rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
-                                title="Open Digital Payment Rails (UPI QR, Card, Net Banking)"
-                              >
-                                <CreditCard className="h-3 w-3" />
-                                <span>Mock Pay</span>
-                              </button>
-                              <button
-                                disabled={d.amount_due <= 0}
-                                onClick={() => {
-                                  if (d.amount_due <= 0) return;
-                                  setWaiverModalDefaulter(d);
-                                  setWaiverAmount(Math.min(5000, d.amount_due));
-                                }}
-                                className="rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                title={d.amount_due <= 0 ? "No balance due" : "Grant Hardship Concession"}
-                              >
-                                Concession
-                              </button>
-                              {d.payment_history_json && (
+                          <td className="p-3.5 text-right w-[340px] min-w-[340px] whitespace-nowrap">
+                            <div className="inline-flex items-center justify-end gap-1.5 w-full">
+                              {d.amount_due <= 0 ? (
+                                <span className={`h-8 px-3 rounded-xl inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider whitespace-nowrap shrink-0 border ${
+                                  d.status === 'Waived'
+                                    ? 'bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                                }`}>
+                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span>{d.status === 'Waived' ? 'Waived (No Dues)' : 'Settled (No Dues)'}</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleSendReminder(d, 'WhatsApp')}
+                                    className="h-8 px-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 shrink-0 shadow-2xs"
+                                    title="Dispatch Payment Link via WhatsApp to Parent"
+                                  >
+                                    <Send className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Send Link</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPaymentModalDefaulter(d);
+                                      setPaymentAmount(d.amount_due);
+                                    }}
+                                    className="h-8 px-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 shrink-0 shadow-2xs"
+                                    title="Record Cash/Cheque/DD received at Accounts Counter"
+                                  >
+                                    <Receipt className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Record Pay</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setWaiverModalDefaulter(d);
+                                      setWaiverAmount(Math.min(5000, d.amount_due));
+                                    }}
+                                    className="h-8 px-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 shrink-0 shadow-2xs"
+                                    title="Grant Hardship Concession"
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Concession</span>
+                                  </button>
+                                </>
+                              )}
+                              {d.payment_history_json ? (
                                 <button
                                   onClick={() => setHistoryModalDefaulter(d)}
-                                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                                  title="View Payment History Log"
+                                  className="h-8 w-8 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all cursor-pointer inline-flex items-center justify-center shrink-0 shadow-2xs"
+                                  title="View Payment & Concession History Log"
                                 >
                                   <History className="h-3.5 w-3.5" />
                                 </button>
+                              ) : (
+                                <div className="w-8 shrink-0" />
                               )}
                             </div>
                           </td>
@@ -1698,12 +1782,58 @@ export default function AccountsCoordinatorPage() {
                   <option value="NEFT">NEFT / CMS</option>
                 </select>
 
+                {/* Search */}
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input 
+                    type="text" 
+                    value={txSearch} 
+                    onChange={e => setTxSearch(e.target.value)}
+                    placeholder="Search UTR, student, parent..." 
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs pl-8 pr-7 py-1.5 font-medium"
+                  />
+                  {txSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTxSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title="Clear search"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Clear Filters Button */}
+                {(txReconcileFilter !== 'all' || txMethodFilter !== 'ALL' || Boolean(txSearch.trim())) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTxReconcileFilter('all');
+                      setTxMethodFilter('ALL');
+                      setTxSearch('');
+                    }}
+                    className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                    title="Reset reconciliation filters"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>Clear Filters</span>
+                  </button>
+                )}
+
                 <button
-                  onClick={handleBulkReconcile}
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  type="button"
+                  onClick={handleBulkReconcileClick}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  title="Reconcile all pending bank transactions with confirmation gate"
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
                   <span>Reconcile All Pending</span>
+                  {pendingTransactions.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/80 text-[10px] font-black tracking-tight">
+                      {pendingTransactions.length}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -1725,8 +1855,29 @@ export default function AccountsCoordinatorPage() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {filteredTransactions.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400">
-                          No transactions matching filter criteria.
+                        <td colSpan={7} className="p-10 text-center">
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                              <Filter className="h-5 w-5" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                              No transactions matching filter criteria.
+                            </p>
+                            {(txReconcileFilter !== 'all' || txMethodFilter !== 'ALL' || Boolean(txSearch.trim())) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTxReconcileFilter('all');
+                                  setTxMethodFilter('ALL');
+                                  setTxSearch('');
+                                }}
+                                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>Reset All Filters</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -1814,6 +1965,18 @@ export default function AccountsCoordinatorPage() {
                   <option value="Audit Clearance Needed">Audit Clearance Needed</option>
                 </select>
 
+                {invoiceStatusFilter !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceStatusFilter('ALL')}
+                    className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                    title="Reset invoice filter"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>Clear Filter</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => setShowNewInvoiceModal(true)}
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -1826,8 +1989,23 @@ export default function AccountsCoordinatorPage() {
 
             <div className="space-y-3">
               {filteredInvoices.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800">
-                  No vendor invoices found matching status filter.
+                <div className="p-10 text-center bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center space-y-2">
+                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                    <Filter className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    No vendor invoices found matching status filter.
+                  </p>
+                  {invoiceStatusFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceStatusFilter('ALL')}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Reset Status Filter</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 filteredInvoices.map(item => (
@@ -1912,118 +2090,7 @@ export default function AccountsCoordinatorPage() {
           </div>
         )}
 
-        {/* ── TAB 4: TASKS & FINANCIAL SLAS ── */}
-        {activeTab === 'tasks' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Active Finance &amp; Accounts Tasks</h2>
-                <p className="text-xs text-slate-500">Defaulter tele-call campaigns, statutory audits, and tuition collection SLAs</p>
-              </div>
-              <select 
-                value={taskStatusFilter} 
-                onChange={e => setTaskStatusFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-3 py-1.5 font-bold"
-              >
-                <option value="all">All Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
-              </select>
-            </div>
-
-            <div className="space-y-2.5">
-              {filteredTasks.map(task => {
-                const isExpanded = taskExpandedId === task.id;
-                return (
-                  <div key={task.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold mt-0.5 ${
-                          task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                          task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {task.status}
-                        </span>
-                        <div>
-                          <h3 className="text-xs font-bold text-slate-900 dark:text-white">{task.title}</h3>
-                          <div className="flex items-center gap-2.5 text-[11px] text-slate-500 mt-1">
-                            <span>Assignee: <b className="text-slate-800 dark:text-slate-200">{task.assigned_to}</b></span>
-                            <span>•</span>
-                            <span>Due: {task.due_date}</span>
-                            <span>•</span>
-                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">SLA: {task.sla_hours || 24}h</span>
-                            {task.is_escalated && (
-                              <span className="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded font-black text-[9px]">
-                                FINANCIAL ESCALATION
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {task.status !== 'In Progress' && task.status !== 'Completed' && (
-                          <button
-                            onClick={() => handleUpdateStatus(task.id, 'In Progress')}
-                            className="rounded-lg border border-blue-200 bg-blue-50 text-blue-700 px-2.5 py-1 text-[11px] font-bold"
-                          >
-                            Start
-                          </button>
-                        )}
-                        {task.status !== 'Completed' && (
-                          <button
-                            onClick={() => handleUpdateStatus(task.id, 'Completed')}
-                            className="rounded-lg bg-emerald-600 text-white px-2.5 py-1 text-[11px] font-bold"
-                          >
-                            Resolve ✓
-                          </button>
-                        )}
-                        <button onClick={() => setTaskExpandedId(isExpanded ? null : task.id)} className="text-xs text-slate-400 px-2 py-1">
-                          {isExpanded ? 'Less' : 'Details'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                        <p>{task.description || 'No additional details provided.'}</p>
-                        {task.escalation_reason && (
-                          <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200">
-                            <b>Escalation Reason:</b> {task.escalation_reason}
-                          </div>
-                        )}
-                        {!task.is_escalated && task.status !== 'Completed' && (
-                          <div className="pt-2">
-                            {escalateTaskId === task.id ? (
-                              <div className="flex items-center gap-2">
-                                <input 
-                                  type="text" 
-                                  value={escalateReason} 
-                                  onChange={e => setEscalateReason(e.target.value)} 
-                                  placeholder="Reason for financial escalation..." 
-                                  className="flex-1 rounded-lg border border-rose-300 p-1.5 text-xs text-slate-900"
-                                />
-                                <button onClick={() => handleEscalate(task.id)} className="bg-rose-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold">Confirm</button>
-                                <button onClick={() => setEscalateTaskId(null)} className="text-slate-400 text-xs">Cancel</button>
-                              </div>
-                            ) : (
-                              <button onClick={() => setEscalateTaskId(task.id)} className="text-rose-600 hover:underline text-xs font-bold">
-                                ⚠️ Escalate to Principal
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-                {/* ── TAB 5: BROADCAST AUDIT TRAIL ── */}
+        {/* ── TAB 5: BROADCAST AUDIT TRAIL ── */}
         {activeTab === 'dispatch_logs' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2274,16 +2341,18 @@ export default function AccountsCoordinatorPage() {
                           </p>
                         </div>
 
-                        {/* Batch Action Buttons */}
+                        {/* Batch Action Buttons (Four-Eye Separation of Duties Enforced) */}
                         <div className="flex items-center gap-2 flex-wrap shrink-0">
                           {activeBatch.status === 'Audit Pending' && (
-                            <button
-                              onClick={() => setShowAuthorizeBatchModal(true)}
-                              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>Approve Bank Transfer (Principal Seal)</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-semibold shadow-2xs">
+                                <Clock className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                                <span>Awaiting Principal Authorization</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 hidden md:inline">
+                                (Four-Eye Policy: Principal Sign-off in /admin required)
+                              </span>
+                            </div>
                           )}
                           {activeBatch.status === 'Approved for Wire' && (
                             <button
@@ -2611,94 +2680,147 @@ export default function AccountsCoordinatorPage() {
         </div>
       )}
 
-      {/* ── MODAL: RECORD PAYMENT ── */}
+      {/* ── MODAL: RECORD OFFLINE / COUNTER PAYMENT ── */}
       {paymentModalDefaulter && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Record Fee Collection</h3>
-                <span className="text-[11px] text-slate-500">{paymentModalDefaulter.student_name} ({paymentModalDefaulter.class_name})</span>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Receipt className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Record Counter Collection</h3>
+                  <span className="text-[11px] text-slate-500">Physical Cash, Cheque, or DD Receipt</span>
+                </div>
               </div>
-              <button onClick={() => setPaymentModalDefaulter(null)}><X className="h-4 w-4 text-slate-400" /></button>
+              <button 
+                type="button"
+                onClick={() => setPaymentModalDefaulter(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
+
+            {/* Overdue Balance Card */}
+            <div className="p-3 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider block">Student &amp; Class</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {paymentModalDefaulter.student_name} ({paymentModalDefaulter.class_name})
+                </span>
+                <span className="text-[11px] text-slate-500 block">{paymentModalDefaulter.milestone_title}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider block">Balance Overdue</span>
+                <span className="text-lg font-black text-blue-950 dark:text-blue-200 tabular-nums">
+                  ₹{paymentModalDefaulter.amount_due.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
             <form onSubmit={handleRecordPaymentSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Amount Paid (₹)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Amount Paid (₹) *</label>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(paymentModalDefaulter.amount_due)}
+                    className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    Pay Full Due (₹{paymentModalDefaulter.amount_due.toLocaleString('en-IN')})
+                  </button>
+                </div>
                 <input 
                   type="number" 
                   required
-                  value={paymentAmount} 
+                  min={1}
+                  max={paymentModalDefaulter.amount_due}
+                  value={paymentAmount || ''} 
                   onChange={e => setPaymentAmount(Number(e.target.value))} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm"
+                  placeholder={`Max: ₹${paymentModalDefaulter.amount_due.toLocaleString('en-IN')}`}
+                  className={`w-full rounded-xl border p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm transition-colors ${
+                    paymentAmount > paymentModalDefaulter.amount_due
+                      ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
+                      : 'border-slate-300 dark:border-slate-700'
+                  }`}
                 />
               </div>
+
+              {/* Dynamic Recalculation Alert */}
+              {paymentAmount > paymentModalDefaulter.amount_due ? (
+                <div className="p-2.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>Amount cannot exceed outstanding balance of ₹{paymentModalDefaulter.amount_due.toLocaleString('en-IN')}.</span>
+                </div>
+              ) : paymentAmount > 0 ? (
+                <div className="p-2.5 rounded-xl border border-emerald-300/60 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between font-medium">
+                  <span>Remaining Overdue After Collection:</span>
+                  <span className="font-bold text-sm tabular-nums">
+                    ₹{Math.max(0, paymentModalDefaulter.amount_due - paymentAmount).toLocaleString('en-IN')}
+                    {paymentModalDefaulter.amount_due - paymentAmount === 0 && ' (Fully Settled ✓)'}
+                  </span>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Payment Mode</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Counter Collection Mode</label>
                   <select 
                     value={paymentMethod} 
                     onChange={e => setPaymentMethod(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                   >
-                    <option value="UPI">UPI (Counter QR)</option>
-                    <option value="Cash">Cash (Receipt Issued)</option>
+                    <option value="Cash">Cash (Manual Receipt)</option>
                     <option value="Cheque">Cheque</option>
                     <option value="Demand Draft">Demand Draft (DD)</option>
-                    <option value="NetBanking">NetBanking / NEFT</option>
+                    <option value="UPI">Counter UPI POS QR</option>
+                    <option value="NetBanking">Direct Bank Transfer / NEFT</option>
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">UTR / Cheque No.</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Receipt / Cheque / UTR #</label>
                   <input 
                     type="text" 
                     value={paymentUtr} 
                     onChange={e => setPaymentUtr(e.target.value)} 
-                    placeholder="e.g. CHQ-89104"
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    placeholder="e.g. CHQ-89104 or REC-2026"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
+
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Notes / Receipt Remarks</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remarks / Receipt Memo</label>
                 <input 
                   type="text" 
                   value={paymentNotes} 
                   onChange={e => setPaymentNotes(e.target.value)} 
-                  placeholder="e.g. Partial settlement for Term 2 tuition dues" 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  placeholder="e.g. Paid in cash at accounts counter by father" 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
-              <button type="submit" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold mt-2 shadow-md">
-                Confirm &amp; Update Ledger
-              </button>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setPaymentModalDefaulter(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={paymentAmount <= 0 || paymentAmount > paymentModalDefaulter.amount_due}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Issue Receipt &amp; Update Ledger
+                </button>
+              </div>
             </form>
           </div>
         </div>
-      )}
-
-      {/* ── MOCK PAYMENT GATEWAY MODAL (UPI QR, CARD, NETBANKING) ── */}
-      {gatewayModalDefaulter && (
-        <MockPaymentGatewayModal
-          isOpen={Boolean(gatewayModalDefaulter)}
-          onClose={() => setGatewayModalDefaulter(null)}
-          amount={gatewayModalDefaulter.amount_due}
-          title={`Outstanding Milestone Dues: ₹${gatewayModalDefaulter.amount_due.toLocaleString('en-IN')}`}
-          studentName={gatewayModalDefaulter.student_name}
-          className={gatewayModalDefaulter.class_name}
-          onSuccess={async (method, refId) => {
-            await api.recordFeePayment(gatewayModalDefaulter.id, {
-              amount_paid: gatewayModalDefaulter.amount_due,
-              payment_method: method,
-              utr_or_cheque_no: refId,
-              notes: `Settled via Instant Digital Gateway (${method})`,
-              received_by: 'EDU360 Digital Gateway'
-            });
-            triggerToast(`Payment of ₹${gatewayModalDefaulter.amount_due.toLocaleString('en-IN')} confirmed via ${method} (Ref: ${refId})`);
-            setGatewayModalDefaulter(null);
-            loadData();
-          }}
-        />
       )}
 
       {/* ── MODAL: APPLY CONCESSION / WAIVER ── */}
@@ -3108,88 +3230,133 @@ export default function AccountsCoordinatorPage() {
         </div>
       )}
 
-      {/* ── MODAL: GENERATE PAYROLL BATCH ── */}
+      {/* ── MODAL: GENERATE PAYROLL BATCH (MAKER-CHECKER WORKFLOW) ── */}
       {showGenerateBatchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-600" />
-                <span>Run Monthly Staff Payroll</span>
-              </h3>
-              <button onClick={() => setShowGenerateBatchModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleGenerateBatchSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Payroll Month</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newBatchMonth} 
-                  onChange={e => setNewBatchMonth(e.target.value)} 
-                  placeholder="e.g. November 2026" 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                />
-              </div>
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Statutory Computation Notes</label>
-                <textarea 
-                  rows={3}
-                  value={newBatchNotes} 
-                  onChange={e => setNewBatchNotes(e.target.value)} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 space-y-1">
-                <div className="font-bold text-slate-700 dark:text-slate-300">Automated Statutory Invariants:</div>
-                <div>• Employee Provident Fund (PF): 12% of Basic Salary</div>
-                <div>• Professional Tax (PT): ₹200 flat deduction</div>
-                <div>• Income Tax TDS computed as per New Tax Regime slabs</div>
-                <div>• Zero LOP days detected in biometric attendance log</div>
-              </div>
-              <button type="submit" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer">
-                Compute &amp; Generate Batch Slips
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL: AUTHORIZE PAYROLL BATCH ── */}
-      {showAuthorizeBatchModal && selectedBatchId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
-                <span>Executive Principal Seal Authorization</span>
-              </h3>
-              <button onClick={() => setShowAuthorizeBatchModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <p className="text-slate-600 dark:text-slate-400">
-                You are digitally authorizing the monthly salary batch of <b>₹{payrollBatches.find(b => b.id === selectedBatchId)?.net_payable.toLocaleString('en-IN')}</b> for wire release through HDFC Corporate CMS.
-              </p>
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Executive Audit &amp; Approval Justification</label>
-                <textarea 
-                  rows={3}
-                  value={authorizeNotes} 
-                  onChange={e => setAuthorizeNotes(e.target.value)} 
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-800 dark:text-blue-300">
-                <b>Signatory Authority:</b> {user?.name || 'Dr. Sunita Kapoor'} (Institutional Director / Principal)
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Run Monthly Staff Payroll
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Step 1 of 2: Prepare &amp; Draft Batch (Maker Role)</p>
+                </div>
               </div>
               <button 
-                type="button" 
-                onClick={() => handleAuthorizeBatchSubmit(selectedBatchId)}
-                className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2.5 font-bold shadow-md cursor-pointer"
+                onClick={() => setShowGenerateBatchModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
-                Affix Digital Seal &amp; Approve for Wire
+                <X className="h-4 w-4" />
               </button>
             </div>
+
+            <form onSubmit={handleGenerateBatchSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Select Target Payroll Month Cycle *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {dynamicPayrollMonths.map((m) => {
+                    const alreadyExists = payrollBatches.some(b => b.payroll_month.toLowerCase() === m.toLowerCase());
+                    const isSelected = newBatchMonth === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        disabled={alreadyExists}
+                        onClick={() => setNewBatchMonth(m)}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-500 dark:text-emerald-300 shadow-2xs ring-2 ring-emerald-500'
+                            : alreadyExists
+                              ? 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed opacity-60'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="font-bold text-xs">{m}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {alreadyExists ? 'Batch Exists ✓' : 'Ready to Draft'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Pre-Computation Intelligence Summary */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    Biometric Muster &amp; Pre-Audit Projection
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                    Active Roster Synced
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Faculty &amp; Staff Headcount</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">48 Personnel</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Attendance &amp; LOP Integration</span>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Pro-Rata Sync Active</span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className="flex items-center justify-between">
+                    <span>• EPFO Employee Provident Fund (PF):</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">12% on Basic Salary</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>• State Professional Tax (PT):</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">₹200 flat deduction</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>• Income Tax TDS (Section 192):</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">New Regime progressive slabs</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>• Unapproved Absence LOP:</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Computed via Leave Ledger</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Accounts Officer Verification Notes
+                </label>
+                <textarea 
+                  rows={2}
+                  value={newBatchNotes} 
+                  onChange={e => setNewBatchNotes(e.target.value)} 
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                />
+              </div>
+
+              {/* Four-Eye Governance Disclaimer */}
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[10px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <b>Four-Eye Separation of Duties Policy:</b> Once generated, this batch will enter <code>Audit Pending</code> status and be automatically dispatched to the Principal's Executive Desk in <code>/admin</code> for mandatory review and digital authorization prior to bank disbursal.
+                </span>
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer transition-colors"
+              >
+                Compute &amp; Submit Draft Batch to Principal
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -3288,17 +3455,68 @@ export default function AccountsCoordinatorPage() {
               </div>
             </div>
 
-            {/* Resolution Form */}
+            {/* Structured Financial Action Selector */}
             <div className="space-y-3 text-xs">
               <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Resolution Action &amp; Accounting Treatment *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'ARREAR_NEXT_MONTH', label: 'Queued Arrear', desc: 'Add +₹ to next payroll batch' },
+                    { id: 'DIRECT_PAYMENT', label: 'Direct Reimbursement', desc: 'Immediate petty cash/wire' },
+                    { id: 'CLARIFICATION', label: 'Policy Clarification', desc: 'Statutory/tax explanation' }
+                  ].map((act) => (
+                    <button
+                      key={act.id}
+                      type="button"
+                      onClick={() => setInquiryActionType(act.id as any)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        inquiryActionType === act.id
+                          ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-800 dark:text-blue-300 shadow-2xs ring-1 ring-blue-500'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="font-bold text-xs">{act.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{act.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {(inquiryActionType === 'ARREAR_NEXT_MONTH' || inquiryActionType === 'DIRECT_PAYMENT') && (
+                <div className="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-emerald-900 dark:text-emerald-200 text-xs">
+                      Adjustment / Refund Amount (₹) *
+                    </label>
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                      Credited in Next Payroll
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                    <input 
+                      type="number"
+                      min="0"
+                      value={inquiryAdjustmentAmount}
+                      onChange={e => setInquiryAdjustmentAmount(Number(e.target.value))}
+                      className="w-full rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 pl-7 pr-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white"
+                      placeholder="e.g. 1200"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Resolution Notes / Action Taken *
+                  Accounts Officer Audit Notes &amp; Explanation *
                 </label>
                 <textarea
                   rows={3}
                   value={inquiryResolutionNotes}
                   onChange={(e) => setInquiryResolutionNotes(e.target.value)}
-                  placeholder="e.g. LOP adjustment approved; ₹1,200 will be refunded in the Nov payroll batch. Bank wire trace confirmed with HDFC."
+                  placeholder="State official reason for approval, specific dates verified, and transaction audit trails..."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none leading-relaxed"
                 />
               </div>
@@ -3320,12 +3538,13 @@ export default function AccountsCoordinatorPage() {
                       if (!selectedInquiry) return;
                       setIsResolvingInquiry(true);
                       try {
+                        const note = `[Query Rejected] ${inquiryResolutionNotes.trim()}`;
                         const updated = await api.resolveSalaryInquiry(selectedInquiry.id, {
                           status: 'Rejected',
-                          resolution_notes: inquiryResolutionNotes.trim(),
+                          resolution_notes: note,
                           resolved_by: 'Mr. Arvind Krishnan (Accounts Coordinator)'
                         });
-                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Rejected', resolution_notes: inquiryResolutionNotes.trim() }) : i));
+                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Rejected', resolution_notes: note }) : i));
                         setSelectedInquiry(null);
                         triggerToast(`Query #${selectedInquiry.id} marked as Rejected.`);
                       } finally {
@@ -3344,22 +3563,28 @@ export default function AccountsCoordinatorPage() {
                       if (!selectedInquiry) return;
                       setIsResolvingInquiry(true);
                       try {
+                        const actionPrefix = inquiryActionType === 'ARREAR_NEXT_MONTH'
+                          ? `[Arrear Queued: +₹${inquiryAdjustmentAmount.toLocaleString('en-IN')}] `
+                          : inquiryActionType === 'DIRECT_PAYMENT'
+                            ? `[Direct Reimbursement: ₹${inquiryAdjustmentAmount.toLocaleString('en-IN')}] `
+                            : '[Policy Clarification] ';
+                        const finalNotes = `${actionPrefix}${inquiryResolutionNotes.trim()}`;
                         const updated = await api.resolveSalaryInquiry(selectedInquiry.id, {
                           status: 'Resolved',
-                          resolution_notes: inquiryResolutionNotes.trim(),
+                          resolution_notes: finalNotes,
                           resolved_by: 'Mr. Arvind Krishnan (Accounts Coordinator)'
                         });
-                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Resolved', resolution_notes: inquiryResolutionNotes.trim() }) : i));
+                        setSalaryInquiries(prev => prev.map(i => i.id === selectedInquiry.id ? (updated || { ...i, status: 'Resolved', resolution_notes: finalNotes }) : i));
                         setSelectedInquiry(null);
-                        triggerToast(`Query #${selectedInquiry.id} successfully Resolved and notification dispatched to teacher!`);
+                        triggerToast(`Query #${selectedInquiry.id} resolved with ${inquiryActionType === 'ARREAR_NEXT_MONTH' ? `+₹${inquiryAdjustmentAmount} arrear queued` : 'audit clearance'}!`);
                       } finally {
                         setIsResolvingInquiry(false);
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-sm disabled:opacity-50 flex items-center gap-1.5"
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>{isResolvingInquiry ? 'Resolving...' : 'Confirm Resolution'}</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Confirm Resolution</span>
                   </button>
                 </div>
               </div>
@@ -3745,6 +3970,139 @@ Accounts & Finance Office`}
                 Confirm Wire Payment &amp; Mark Paid
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Reconciliation Confirmation Modal Card */}
+      {showBulkReconcileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b pb-4 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Confirm Batch Bank Reconciliation
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Statutory Current Account Ledger Clearance &amp; Verification Gate
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isReconcilingBulk && setShowBulkReconcileModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Confirmation Alert Card */}
+            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-black text-sm">
+                <span>⚠️ Do you really want to reconcile all pending transactions?</span>
+              </div>
+              <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
+                This action will permanently verify and reconcile <strong className="font-bold underline">{pendingTransactions.length} pending transactions</strong> against the school current account bank statement. Once reconciled, audit timestamps are generated and transactions are locked into the statutory CBSE balance sheet.
+              </p>
+            </div>
+
+            {/* Reconciliation Scope Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pending Items</div>
+                <div className="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                  {pendingTransactions.length} <span className="text-xs font-normal text-slate-500">records</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Settlement</div>
+                <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
+                  ₹{pendingTotalAmount.toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 col-span-2 sm:col-span-1">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Settlement Account</div>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
+                  ICICI Bank (A/c #9021)
+                </div>
+              </div>
+            </div>
+
+            {/* Transaction Preview Table / List */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Transactions Queued for Verification ({pendingTransactions.length})</span>
+                <span className="text-[10px] text-slate-500">Scroll to view all</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-xs">
+                {pendingTransactions.map(tx => (
+                  <div key={tx.id} className="p-2.5 flex items-center justify-between gap-3 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 dark:text-white truncate">
+                        {tx.student_name} <span className="text-slate-400 font-normal">({tx.class_name})</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono truncate">
+                        UTR: {tx.utr_number} • {tx.payment_method}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-mono font-bold text-slate-900 dark:text-white">
+                        ₹{(tx.amount || 0).toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                        Pending Verification
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Security Audit & Officer Designation */}
+            <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-300">
+              <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+              <div className="text-[11px]">
+                Reconciling Officer: <strong className="font-bold text-slate-900 dark:text-white">Mr. Arvind Krishnan (Senior Accounts Officer)</strong>. Immutable security audit record will be registered in compliance with statutory financial reporting.
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isReconcilingBulk}
+                onClick={() => setShowBulkReconcileModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel &amp; Keep Pending
+              </button>
+              <button
+                type="button"
+                disabled={isReconcilingBulk || pendingTransactions.length === 0}
+                onClick={handleConfirmBulkReconcile}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isReconcilingBulk ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Reconciling {pendingTransactions.length} Items...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck className="h-4 w-4" />
+                    <span>Confirm &amp; Reconcile All ({pendingTransactions.length} Items • ₹{pendingTotalAmount.toLocaleString('en-IN')})</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

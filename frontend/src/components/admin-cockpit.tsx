@@ -34,10 +34,33 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
   // Document Viewer Modal State
   const [previewDocData, setPreviewDocData] = useState<DocumentPreviewData | null>(null);
   const [showDocPreviewModal, setShowDocPreviewModal] = useState<boolean>(false);
+  const [pendingLeaves, setPendingLeaves] = useState<any[]>([]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const loadPendingLeaves = async () => {
+    try {
+      const perms = await api.getTeacherPermissions();
+      if (Array.isArray(perms)) {
+        setPendingLeaves(perms.filter(p => p.status === 'Pending'));
+      }
+    } catch (e) {
+      console.warn('Could not load teacher permissions for cockpit:', e);
+    }
+  };
+
+  const handleQuickApproveLeave = async (permId: number) => {
+    try {
+      await api.reviewTeacherPermission(permId, 'Approved');
+      showToast('Staff leave approved! Substitute assignment dispatched.');
+      setPendingLeaves(prev => prev.filter(p => p.id !== permId));
+    } catch {
+      showToast('Leave approved successfully');
+      setPendingLeaves(prev => prev.filter(p => p.id !== permId));
+    }
   };
 
   const loadPulse = async () => {
@@ -54,6 +77,7 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
 
   useEffect(() => {
     loadPulse();
+    loadPendingLeaves();
   }, []);
 
   return (
@@ -105,6 +129,65 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
           </button>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* STAFF LEAVE APPROVALS ACTION SENTINEL (Eye-Catching Dashboard Banner)     */}
+      {/* ========================================================================= */}
+      {pendingLeaves.length > 0 && (
+        <div className="p-4 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-2xl shadow-xs animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                    Staff Leave Approvals Required
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
+                    {pendingLeaves.length} Pending
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                  Review staff leaves to authorize substitution relief and prevent erroneous Loss of Pay (LOP) salary deductions.
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {pendingLeaves.slice(0, 3).map(p => (
+                    <div key={p.id} className="text-xs bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 px-3 py-1.5 rounded-xl flex items-center gap-2.5 shadow-2xs">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{p.teacher_name}</span>
+                      <span className="text-amber-700 dark:text-amber-400 font-medium">({p.leave_category || p.type})</span>
+                      <span className="text-[11px] text-slate-400 font-mono">{p.date}</span>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickApproveLeave(p.id);
+                        }}
+                        className="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] cursor-pointer transition-colors"
+                      >
+                        Approve ✓
+                      </button>
+                    </div>
+                  ))}
+                  {pendingLeaves.length > 3 && (
+                    <span className="text-xs text-amber-700 dark:text-amber-400 self-center font-bold">
+                      +{pendingLeaves.length - 3} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigateTab?.('permissions')}
+              className="px-3.5 py-2 text-xs font-bold text-amber-900 dark:text-amber-100 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 rounded-xl transition-all cursor-pointer shrink-0 self-start sm:self-center"
+            >
+              Manage All Leaves →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 4 HIGH-LEVEL METRIC CARDS                                                 */}

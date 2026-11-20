@@ -114,15 +114,22 @@ async def get_notifications(
     conditions = []
     
     if user_id is not None and role:
-        # Match user ID specifically or match role-wide notification
+        # Match user ID specifically or match role-wide notification (including "all")
         conditions.append(or_(
             Notification.recipient_user_id == user_id,
-            and_(Notification.recipient_role == role, Notification.recipient_user_id.is_(None))
+            Notification.recipient_role == role,
+            Notification.recipient_role == "all"
         ))
     elif user_id is not None:
-        conditions.append(Notification.recipient_user_id == user_id)
+        conditions.append(or_(
+            Notification.recipient_user_id == user_id,
+            Notification.recipient_role == "all"
+        ))
     elif role:
-        conditions.append(Notification.recipient_role == role)
+        conditions.append(or_(
+            Notification.recipient_role == role,
+            Notification.recipient_role == "all"
+        ))
 
     if unread_only:
         conditions.append(Notification.is_read == False)

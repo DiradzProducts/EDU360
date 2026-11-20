@@ -43,6 +43,8 @@ export function NotificationCenter({
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'FEES' | 'ACADEMIC' | 'EXAMS' | 'TASKS'>('ALL');
+  const [liveToast, setLiveToast] = useState<NotificationItem | null>(null);
   const [loading, setLoading] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
@@ -58,26 +60,66 @@ export function NotificationCenter({
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 20000); // Poll every 20s
+    const interval = setInterval(fetchNotifications, 15000); // Poll every 15s
 
-    // Real-time synchronization for Coordinator Exam Schedules & Duty Allocations
-    let channel: BroadcastChannel | null = null;
-    try {
-      if (typeof window !== 'undefined') {
-        channel = new BroadcastChannel('edu360_exam_live_channel');
-        channel.onmessage = (e) => {
+    // Real-time synchronization for Exam Schedules & Duty Allocations
+    let examChannel: BroadcastChannel | null = null;
+    let globalChannel: BroadcastChannel | null = null;
+
+    const handleIncomingNotif = (notif: NotificationItem) => {
+      const currentRole = role?.toLowerCase();
+      const targetRole = notif.recipient_role?.toLowerCase();
+      if (!targetRole || targetRole === 'all' || targetRole === currentRole || (userId && notif.recipient_user_id === userId)) {
+        fetchNotifications();
+        if (notif.priority === 'CRITICAL' || notif.priority === 'URGENT') {
+          setLiveToast(notif);
+        }
+      }
+    };
+
+    const handleCustomEvent = (e: any) => {
+      if (e.detail) handleIncomingNotif(e.detail);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('edu360_notification_event', handleCustomEvent);
+
+      try {
+        examChannel = new BroadcastChannel('edu360_exam_live_channel');
+        examChannel.onmessage = (e) => {
           if (e.data?.type === 'EXAM_SCHEDULED' || e.data?.type === 'DUTY_ASSIGNED' || e.data?.type === 'HALL_TICKETS_RELEASED') {
             fetchNotifications();
           }
         };
-      }
-    } catch {}
+      } catch {}
+
+      try {
+        globalChannel = new BroadcastChannel('edu360_global_notifications');
+        globalChannel.onmessage = (e) => {
+          if (e.data?.notification) {
+            handleIncomingNotif(e.data.notification);
+          }
+        };
+      } catch {}
+    }
 
     return () => {
       clearInterval(interval);
-      if (channel) channel.close();
+      if (examChannel) examChannel.close();
+      if (globalChannel) globalChannel.close();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('edu360_notification_event', handleCustomEvent);
+      }
     };
   }, [userId, role]);
+
+  // Auto-dismiss live toast banner after 7 seconds
+  useEffect(() => {
+    if (liveToast) {
+      const timer = setTimeout(() => setLiveToast(null), 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveToast]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -124,6 +166,9 @@ export function NotificationCenter({
       } else {
         router.push(notif.action_url);
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('edu360-navigate-url', { detail: notif.action_url }));
+      }
     }
   };
 
@@ -145,9 +190,32 @@ export function NotificationCenter({
     }
   };
 
-  const filteredNotifications = activeTab === 'unread' 
-    ? notifications.filter(n => !n.is_read)
-    : notifications;
+  const filteredNotifications = notifications.filter(n => {
+    if (activeTab === 'unread' && n.is_read) return false;
+    if (role === 'admin') {
+      if (categoryFilter === 'FEES') {
+        const t = (n.notification_type || '').toLowerCase();
+        const txt = (n.title + ' ' + n.message).toLowerCase();
+        return t.includes('fee') || t.includes('payment') || t.includes('invoice') || txt.includes('fee') || txt.includes('payment') || txt.includes('bursar');
+      }
+      if (categoryFilter === 'ACADEMIC') {
+        const t = (n.notification_type || '').toLowerCase();
+        const txt = (n.title + ' ' + n.message).toLowerCase();
+        return t.includes('homework') || t.includes('remedial') || t.includes('proxy') || t.includes('class') || txt.includes('homework') || txt.includes('class') || txt.includes('remedial');
+      }
+      if (categoryFilter === 'EXAMS') {
+        const t = (n.notification_type || '').toLowerCase();
+        const txt = (n.title + ' ' + n.message).toLowerCase();
+        return t.includes('exam') || t.includes('qp') || t.includes('gradebook') || t.includes('moderation') || txt.includes('exam') || txt.includes('admit') || txt.includes('timetable');
+      }
+      if (categoryFilter === 'TASKS') {
+        const t = (n.notification_type || '').toLowerCase();
+        const txt = (n.title + ' ' + n.message).toLowerCase();
+        return t.includes('task') || t.includes('leave') || t.includes('enquiry') || txt.includes('task') || txt.includes('sla') || txt.includes('leave');
+      }
+    }
+    return true;
+  });
 
   const getTypeIcon = (type: string, priority: string) => {
     if (priority === 'CRITICAL') {
@@ -284,6 +352,26 @@ export function NotificationCenter({
             </button>
           </div>
 
+          {/* Category Chips - Displayed exclusively for Admin role */}
+          {role === 'admin' && (
+            <div className="px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-[10px]">
+              {(['ALL', 'FEES', 'ACADEMIC', 'EXAMS', 'TASKS'] as const).map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`px-2 py-0.5 rounded-full font-bold transition-all shrink-0 cursor-pointer ${
+                    categoryFilter === cat
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {cat === 'ALL' ? 'All Alerts' : cat.charAt(0) + cat.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Notifications List */}
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
             {filteredNotifications.length === 0 ? (
@@ -361,6 +449,48 @@ export function NotificationCenter({
             </span>
           </div>
 
+        </div>
+      )}
+
+      {/* Real-time Interactive Floating Banner for Urgent Alerts */}
+      {liveToast && (
+        <div className="fixed top-18 right-6 z-50 max-w-sm w-full bg-slate-900/95 dark:bg-slate-900/95 text-white p-4 rounded-3xl border-2 border-rose-500 shadow-2xl backdrop-blur-md animate-in slide-in-from-top-4 duration-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 shrink-0">
+              <AlertOctagon className="h-5 w-5 animate-bounce" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-400">
+                  {liveToast.priority || 'URGENT'} ALERT
+                </span>
+                <button
+                  onClick={() => setLiveToast(null)}
+                  className="text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <h4 className="text-xs font-black truncate">{liveToast.title}</h4>
+              <p className="text-[11px] text-slate-300 line-clamp-2 leading-tight">
+                {liveToast.message}
+              </p>
+              {liveToast.action_url && (
+                <div className="pt-1.5 flex justify-end">
+                  <button
+                    onClick={() => {
+                      handleItemClick(liveToast);
+                      setLiveToast(null);
+                    }}
+                    className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <span>View Details</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

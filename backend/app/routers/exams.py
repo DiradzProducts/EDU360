@@ -1269,45 +1269,76 @@ async def list_exam_schedules(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    List all examination schedules with hall deployment & academic clearance status.
-    Ordered by latest created first (id desc) so newly scheduled exams appear immediately.
+    List all examination schedules with hall deployment, academic clearance & batch metadata.
+    Ordered chronologically by exam_date and start_time so batch timetables read naturally.
     """
     query = select(ExamSchedule)
     if class_name:
-        query = query.where(ExamSchedule.class_name == class_name)
+        base_class = class_name.split("-")[0].strip()
+        query = query.where(or_(
+            ExamSchedule.class_name == class_name,
+            ExamSchedule.class_name == base_class,
+            ExamSchedule.class_name.ilike(f"%{base_class}%")
+        ))
     if section:
-        query = query.where(ExamSchedule.section == section)
-    res = await db.execute(query.order_by(ExamSchedule.id.desc()))
+        query = query.where(or_(
+            ExamSchedule.section == section,
+            ExamSchedule.section.ilike(f"%{section}%"),
+            ExamSchedule.section.in_(["A & B", "A, B", "All", "Both", "Combined", "ALL", "A and B", "A,B"])
+        ))
+    res = await db.execute(query.order_by(ExamSchedule.exam_date.asc(), ExamSchedule.start_time.asc(), ExamSchedule.id.asc()))
     schedules = res.scalars().all()
+    
+    formatted_schedules = []
+    for s in schedules:
+        raw_title = s.title or ""
+        inferred_series = getattr(s, "series_name", None)
+        if not inferred_series:
+            if " - " in raw_title:
+                inferred_series = raw_title.split(" - ", 1)[1].strip()
+            elif ": " in raw_title:
+                inferred_series = raw_title.split(": ", 1)[1].strip()
+            else:
+                inferred_series = raw_title or "General Assessment"
+
+        inferred_type = getattr(s, "schedule_type", None) or ("BATCH" if (" - " in raw_title or ": " in raw_title) else "SINGLE")
+        inferred_batch_id = getattr(s, "batch_id", None)
+        if not inferred_batch_id and inferred_type == "BATCH":
+            clean_class = (s.class_name or "ALL").replace(" ", "").replace(",", "_")
+            clean_series = inferred_series.replace(" ", "_")
+            inferred_batch_id = f"BATCH-{clean_class}-{clean_series}"
+
+        formatted_schedules.append({
+            "id": s.id,
+            "exam_id": s.exam_id,
+            "question_paper_id": s.question_paper_id,
+            "question_paper_title": s.question_paper_title,
+            "status": getattr(s, "status", "Scheduled"),
+            "lifecycle_status": compute_schedule_lifecycle(s.exam_date, s.start_time, s.end_time),
+            "title": s.title,
+            "series_name": inferred_series,
+            "batch_id": inferred_batch_id,
+            "schedule_type": inferred_type,
+            "subject": s.subject,
+            "class_name": s.class_name,
+            "section": getattr(s, "section", "A & B") or "A & B",
+            "exam_mode": getattr(s, "exam_mode", "MODE_HYBRID_SCAN") or "MODE_HYBRID_SCAN",
+            "exam_date": s.exam_date,
+            "start_time": s.start_time,
+            "end_time": s.end_time,
+            "hall_name": s.hall_name,
+            "capacity": s.capacity,
+            "chief_invigilator_name": s.chief_invigilator_name,
+            "duration_minutes": getattr(s, "duration_minutes", 180) or 180,
+            "total_marks": 100,
+            "academic_clearance": s.academic_clearance,
+            "academic_clearance_notes": s.academic_clearance_notes,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        })
+
     return {
         "success": True,
-        "schedules": [
-            {
-                "id": s.id,
-                "exam_id": s.exam_id,
-                "question_paper_id": s.question_paper_id,
-                "question_paper_title": s.question_paper_title,
-                "status": getattr(s, "status", "Scheduled"),
-                "lifecycle_status": compute_schedule_lifecycle(s.exam_date, s.start_time, s.end_time),
-                "title": s.title,
-                "subject": s.subject,
-                "class_name": s.class_name,
-                "section": getattr(s, "section", "B"),
-                "exam_mode": getattr(s, "exam_mode", "MODE_HYBRID_SCAN") or "MODE_HYBRID_SCAN",
-                "exam_date": s.exam_date,
-                "start_time": s.start_time,
-                "end_time": s.end_time,
-                "hall_name": s.hall_name,
-                "capacity": s.capacity,
-                "chief_invigilator_name": s.chief_invigilator_name,
-                "duration_minutes": getattr(s, "duration_minutes", 180) or 180,
-                "total_marks": 100,
-                "academic_clearance": s.academic_clearance,
-                "academic_clearance_notes": s.academic_clearance_notes,
-                "created_at": s.created_at.isoformat() if s.created_at else None
-            }
-            for s in schedules
-        ]
+        "schedules": formatted_schedules
     }
 
 @router.post("/schedules/create")
@@ -1344,6 +1375,9 @@ async def create_exam_schedule(
         question_paper_title=req.question_paper_title,
         status="Scheduled",
         title=exam_title,
+        series_name=req.title or f"{req.subject} Single Slot Assessment",
+        batch_id=None,
+        schedule_type="SINGLE",
         subject=req.subject,
         class_name=req.class_name,
         section=req.section or "B",
@@ -1486,6 +1520,7 @@ class BatchClassSlotItem(BaseModel):
 
 class BatchClassScheduleRequest(BaseModel):
     class_name: str
+    section: Optional[str] = "A & B"
     series_name: str = "Term 1 Final Examination 2026"
     slots: List[BatchClassSlotItem]
 
@@ -1497,12 +1532,22 @@ async def create_batch_class_schedules(
     """
     Exam Coordinator schedules all exams for a chosen class in one atomic batch.
     """
+    import re
+    cleaned_class = re.sub(r'[^a-zA-Z0-9]', '', req.class_name).upper()
+    cleaned_section = re.sub(r'[^a-zA-Z0-9]', '', req.section or "AB").upper()
+    cleaned_series = re.sub(r'[^a-zA-Z0-9]', '', req.series_name).upper()
+    batch_uid = f"BATCH-{cleaned_class}{cleaned_section}-{cleaned_series}-{int(datetime.datetime.utcnow().timestamp())}"
+
     created_ids = []
     for slot in req.slots:
         sched = ExamSchedule(
             title=f"{slot.subject} - {req.series_name}",
+            series_name=req.series_name,
+            batch_id=batch_uid,
+            schedule_type="BATCH",
             subject=slot.subject,
             class_name=req.class_name,
+            section=req.section or "A & B",
             exam_date=slot.exam_date,
             start_time=slot.start_time,
             end_time=slot.end_time,
@@ -1578,7 +1623,8 @@ async def create_batch_class_schedules(
     return {
         "success": True,
         "message": f"Successfully created {len(created_ids)} exam schedules for {req.class_name}.",
-        "schedule_ids": created_ids
+        "schedule_ids": created_ids,
+        "batch_id": batch_uid
     }
 
 @router.get("/submissions/summary")

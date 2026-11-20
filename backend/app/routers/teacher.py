@@ -534,21 +534,125 @@ _my_permissions = [
     }
 ]
 
+_teacher_attendance_today = {
+    "checked_in": False,
+    "check_in_time": None,
+    "check_out_time": None,
+    "status": "Not Checked In",
+    "date": datetime.date.today().strftime("%Y-%m-%d")
+}
+
+@router.get("/attendance/today")
+async def get_teacher_attendance_today(db: AsyncSession = Depends(get_db)):
+    """Returns today's teacher check-in status."""
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    try:
+        from app.models.models import StaffAttendanceDaily
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if rec:
+            return {
+                "checked_in": True,
+                "check_in_time": rec.check_in_time,
+                "check_out_time": rec.check_out_time,
+                "status": rec.status,
+                "date": today_str
+            }
+    except Exception:
+        pass
+    return _teacher_attendance_today
+
+@router.post("/attendance/check-in")
+async def teacher_check_in(req: dict = None, db: AsyncSession = Depends(get_db)):
+    """1-Click daily teacher morning check-in."""
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    _teacher_attendance_today["checked_in"] = True
+    _teacher_attendance_today["check_in_time"] = now_time
+    _teacher_attendance_today["status"] = "Present"
+    _teacher_attendance_today["date"] = today_str
+
+    try:
+        from app.models.models import StaffAttendanceDaily, StaffMember
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if not rec:
+            rec = StaffAttendanceDaily(
+                staff_id=1,
+                staff_name="Mrs. Ananya Verma",
+                attendance_date=today_str,
+                check_in_time=now_time,
+                status="Present"
+            )
+            db.add(rec)
+        else:
+            rec.check_in_time = now_time
+            rec.status = "Present"
+        
+        await db.execute(
+            update(StaffMember)
+            .where(StaffMember.id == 1)
+            .values(attendance_status="Present")
+        )
+        await db.commit()
+    except Exception as ex:
+        print("Attendance check-in persist warning:", ex)
+
+    return {"success": True, "message": f"Checked in successfully at {now_time}", "data": _teacher_attendance_today}
+
+@router.post("/attendance/check-out")
+async def teacher_check_out(req: dict = None, db: AsyncSession = Depends(get_db)):
+    """1-Click daily teacher evening check-out."""
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    _teacher_attendance_today["check_out_time"] = now_time
+
+    try:
+        from app.models.models import StaffAttendanceDaily
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if rec:
+            rec.check_out_time = now_time
+            await db.commit()
+    except Exception as ex:
+        print("Attendance check-out persist warning:", ex)
+
+    return {"success": True, "message": f"Checked out successfully at {now_time}", "data": _teacher_attendance_today}
+
 @router.get("/my-permissions")
 async def get_my_permissions():
     return _my_permissions
 
 @router.post("/apply-permission")
 async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)):
+    leave_cat = req.get("leave_category") or req.get("type") or "Casual Leave (CL)"
+    tot_days = int(req.get("total_days", 1) or 1)
     new_perm = {
         "id": len(_my_permissions) + 10,
         "teacher_name": req.get("teacher_name", "Mrs. Ananya Verma"),
-        "type": req.get("type", "Short Permission (1 hr)"),
+        "type": leave_cat,
+        "leave_category": leave_cat,
+        "total_days": tot_days,
         "reason": req.get("reason", "Personal errand"),
         "status": "Pending",
         "date": req.get("date", "Tomorrow"),
-        "shift": req.get("shift", "Morning Shift (08:30 AM - 12:30 PM)"),
-        "affected_periods": req.get("affected_periods", "Period 2 & Period 4"),
+        "shift": req.get("shift", "Full Day"),
+        "affected_periods": req.get("affected_periods", "All Scheduled Periods"),
         "suggested_substitute": req.get("suggested_substitute", "Mrs. Neha Roy (TGT Science)"),
         "applied_at": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
     }
@@ -561,6 +665,8 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
             "id": new_perm["id"],
             "teacher_name": new_perm["teacher_name"],
             "type": new_perm["type"],
+            "leave_category": leave_cat,
+            "total_days": tot_days,
             "reason": new_perm["reason"],
             "status": "Pending",
             "date": new_perm["date"],
@@ -578,10 +684,12 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
             staff_id=1,
             staff_name=new_perm["teacher_name"],
             role="Teacher",
-            permission_type=new_perm["type"],
+            permission_type=leave_cat,
+            leave_category=leave_cat,
+            total_days=tot_days,
             from_date=new_perm["date"],
             to_date=new_perm["date"],
-            affected_periods=new_perm.get("affected_periods", "General Periods"),
+            affected_periods=new_perm.get("affected_periods", "All Scheduled Periods"),
             reason=new_perm["reason"],
             status="Pending"
         )

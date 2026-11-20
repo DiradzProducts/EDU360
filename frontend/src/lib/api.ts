@@ -1503,51 +1503,307 @@ let fallbackReExamRequests: ReExamRequestItem[] = [
 
 
 let fallbackNotifications: any[] = [
-
+  // --- Accounts Coordinator Notifications ---
   {
-
-    id: 1,
-
-    title: 'Term 1 Timetable Published',
-
-    message: 'CBSE Term 1 final examinations timetable has been officially released by Examination Cell.',
-
-    recipient_role: 'parent',
-
-    sender_name: 'Examination Cell',
-
-    sender_role: 'exam_coordinator',
-
+    id: 101,
+    title: 'Online Fee Payment Received: ₹25,000',
+    message: 'Instant UPI settlement verified for Kabir Mehta (Class 8-A). Ref: UPI/20261028/ICICI. Receipt issued.',
+    recipient_role: 'accounts_coordinator',
+    sender_name: 'Online Payment Gateway',
+    sender_role: 'system',
     priority: 'Normal',
-
+    notification_type: 'PAYMENT_RECEIVED',
+    action_url: '/accounts_coordinator?tab=reconciliation',
     is_read: false,
-
-    created_at: '2026-10-27T10:00:00Z'
-
+    created_at: new Date(Date.now() - 15 * 60000).toISOString()
+  },
+  {
+    id: 102,
+    title: 'High-Value Vendor Invoice Pending Authorization',
+    message: 'Vendor invoice #INV-2026-089 from Bharat Petroleum (₹72,400) awaits wire transfer approval.',
+    recipient_role: 'accounts_coordinator',
+    sender_name: 'Mrs. Shalini Rao (Store Lead)',
+    sender_role: 'inventory_coordinator',
+    priority: 'URGENT',
+    notification_type: 'INVOICE_PENDING',
+    action_url: '/accounts_coordinator?tab=payables',
+    is_read: false,
+    created_at: new Date(Date.now() - 65 * 60000).toISOString()
+  },
+  {
+    id: 103,
+    title: 'Exam Hall Ticket Hold Applied: 4 Overdue Accounts',
+    message: 'Statutory hold applied for 4 student examination dockets pending Milestone 2 fee clearance.',
+    recipient_role: 'accounts_coordinator',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'CRITICAL',
+    notification_type: 'EXAM_HOLD_TRIGGERED',
+    action_url: '/accounts_coordinator?tab=defaulters',
+    is_read: true,
+    created_at: new Date(Date.now() - 180 * 60000).toISOString()
   },
 
+  // --- Admissions & SIS Coordinator Notifications ---
   {
-
-    id: 2,
-
-    title: 'Admit Cards Active',
-
-    message: 'Digital Admit cards are available in the portal for all registered candidates.',
-
-    recipient_role: 'parent',
-
-    sender_name: 'Dr. Radhakrishnan (Principal)',
-
-    sender_role: 'admin',
-
+    id: 201,
+    title: 'New Prospective Enrolment Enquiry: Class 8-B',
+    message: 'Online enquiry received from parent Dr. Amit Deshmukh for student Tanvi Deshmukh. Immediate follow-up required.',
+    recipient_role: 'admissions_coordinator',
+    sender_name: 'Admissions Web Desk',
+    sender_role: 'system',
     priority: 'Normal',
-
+    notification_type: 'NEW_ENQUIRY',
+    action_url: '/admissions_coordinator?tab=crm',
+    is_read: false,
+    created_at: new Date(Date.now() - 25 * 60000).toISOString()
+  },
+  {
+    id: 202,
+    title: 'Incoming TC 30-Day Window: 2 Days Left for Rahul Rehaman',
+    message: 'Mandatory Transfer Certificate submission window closing in 48 hours for provisional SIS admission.',
+    recipient_role: 'admissions_coordinator',
+    sender_name: 'SIS Document Vault',
+    sender_role: 'system',
+    priority: 'CRITICAL',
+    notification_type: 'TC_EXPIRING',
+    action_url: '/admissions_coordinator?tab=documents',
+    is_read: false,
+    created_at: new Date(Date.now() - 90 * 60000).toISOString()
+  },
+  {
+    id: 203,
+    title: 'VIP Management Referral: Ananya Kulkarni',
+    message: 'Direct executive referral registered by Principal Desk. Prioritize campus tour & academic evaluation.',
+    recipient_role: 'admissions_coordinator',
+    sender_name: 'Dr. Sunita Kapoor (Principal)',
+    sender_role: 'admin',
+    priority: 'URGENT',
+    notification_type: 'VIP_REFERRAL',
+    action_url: '/admissions_coordinator?tab=crm',
     is_read: true,
+    created_at: new Date(Date.now() - 240 * 60000).toISOString()
+  },
 
-    created_at: '2026-10-26T09:30:00Z'
+  // --- Teacher / Faculty Notifications ---
+  {
+    id: 301,
+    title: 'Proxy Substitution Assigned: Period 3 (Class 8-B)',
+    message: 'Allocated to cover Period 3 Mathematics in Room 204 for absent teacher Dr. K. Raman.',
+    recipient_role: 'teacher',
+    sender_name: 'Prof. Rajeshwari Nair',
+    sender_role: 'academic_coordinator',
+    priority: 'CRITICAL',
+    notification_type: 'PROXY_ASSIGNED',
+    action_url: '/teacher?tab=schedule',
+    is_read: false,
+    created_at: new Date(Date.now() - 10 * 60000).toISOString()
+  },
+  {
+    id: 302,
+    title: 'Remedial Rough Work Submitted: Aarav Sharma (Day 2)',
+    message: 'Student has uploaded notebook scratch work for Polynomial Long Division. SpeedGrader ready for verification.',
+    recipient_role: 'teacher',
+    sender_name: 'Remedial Engine',
+    sender_role: 'system',
+    priority: 'URGENT',
+    notification_type: 'REMEDIAL_SUBMISSION',
+    action_url: '/teacher?tab=focus_table',
+    is_read: false,
+    created_at: new Date(Date.now() - 40 * 60000).toISOString()
+  },
+  {
+    id: 303,
+    title: 'Medical Leave Request: Kabir Mehta (Class 8-A)',
+    message: 'Parent Mr. Suresh Mehta has applied for 2 days medical leave with doctor certificate attachment.',
+    recipient_role: 'teacher',
+    sender_name: 'Mr. Suresh Mehta (Parent)',
+    sender_role: 'parent',
+    priority: 'Normal',
+    notification_type: 'LEAVE_REQUEST',
+    action_url: '/teacher?tab=leave_approvals',
+    is_read: false,
+    created_at: new Date(Date.now() - 120 * 60000).toISOString()
+  },
+  {
+    id: 304,
+    title: 'Term 1 Mathematics Blueprint Commissioned',
+    message: 'Designated as Lead Paper Setter for CBSE Class 8 Mathematics. Final draft due within 5 days.',
+    recipient_role: 'teacher',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'Normal',
+    notification_type: 'QP_ASSIGNED',
+    action_url: '/teacher?tab=exams_gradebook',
+    is_read: true,
+    created_at: new Date(Date.now() - 300 * 60000).toISOString()
+  },
 
+  // --- Admin / Principal Notifications ---
+  {
+    id: 401,
+    title: 'Staff Task Escalated: Physics Lab Equipment Requisition',
+    message: 'Operational task #TASK-098 breached 48h SLA without resolution. Principal intervention requested.',
+    recipient_role: 'admin',
+    sender_name: 'Operations Cockpit',
+    sender_role: 'system',
+    priority: 'CRITICAL',
+    notification_type: 'TASK_ESCALATED',
+    action_url: '/admin?tab=tasks',
+    is_read: false,
+    created_at: new Date(Date.now() - 20 * 60000).toISOString()
+  },
+  {
+    id: 402,
+    title: 'Monthly Staff Payroll Batch Ready for Executive Sign-off',
+    message: 'November 2026 payroll run (42 staff members • ₹18,45,000) verified by Bursar. Signature required.',
+    recipient_role: 'admin',
+    sender_name: 'Mr. Arvind Krishnan',
+    sender_role: 'accounts_coordinator',
+    priority: 'URGENT',
+    notification_type: 'PAYROLL_READY',
+    action_url: '/accounts_coordinator?tab=payroll',
+    is_read: false,
+    created_at: new Date(Date.now() - 85 * 60000).toISOString()
+  },
+  {
+    id: 403,
+    title: 'Question Paper Sealed in Strongroom Vault',
+    message: 'Class 8-B Term 1 Final Mathematics question paper locked in vault with dual-custody digital seal.',
+    recipient_role: 'admin',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'Normal',
+    notification_type: 'QP_IN_VAULT',
+    action_url: '/exam_coordinator?tab=vault',
+    is_read: true,
+    created_at: new Date(Date.now() - 200 * 60000).toISOString()
+  },
+
+  // --- Exam Coordinator Notifications ---
+  {
+    id: 501,
+    title: 'Gradebook Submitted & Sealed: Class 8-B Mathematics',
+    message: 'Faculty Mrs. Ananya Verma submitted final internal marks for 32 students. Ready for statistical normalization.',
+    recipient_role: 'exam_coordinator',
+    sender_name: 'Mrs. Ananya Verma',
+    sender_role: 'teacher',
+    priority: 'Normal',
+    notification_type: 'GRADEBOOK_SEALED',
+    action_url: '/exam_coordinator?tab=moderation',
+    is_read: false,
+    created_at: new Date(Date.now() - 35 * 60000).toISOString()
+  },
+  {
+    id: 502,
+    title: 'Question Paper Draft Submitted for Moderation',
+    message: 'Draft question paper for Class 8 Science submitted by Dr. K. Raman. Review rubric compliance.',
+    recipient_role: 'exam_coordinator',
+    sender_name: 'Dr. K. Raman',
+    sender_role: 'teacher',
+    priority: 'URGENT',
+    notification_type: 'QP_SUBMITTED',
+    action_url: '/exam_coordinator?tab=vault',
+    is_read: false,
+    created_at: new Date(Date.now() - 95 * 60000).toISOString()
+  },
+
+  // --- Student Portal Notifications ---
+  {
+    id: 601,
+    title: 'Live Mathematics Class Starting in 10 Mins',
+    message: 'Algebraic Expressions & Identities session with Mrs. Ananya Verma starts at 10:00 AM on LiveKit.',
+    recipient_role: 'student',
+    sender_name: 'Live Class Engine',
+    sender_role: 'system',
+    priority: 'CRITICAL',
+    notification_type: 'LIVE_CLASS_COUNTDOWN',
+    action_url: '/student?tab=classes',
+    is_read: false,
+    created_at: new Date(Date.now() - 5 * 60000).toISOString()
+  },
+  {
+    id: 602,
+    title: 'New Homework Assigned: Chapter 4 Factorization',
+    message: '5 problems assigned with due date this Friday, 5:00 PM. Submit notebook scans on portal.',
+    recipient_role: 'student',
+    sender_name: 'Mrs. Ananya Verma',
+    sender_role: 'teacher',
+    priority: 'URGENT',
+    notification_type: 'HOMEWORK_ASSIGNED',
+    action_url: '/student?tab=homework',
+    is_read: false,
+    created_at: new Date(Date.now() - 50 * 60000).toISOString()
+  },
+  {
+    id: 603,
+    title: 'Official Term 1 Admit Card Released for Download',
+    message: 'Examination Roll No: ADM-2026-0819. Download official hall ticket docket with school stamp.',
+    recipient_role: 'student',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'Normal',
+    notification_type: 'ADMIT_CARD_ACTIVE',
+    action_url: '/student?tab=exams',
+    is_read: true,
+    created_at: new Date(Date.now() - 220 * 60000).toISOString()
+  },
+
+  // --- Parent Portal Notifications ---
+  {
+    id: 701,
+    title: 'Fee Payment Receipt Generated: ₹25,000',
+    message: 'Official fee payment received for Aarav Sharma (Class 8-B). Receipt #REC-COUNTER-2026 available.',
+    recipient_role: 'parent',
+    sender_name: 'Bursar Desk',
+    sender_role: 'accounts_coordinator',
+    priority: 'Normal',
+    notification_type: 'PAYMENT_RECEIVED',
+    action_url: '/parent?tab=fees',
+    is_read: false,
+    created_at: new Date(Date.now() - 12 * 60000).toISOString()
+  },
+  {
+    id: 702,
+    title: 'Student Absence Notice: Morning Roll Call',
+    message: 'Student Aarav Sharma was marked absent during morning homeroom attendance by Class Teacher.',
+    recipient_role: 'parent',
+    sender_name: 'Mrs. Ananya Verma',
+    sender_role: 'teacher',
+    priority: 'CRITICAL',
+    notification_type: 'STUDENT_ABSENT',
+    action_url: '/parent?tab=leave',
+    is_read: false,
+    created_at: new Date(Date.now() - 75 * 60000).toISOString()
+  },
+  {
+    id: 703,
+    title: 'CBSE Term 1 Examination Timetable Released',
+    message: 'Final date sheet for Class 8 Term 1 exams has been published. First paper starts 15 November.',
+    recipient_role: 'parent',
+    sender_name: 'Examination Cell',
+    sender_role: 'exam_coordinator',
+    priority: 'Normal',
+    notification_type: 'TIMETABLE_PUBLISHED',
+    action_url: '/parent?tab=marks',
+    is_read: true,
+    created_at: new Date(Date.now() - 360 * 60000).toISOString()
+  },
+
+  // --- Academic Coordinator Notifications ---
+  {
+    id: 801,
+    title: 'Curriculum Pacing Lag Warning: Class 9 Science',
+    message: 'Physics Unit 3 is lagging 4 teaching days behind the CBSE prescribed annual academic calendar.',
+    recipient_role: 'academic_coordinator',
+    sender_name: 'Academic Registry',
+    sender_role: 'system',
+    priority: 'CRITICAL',
+    notification_type: 'PACING_LAG_CRITICAL',
+    action_url: '/academic_coordinator?tab=pacing',
+    is_read: false,
+    created_at: new Date(Date.now() - 30 * 60000).toISOString()
   }
-
 ];
 
 
@@ -6265,11 +6521,199 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   getStudentDocuments: async (studentId: number) => {
+    let matching = fallbackDocuments.filter(d => d.student_id === studentId);
+    if (matching.length === 0) {
+      const student = fallbackStudents.find(s => s.id === studentId);
+      const studentName = student?.name || `Student ${studentId}`;
+      const docSlug = studentName.toLowerCase().replace(/\s+/g, '_');
+      const linkedEnquiry = fallbackEnquiries.find((e: AdmissionEnquiry) => 
+        (student && e.student_name.toLowerCase() === student.name.toLowerCase()) || 
+        (student && e.phone === student.guardian_phone)
+      );
+      const hasTc = linkedEnquiry ? linkedEnquiry.doc_transfer_cert : true;
+      const hasBirth = linkedEnquiry ? linkedEnquiry.doc_birth_cert : true;
+      const hasReport = linkedEnquiry ? linkedEnquiry.doc_report_card : true;
 
-    const fallback = studentId === 1 ? fallbackDocuments : [];
+      matching = [
+        {
+          id: fallbackDocuments.length + 101,
+          student_id: studentId,
+          title: `Municipal Birth Certificate & Identity Proof - ${studentName}`,
+          doc_type: "Birth Certificate",
+          file_url: `/documents/birth_cert_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: "admissions_coordinator",
+          status: hasBirth ? "Verified" : "Pending Verification",
+          verified_stamp: hasBirth ? "EDU360 Official Seal - Municipal Birth Record Verified" : "Awaiting Registrar Verification",
+          upload_date: new Date().toISOString()
+        },
+        {
+          id: fallbackDocuments.length + 102,
+          student_id: studentId,
+          title: `Previous Grade Academic Record & Marks Memo - ${studentName}`,
+          doc_type: "Marks Card",
+          file_url: `/documents/report_card_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: "admissions_coordinator",
+          status: hasReport ? "Verified" : "Pending Verification",
+          verified_stamp: hasReport ? "EDU360 Academic Registry Seal" : "Awaiting Academic Verification",
+          upload_date: new Date().toISOString()
+        },
+        {
+          id: fallbackDocuments.length + 103,
+          student_id: studentId,
+          title: hasTc
+            ? `Transfer Certificate (Incoming TC Deposited) - ${studentName}`
+            : `30-Day Provisional Undertaking (Transfer Certificate) - ${studentName}`,
+          doc_type: "Transfer Certificate",
+          file_url: hasTc ? `/documents/tc_${docSlug}.pdf` : `/documents/tc_undertaking_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: "admissions_coordinator",
+          status: hasTc ? "Verified" : "Pending Submission (30-Day Window)",
+          verified_stamp: hasTc ? "Clearance Approved & Archived" : "Provisional Undertaking (30 Days Validity)",
+          upload_date: new Date().toISOString()
+        },
+        {
+          id: fallbackDocuments.length + 104,
+          student_id: studentId,
+          title: `Bonafide Student & Study Certificate - ${studentName}`,
+          doc_type: "Bonafide",
+          file_url: `/documents/bonafide_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: "admin",
+          status: "Verified",
+          verified_stamp: "EDU360 Institutional Study Seal",
+          upload_date: new Date().toISOString()
+        }
+      ];
+      fallbackDocuments = [...matching, ...fallbackDocuments];
+    }
+    return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, matching);
+  },
 
-    return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, fallback);
+  getStudentTcStatus: async (studentId: number) => {
+    const student = fallbackStudents.find(s => s.id === studentId);
+    const linkedEnquiry = fallbackEnquiries.find((e: AdmissionEnquiry) => 
+      (student && e.student_name.toLowerCase() === student.name.toLowerCase()) || 
+      (student && e.phone === student.guardian_phone)
+    );
+    const tcDoc = fallbackDocuments.find(d => d.student_id === studentId && d.doc_type === 'Transfer Certificate');
+    const isUndertaking = tcDoc 
+      ? (tcDoc.title.includes('Undertaking') || tcDoc.status.includes('Pending Submission'))
+      : (linkedEnquiry ? !linkedEnquiry.doc_transfer_cert : false);
 
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 25);
+    const deadlineStr = deadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const fallback = {
+      student_id: studentId,
+      student_name: student?.name || 'Student',
+      is_undertaking: isUndertaking,
+      tc_submitted: !isUndertaking || (tcDoc ? tcDoc.status === 'Verified' && !tcDoc.title.includes('Undertaking') : false),
+      tenure_days_total: 30,
+      days_elapsed: 5,
+      days_remaining: 25,
+      is_overdue: false,
+      deadline_date: deadlineStr,
+      tc_doc_id: tcDoc?.id,
+      tc_doc_status: tcDoc?.status || (isUndertaking ? 'Pending Submission (30-Day Window)' : 'Verified')
+    };
+    return fetchWithFallback<any>(`/api/admin/students/${studentId}/tc-status`, undefined, fallback);
+  },
+
+  depositStudentTc: async (studentId: number) => {
+    try {
+      return await fetchWithFallback<OfficialDocument>(`/api/admin/students/${studentId}/tc/upload`, { method: 'POST' });
+    } catch {
+      const student = fallbackStudents.find(s => s.id === studentId);
+      const studentName = student?.name || 'Student';
+      const docSlug = studentName.toLowerCase().replace(/\s+/g, '_');
+      let targetDoc: OfficialDocument | undefined;
+      fallbackDocuments = fallbackDocuments.map(d => {
+        if (d.student_id === studentId && d.doc_type === 'Transfer Certificate') {
+          targetDoc = {
+            ...d,
+            title: `Transfer Certificate (Original TC Deposited & Verified) - ${studentName}`,
+            status: 'Verified',
+            verified_stamp: 'EDU360 Official Seal - TC Deposited & Certified',
+            file_url: `/documents/tc_${docSlug}.pdf`
+          };
+          return targetDoc;
+        }
+        return d;
+      });
+      if (!targetDoc) {
+        targetDoc = {
+          id: fallbackDocuments.length + 1,
+          student_id: studentId,
+          title: `Transfer Certificate (Original TC Deposited & Verified) - ${studentName}`,
+          doc_type: 'Transfer Certificate',
+          file_url: `/documents/tc_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: 'admin',
+          status: 'Verified',
+          verified_stamp: 'EDU360 Official Seal - TC Deposited & Certified',
+          upload_date: new Date().toISOString()
+        };
+        fallbackDocuments = [targetDoc, ...fallbackDocuments];
+      }
+      return targetDoc;
+    }
+  },
+
+  submitParentTc: async (studentId: number, payload: { previous_school_name?: string; tc_serial_number?: string; file_name?: string; remarks?: string }) => {
+    try {
+      return await fetchWithFallback<any>(`/api/parent/students/${studentId}/tc-submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      const student = fallbackStudents.find(s => s.id === studentId);
+      const studentName = student?.name || 'Student';
+      const docSlug = studentName.toLowerCase().replace(/\s+/g, '_');
+      const serialInfo = payload.tc_serial_number ? ` (TC Ref: ${payload.tc_serial_number})` : '';
+      let targetDoc: OfficialDocument | undefined;
+
+      fallbackDocuments = fallbackDocuments.map(d => {
+        if (d.student_id === studentId && d.doc_type === 'Transfer Certificate') {
+          targetDoc = {
+            ...d,
+            title: `Transfer Certificate (Submitted by Parent - Pending Verification) - ${studentName}`,
+            status: 'Pending Verification',
+            uploaded_by_role: 'parent',
+            verified_stamp: `Parent Submission${serialInfo} - Awaiting School Registrar Physical Verification`,
+            file_url: `/documents/${payload.file_name || 'parent_tc_scan'}_${docSlug}.pdf`,
+            upload_date: new Date().toISOString()
+          };
+          return targetDoc;
+        }
+        return d;
+      });
+
+      if (!targetDoc) {
+        targetDoc = {
+          id: fallbackDocuments.length + 1,
+          student_id: studentId,
+          title: `Transfer Certificate (Submitted by Parent - Pending Verification) - ${studentName}`,
+          doc_type: 'Transfer Certificate',
+          file_url: `/documents/${payload.file_name || 'parent_tc_scan'}_${docSlug}.pdf`,
+          is_official: true,
+          uploaded_by_role: 'parent',
+          status: 'Pending Verification',
+          verified_stamp: `Parent Submission${serialInfo} - Awaiting School Registrar Physical Verification`,
+          upload_date: new Date().toISOString()
+        };
+        fallbackDocuments = [targetDoc, ...fallbackDocuments];
+      }
+
+      return {
+        success: true,
+        message: `Transfer Certificate for ${studentName} submitted successfully. School Registrar will verify against physical original.`,
+        document: targetDoc
+      };
+    }
   },
 
   uploadOfficialDocument: async (doc: { student_id: number; title: string; doc_type: string; file_url: string }) => {
@@ -6325,23 +6769,25 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   approveOfficialDocument: async (docId: number) => {
-
     try {
-
       return await fetchWithFallback<OfficialDocument>(`/api/admin/documents/${docId}/approve`, {
-
         method: 'POST'
-
       });
-
     } catch {
-
-      fallbackDocuments = fallbackDocuments.map(d => d.id === docId ? { ...d, status: 'Verified', verified_stamp: 'EDU360 Official Seal - Approved by Administrator' } : d);
-
+      fallbackDocuments = fallbackDocuments.map(d => {
+        if (d.id === docId) {
+          const isUndertaking = d.title.includes('Undertaking') || d.doc_type === 'Transfer Certificate';
+          return {
+            ...d,
+            title: isUndertaking ? d.title.replace('30-Day Provisional Undertaking', 'Transfer Certificate (Deposited & Verified)').replace('Pending Submission', 'Verified Deposit') : d.title,
+            status: 'Verified',
+            verified_stamp: 'EDU360 Official Seal - Approved by Administrator'
+          };
+        }
+        return d;
+      });
       return fallbackDocuments.find(d => d.id === docId);
-
     }
-
   },
 
   checkGuardianPhone: async (phone: string) => {
@@ -6992,19 +7438,25 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   sendFeeReminder: async (id: number, channel: string = 'WhatsApp'): Promise<any> => {
-
+    const student = fallbackFeeDefaulters.find(d => d.id === id);
+    const studentName = student?.student_name || 'Student';
+    const amountDue = student?.amount_due || 25000;
+    api.publishClientNotification({
+      recipient_role: 'parent',
+      title: `Fee Payment Reminder: ${studentName}`,
+      message: `Bursar reminder for overdue milestone payment (₹${amountDue.toLocaleString('en-IN')}) via ${channel}.`,
+      sender_name: 'Mr. Arvind Krishnan (Senior Accounts Officer)',
+      sender_role: 'accounts_coordinator',
+      priority: 'URGENT',
+      notification_type: 'FEE_REMINDER',
+      action_url: '/parent?tab=fees'
+    });
     try {
-
       return await fetchWithFallback(`/api/finance/defaulters/${id}/reminder?channel=${encodeURIComponent(channel)}`, { method: 'POST' });
-
     } catch {
-
       fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => d.id === id ? { ...d, reminder_sent: true } : d);
-
       return { success: true };
-
     }
-
   },
 
 
@@ -7709,6 +8161,35 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
     }
 
+  },
+
+  getTeacherAttendanceToday: async () => {
+    return fetchWithFallback<any>('/api/teacher/attendance/today', undefined, {
+      checked_in: false,
+      check_in_time: null,
+      check_out_time: null,
+      status: "Not Checked In"
+    });
+  },
+
+  teacherCheckIn: async () => {
+    try {
+      return await fetchWithFallback<any>('/api/teacher/attendance/check-in', {
+        method: 'POST'
+      });
+    } catch {
+      return { success: true, message: "Checked in successfully", data: { checked_in: true, check_in_time: "08:30 AM", status: "Present" } };
+    }
+  },
+
+  teacherCheckOut: async () => {
+    try {
+      return await fetchWithFallback<any>('/api/teacher/attendance/check-out', {
+        method: 'POST'
+      });
+    } catch {
+      return { success: true, message: "Checked out successfully", data: { check_out_time: "04:15 PM" } };
+    }
   },
 
   getParentChatContext: async (studentId: number = 1) => {
@@ -12233,6 +12714,8 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       const newSlot: ExamScheduleItem = {
         id: (res && res.schedule_id) ? res.schedule_id : (fallbackExamSchedules.length + 1),
         title: data.exam_name || data.title || `${data.class_name} ${data.subject} Assessment`,
+        series_name: data.title || data.exam_name || `${data.subject} Single Slot`,
+        schedule_type: 'SINGLE',
         subject: data.subject,
         class_name: data.class_name,
         section: data.section || 'B',
@@ -12267,6 +12750,8 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       const newItem: ExamScheduleItem = {
         id: newId,
         title: data.exam_name || data.title || `${data.class_name} ${data.subject} Assessment`,
+        series_name: data.title || data.exam_name || `${data.subject} Single Slot`,
+        schedule_type: 'SINGLE',
         subject: data.subject,
         class_name: data.class_name,
         section: data.section || 'B',
@@ -12553,18 +13038,71 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   // --- Class-Wise Batch Schedules ---
 
-  createBatchClassSchedule: async (data: { class_name: string; series_name?: string; slots: { subject: string; exam_date: string; start_time: string; end_time: string; hall_name: string; capacity?: number; chief_invigilator_name?: string }[] }): Promise<any> => {
-
-    return await fetchWithFallback<any>(`/api/exams/schedules/batch-class`, {
-
-      method: 'POST',
-
-      headers: { 'Content-Type': 'application/json' },
-
-      body: JSON.stringify(data)
-
-    });
-
+  createBatchClassSchedule: async (data: { class_name: string; section?: string; series_name?: string; slots: { subject: string; exam_date: string; start_time: string; end_time: string; hall_name: string; capacity?: number; chief_invigilator_name?: string }[] }): Promise<any> => {
+    try {
+      const res = await fetchWithFallback<any>(`/api/exams/schedules/batch-class`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const batchId = res?.batch_id || `BATCH-${data.class_name.replace(/\s+/g, '')}-${(data.series_name || 'TERM1').replace(/\s+/g, '')}-${Date.now()}`;
+      const newItems: ExamScheduleItem[] = data.slots.map((s, idx) => ({
+        id: (res?.schedule_ids && res.schedule_ids[idx]) ? res.schedule_ids[idx] : (fallbackExamSchedules.length + idx + 1),
+        title: `${s.subject} - ${data.series_name || 'Term Exam'}`,
+        series_name: data.series_name || 'Term Exam',
+        batch_id: batchId,
+        schedule_type: 'BATCH',
+        subject: s.subject,
+        class_name: data.class_name,
+        section: data.section || 'A & B',
+        exam_date: s.exam_date,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        hall_name: s.hall_name,
+        room_hall: s.hall_name,
+        chief_invigilator_name: s.chief_invigilator_name || 'Mrs. Ananya Verma',
+        invigilator_name: s.chief_invigilator_name || 'Mrs. Ananya Verma',
+        academic_clearance: true,
+        status: 'published'
+      }));
+      fallbackExamSchedules.unshift(...newItems);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('edu360_exam_schedules', JSON.stringify(fallbackExamSchedules));
+          window.dispatchEvent(new Event('edu360_exam_schedules_updated'));
+        } catch {}
+      }
+      return res || { success: true, message: `Created ${data.slots.length} batch slots`, batch_id: batchId };
+    } catch {
+      const batchId = `BATCH-${data.class_name.replace(/\s+/g, '')}-${(data.series_name || 'TERM1').replace(/\s+/g, '')}-${Date.now()}`;
+      const newItems: ExamScheduleItem[] = data.slots.map((s, idx) => ({
+        id: fallbackExamSchedules.length + idx + 1,
+        title: `${s.subject} - ${data.series_name || 'Term Exam'}`,
+        series_name: data.series_name || 'Term Exam',
+        batch_id: batchId,
+        schedule_type: 'BATCH',
+        subject: s.subject,
+        class_name: data.class_name,
+        section: 'B',
+        exam_date: s.exam_date,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        hall_name: s.hall_name,
+        room_hall: s.hall_name,
+        chief_invigilator_name: s.chief_invigilator_name || 'Mrs. Ananya Verma',
+        invigilator_name: s.chief_invigilator_name || 'Mrs. Ananya Verma',
+        academic_clearance: true,
+        status: 'published'
+      }));
+      fallbackExamSchedules.unshift(...newItems);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('edu360_exam_schedules', JSON.stringify(fallbackExamSchedules));
+          window.dispatchEvent(new Event('edu360_exam_schedules_updated'));
+        } catch {}
+      }
+      return { success: true, message: `Created ${data.slots.length} batch slots`, batch_id: batchId };
+    }
   },
 
 
@@ -13302,41 +13840,71 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       const res = await fetchWithFallback<{ success: boolean; unread_count: number; notifications: any[] }>(`/api/notifications?${q.toString()}`);
 
       if (res && res.notifications && res.notifications.length > 0) {
-
         return { unread_count: res.unread_count || 0, notifications: res.notifications };
-
       }
-
     } catch {
-
       // ignore
-
     }
 
     let list = [...fallbackNotifications];
 
     if (params?.role) {
-
-      list = list.filter(n => !n.recipient_role || n.recipient_role === params.role || n.recipient_role === 'all');
-
+      const targetRole = params.role.toLowerCase();
+      list = list.filter(n => {
+        if (!n.recipient_role) return true;
+        const r = String(n.recipient_role).toLowerCase();
+        return r === targetRole || r === 'all';
+      });
     }
 
     if (params?.unread_only) {
-
       list = list.filter(n => !n.is_read);
-
     }
 
     if (params?.limit) {
-
       list = list.slice(0, params.limit);
-
     }
 
     const unread = list.filter(n => !n.is_read).length;
-
     return { unread_count: unread, notifications: list };
+  },
 
+  publishClientNotification: (notif: {
+    title: string;
+    message: string;
+    recipient_role?: string;
+    recipient_user_id?: number;
+    sender_name: string;
+    sender_role: string;
+    priority?: string;
+    action_url?: string;
+    notification_type?: string;
+  }) => {
+    const newNotif = {
+      id: Date.now(),
+      title: notif.title,
+      message: notif.message,
+      recipient_role: (notif.recipient_role || 'all').toLowerCase(),
+      recipient_user_id: notif.recipient_user_id,
+      sender_name: notif.sender_name,
+      sender_role: notif.sender_role,
+      priority: notif.priority || 'Normal',
+      action_url: notif.action_url || '',
+      notification_type: notif.notification_type || 'SYSTEM',
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+    fallbackNotifications = [newNotif, ...fallbackNotifications];
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: newNotif }));
+      try {
+        const bc = new BroadcastChannel('edu360_global_notifications');
+        bc.postMessage({ type: 'NOTIFICATION_DISPATCHED', notification: newNotif });
+        bc.close();
+      } catch {}
+    }
+    return newNotif;
   },
 
 
@@ -13454,17 +14022,21 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
   bulkSendFeeReminders: async (payload: BulkReminderPayload): Promise<any> => {
-
-    return await fetchWithFallback<any>(`/api/finance/defaulters/bulk-remind`, {
-
-      method: 'POST',
-
-      headers: { 'Content-Type': 'application/json' },
-
-      body: JSON.stringify(payload)
-
+    api.publishClientNotification({
+      recipient_role: 'parent',
+      title: 'Institutional Fee Payment Cycle Notice',
+      message: `Bursar reminder broadcast dispatched to parents for current milestone clearance.`,
+      sender_name: 'Bursar & Accounts Office',
+      sender_role: 'accounts_coordinator',
+      priority: 'URGENT',
+      notification_type: 'FEE_CYCLE_NOTICE',
+      action_url: '/parent?tab=fees'
     });
-
+    return await fetchWithFallback<any>(`/api/finance/defaulters/bulk-remind`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
   },
 
 
@@ -13505,68 +14077,57 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
 
-recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
-
+  recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
+    api.publishClientNotification({
+      recipient_role: 'parent',
+      title: 'Fee Payment Recorded & Receipt Generated',
+      message: `Offline counter payment of ₹${payload.amount_paid.toLocaleString('en-IN')} (${payload.payment_method}) was recorded. Receipt generated.`,
+      sender_name: payload.received_by || 'Bursar Counter',
+      sender_role: 'accounts_coordinator',
+      priority: 'Normal',
+      notification_type: 'PAYMENT_RECEIVED',
+      action_url: '/parent?tab=fees'
+    });
     try {
-
       return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
-
         method: 'POST',
-
         headers: { 'Content-Type': 'application/json' },
-
         body: JSON.stringify(payload)
-
       });
-
     } catch {
-
       fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => {
-
         if (d.id === id) {
-
           const remaining = Math.max(0, d.amount_due - payload.amount_paid);
-
           return {
-
             ...d,
-
             amount_due: remaining,
-
             status: (remaining === 0 ? 'Paid' : 'Partially Paid') as any,
-
             exam_clearance: remaining === 0 ? true : d.exam_clearance,
-
             notes: payload.notes || d.notes
-
           };
-
         }
-
         return d;
-
       });
-
       return fallbackFeeDefaulters.find(d => d.id === id)!;
-
     }
-
   },
 
-
-
   applyFeeWaiver: async (id: number, payload: ApplyWaiverPayload): Promise<FeeDefaulterItem> => {
-
-    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/waiver`, {
-
-      method: 'POST',
-
-      headers: { 'Content-Type': 'application/json' },
-
-      body: JSON.stringify(payload)
-
+    api.publishClientNotification({
+      recipient_role: 'parent',
+      title: 'Fee Concession Approved',
+      message: `Official fee concession of ₹${payload.waiver_amount.toLocaleString('en-IN')} approved by ${payload.approved_by || 'Principal'}. Reason: ${payload.reason}`,
+      sender_name: payload.approved_by || 'Principal Office',
+      sender_role: 'accounts_coordinator',
+      priority: 'Normal',
+      notification_type: 'FEE_CONCESSION',
+      action_url: '/parent?tab=fees'
     });
-
+    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/waiver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
   },
 
 
@@ -13601,29 +14162,85 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
 
   reconcileTransaction: async (id: number, reconciledBy: string = 'Mr. Arvind Krishnan'): Promise<PaymentTransactionItem> => {
-
-    return await fetchWithFallback<PaymentTransactionItem>(`/api/finance/transactions/${id}/reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
-
-      method: 'POST'
-
-    });
-
+    try {
+      const res = await fetchWithFallback<PaymentTransactionItem>(`/api/finance/transactions/${id}/reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
+        method: 'POST'
+      });
+      fallbackPaymentTransactions = fallbackPaymentTransactions.map(t => {
+        if (t.id === id) {
+          return {
+            ...t,
+            reconciled: true,
+            reconciled_by: reconciledBy,
+            reconciled_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      return res;
+    } catch {
+      fallbackPaymentTransactions = fallbackPaymentTransactions.map(t => {
+        if (t.id === id) {
+          return {
+            ...t,
+            reconciled: true,
+            reconciled_by: reconciledBy,
+            reconciled_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      return fallbackPaymentTransactions.find(t => t.id === id)!;
+    }
   },
 
-
-
   bulkReconcileTransactions: async (transactionIds?: number[], reconciledBy: string = 'Mr. Arvind Krishnan'): Promise<any> => {
-
-    return await fetchWithFallback<any>(`/api/finance/transactions/bulk-reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
-
-      method: 'POST',
-
-      headers: { 'Content-Type': 'application/json' },
-
-      body: JSON.stringify(transactionIds || null)
-
+    api.publishClientNotification({
+      recipient_role: 'accounts_coordinator',
+      title: 'Batch Bank Reconciliation Committed',
+      message: 'Pending transactions have been officially matched against the bank statement and committed.',
+      sender_name: reconciledBy,
+      sender_role: 'accounts_coordinator',
+      priority: 'Normal',
+      notification_type: 'BATCH_RECONCILE',
+      action_url: '/accounts_coordinator?tab=reconciliation'
     });
-
+    try {
+      const res = await fetchWithFallback<any>(`/api/finance/transactions/bulk-reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transactionIds || null)
+      });
+      fallbackPaymentTransactions = fallbackPaymentTransactions.map(t => {
+        if (!t.reconciled && (!transactionIds || transactionIds.includes(t.id))) {
+          return {
+            ...t,
+            reconciled: true,
+            reconciled_by: reconciledBy,
+            reconciled_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      return res;
+    } catch {
+      fallbackPaymentTransactions = fallbackPaymentTransactions.map(t => {
+        if (!t.reconciled && (!transactionIds || transactionIds.includes(t.id))) {
+          return {
+            ...t,
+            reconciled: true,
+            reconciled_by: reconciledBy,
+            reconciled_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      return {
+        status: 'success',
+        reconciled_count: fallbackPaymentTransactions.filter(t => t.reconciled).length,
+        message: 'Bulk reconciliation updated across ledger.'
+      };
+    }
   },
 
 
@@ -13735,12 +14352,17 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
 
   getPayrollSlips: async (batchId: number): Promise<StaffPayslipItem[]> => {
-
     return await fetchWithFallback<StaffPayslipItem[]>(`/api/finance/payroll/batches/${batchId}/slips`, undefined, fallbackPayslipsMap[batchId] || fallbackPayslipsMap[1] || []);
-
   },
 
-
+  getPayrollLopPreview: async (month: string = 'November 2026'): Promise<any> => {
+    return await fetchWithFallback<any>(`/api/finance/payroll/lop-preview?payroll_month=${encodeURIComponent(month)}`, undefined, {
+      payroll_month: month,
+      total_staff: 42,
+      staff_with_lop_count: 0,
+      lop_details: []
+    });
+  },
 
   generatePayroll: async (payload: GeneratePayrollPayload): Promise<PayrollBatchItem> => {
 
@@ -13840,7 +14462,7 @@ recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<
 
       ...b,
 
-      status: 'Approved for Bank Transfer',
+      status: 'Approved for Wire',
 
       authorized_by: payload.authorized_by,
 

@@ -1560,8 +1560,209 @@ async def get_student_profile(student_id: int, db: AsyncSession = Depends(get_db
 
 @router.get("/students/{student_id}/documents", response_model=list[OfficialDocumentResponse])
 async def get_student_documents(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(OfficialDocument).where(OfficialDocument.student_id == student_id))
-    return result.scalars().all()
+    result = await db.execute(
+        select(OfficialDocument)
+        .where(OfficialDocument.student_id == student_id)
+        .order_by(OfficialDocument.id.asc())
+    )
+    docs = result.scalars().all()
+    if docs:
+        return docs
+
+    # Auto-seed standard & intake documents if student has no records in vault yet
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        return []
+
+    # Check for linked admission enquiry to sync document flags
+    enq_res = await db.execute(
+        select(AdmissionEnquiry).where(
+            (AdmissionEnquiry.student_name.ilike(student.name)) |
+            (AdmissionEnquiry.phone == student.guardian_phone)
+        )
+    )
+    enquiry = enq_res.scalars().first()
+    doc_slug = student.name.lower().replace(" ", "_")
+
+    has_tc = enquiry.doc_transfer_cert if enquiry else True
+    has_birth = enquiry.doc_birth_cert if enquiry else True
+    has_report = enquiry.doc_report_card if enquiry else True
+
+    new_docs = [
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Municipal Birth Certificate & Identity Proof - {student.name}",
+            doc_type="Birth Certificate",
+            file_url=f"/documents/birth_cert_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_birth else "Pending Verification",
+            verified_stamp="EDU360 Official Seal - Municipal Birth Record Verified" if has_birth else "Awaiting Registrar Verification"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Previous Grade Academic Record & Marks Memo - {student.name}",
+            doc_type="Marks Card",
+            file_url=f"/documents/report_card_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_report else "Pending Verification",
+            verified_stamp="EDU360 Academic Registry Seal" if has_report else "Awaiting Academic Verification"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=(
+                f"Transfer Certificate (Incoming TC Deposited) - {student.name}"
+                if has_tc
+                else f"30-Day Provisional Undertaking (Transfer Certificate) - {student.name}"
+            ),
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf" if has_tc else f"/documents/tc_undertaking_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_tc else "Pending Submission (30-Day Window)",
+            verified_stamp="Clearance Approved & Archived" if has_tc else "Provisional Undertaking (30 Days Validity)"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Bonafide Student & Study Certificate - {student.name}",
+            doc_type="Bonafide",
+            file_url=f"/documents/bonafide_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Institutional Study Seal"
+        )
+    ]
+    db.add_all(new_docs)
+    await db.commit()
+    for d in new_docs:
+        await db.refresh(d)
+    return new_docs
+
+@router.get("/students/{student_id}/tc-status")
+async def get_student_tc_status(student_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Returns 30-day provisional tenure countdown and submission status for a student's TC.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Find TC doc in official_documents
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    tc_doc = doc_res.scalars().first()
+
+    # Find linked enquiry
+    enq_res = await db.execute(
+        select(AdmissionEnquiry).where(
+            (AdmissionEnquiry.student_name.ilike(student.name)) |
+            (AdmissionEnquiry.phone == student.guardian_phone)
+        )
+    )
+    enquiry = enq_res.scalars().first()
+
+    # Determine intake base date
+    base_date = datetime.datetime.utcnow()
+    if student.admission_date:
+        try:
+            base_date = datetime.datetime.fromisoformat(student.admission_date)
+        except Exception:
+            pass
+    elif enquiry and enquiry.created_at:
+        base_date = enquiry.created_at
+    elif tc_doc and tc_doc.upload_date:
+        base_date = tc_doc.upload_date
+
+    total_tenure_days = 30
+    elapsed_days = (datetime.datetime.utcnow() - base_date).days
+    days_remaining = max(0, total_tenure_days - elapsed_days)
+    is_overdue = elapsed_days > total_tenure_days
+
+    is_undertaking = False
+    if tc_doc and ("Undertaking" in tc_doc.title or "30-Day" in tc_doc.title or tc_doc.status != "Verified"):
+        is_undertaking = True
+    elif enquiry and not enquiry.doc_transfer_cert:
+        is_undertaking = True
+
+    tc_submitted = not is_undertaking or (tc_doc is not None and tc_doc.status == "Verified" and "Undertaking" not in tc_doc.title)
+    deadline_date = (base_date + datetime.timedelta(days=total_tenure_days)).strftime("%d %b %Y")
+
+    return {
+        "student_id": student_id,
+        "student_name": student.name,
+        "is_undertaking": is_undertaking,
+        "tc_submitted": tc_submitted,
+        "tenure_days_total": total_tenure_days,
+        "days_elapsed": elapsed_days,
+        "days_remaining": days_remaining,
+        "is_overdue": is_overdue,
+        "deadline_date": deadline_date,
+        "tc_doc_id": tc_doc.id if tc_doc else None,
+        "tc_doc_status": tc_doc.status if tc_doc else ("Pending Submission" if is_undertaking else "Verified")
+    }
+
+@router.post("/students/{student_id}/tc/upload", response_model=OfficialDocumentResponse)
+async def upload_student_deposited_tc(student_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Fulfills 30-Day Provisional Undertaking when parent deposits physical TC.
+    Converts status to Verified and applies Official Administrator Seal.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    existing_tc = doc_res.scalars().first()
+    doc_slug = student.name.lower().replace(" ", "_")
+
+    if existing_tc:
+        existing_tc.title = f"Transfer Certificate (Original TC Deposited & Verified) - {student.name}"
+        existing_tc.status = "Verified"
+        existing_tc.is_official = True
+        existing_tc.verified_stamp = "EDU360 Official Seal - TC Deposited & Certified"
+        existing_tc.file_url = f"/documents/tc_{doc_slug}.pdf"
+        target_doc = existing_tc
+    else:
+        target_doc = OfficialDocument(
+            student_id=student.id,
+            title=f"Transfer Certificate (Original TC Deposited & Verified) - {student.name}",
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Official Seal - TC Deposited & Certified"
+        )
+        db.add(target_doc)
+
+    # Sync linked enquiry if present
+    enq_res = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.student_name.ilike(student.name)))
+    enq = enq_res.scalars().first()
+    if enq:
+        enq.doc_transfer_cert = True
+
+    await db.commit()
+    await db.refresh(target_doc)
+    return target_doc
 
 @router.get("/documents", response_model=list[OfficialDocumentResponse])
 async def list_all_official_documents(db: AsyncSession = Depends(get_db)):
@@ -1574,9 +1775,54 @@ async def approve_and_seal_document(doc_id: int, db: AsyncSession = Depends(get_
     doc = result.scalars().first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    
+    st_res = await db.execute(select(Student).where(Student.id == doc.student_id))
+    student = st_res.scalars().first()
+    st_name = student.name if student else "Student"
+
     doc.status = "Verified"
     doc.is_official = True
-    doc.verified_stamp = "EDU360 Official Seal - Approved by Administrator"
+
+    if doc.doc_type == "Transfer Certificate":
+        doc.title = f"Transfer Certificate (Original TC Deposited & Verified) - {st_name}"
+        doc.verified_stamp = "EDU360 Official Seal - Physical Original Verified & Certified"
+        # Fulfill linked enquiry TC flag
+        if student:
+            enq_res = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.student_name.ilike(student.name)))
+            enq = enq_res.scalars().first()
+            if enq:
+                enq.doc_transfer_cert = True
+        # Notify Parent that TC is verified & sealed
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name="Principal Dr. Rajesh Sharma",
+                sender_role="ADMIN",
+                title=f"Transfer Certificate Verified & Sealed: {st_name}",
+                message=f"The Transfer Certificate for {st_name} has been verified against physical originals and sealed with the official institutional seal. 30-Day Undertaking is cleared.",
+                notification_type="TC_VERIFIED_NOTICE",
+                priority="NORMAL",
+                recipient_role="PARENT",
+                action_url="/parent?nav=child_sis",
+                metadata_dict={"student_id": doc.student_id, "doc_id": doc.id}
+            )
+        except Exception as e:
+            print(f"Warning: could not dispatch parent TC verification notification: {e}")
+    else:
+        doc.verified_stamp = "EDU360 Official Seal - Approved & Verified by Administrator"
+
+    # Audit log
+    audit_rec = SecurityAuditLog(
+        actor_name="Principal Dr. Rajesh Sharma",
+        actor_role="ADMIN",
+        action_type="DOCUMENT_VERIFICATION_SEAL",
+        target_entity=f"Document #{doc.id} ({doc.title}) - Student #{doc.student_id}",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Administrator verified and applied official seal to {doc.title} ({doc.doc_type}). Status marked Verified."
+    )
+    db.add(audit_rec)
+
     await db.commit()
     await db.refresh(doc)
     return doc

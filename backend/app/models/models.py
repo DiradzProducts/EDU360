@@ -1297,6 +1297,12 @@ class ExamSchedule(Base):
 
     title = Column(String(150), nullable=False)
 
+    series_name = Column(String(150), nullable=True, index=True)
+
+    batch_id = Column(String(100), nullable=True, index=True)
+
+    schedule_type = Column(String(30), default="BATCH", index=True)
+
     subject = Column(String(50), nullable=False)
 
     class_name = Column(String(50), nullable=False)
@@ -2141,13 +2147,26 @@ class StaffPermission(Base):
     affected_periods = Column(String(128), nullable=True)  # "Period 2 (8-A), Period 3 (8-B)"
 
     reason = Column(Text, nullable=False)
-
+    leave_category = Column(String(64), nullable=True, default="Casual Leave (CL)")
+    total_days = Column(Integer, default=1)
     status = Column(String(32), default="Pending", index=True)  # "Pending", "Approved", "Rejected"
-
     approved_by = Column(String(128), nullable=True)
-
     reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+
+class StaffAttendanceDaily(Base):
+    """Daily check-in / check-out log for teachers and staff members."""
+    __tablename__ = "staff_attendance_daily"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("staff_members.id"), nullable=False, index=True)
+    staff_name = Column(String(128), nullable=False)
+    attendance_date = Column(String(32), nullable=False, index=True)  # YYYY-MM-DD
+    check_in_time = Column(String(32), nullable=True)  # e.g. "08:45 AM"
+    check_out_time = Column(String(32), nullable=True) # e.g. "04:15 PM"
+    status = Column(String(32), default="Present")      # "Present", "Absent", "On Leave", "On Duty"
+    notes = Column(String(256), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

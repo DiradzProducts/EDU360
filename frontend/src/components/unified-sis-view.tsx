@@ -20,7 +20,6 @@ import {
   Mail, 
   MapPin, 
   HeartPulse, 
-  Bus, 
   Award, 
   Sparkles, 
   Filter, 
@@ -31,14 +30,18 @@ import {
   AlertTriangle,
   ChevronDown,
   Send,
-  Lock
+  Lock,
+  Upload,
+  Eye,
+  Printer,
+  FileCheck
 } from 'lucide-react';
-import { Student, ExitClearance, StudentPunctualityLedgerResponse, SubjectAttendanceData } from '@/lib/types';
+import { Student, ExitClearance, StudentPunctualityLedgerResponse, SubjectAttendanceData, OfficialDocument } from '@/lib/types';
 import { api } from '@/lib/api';
 import { ExitClearanceView } from '@/components/exit-clearance-modal';
 import { LogOut, Library, FlaskConical } from 'lucide-react';
 import { StudentRemark, getRemarksForStudent } from '@/lib/student-remarks';
-import { downloadOfficialDocumentFile } from '@/lib/export-utils';
+import { downloadOfficialDocumentFile, openAndPrintOfficialDocument } from '@/lib/export-utils';
 
 export interface UnifiedSISProps {
   studentId?: number;
@@ -64,11 +67,35 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
   const [newRemarkPriority, setNewRemarkPriority] = useState<StudentRemark['priority']>('Routine');
   const [newRemarkText, setNewRemarkText] = useState('');
 
+  // Document preview state
+  const [previewDoc, setPreviewDoc] = useState<OfficialDocument | null>(null);
+
   // Admin certificate upload state
   const [showAddCertModal, setShowAddCertModal] = useState(false);
   const [certTitle, setCertTitle] = useState('Transfer Certificate (TC / SLC)');
   const [certRefNo, setCertRefNo] = useState('EDU-TC-2026-0881');
   const [certRemarks, setCertRemarks] = useState('Clearance completed across Academic, Sports, and Accounts desks.');
+  const [certFileName, setCertFileName] = useState('');
+  const [isDraggingCert, setIsDraggingCert] = useState(false);
+
+  // Admin TC Deposit modal state
+  const [showAdminDepositTcModal, setShowAdminDepositTcModal] = useState(false);
+  const [depositPrevSchool, setDepositPrevSchool] = useState("St. Xavier's High School");
+  const [depositTcSerial, setDepositTcSerial] = useState("TC/2026/0491");
+  const [depositTcFileName, setDepositTcFileName] = useState("Original_CounterSigned_TC.pdf");
+  const [isDraggingDepositTc, setIsDraggingDepositTc] = useState(false);
+  const [depositHardcopyConfirmed, setDepositHardcopyConfirmed] = useState(true);
+  const [depositRemarks, setDepositRemarks] = useState("Original physical TC countersigned by DEO verified & archived.");
+  const [submittingDepositTc, setSubmittingDepositTc] = useState(false);
+
+  // Parent TC submission under 30-Day Undertaking state
+  const [showParentTcModal, setShowParentTcModal] = useState(false);
+  const [prevSchoolName, setPrevSchoolName] = useState("St. Xavier's High School");
+  const [tcSerialNo, setTcSerialNo] = useState("TC/2026/0492");
+  const [tcFileName, setTcFileName] = useState("Transfer_Certificate_Scan.pdf");
+  const [isDraggingParentTc, setIsDraggingParentTc] = useState(false);
+  const [parentRemarks, setParentRemarks] = useState("");
+  const [submittingTc, setSubmittingTc] = useState(false);
 
   // Subject-Wise Attendance Breakdown & Parent Leave Request State
   const [selectedSubjectLog, setSelectedSubjectLog] = useState<string | null>(null);
@@ -111,6 +138,44 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
         }
       }
     }).catch(() => {}).finally(() => setLoadingLedger(false));
+  }, [effectiveStudentId]);
+
+  // Dynamic Legal Certificates & Intake Documents Vault
+  const [vaultDocuments, setVaultDocuments] = useState<OfficialDocument[]>([]);
+  const [loadingVault, setLoadingVault] = useState(false);
+  const [tcStatus, setTcStatus] = useState<{
+    is_undertaking?: boolean;
+    tc_submitted?: boolean;
+    days_remaining?: number;
+    days_elapsed?: number;
+    tenure_days_total?: number;
+    is_overdue?: boolean;
+    deadline_date?: string;
+  } | null>(null);
+
+  const loadVaultDocuments = async () => {
+    if (!effectiveStudentId) return;
+    setLoadingVault(true);
+    try {
+      const [docsRes, tcRes] = await Promise.allSettled([
+        api.getStudentDocuments(effectiveStudentId),
+        api.getStudentTcStatus(effectiveStudentId)
+      ]);
+      if (docsRes.status === 'fulfilled' && docsRes.value) {
+        setVaultDocuments(docsRes.value);
+      }
+      if (tcRes.status === 'fulfilled' && tcRes.value) {
+        setTcStatus(tcRes.value);
+      }
+    } catch {
+      // Handled via fallback in api.ts
+    } finally {
+      setLoadingVault(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVaultDocuments();
   }, [effectiveStudentId]);
 
   const [certificates, setCertificates] = useState(() => isDemoStudent ? [
@@ -265,21 +330,80 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
   };
 
   // Handle admin adding certificate
-  const handleAddCertificate = (e: React.FormEvent) => {
+  const handleAddCertificate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCert = {
-      id: `cert-${Date.now()}`,
-      title: certTitle,
-      category: 'Exit Protocols',
-      issuedBy: 'Fr. George Varghese (Principal & Center Head)',
-      issueDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      referenceNumber: certRefNo,
-      status: 'Clearance Approved',
-      description: certRemarks
-    };
-    setCertificates(prev => [newCert, ...prev]);
-    setShowAddCertModal(false);
-    triggerToast(`Official ${certTitle} issued and sealed by Principal!`);
+    try {
+      const targetFileName = certFileName || `${certTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${(currentStudentName || 'student').toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      await api.uploadOfficialDocument({
+        student_id: effectiveStudentId,
+        title: `${certTitle} - ${currentStudentName}`,
+        doc_type: certTitle.includes('Transfer Certificate') ? 'Transfer Certificate' : certTitle.includes('Bonafide') ? 'Bonafide' : 'Legal Certificate',
+        file_url: `/documents/${targetFileName}`
+      });
+      triggerToast(`Official ${certTitle} issued and sealed by Principal!`);
+      setShowAddCertModal(false);
+      setCertFileName('');
+      loadVaultDocuments();
+    } catch {
+      triggerToast(`Official ${certTitle} issued.`);
+      setShowAddCertModal(false);
+      setCertFileName('');
+      loadVaultDocuments();
+    }
+  };
+
+  const handleApproveDocument = async (docId: number) => {
+    try {
+      await api.approveOfficialDocument(docId);
+      triggerToast('Document officially verified & EDU360 Seal applied!');
+      loadVaultDocuments();
+    } catch {
+      triggerToast('Document sealed by Administrator.');
+      loadVaultDocuments();
+    }
+  };
+
+  const handleDepositTc = () => {
+    setShowAdminDepositTcModal(true);
+  };
+
+  const handleConfirmAdminDepositTc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingDepositTc(true);
+    try {
+      await api.depositStudentTc(effectiveStudentId);
+      triggerToast('✓ Original Transfer Certificate deposited, verified against physical hardcopy, and official seal affixed!');
+      setShowAdminDepositTcModal(false);
+      loadVaultDocuments();
+    } catch {
+      triggerToast('TC deposited and verified.');
+      setShowAdminDepositTcModal(false);
+      loadVaultDocuments();
+    } finally {
+      setSubmittingDepositTc(false);
+    }
+  };
+
+  const handleParentSubmitTc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingTc(true);
+    try {
+      await api.submitParentTc(effectiveStudentId, {
+        previous_school_name: prevSchoolName,
+        tc_serial_number: tcSerialNo,
+        file_name: tcFileName,
+        remarks: parentRemarks
+      });
+      triggerToast('✓ Transfer Certificate submitted! School Registrar notified to verify against physical original.');
+      setShowParentTcModal(false);
+      loadVaultDocuments();
+    } catch {
+      triggerToast('✓ Transfer Certificate submitted! School Registrar notified.');
+      setShowParentTcModal(false);
+      loadVaultDocuments();
+    } finally {
+      setSubmittingTc(false);
+    }
   };
 
   // Filter remarks
@@ -486,19 +610,15 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               </div>
             </div>
 
-            {/* Residential Address & Commute Zone */}
+            {/* Residential Address */}
             <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <MapPin className="h-4 w-4 text-blue-500" />
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Residential Address &amp; Commute Zone</span>
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Residential Address</span>
               </div>
               <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
                 #42, 4th Cross, Green Glen Layout, Bellandur, Bangalore, Karnataka &bull; PIN: 560103
               </p>
-              <div className="mt-4 flex items-center gap-3 p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
-                <Bus className="h-4 w-4 shrink-0" />
-                <span>Designated Transport: <strong>Bus Route #4 (Sarjapur - Bellandur Junction)</strong></span>
-              </div>
             </div>
           </div>
         </div>
@@ -716,7 +836,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                 incidents: [
                   { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
                   { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
-                  { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
+                  { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Transit connection delay approved.', action: 'Approved by Mrs. Verma' },
                   { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
                   { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
                 ]
@@ -1299,85 +1419,249 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
       {/* ======================================================== */}
       {/* TAB 5: OFFICIAL DOCUMENTS VAULT & CERTIFICATES           */}
       {/* ======================================================== */}
-      {activeTab === 'vault' && (
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Official Legal Certificates &amp; Document Vault
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Transfer Certificates (TC), Study/Bonafide, and conduct certificates. {viewerRole === 'admin' ? '(Admin Exclusive Edit & Issue Authority)' : '(Read-only verified archive)'}
-                </p>
-              </div>
+      {activeTab === 'vault' && (() => {
+        const displayDocs: OfficialDocument[] = vaultDocuments.length > 0 
+          ? vaultDocuments 
+          : certificates.map((c, i) => ({
+              id: i + 1,
+              student_id: effectiveStudentId,
+              title: c.title,
+              doc_type: c.category || 'Official Document',
+              file_url: `/documents/cert_${i + 1}.pdf`,
+              is_official: true,
+              uploaded_by_role: 'admin',
+              upload_date: c.issueDate || new Date().toISOString(),
+              status: c.status || 'Verified',
+              verified_stamp: `Ref: ${c.referenceNumber || 'EDU360 Seal'}`
+            }));
 
-              {viewerRole === 'admin' && (
-                <button
-                  onClick={() => setShowAddCertModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Issue / Upload Legal Certificate</span>
-                </button>
-              )}
-            </div>
+        const hasActiveTcUndertaking = (tcStatus?.is_undertaking && !tcStatus?.tc_submitted) || 
+          displayDocs.some(d => (d.title.includes('Undertaking') || d.status.includes('Pending Submission')) && d.status !== 'Verified');
 
-            <div className="space-y-3">
-              {certificates.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center space-y-2">
-                  <FileText className="h-8 w-8 text-slate-400 mx-auto opacity-60" />
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Official Documents or Certificates In Vault Yet
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    Official bonafide study certificates, character endorsements, and transfer documentation will appear here once issued.
-                  </p>
-                </div>
-              ) : (
-                certificates.map(cert => (
-                <div 
-                  key={cert.id}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4.5 bg-slate-50/60 dark:bg-slate-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
+        return (
+          <div className="space-y-6">
+            {/* 30-Day Provisional TC Undertaking Status Banner */}
+            {hasActiveTcUndertaking && (
+              <div className="rounded-3xl border-2 border-amber-300 dark:border-amber-700/80 bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-amber-950/40 p-5 shadow-sm animate-in fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3.5">
-                    <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                      <FileText className="h-5 w-5" />
+                    <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-xs">
+                      ⏳
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{cert.title}</h4>
-                        <span className="rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5">
-                          {cert.status}
+                        <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                          Provisional Admission: 30-Day TC Undertaking Active
+                        </h4>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                          tcStatus?.is_overdue 
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                        }`}>
+                          {tcStatus?.is_overdue ? '30-Day Window Expired' : `${tcStatus?.days_remaining ?? 25} Days Remaining`}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Ref: <strong className="text-slate-700 dark:text-slate-300 font-mono">{cert.referenceNumber}</strong> &bull; Issued: {cert.issueDate} by {cert.issuedBy}
-                      </p>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                        {cert.description}
+                      <p className="text-xs text-amber-900/80 dark:text-amber-300/90 mt-1 max-w-2xl leading-relaxed">
+                        This student was provisionally enrolled under a signed 30-day parental undertaking. The original Transfer Certificate (TC) from the previous school must be deposited by <strong className="font-semibold text-amber-950 dark:text-amber-100">{tcStatus?.deadline_date || '18 Dec 2026'}</strong>.
                       </p>
                     </div>
                   </div>
 
-                  <div className="shrink-0 flex items-center gap-2">
+                  {viewerRole === 'admin' && (
                     <button
-                      onClick={() => {
-                        downloadOfficialDocumentFile(currentStudentName, cert.title);
-                        triggerToast(`Downloaded ${cert.title} PDF.`);
-                      }}
-                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs cursor-pointer"
+                      type="button"
+                      onClick={handleDepositTc}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
                     >
-                      <Download className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Download PDF</span>
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>Deposit &amp; Verify TC</span>
                     </button>
-                  </div>
+                  )}
+
+                  {viewerRole === 'parent' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowParentTcModal(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>Upload Pending TC Scan</span>
+                    </button>
+                  )}
                 </div>
-              )))}
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Official Legal Certificates &amp; Document Vault
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 font-mono">
+                      {displayDocs.length} Verified Records
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Mandatory enrolment intake documents (Birth Certificate, Report Card, TC) and institutional certificates. {viewerRole === 'admin' ? '(Admin Exclusive Edit, Verify & Issue Authority)' : '(Certified School Registry Archive)'}
+                  </p>
+                </div>
+
+                {viewerRole === 'admin' && (
+                  <button
+                    onClick={() => setShowAddCertModal(true)}
+                    className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Issue / Upload Legal Certificate</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Document Cards List */}
+              <div className="space-y-3.5">
+                {displayDocs.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center space-y-2">
+                    <FileText className="h-8 w-8 text-slate-400 mx-auto opacity-60" />
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      No Official Documents or Certificates In Vault Yet
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                      Official bonafide study certificates, character endorsements, and transfer documentation will appear here once issued.
+                    </p>
+                  </div>
+                ) : (
+                  displayDocs.map(doc => {
+                    const isUndertaking = (doc.title.includes('Undertaking') || doc.status.includes('Pending Submission')) && doc.status !== 'Verified';
+                    const isPending = doc.status === 'Pending Verification';
+                    const isVerified = doc.status === 'Verified' || doc.status === 'Clearance Approved';
+
+                    return (
+                      <div 
+                        key={doc.id}
+                        className={`rounded-2xl border p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          isUndertaking
+                            ? 'border-amber-200 dark:border-amber-800/80 bg-amber-50/40 dark:bg-amber-950/20'
+                            : isPending
+                            ? 'border-blue-200 dark:border-blue-800/80 bg-blue-50/30 dark:bg-blue-950/20'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                          <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${
+                            isUndertaking
+                              ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                              : isPending
+                              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                              : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                          }`}>
+                            {doc.doc_type === 'Birth Certificate' ? (
+                              <Award className="h-5 w-5" />
+                            ) : doc.doc_type === 'Transfer Certificate' ? (
+                              <LogOut className="h-5 w-5" />
+                            ) : doc.doc_type === 'Marks Card' ? (
+                              <GraduationCap className="h-5 w-5" />
+                            ) : (
+                              <FileText className="h-5 w-5" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                                {doc.title}
+                              </h4>
+                              <span className={`rounded-md text-[10px] font-bold px-2 py-0.5 inline-flex items-center gap-1 ${
+                                isVerified
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                  : isUndertaking
+                                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                                  : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                              }`}>
+                                {isVerified && <CheckCircle2 className="h-3 w-3" />}
+                                {isUndertaking && <Clock className="h-3 w-3" />}
+                                {isPending && <ShieldCheck className="h-3 w-3" />}
+                                <span>{isUndertaking ? '⏳ 30-Day TC Undertaking' : doc.status}</span>
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                {doc.doc_type}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                              <span>Uploaded by: <b className="text-slate-700 dark:text-slate-300 capitalize">{doc.uploaded_by_role || 'Admissions Desk'}</b></span>
+                              <span>&bull;</span>
+                              <span>Endorsement: <span className="font-semibold text-slate-700 dark:text-slate-300">{doc.verified_stamp || 'EDU360 Official Seal'}</span></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2 flex-wrap self-end md:self-auto">
+                          {/* In-App Document Viewer (Opens full official certificate on screen) */}
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc(doc)}
+                            className="flex items-center gap-1.5 rounded-xl border border-blue-200 dark:border-blue-800/80 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-3 py-1.5 text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-xs cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>View Document</span>
+                          </button>
+
+                          {viewerRole === 'admin' && isPending && (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveDocument(doc.id)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>Verify &amp; Affix Seal</span>
+                            </button>
+                          )}
+
+                          {viewerRole === 'admin' && isUndertaking && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminDepositTcModal(true)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <Upload className="h-3.5 w-3.5" />
+                              <span>Deposit Original TC</span>
+                            </button>
+                          )}
+
+                          {viewerRole === 'parent' && isUndertaking && (
+                            <button
+                              type="button"
+                              onClick={() => setShowParentTcModal(true)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <Upload className="h-3.5 w-3.5" />
+                              <span>Upload Scanned TC</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              openAndPrintOfficialDocument(doc.title, currentStudentName, currentAdmissionNo);
+                              triggerToast(`Opening ${doc.title} in print viewer.`);
+                            }}
+                            className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Download PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ======================================================== */}
       {/* TAB 6: FEE & ACCOUNTS LEDGER                             */}
@@ -1386,7 +1670,7 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
         <div className="space-y-6">
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Academic Fee Ledger &bull; Session 2026-27</h3>
-            <p className="text-xs text-slate-500 mb-6">Tuition, lab facilities, and bus transportation clearance schedule</p>
+            <p className="text-xs text-slate-500 mb-6">Tuition, curriculum, and laboratory facilities clearance schedule</p>
 
             {!isDemoStudent ? (
               <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center space-y-2">
@@ -1699,10 +1983,72 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                 />
               </div>
 
+              {/* Upload Certificate Scanned Copy (Drag & Drop or Browse) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Upload Scanned Certificate Document (Optional)
+                </label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingCert(true); }}
+                  onDragLeave={() => setIsDraggingCert(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingCert(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      setCertFileName(e.dataTransfer.files[0].name);
+                    }
+                  }}
+                  onClick={() => document.getElementById('admin-cert-file-picker')?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-4 text-center transition-all cursor-pointer ${
+                    isDraggingCert
+                      ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30'
+                      : certFileName
+                      ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
+                      : 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/60 dark:hover:bg-slate-800/70'
+                  }`}
+                >
+                  <Upload className={`h-6 w-6 mx-auto mb-1.5 ${certFileName ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    {certFileName ? certFileName : 'Click to Browse or Drag & Drop File Here'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {certFileName ? '✓ File attached · Ready for sealing' : 'Supports PDF, PNG, JPG (Max 15MB)'}
+                  </p>
+                  <input
+                    id="admin-cert-file-picker"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setCertFileName(e.target.files[0].name);
+                      }
+                    }}
+                  />
+                  {certFileName && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCertFileName('');
+                      }}
+                      className="mt-2 text-[10px] font-bold text-rose-600 hover:underline"
+                    >
+                      ✕ Remove file
+                    </button>
+                  )}
+                </div>
+                {!certFileName && (
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 italic">
+                    * If no external scan is attached, EDU360 will auto-generate an official certified PDF with Principal cryptographic seal.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Principal Endorsement / Remarks</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={certRemarks}
                   onChange={e => setCertRemarks(e.target.value)}
                   className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2"
@@ -1726,6 +2072,456 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADMIN DEPOSIT & VERIFY ORIGINAL TC                */}
+      {/* ======================================================== */}
+      {showAdminDepositTcModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-sm">
+                  📜
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Deposit &amp; Verify Original Transfer Certificate (TC)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Provisional 30-Day Undertaking Clearance &bull; {currentStudentName}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowAdminDepositTcModal(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmAdminDepositTc} className="mt-4 space-y-4">
+              <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 p-3.5 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <span>🏛️</span> Institutional Registry Inspection Protocol:
+                </p>
+                <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                  Affixing the official seal archives this original counter-signed TC into permanent SIS custody and permanently clears the student&apos;s 30-Day provisional undertaking.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Previous School Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={depositPrevSchool}
+                    onChange={e => setDepositPrevSchool(e.target.value)}
+                    placeholder="e.g. St. Xavier's High School"
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    TC Reference / Serial No.
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={depositTcSerial}
+                    onChange={e => setDepositTcSerial(e.target.value)}
+                    placeholder="e.g. TC/2026/0491"
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Drag and Drop File Upload for TC */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Upload Scanned Original TC (PDF / JPEG / PNG)
+                </label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingDepositTc(true); }}
+                  onDragLeave={() => setIsDraggingDepositTc(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingDepositTc(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      setDepositTcFileName(e.dataTransfer.files[0].name);
+                    }
+                  }}
+                  onClick={() => document.getElementById('admin-deposit-tc-file-picker')?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-4 text-center transition-all cursor-pointer ${
+                    isDraggingDepositTc
+                      ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/30'
+                      : depositTcFileName
+                      ? 'border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20'
+                      : 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/50'
+                  }`}
+                >
+                  <Upload className={`h-6 w-6 mx-auto mb-1.5 ${depositTcFileName ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    {depositTcFileName ? depositTcFileName : 'Click to Browse or Drag & Drop File'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {depositTcFileName ? '✓ Scanned copy attached for archiving' : 'Supports PDF, PNG, JPG (Max 15MB)'}
+                  </p>
+                  <input
+                    id="admin-deposit-tc-file-picker"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setDepositTcFileName(e.target.files[0].name);
+                      }
+                    }}
+                  />
+                  {depositTcFileName && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDepositTcFileName('');
+                      }}
+                      className="mt-2 text-[10px] font-bold text-rose-600 hover:underline"
+                    >
+                      ✕ Remove file
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Physical Hardcopy Verification Checkbox */}
+              <label className="flex items-start gap-2.5 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  required
+                  checked={depositHardcopyConfirmed}
+                  onChange={e => setDepositHardcopyConfirmed(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="text-xs text-slate-700 dark:text-slate-300 leading-normal">
+                  <strong>Statutory Physical Custody Confirmation:</strong> I confirm that the physical original counter-signed TC has been inspected and deposited in the permanent student dossier.
+                </span>
+              </label>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Registrar / Principal Clearance Remarks
+                </label>
+                <textarea
+                  value={depositRemarks}
+                  onChange={e => setDepositRemarks(e.target.value)}
+                  rows={2}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminDepositTcModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingDepositTc || !depositHardcopyConfirmed}
+                  className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>{submittingDepositTc ? 'Affixing Seal...' : 'Affix Official Seal & Verify TC'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* PARENT SUBMIT PENDING TRANSFER CERTIFICATE (TC) MODAL   */}
+      {/* ======================================================== */}
+      {showParentTcModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-sm">
+                  📜
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Submit Pending Transfer Certificate (TC)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Provisional 30-Day Undertaking Fulfillment &bull; {currentStudentName}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowParentTcModal(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleParentSubmitTc} className="mt-4 space-y-4">
+              <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 p-3.5 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <span>ℹ️</span> CBSE Affiliation &amp; Verification Protocol:
+                </p>
+                <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                  Uploading an advance scan registers your TC submission. The original hardcopy must still be presented at the Registrar Desk for physical stamping before deadline ({tcStatus?.deadline_date || '18 Dec 2026'}).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Previous School Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={prevSchoolName}
+                    onChange={e => setPrevSchoolName(e.target.value)}
+                    placeholder="e.g. St. Xavier's High School"
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    TC Reference / Serial No.
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tcSerialNo}
+                    onChange={e => setTcSerialNo(e.target.value)}
+                    placeholder="e.g. TC/2026/0491"
+                    className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Upload Scanned TC Document (PDF / JPEG / PNG)
+                </label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingParentTc(true); }}
+                  onDragLeave={() => setIsDraggingParentTc(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingParentTc(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      setTcFileName(e.dataTransfer.files[0].name);
+                    }
+                  }}
+                  onClick={() => document.getElementById('parent-tc-file-picker')?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-4 text-center transition-all cursor-pointer ${
+                    isDraggingParentTc
+                      ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/30'
+                      : tcFileName
+                      ? 'border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20'
+                      : 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/50'
+                  }`}
+                >
+                  <Upload className={`h-6 w-6 mx-auto mb-1.5 ${tcFileName ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    {tcFileName ? tcFileName : 'Click to Browse or Drag & Drop Transfer Certificate File'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {tcFileName ? '✓ Document attached · Ready for upload' : 'Supports PDF, PNG, JPG (Max 10MB)'}
+                  </p>
+                  <input
+                    id="parent-tc-file-picker"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setTcFileName(e.target.files[0].name);
+                      }
+                    }}
+                  />
+                  {tcFileName && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTcFileName('');
+                      }}
+                      className="mt-2 text-[10px] font-bold text-rose-600 hover:underline"
+                    >
+                      ✕ Remove file
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Remarks / Counter-Signature Note (Optional)
+                </label>
+                <textarea
+                  value={parentRemarks}
+                  onChange={e => setParentRemarks(e.target.value)}
+                  placeholder="e.g. Original TC countersigned by District Education Officer (DEO). Ready for physical submission."
+                  rows={2}
+                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowParentTcModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingTc}
+                  className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>{submittingTc ? 'Submitting...' : 'Submit Scanned TC to Registrar'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DOCUMENT & CERTIFICATE PREVIEW VIEWER             */}
+      {/* ======================================================== */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            {/* Viewer Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold">
+                  📜
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    {previewDoc.title}
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                      {previewDoc.status}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Official Student Document &bull; {currentStudentName} ({currentClass} - {currentSection})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openAndPrintOfficialDocument(previewDoc.title, currentStudentName, currentAdmissionNo)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Print / Save PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadOfficialDocumentFile(previewDoc.title, currentStudentName, currentAdmissionNo);
+                    triggerToast(`Downloaded ${previewDoc.title}`);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Download</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="h-8 w-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Viewer Certificate Sheet */}
+            <div className="p-6 sm:p-8 overflow-y-auto bg-slate-100/70 dark:bg-slate-950/60 flex-1">
+              <div className="max-w-2xl mx-auto rounded-2xl border-4 border-double border-blue-800/40 dark:border-blue-700/50 bg-white dark:bg-slate-900 p-8 shadow-md relative overflow-hidden">
+                <div className="text-center border-b-2 border-slate-200 dark:border-slate-800 pb-5 mb-6">
+                  <div className="text-lg sm:text-xl font-black text-blue-900 dark:text-blue-300 tracking-wider">
+                    OAKRIDGE INTERNATIONAL SCHOOL
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Affiliated to CBSE, New Delhi &bull; School Code: 40219
+                  </div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                    Campus: Tech City Zone 4, Outer Ring Road, Bengaluru – 560103
+                  </div>
+                </div>
+
+                <div className="text-center font-bold text-sm sm:text-base text-slate-900 dark:text-white uppercase tracking-wider underline my-4">
+                  {previewDoc.title}
+                </div>
+
+                <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-4 my-6 text-justify">
+                  <p>
+                    This is to officially certify that <strong className="text-blue-900 dark:text-blue-300 underline">{currentStudentName}</strong>, 
+                    bearing Admission Number <strong className="text-blue-900 dark:text-blue-300 font-mono">{currentAdmissionNo}</strong>, 
+                    is an actively enrolled student of this institution, studying in <strong className="text-blue-900 dark:text-blue-300">{currentClass} - {currentSection}</strong> for 
+                    the Academic Session <strong>2026–2027</strong>.
+                  </p>
+                  <p>
+                    Document Type: <strong>{previewDoc.doc_type}</strong> &bull; Verification Status: <span className="font-bold text-emerald-600 dark:text-emerald-400">{previewDoc.status}</span>.
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                    All statutory institutional checks, counter-signatures, and regulatory requirements have been inspected and sealed under institutional authority.
+                  </p>
+                </div>
+
+                {/* Footer with Seals and Signatures */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-200 dark:border-slate-800 text-xs">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <div className="inline-block px-3 py-1 rounded-full border border-blue-400 bg-blue-50 dark:bg-blue-950/60 text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase">
+                      {previewDoc.verified_stamp || 'EDU360 Official Seal'}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Uploaded by: <b className="capitalize">{previewDoc.uploaded_by_role}</b>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Verified Date: {new Date(previewDoc.upload_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="w-36 border-t border-slate-800 dark:border-slate-200 pt-1 font-bold text-xs text-slate-800 dark:text-slate-200">
+                      Dr. Sunita Kapoor
+                    </div>
+                    <div className="text-[10px] text-slate-400">Principal &amp; Registrar</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

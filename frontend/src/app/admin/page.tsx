@@ -85,7 +85,8 @@ import {
   TaskExecutiveCockpitResponse,
   TaskDomain,
   RemedialAdminOverview,
-  RemedialEarlyWarning
+  RemedialEarlyWarning,
+  PayrollBatchItem
 } from '@/lib/types';
 import { TriageCard } from '@/components/triage-card';
 import { CRMBoard } from '@/components/crm-board';
@@ -161,6 +162,13 @@ export default function AdminPage() {
   // Audit Logs Filter & Search State
   const [auditSearch, setAuditSearch] = useState('');
   const [auditFilter, setAuditFilter] = useState('ALL');
+
+  // Four-Eye Governance: Staff Payroll Batches & Principal Authorization State
+  const [adminPayrollBatches, setAdminPayrollBatches] = useState<PayrollBatchItem[]>([]);
+  const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
+  const [isAuthorizingPayroll, setIsAuthorizingPayroll] = useState(false);
+  const [selectedAdminBatchId, setSelectedAdminBatchId] = useState<number | null>(null);
+  const [principalAuthNotes, setPrincipalAuthNotes] = useState('Reviewed faculty attendance, EPFO statutory 12%, and TDS withholding. Digitally authorized for bank wire.');
 
   // Academic Rollover Modal State
   const [showRolloverModal, setShowRolloverModal] = useState(false);
@@ -401,7 +409,8 @@ export default function AdminPage() {
           api.getRemedialAdminOverview(),
           api.getStudents(),
           api.getReExamRequests(),
-          api.getAdminStudentLeaves()
+          api.getAdminStudentLeaves(),
+          api.getPayrollBatches()
         ]);
 
         if (results[0].status === 'fulfilled') setTriageAlerts(results[0].value);
@@ -423,6 +432,7 @@ export default function AdminPage() {
         if (results[16] && results[16].status === 'fulfilled') setStudentsList(results[16].value as Student[]);
         if (results[17] && results[17].status === 'fulfilled') setReExamRequests(results[17].value as ReExamRequestItem[]);
         if (results[18] && results[18].status === 'fulfilled') setStudentLeaves(results[18].value as LeaveRequest[]);
+        if (results[19] && results[19].status === 'fulfilled') setAdminPayrollBatches((results[19].value as PayrollBatchItem[]) || []);
       } catch (err) {
         console.error("Error loading admin dashboard", err);
       } finally {
@@ -434,6 +444,40 @@ export default function AdminPage() {
     // Also directly load remedial overview with resilient fallback
     api.getRemedialAdminOverview().then(res => setRemedialOverview(res)).catch(() => {});
   }, []);
+
+  const loadAdminPayroll = async () => {
+    try {
+      setIsLoadingPayroll(true);
+      const batches = await api.getPayrollBatches();
+      setAdminPayrollBatches(batches || []);
+    } catch (err) {
+      console.error('Failed to load payroll batches in admin:', err);
+    } finally {
+      setIsLoadingPayroll(false);
+    }
+  };
+
+  const handlePrincipalAuthorizeBatch = async (batchId: number) => {
+    try {
+      setIsAuthorizingPayroll(true);
+      await api.authorizePayroll(batchId, {
+        authorized_by: 'Dr. Sunita Kapoor (Principal)',
+        notes: principalAuthNotes || 'Reviewed faculty attendance, EPFO/TDS reconciliation, and approved for corporate wire.'
+      });
+      setAdminPayrollBatches(prev => prev.map(b => b.id === batchId ? {
+        ...b,
+        status: 'Approved for Wire',
+        authorized_by: 'Dr. Sunita Kapoor (Principal)',
+        authorized_at: new Date().toLocaleDateString('en-GB')
+      } : b));
+      triggerToast('Monthly Staff Payroll batch digitally authorized with Principal seal!');
+      await loadAdminPayroll();
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to authorize payroll batch.');
+    } finally {
+      setIsAuthorizingPayroll(false);
+    }
+  };
 
   // Handlers
   const handleNotifyTeacherForRemedial = async (studentId: number, studentName: string) => {
@@ -1898,19 +1942,37 @@ export default function AdminPage() {
                         ))}
                       </div>
 
-                      {/* Search Bar */}
-                      <div className="relative min-w-[240px]">
-                        <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={studentSearchQuery}
-                          onChange={e => setStudentSearchQuery(e.target.value)}
-                          placeholder="Search by student, roll no, parent..."
-                          className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {studentSearchQuery && (
-                          <button onClick={() => setStudentSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer">
-                            <X className="h-3.5 w-3.5" />
+                      {/* Search Bar & Clear Filters */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="relative min-w-[240px]">
+                          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={studentSearchQuery}
+                            onChange={e => setStudentSearchQuery(e.target.value)}
+                            placeholder="Search by student, roll no, parent..."
+                            className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          {studentSearchQuery && (
+                            <button onClick={() => setStudentSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {(studentClassFilter !== 'All' || studentSectionFilter !== 'All' || Boolean(studentSearchQuery.trim())) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStudentClassFilter('All');
+                              setStudentSectionFilter('All');
+                              setStudentSearchQuery('');
+                            }}
+                            className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                            title="Reset all filters"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            <span>Clear Filters</span>
                           </button>
                         )}
                       </div>
@@ -1934,15 +1996,47 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {studentsList
-                            .filter(s => {
+                          {(() => {
+                            const filtered = studentsList.filter(s => {
                               const matchClass = studentClassFilter === 'All' || s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
                               const matchSec = studentSectionFilter === 'All' || s.section.toUpperCase() === studentSectionFilter.toUpperCase();
                               const q = studentSearchQuery.trim().toLowerCase();
                               const matchQ = !q || s.name.toLowerCase().includes(q) || s.admission_no.toLowerCase().includes(q) || s.guardian_name.toLowerCase().includes(q) || s.roll_no.toLowerCase().includes(q);
                               return matchClass && matchSec && matchQ;
-                            })
-                            .map((student) => (
+                            });
+
+                            if (filtered.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={8} className="py-12 text-center">
+                                    <div className="flex flex-col items-center justify-center space-y-2">
+                                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                        <Filter className="h-5 w-5" />
+                                      </div>
+                                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                        No students found matching current class, section, or search query.
+                                      </p>
+                                      {(studentClassFilter !== 'All' || studentSectionFilter !== 'All' || Boolean(studentSearchQuery.trim())) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setStudentClassFilter('All');
+                                            setStudentSectionFilter('All');
+                                            setStudentSearchQuery('');
+                                          }}
+                                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                                        >
+                                          <RotateCcw className="h-3.5 w-3.5" />
+                                          <span>Reset All Filters</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return filtered.map((student) => (
                               <tr key={student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group">
                                 <td className="py-3.5 px-4 font-mono font-bold text-slate-500">
                                   #{student.roll_no}
@@ -2005,7 +2099,8 @@ export default function AdminPage() {
                                   </button>
                                 </td>
                               </tr>
-                            ))}
+                            ));
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -2118,17 +2213,27 @@ export default function AdminPage() {
                 {/* 3. SEARCH & FILTER TOOLBAR */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
                   <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                     <input
                       type="text"
                       placeholder="Search student, parent, or medical reason..."
                       value={studentLeaveSearch}
                       onChange={(e) => setStudentLeaveSearch(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-9 pr-8 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                     />
+                    {studentLeaveSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setStudentLeaveSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                        title="Clear search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 flex-wrap">
                     {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map(tab => (
                       <button
                         key={tab}
@@ -2142,6 +2247,21 @@ export default function AdminPage() {
                         {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : tab === 'APPROVED' ? 'Approved' : tab === 'REJECTED' ? 'Rejected' : 'Medical Slips'}
                       </button>
                     ))}
+
+                    {(studentLeaveFilter !== 'ALL' || Boolean(studentLeaveSearch.trim())) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudentLeaveFilter('ALL');
+                          setStudentLeaveSearch('');
+                        }}
+                        className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                        title="Reset all filters"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Clear Filters</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2155,10 +2275,25 @@ export default function AdminPage() {
                   </div>
 
                   {filteredLeaves.length === 0 ? (
-                    <div className="p-12 text-center">
-                      <UserCheck className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                    <div className="p-12 text-center flex flex-col items-center justify-center space-y-2">
+                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                        <Filter className="h-5 w-5" />
+                      </div>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No student leave applications match your criteria</p>
                       <p className="text-xs text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
+                      {(studentLeaveFilter !== 'ALL' || Boolean(studentLeaveSearch.trim())) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudentLeaveFilter('ALL');
+                            setStudentLeaveSearch('');
+                          }}
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Reset All Filters</span>
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -2749,14 +2884,24 @@ export default function AdminPage() {
                   {/* Search & Filter Toolbar */}
                   <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="relative flex-1 max-w-md">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
                         value={feeDefaulterSearch}
                         onChange={(e) => setFeeDefaulterSearch(e.target.value)}
                         placeholder="Search student, guardian, roll #, or phone..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
                       />
+                      {feeDefaulterSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setFeeDefaulterSearch('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                          title="Clear search"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -2807,6 +2952,24 @@ export default function AdminPage() {
                           <option key={cls} value={cls}>{cls}</option>
                         ))}
                       </select>
+
+                      {/* Clear Filters Button */}
+                      {(feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeeDefaulterTierFilter('ALL');
+                            setFeeDefaulterCategoryFilter('ALL');
+                            setFeeDefaulterClassFilter('All Classes');
+                            setFeeDefaulterSearch('');
+                          }}
+                          className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                          title="Reset fee defaulters filter"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Clear Filters</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2843,8 +3006,30 @@ export default function AdminPage() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredFeeDefaulters.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="py-8 text-center text-slate-400">
-                                No fee accounts match the selected filter criteria.
+                              <td colSpan={8} className="py-10 text-center">
+                                <div className="flex flex-col items-center justify-center space-y-2">
+                                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                    <Filter className="h-5 w-5" />
+                                  </div>
+                                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                    No fee accounts match the selected filter criteria.
+                                  </p>
+                                  {(feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFeeDefaulterTierFilter('ALL');
+                                        setFeeDefaulterCategoryFilter('ALL');
+                                        setFeeDefaulterClassFilter('All Classes');
+                                        setFeeDefaulterSearch('');
+                                      }}
+                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                                    >
+                                      <RotateCcw className="h-3.5 w-3.5" />
+                                      <span>Reset All Filters</span>
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ) : (
@@ -3564,6 +3749,149 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {activeTab === 'payroll' && (
             <div className="space-y-6">
+              {/* Four-Eye Governance: Principal Executive Sign-off Section */}
+              {(() => {
+                const pendingBatches = adminPayrollBatches.filter(b => b.status === 'Audit Pending');
+                const pendingBatch = (selectedAdminBatchId ? pendingBatches.find(b => b.id === selectedAdminBatchId) : null) || pendingBatches[0];
+                if (pendingBatch) {
+                  return (
+                    <div className="p-6 rounded-3xl bg-gradient-to-br from-blue-50/80 via-white to-amber-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/20 border-2 border-blue-500/30 dark:border-blue-500/40 shadow-xl space-y-5 animate-in fade-in slide-in-from-top-2">
+                      {pendingBatches.length > 1 && (
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap">
+                          <span className="text-[11px] font-bold text-slate-500">Pending Batches ({pendingBatches.length}):</span>
+                          {pendingBatches.map(b => (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => setSelectedAdminBatchId(b.id)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                pendingBatch.id === b.id
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              Batch #{b.id}: {b.payroll_month}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 border-slate-200/80 dark:border-slate-800">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-md">
+                            <ShieldCheck className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                                Executive Sign-off Required: {pendingBatch.payroll_month} Payroll
+                              </h3>
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-300 dark:border-amber-700 animate-pulse">
+                                Four-Eye Policy Pending
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                              Submitted by Accounts Office (Mr. Arvind Krishnan) • Batch #{pendingBatch.id} • Awaiting Principal Authorization
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right sm:border-l sm:pl-4 border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                            Net Wire Disbursement
+                          </span>
+                          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                            ₹{(pendingBatch.net_payable || 1845000).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Summary Metric Tiles */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Total Faculty &amp; Staff</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                            {pendingBatch.total_staff_count || 48} Personnel
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Gross Compensation</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                            ₹{(pendingBatch.gross_total || 2180000).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Statutory Deductions (PF/PT/TDS)</span>
+                          <span className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5 block">
+                            -₹{(pendingBatch.total_deductions || 295000).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Audit Checkpoint</span>
+                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 block flex items-center gap-1">
+                            <Check className="h-3.5 w-3.5" /> Biometric Reconciled
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Principal Sign-off Form */}
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+                        <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                          Principal Executive Endorsement &amp; Digital Seal Remarks
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={principalAuthNotes}
+                          onChange={(e) => setPrincipalAuthNotes(e.target.value)}
+                          placeholder="e.g. Reviewed faculty attendance, EPFO statutory 12%, and TDS withholding. Digitally authorized for bank corporate wire."
+                          className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                        />
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Signatory Authority: <b>Dr. Sunita Kapoor (Principal / Institutional Head)</b>
+                          </div>
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerToast('Audit query dispatched to Accounts Coordinator. Batch retained in Audit Pending.');
+                              }}
+                              className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              Request Revision
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isAuthorizingPayroll}
+                              onClick={() => handlePrincipalAuthorizeBatch(pendingBatch.id)}
+                              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                              <span>{isAuthorizingPayroll ? 'Affixing Seal...' : 'Affix Principal Digital Seal & Authorize Wire'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-300">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        <b>Four-Eye Governance Status:</b> All monthly staff salary batches are fully authorized and reconciled. No pending sign-offs at Principal Executive Desk.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadAdminPayroll}
+                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-50 transition-colors cursor-pointer shrink-0 text-xs"
+                    >
+                      Refresh Batches
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* Monthly Payroll Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -4124,7 +4452,7 @@ export default function AdminPage() {
                   </div>
 
                   {/* Status Dropdown */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-slate-500">Status:</span>
                     <select
                       value={taskStatusFilter}
@@ -4137,16 +4465,46 @@ export default function AdminPage() {
                       <option value="Pending Review">Pending Review</option>
                       <option value="Completed">Completed</option>
                     </select>
+
+                    {(taskOriginFilter !== 'all' || taskStatusFilter !== 'all') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaskOriginFilter('all');
+                          setTaskStatusFilter('all');
+                        }}
+                        className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                        title="Reset task filters"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Clear Filters</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* ── Clean Task List Cards ── */}
                 <div className="space-y-3">
                   {filteredTasks.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center">
-                      <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-3" />
+                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center flex flex-col items-center justify-center space-y-2">
+                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                        <Filter className="h-5 w-5" />
+                      </div>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No tasks match this filter.</p>
-                      <p className="text-xs text-slate-400 mt-1">Try switching to All Tasks or change status filter.</p>
+                      <p className="text-xs text-slate-400">Try switching to All Tasks or change status filter.</p>
+                      {(taskOriginFilter !== 'all' || taskStatusFilter !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTaskOriginFilter('all');
+                            setTaskStatusFilter('all');
+                          }}
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Reset All Filters</span>
+                        </button>
+                      )}
                     </div>
                   )}
 

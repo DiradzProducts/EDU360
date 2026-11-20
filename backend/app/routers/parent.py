@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
     LeaveRequest, ExitClearance, Homework, FeeDefaulter, PaymentTransaction,
-    ParentTeacherMessage, ReportCard, SecurityAuditLog
+    ParentTeacherMessage, ReportCard, SecurityAuditLog, OfficialDocument, AdmissionEnquiry
 )
 from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
@@ -232,7 +232,7 @@ async def get_parent_banners():
         {
             "id": 3,
             "title": "Fee Milestone 2 Due on 25th Oct",
-            "subtitle": "Term 2 tuition & transport fee installment open for online payment.",
+            "subtitle": "Term 2 tuition & academic curriculum fee installment open for online payment.",
             "badge": "Payment Due",
             "badge_color": "amber",
             "action_text": "Pay via UPI / Card",
@@ -242,14 +242,14 @@ async def get_parent_banners():
         },
         {
             "id": 4,
-            "title": "School Bus Route 4 — On Schedule",
-            "subtitle": "Bus is 8 mins away from Sector 15 Crossroad Stop.",
-            "badge": "Live GPS",
-            "badge_color": "emerald",
-            "action_text": "Open Live Tracker",
-            "action_target": "bus",
-            "icon": "Navigation",
-            "gradient": "from-emerald-600 to-teal-700"
+            "title": "Annual STEM & Robotics Exhibition 2026",
+            "subtitle": "Inter-school science showcase registrations open for Middle & Senior wings.",
+            "badge": "Campus Event",
+            "badge_color": "purple",
+            "action_text": "View Campus Calendar",
+            "action_target": "events",
+            "icon": "Calendar",
+            "gradient": "from-purple-600 to-indigo-700"
         }
     ]
 
@@ -1146,4 +1146,112 @@ async def get_parent_tax_certificate(student_id: int, db: AsyncSession = Depends
         "eligible_tuition_fee": total_tuition_paid,
         "tax_section": "Section 80C of the Income Tax Act, 1961 (Tuition Fees Deduction)",
         "certification_text": "This is to certify that the above mentioned student is a bona fide regular student of this institution. The amount specified represents solely the tuition fee paid during the financial year 2026-2027, eligible for deduction under Section 80C."
+    }
+
+# =========================================================================
+# 30-DAY TC UNDERTAKING PARENT SUBMISSION GATEWAY
+# =========================================================================
+
+class ParentTcSubmitRequest(BaseModel):
+    previous_school_name: Optional[str] = "St. Xavier High School"
+    tc_serial_number: Optional[str] = None
+    file_name: Optional[str] = None
+    remarks: Optional[str] = None
+
+@router.post("/students/{student_id}/tc-submit")
+async def submit_parent_tc(
+    student_id: int,
+    req: ParentTcSubmitRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Parent submits pending Transfer Certificate (TC) scan under the 30-day provisional undertaking.
+    Sets status to 'Pending Verification' awaiting physical original verification by school registrar.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    doc_slug = student.name.lower().replace(" ", "_")
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    existing_tc = doc_res.scalars().first()
+    
+    file_name = req.file_name or f"tc_submission_{doc_slug}.pdf"
+    file_url = f"/documents/{file_name}"
+    serial_info = f" (TC Ref: {req.tc_serial_number})" if req.tc_serial_number else ""
+    stamp = f"Parent Submission{serial_info} - Awaiting School Registrar Physical Verification"
+
+    if existing_tc:
+        existing_tc.title = f"Transfer Certificate (Submitted by Parent - Pending Verification) - {student.name}"
+        existing_tc.status = "Pending Verification"
+        existing_tc.is_official = True
+        existing_tc.uploaded_by_role = "parent"
+        existing_tc.upload_date = datetime.datetime.utcnow()
+        existing_tc.file_url = file_url
+        existing_tc.verified_stamp = stamp
+        target_doc = existing_tc
+    else:
+        target_doc = OfficialDocument(
+            student_id=student.id,
+            title=f"Transfer Certificate (Submitted by Parent - Pending Verification) - {student.name}",
+            doc_type="Transfer Certificate",
+            file_url=file_url,
+            is_official=True,
+            uploaded_by_role="parent",
+            upload_date=datetime.datetime.utcnow(),
+            status="Pending Verification",
+            verified_stamp=stamp
+        )
+        db.add(target_doc)
+
+    # 1. Statutory Security Audit Log
+    audit_rec = SecurityAuditLog(
+        actor_name=student.guardian_name or "Parent",
+        actor_role="PARENT",
+        action_type="PARENT_TC_SUBMISSION",
+        target_entity=f"Student #{student.id} - {student.name} (TC Submission)",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Parent submitted pending TC for {student.name}. Prev School: {req.previous_school_name or 'N/A'}, TC Serial: {req.tc_serial_number or 'N/A'}. Verification requested."
+    )
+    db.add(audit_rec)
+
+    # 2. Notify Central Administration
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=student.guardian_name or "Parent",
+            sender_role="PARENT",
+            title=f"Transfer Certificate Submitted: {student.name}",
+            message=f"Parent of {student.name} ({student.class_name}) has uploaded the Transfer Certificate{serial_info} from {req.previous_school_name or 'previous school'}. Please verify against physical original and affix official seal.",
+            notification_type="TC_SUBMISSION_ALERT",
+            priority="HIGH",
+            recipient_role="ADMIN",
+            action_url=f"/admin?tab=sis&student_id={student.id}",
+            metadata_dict={"student_id": student.id, "tc_serial": req.tc_serial_number}
+        )
+    except Exception as e:
+        print(f"Warning: could not dispatch admin TC notification: {e}")
+
+    await db.commit()
+    await db.refresh(target_doc)
+    return {
+        "success": True,
+        "message": f"Transfer Certificate for {student.name} submitted successfully. School Registrar will verify against physical original.",
+        "document": {
+            "id": target_doc.id,
+            "student_id": target_doc.student_id,
+            "title": target_doc.title,
+            "doc_type": target_doc.doc_type,
+            "status": target_doc.status,
+            "file_url": target_doc.file_url,
+            "verified_stamp": target_doc.verified_stamp,
+            "uploaded_by_role": target_doc.uploaded_by_role
+        }
     }

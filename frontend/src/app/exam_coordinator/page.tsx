@@ -297,6 +297,7 @@ export default function ExamCoordinatorPage() {
   const [showBatchModal, setShowBatchModal] = useState(false);
 
   const [batchClass, setBatchClass] = useState('Class 8');
+  const [batchSection, setBatchSection] = useState('A & B');
 
   const [batchSeriesName, setBatchSeriesName] = useState('Term 1 Final Examination 2026');
 
@@ -374,6 +375,128 @@ export default function ExamCoordinatorPage() {
       } catch {}
     }, 600);
   };
+
+  // Grouped Exam Batch Interface
+  interface ExamBatchGroup {
+    batchId: string;
+    seriesName: string;
+    className: string;
+    section: string;
+    slots: ExamScheduleItem[];
+    startDate: string;
+    endDate: string;
+    allCleared: boolean;
+    totalSlots: number;
+  }
+
+  const handlePublishBatchAdmitCards = (batchId: string, seriesName: string, className: string) => {
+    setPublishingTimetable(true);
+    setTimeout(() => {
+      setIsTimetablePublished(true);
+      setPublishingTimetable(false);
+      setSchedules(prev => prev.map(s => {
+        const match = s.batch_id === batchId || (s.series_name === seriesName && s.class_name.includes(className));
+        return match ? { ...s, is_published: true, hall_ticket_published: true } : s;
+      }));
+      triggerToast(`✓ Admit cards activated for ${seriesName} (${className})! Enrolled student hall tickets deployed.`);
+    }, 400);
+  };
+
+  const handleExportBatchCsv = (batch: ExamBatchGroup) => {
+    try {
+      const headers = ['Exam Date', 'Time', 'Grade & Section', 'Subject Paper', 'Hall / Virtual Room', 'Chief Invigilator', 'Academic Clearance', 'Admit Pass Status'];
+      const rows = batch.slots.map(s => [
+        s.exam_date,
+        `${s.start_time} - ${s.end_time}`,
+        `${s.class_name} ${s.section || 'B'}`,
+        s.subject,
+        s.room_hall || s.hall_name || 'Virtual Room A',
+        s.invigilator_name || s.chief_invigilator_name || 'Mrs. Ananya Verma',
+        s.academic_clearance ? 'Cleared' : 'Pending',
+        'Active (100% Issued)'
+      ]);
+      const safeFilename = `Timetable_${batch.className.replace(/[^a-zA-Z0-9]/g, '_')}_${batch.seriesName.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+      exportToCsv(safeFilename, headers, rows);
+      triggerToast(`✓ Exported ${batch.seriesName} timetable (${batch.totalSlots} subjects)`);
+    } catch {
+      triggerToast('Export failed, please try again.');
+    }
+  };
+
+  // Filtered and grouped exam schedules: Separates into structured Batches and Single Slots
+  const { batchGroups, singleSlotExams, totalFilteredCount } = React.useMemo(() => {
+    const filtered = (schedules || []).filter(s => {
+      if (schedClassFilter === 'All') return true;
+      return (s.class_name || '').includes(schedClassFilter);
+    });
+
+    const batchMap = new Map<string, ExamBatchGroup>();
+    const singles: ExamScheduleItem[] = [];
+
+    filtered.forEach(item => {
+      const rawTitle = item.title || '';
+      const isExplicitSingle = item.schedule_type === 'SINGLE';
+      const hasBatchPattern = Boolean(item.batch_id || rawTitle.includes(' - ') || rawTitle.includes(': '));
+
+      if (isExplicitSingle || !hasBatchPattern) {
+        singles.push(item);
+      } else {
+        const inferredSeries = item.series_name || (rawTitle.includes(' - ') ? rawTitle.split(' - ')[1].trim() : (rawTitle.includes(': ') ? rawTitle.split(': ')[1].trim() : rawTitle));
+        const cleanClass = (item.class_name || 'Class').trim();
+        const bKey = item.batch_id || `BATCH-${cleanClass.replace(/\s+/g, '')}-${inferredSeries.replace(/\s+/g, '')}`;
+
+        if (!batchMap.has(bKey)) {
+          batchMap.set(bKey, {
+            batchId: bKey,
+            seriesName: inferredSeries,
+            className: cleanClass,
+            section: item.section || 'A & B',
+            slots: [],
+            startDate: item.exam_date || '',
+            endDate: item.exam_date || '',
+            allCleared: true,
+            totalSlots: 0
+          });
+        }
+        const b = batchMap.get(bKey)!;
+        b.slots.push(item);
+        if (item.section && b.section && b.section !== item.section) {
+          b.section = 'A & B';
+        }
+      }
+    });
+
+    const groups = Array.from(batchMap.values()).map(b => {
+      b.slots.sort((x, y) => {
+        const d1 = x.exam_date || '';
+        const d2 = y.exam_date || '';
+        if (d1 !== d2) return d1.localeCompare(d2);
+        return (x.start_time || '').localeCompare(y.start_time || '');
+      });
+      if (b.slots.length > 0) {
+        b.startDate = b.slots[0].exam_date;
+        b.endDate = b.slots[b.slots.length - 1].exam_date;
+      }
+      b.allCleared = b.slots.every(s => s.academic_clearance);
+      b.totalSlots = b.slots.length;
+      return b;
+    });
+
+    groups.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+    singles.sort((x, y) => {
+      const d1 = x.exam_date || '';
+      const d2 = y.exam_date || '';
+      if (d1 !== d2) return d1.localeCompare(d2);
+      return (x.start_time || '').localeCompare(y.start_time || '');
+    });
+
+    return {
+      batchGroups: groups,
+      singleSlotExams: singles,
+      totalFilteredCount: filtered.length
+    };
+  }, [schedules, schedClassFilter]);
 
 
 
@@ -1062,6 +1185,8 @@ export default function ExamCoordinatorPage() {
 
         class_name: batchClass,
 
+        section: batchSection,
+
         series_name: batchSeriesName,
 
         slots: batchSlots.map(s => ({
@@ -1083,13 +1208,13 @@ export default function ExamCoordinatorPage() {
       });
 
       if (res.success) {
-        triggerToast(`Class ${batchClass} schedule created (${batchSlots.length} subjects) & routed for Academic Clearance!`);
+        triggerToast(`Class ${batchClass} (Sec ${batchSection}) schedule created (${batchSlots.length} subjects) & routed for Academic Clearance!`);
         setShowBatchModal(false);
 
         const examPayload = {
-          title: `${batchSeriesName} • ${batchClass}-B`,
+          title: `${batchSeriesName} • ${batchClass} (Sec ${batchSection})`,
           subject: 'Mathematics',
-          className: `${batchClass}-B`,
+          className: batchSection === 'A & B' ? `${batchClass} (Sec A & B)` : `${batchClass}-${batchSection}`,
           invigilator: 'Mrs. Ananya Verma',
           hall: 'Virtual Room Alpha (Camera AI)',
           date: 'Today',
@@ -3540,208 +3665,340 @@ export default function ExamCoordinatorPage() {
 
 
               {/* Board Invariant Banner: 100% Hall Ticket Issuance Unlinked from Fees */}
-
               {isTimetablePublished && (
-
                 <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-
                   <div className="flex items-center gap-2.5">
-
                     <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-
                       <CheckCircle2 className="h-4 w-4" />
-
                     </div>
-
                     <div>
-
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-
                         Examination Timetable &amp; 100% Student Admit Cards Active ({schedClassFilter === 'All' ? 'All Classes' : schedClassFilter})
-
                       </h4>
-
                       <p className="text-[11px] text-slate-600 dark:text-slate-400">
-
                         Admit cards and duty rosters active for {schedClassFilter === 'All' ? 'enrolled students' : schedClassFilter}. CBSE Invariant: Fees never block exam entry or hall ticket generation.
-
                       </p>
-
                     </div>
-
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-
-                    <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300">
-
-                      38/38 Hall Tickets Issued ✓
-
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border border-blue-300">
+                      {batchGroups.length} Active {batchGroups.length === 1 ? 'Batch' : 'Batches'}
                     </span>
-
+                    {singleSlotExams.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 border border-amber-300">
+                        {singleSlotExams.length} Single Slots
+                      </span>
+                    )}
+                    <span className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300">
+                      38/38 Hall Tickets Issued ✓
+                    </span>
                   </div>
-
                 </div>
-
               )}
 
-
-
-              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F172A] overflow-hidden shadow-xs">
-
-                <table className="w-full text-left text-xs">
-
-                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-
-                    <tr>
-
-                      <th className="p-3.5">Exam Date &amp; Time</th>
-
-                      <th className="p-3.5">Grade / Section</th>
-
-                      <th className="p-3.5">Subject Paper</th>
-
-                      <th className="p-3.5">Proctored Virtual Room</th>
-
-                      <th className="p-3.5">Chief Invigilator</th>
-
-                      <th className="p-3.5">Academic Clearance</th>
-
-                      <th className="p-3.5">Digital Admit Pass Status</th>
-                      <th className="p-3.5 text-right">Duty Order & Status</th>
-
-                    </tr>
-
-                  </thead>
-
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-
-                    {schedules
-
-                      .filter(s => schedClassFilter === 'All' || s.class_name.includes(schedClassFilter))
-
-                      .map(row => (
-
-                      <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">
-
-                        <td className="p-3.5 font-bold text-slate-900 dark:text-white">
-
-                          <div>{row.exam_date}</div>
-
-                          <div className="text-[10px] text-slate-400 font-normal">{row.start_time} - {row.end_time}</div>
-
-                        </td>
-
-                        <td className="p-3.5 font-semibold text-violet-600 dark:text-violet-400">
-
-                          {row.class_name} {row.section ? `- ${row.section}` : ''}
-
-                        </td>
-
-                        <td className="p-3.5 font-bold text-slate-800 dark:text-slate-200">
-
-                          {row.subject}
-
-                          <div className="text-[10px] text-slate-400 font-normal">{row.title || row.exam_name}</div>
-
-                        </td>
-
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">{row.room_hall || row.hall_name}</td>
-
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">
-
-                          <div className="font-bold text-slate-900 dark:text-white">
-
-                            {row.invigilator_name || row.chief_invigilator_name || 'Mrs. Ananya Verma'}
-
+              {/* ── BATCH CARDS CONTAINER: Separate card & table for each scheduled batch ── */}
+              <div className="space-y-6">
+                {batchGroups.map((batch) => (
+                  <div 
+                    key={batch.batchId} 
+                    className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F172A] shadow-xs overflow-hidden transition-all"
+                  >
+                    {/* Batch Header Bar */}
+                    <div className="p-4 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                          <Layers className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                              {batch.seriesName}
+                            </h3>
+                            <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                              {batch.className} {batch.section ? (batch.section.includes('&') ? `• Sec ${batch.section}` : `• Sec ${batch.section}`) : '• Sec A & B'}
+                            </span>
+                            {batch.allCleared ? (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Academics Cleared</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                <span>Clearance Pending</span>
+                              </span>
+                            )}
                           </div>
-
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/50 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-800 mt-1">
-
-                            <span>Duty Order Dispatched ✓</span>
-
-                          </span>
-
-                        </td>
-
-                        <td className="p-3.5">
-
-                          {row.academic_clearance ? (
-
-                            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/50 font-bold text-[11px] w-fit">
-
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-
-                              <span>Cleared by Academics ✓</span>
-
-                            </div>
-
-                          ) : (
-
-                            <div className="space-y-1">
-
-                              <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/50 font-bold text-[11px] w-fit">
-
-                                <Clock className="h-3.5 w-3.5" />
-
-                                <span>Clearance Pending ⏳</span>
-
-                              </div>
-
-                              <button
-
-                                onClick={() => handleNudgeAcademic(row.subject, row.class_name)}
-
-                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
-
-                              >
-
-                                <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
-
-                              </button>
-
-                            </div>
-
-                          )}
-
-                          {row.academic_clearance_notes && (
-
-                            <div className="text-[9px] text-slate-400 mt-1 max-w-[200px] truncate" title={row.academic_clearance_notes}>
-
-                              {row.academic_clearance_notes}
-
-                            </div>
-
-                          )}
-
-                        </td>
-
-                        <td className="p-3.5">
-
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
-
-                            <Ticket className="h-3 w-3" />
-
-                            <span>Admit Card Active</span>
-
-                          </span>
-
-                        </td>
-                        <td className="p-3.5 text-right">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                            <span>Order Deployed: {row.chief_invigilator_name || 'Invigilator'}</span>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1 flex-wrap">
+                            <span className="flex items-center gap-1 font-medium">
+                              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Schedule Span: <strong>{batch.startDate} → {batch.endDate}</strong></span>
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1 font-medium">
+                              <FileText className="h-3.5 w-3.5 text-slate-400" />
+                              <span><strong>{batch.totalSlots}</strong> Subject Papers</span>
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                              <Ticket className="h-3.5 w-3.5" />
+                              <span>Admit Passes Dispatched (100%)</span>
+                            </span>
                           </div>
-                        </td>
+                        </div>
+                      </div>
 
-                      </tr>
+                      {/* Batch Action Buttons */}
+                      <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleExportBatchCsv(batch)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          title="Export Timetable CSV for this batch"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          <span>Export CSV</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePublishBatchAdmitCards(batch.batchId, batch.seriesName, batch.className)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          title="Sync & verify digital admit cards for this cohort"
+                        >
+                          <Ticket className="h-3.5 w-3.5" />
+                          <span>Admit Cards Active ✓</span>
+                        </button>
+                      </div>
+                    </div>
 
-                    ))}
+                    {/* Dedicated Timetable Table for this Batch */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50/70 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          <tr>
+                            <th className="p-3.5">Exam Date &amp; Time</th>
+                            <th className="p-3.5">Grade / Section</th>
+                            <th className="p-3.5">Subject Paper</th>
+                            <th className="p-3.5">Proctored Virtual Room</th>
+                            <th className="p-3.5">Chief Invigilator</th>
+                            <th className="p-3.5">Academic Clearance</th>
+                            <th className="p-3.5">Digital Admit Pass Status</th>
+                            <th className="p-3.5 text-right">Duty Order &amp; Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                          {batch.slots.map((row) => (
+                            <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-3.5 font-bold text-slate-900 dark:text-white">
+                                <div className="font-mono text-xs">{row.exam_date}</div>
+                                <div className="text-[10px] text-slate-400 font-normal">{row.start_time} - {row.end_time}</div>
+                              </td>
+                              <td className="p-3.5 font-semibold text-violet-600 dark:text-violet-400">
+                                {row.class_name} {row.section ? (row.section.includes('&') ? `- Sec ${row.section}` : `- ${row.section}`) : '- Sec A & B'}
+                              </td>
+                              <td className="p-3.5 font-bold text-slate-800 dark:text-slate-200">
+                                <div>{row.subject}</div>
+                                <div className="text-[10px] text-slate-400 font-normal truncate max-w-[180px]">{row.title || row.exam_name}</div>
+                              </td>
+                              <td className="p-3.5 text-slate-600 dark:text-slate-300 font-medium">
+                                {row.room_hall || row.hall_name}
+                              </td>
+                              <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                                <div className="font-bold text-slate-900 dark:text-white">
+                                  {row.invigilator_name || row.chief_invigilator_name || 'Mrs. Ananya Verma'}
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/50 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-800 mt-1">
+                                  <span>Duty Order Dispatched ✓</span>
+                                </span>
+                              </td>
+                              <td className="p-3.5">
+                                {row.academic_clearance ? (
+                                  <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/50 font-bold text-[11px] w-fit">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Cleared by Academics ✓</span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/50 font-bold text-[11px] w-fit">
+                                      <Clock className="h-3.5 w-3.5" />
+                                      <span>Clearance Pending ⏳</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleNudgeAcademic(row.subject, row.class_name)}
+                                      className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
+                                    </button>
+                                  </div>
+                                )}
+                                {row.academic_clearance_notes && (
+                                  <div className="text-[9px] text-slate-400 mt-1 max-w-[200px] truncate" title={row.academic_clearance_notes}>
+                                    {row.academic_clearance_notes}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3.5">
+                                <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
+                                  <Ticket className="h-3 w-3" />
+                                  <span>Admit Card Active</span>
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                  <span>Order Deployed: {row.chief_invigilator_name || 'Invigilator'}</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
 
-                  </tbody>
+                {/* ── STANDALONE & SINGLE SLOT EXAMINATIONS CARD ── */}
+                {singleSlotExams.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200/90 dark:border-amber-800/60 bg-white dark:bg-[#0F172A] shadow-xs overflow-hidden">
+                    <div className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                          <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                              Standalone &amp; Single Slot Examinations
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 border border-amber-300">
+                              {singleSlotExams.length} Single Slots
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Ad-hoc subject assessments, isolated practicals, and make-up re-examinations scheduled individually
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateScheduleModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-200 text-xs font-bold transition-all cursor-pointer shadow-2xs self-start md:self-auto"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Schedule Single Slot</span>
+                      </button>
+                    </div>
 
-                </table>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-amber-50/30 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          <tr>
+                            <th className="p-3.5">Exam Date &amp; Time</th>
+                            <th className="p-3.5">Grade / Section</th>
+                            <th className="p-3.5">Subject Paper</th>
+                            <th className="p-3.5">Proctored Virtual Room</th>
+                            <th className="p-3.5">Chief Invigilator</th>
+                            <th className="p-3.5">Academic Clearance</th>
+                            <th className="p-3.5">Digital Admit Pass Status</th>
+                            <th className="p-3.5 text-right">Duty Order &amp; Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                          {singleSlotExams.map((row) => (
+                            <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-amber-50/20 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="p-3.5 font-bold text-slate-900 dark:text-white">
+                                <div className="font-mono text-xs">{row.exam_date}</div>
+                                <div className="text-[10px] text-slate-400 font-normal">{row.start_time} - {row.end_time}</div>
+                              </td>
+                              <td className="p-3.5 font-semibold text-amber-700 dark:text-amber-400">
+                                {row.class_name} {row.section ? `- ${row.section}` : ''}
+                              </td>
+                              <td className="p-3.5 font-bold text-slate-800 dark:text-slate-200">
+                                <div>{row.subject}</div>
+                                <div className="text-[10px] text-slate-400 font-normal truncate max-w-[180px]">{row.title || row.exam_name}</div>
+                              </td>
+                              <td className="p-3.5 text-slate-600 dark:text-slate-300 font-medium">
+                                {row.room_hall || row.hall_name}
+                              </td>
+                              <td className="p-3.5 text-slate-600 dark:text-slate-300">
+                                <div className="font-bold text-slate-900 dark:text-white">
+                                  {row.invigilator_name || row.chief_invigilator_name || 'Mrs. Ananya Verma'}
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800 mt-1">
+                                  <span>Duty Order Dispatched ✓</span>
+                                </span>
+                              </td>
+                              <td className="p-3.5">
+                                {row.academic_clearance ? (
+                                  <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/50 font-bold text-[11px] w-fit">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Cleared by Academics ✓</span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/50 font-bold text-[11px] w-fit">
+                                      <Clock className="h-3.5 w-3.5" />
+                                      <span>Clearance Pending ⏳</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleNudgeAcademic(row.subject, row.class_name)}
+                                      className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span className="inline-flex items-center gap-1.5"><span>Nudge Academic Desk</span><Icon3D name="bell" size={15} /></span>
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3.5">
+                                <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 w-fit">
+                                  <Ticket className="h-3 w-3" />
+                                  <span>Admit Card Active</span>
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                  <span>Order Deployed: {row.chief_invigilator_name || 'Invigilator'}</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
+                {/* ── EMPTY STATE ── */}
+                {batchGroups.length === 0 && singleSlotExams.length === 0 && (
+                  <div className="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                      <Calendar className="h-6 w-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">No Examination Timetables Found</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      No exam batches or single slots match {schedClassFilter === 'All' ? 'the active filters' : `class ${schedClassFilter}`}.
+                    </p>
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowBatchModal(true)}
+                        className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
+                      >
+                        Batch Schedule Class
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateScheduleModal(true)}
+                        className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer transition-all"
+                      >
+                        Single Slot Exam
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -4845,6 +5102,7 @@ export default function ExamCoordinatorPage() {
                     onChange={e => setNewSchedSection(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
                   >
+                    <option value="A & B">Sections A &amp; B (Combined Cohort)</option>
                     <option value="A">Section A</option>
                     <option value="B">Section B</option>
                     <option value="C">Section C</option>
@@ -5057,7 +5315,7 @@ export default function ExamCoordinatorPage() {
 
             <form onSubmit={handleCreateBatchSchedules} className="space-y-4 text-xs">
 
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
 
                 <div>
 
@@ -5073,11 +5331,37 @@ export default function ExamCoordinatorPage() {
 
                   >
 
-                    <option value="Class 8">Class 8 (Sections A, B)</option>
+                    <option value="Class 8">Class 8</option>
 
-                    <option value="Class 9">Class 9 (Sections A, B)</option>
+                    <option value="Class 9">Class 9</option>
 
-                    <option value="Class 10">Class 10 (Sections A, B)</option>
+                    <option value="Class 10">Class 10</option>
+
+                  </select>
+
+                </div>
+
+                <div>
+
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target Section(s)</label>
+
+                  <select
+
+                    value={batchSection}
+
+                    onChange={e => setBatchSection(e.target.value)}
+
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+
+                  >
+
+                    <option value="A & B">Sections A &amp; B (Combined Cohort)</option>
+
+                    <option value="A">Section A Only</option>
+
+                    <option value="B">Section B Only</option>
+
+                    <option value="All">All Sections (A, B, C, D)</option>
 
                   </select>
 

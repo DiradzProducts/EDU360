@@ -248,6 +248,75 @@ export default function ParentPage() {
     busRoute: 'Campus Shuttle',
     mentor: 'Mrs. Ananya Verma'
   };
+
+  // Dynamic School Clock evaluation for Parent Portal
+  const { parentAttendanceStatus, parentCurrentClass, isParentSchoolConcluded } = useMemo(() => {
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+
+    if (currentMins >= 14 * 60 + 30) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • 6/6 Periods Attended (Day Concluded)',
+        parentCurrentClass: 'Classes Dismissed for Today',
+        isParentSchoolConcluded: true
+      };
+    } else if (currentMins < 8 * 60 + 30) {
+      return {
+        parentAttendanceStatus: 'Check-In Active • Campus Turnstile Gate',
+        parentCurrentClass: 'Assembly & Morning Homeroom (Starts 08:30 AM)',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 10 * 60 && currentMins < 10 * 60 + 30) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Morning Recess Break',
+        parentCurrentClass: 'Recess Break • Period 3 Commences 10:30 AM',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 12 * 60 && currentMins < 13 * 60) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Lunch Break in Dining Hall',
+        parentCurrentClass: 'Lunch Interval • Period 5 Commences 01:00 PM',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 8 * 60 + 30 && currentMins < 9 * 60 + 15) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 1 Active',
+        parentCurrentClass: 'Live Virtual Class: Period 1 Active',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 9 * 60 + 15 && currentMins < 10 * 60) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 2 Active',
+        parentCurrentClass: 'Live Virtual Class: Period 2 Active',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 10 * 60 + 30 && currentMins < 11 * 60 + 15) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 3 Mathematics (Room 204)',
+        parentCurrentClass: 'Live Virtual Class: Period 3 Active',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 11 * 60 + 15 && currentMins < 12 * 60) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 4 Computer Science (Lab 1)',
+        parentCurrentClass: 'Live Virtual Class: Period 4 Active',
+        isParentSchoolConcluded: false
+      };
+    } else if (currentMins >= 13 * 60 && currentMins < 13 * 60 + 45) {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 5 Social Science (Room 204)',
+        parentCurrentClass: 'Live Virtual Class: Period 5 Active',
+        isParentSchoolConcluded: false
+      };
+    } else {
+      return {
+        parentAttendanceStatus: 'Present Today ✓ • Period 6 Western Choir',
+        parentCurrentClass: 'Live Virtual Class: Period 6 Active',
+        isParentSchoolConcluded: false
+      };
+    }
+  }, []);
+
   const [parentToast, setParentToast] = useState<string | null>(null);
 
   const triggerToast = (msg: string) => {
@@ -374,17 +443,44 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
         try {
           const notifRes = await api.getNotifications({ role: 'parent' });
           if (notifRes && notifRes.notifications && notifRes.notifications.length > 0) {
-            const mappedDynamic: ParentNotification[] = notifRes.notifications.map((n: any, idx: number) => ({
-              id: `api-notif-${n.id || idx}`,
-              level: n.priority === 'High' ? 'red' : 'blue',
-              category: n.title?.toLowerCase().includes('retest') || n.title?.toLowerCase().includes('exam') ? 'Exam Marks' : 'Absence & Attendance',
-              title: n.title,
-              description: n.message,
-              timestamp: 'Just now',
-              actionLabel: n.title?.toLowerCase().includes('retest') ? 'View Retest Admit Pass' : 'View Details',
-              targetTab: n.title?.toLowerCase().includes('retest') || n.title?.toLowerCase().includes('exam') ? 'marks' : 'leave',
-              unread: !n.is_read
-            }));
+            const mappedDynamic: ParentNotification[] = notifRes.notifications.map((n: any, idx: number) => {
+              const titleLower = (n.title || '').toLowerCase();
+              const msgLower = (n.message || '').toLowerCase();
+
+              let category: 'Absence & Attendance' | 'Fee Payment' | 'Pedagogical Remark' | 'Exam Marks' = 'Pedagogical Remark';
+              let level: 'red' | 'orange' | 'purple' | 'blue' = 'blue';
+              let targetTab: 'leave' | 'fees' | 'focus' | 'marks' | 'child_sis' | 'ptm_connect' = 'focus';
+              let actionLabel = 'View Details';
+
+              if (titleLower.includes('fee') || titleLower.includes('payment') || msgLower.includes('fee') || msgLower.includes('dues')) {
+                category = 'Fee Payment';
+                level = 'orange';
+                targetTab = 'fees';
+                actionLabel = 'Pay Fee Online';
+              } else if (titleLower.includes('absent') || titleLower.includes('absence') || titleLower.includes('attendance') || titleLower.includes('leave')) {
+                category = 'Absence & Attendance';
+                level = 'red';
+                targetTab = 'leave';
+                actionLabel = 'View Attendance Record';
+              } else if (titleLower.includes('exam') || titleLower.includes('marks') || titleLower.includes('timetable') || titleLower.includes('admit') || titleLower.includes('retest')) {
+                category = 'Exam Marks';
+                level = 'purple';
+                targetTab = 'marks';
+                actionLabel = titleLower.includes('admit') ? 'Download Admit Docket' : 'View Exam Datesheet';
+              }
+
+              return {
+                id: `api-notif-${n.id || idx}`,
+                level,
+                category,
+                title: n.title,
+                description: n.message,
+                timestamp: n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+                actionLabel,
+                targetTab,
+                unread: !n.is_read
+              };
+            });
 
             setNotifications(mappedDynamic);
           }
@@ -933,13 +1029,17 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                         </span>
 
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1 text-xs font-semibold">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>{activeKid.attendanceStatus}</span>
+                          <span className={`h-2 w-2 rounded-full ${isParentSchoolConcluded ? 'bg-emerald-500' : 'bg-emerald-500 animate-pulse'}`} />
+                          <span>{parentAttendanceStatus || activeKid.attendanceStatus}</span>
                         </span>
 
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium">
-                          <Video className="h-3 w-3 text-blue-500" />
-                          <span>{activeKid.currentClass}</span>
+                          {isParentSchoolConcluded ? (
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <Video className="h-3 w-3 text-blue-500" />
+                          )}
+                          <span>{parentCurrentClass || activeKid.currentClass}</span>
                         </span>
                       </div>
 

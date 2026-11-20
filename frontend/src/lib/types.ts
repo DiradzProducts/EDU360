@@ -1247,6 +1247,9 @@ export interface ExamScheduleItem {
   question_paper_id?: number | null;
   question_paper_title?: string;
   title: string;
+  series_name?: string;
+  batch_id?: string;
+  schedule_type?: 'BATCH' | 'SINGLE';
   exam_name?: string;
   subject: string;
   class_name: string;
@@ -1374,7 +1377,7 @@ export interface NotificationItem {
   title: string;
   message: string;
   notification_type: string;
-  priority: 'LOW' | 'NORMAL' | 'URGENT';
+  priority: 'LOW' | 'NORMAL' | 'URGENT' | 'CRITICAL' | string;
   action_url?: string | null;
   metadata?: Record<string, any>;
   is_read: boolean;
