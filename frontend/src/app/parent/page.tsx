@@ -686,7 +686,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
   return (
     <RoleGuard allowedRole="parent">
-      <div className="flex min-h-[calc(100vh-4rem)] w-full bg-[#F8FAFC] dark:bg-[#070B14] text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
+      <div className="flex min-h-[calc(100vh-4rem)] w-full bg-[#F1F5F9] dark:bg-[#070B14] text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
         
         {/* Mobile Drawer Backdrop */}
         {mobileDrawerOpen && (
@@ -698,53 +698,57 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
         )}
 
         {/* ========================================================= */}
-        {/* 1. COLLAPSIBLE LEFT SIDEBAR NAVIGATION (240px / 72px)     */}
+        {/* 1. COLLAPSIBLE LEFT SIDEBAR NAVIGATION (256px / 72px)     */}
         {/* ========================================================= */}
         <aside
-          className={`fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20 h-screen md:h-[calc(100vh-4rem)] md:self-start flex flex-col transition-all duration-300 ease-in-out shrink-0 select-none ${
+          className={`fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20 h-screen md:h-[calc(100vh-4rem)] md:self-start flex flex-col transition-all duration-200 ease-out shrink-0 select-none ${
             sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'
           } ${
             mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-          } bg-white text-slate-800 border-r border-slate-200/90 dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90`}
+          } bg-white text-slate-800 border-r border-slate-300/90 dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800`}
         >
           {/* Sidebar Campus Context */}
-          <div className="flex h-16 items-center justify-between px-4 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
+          <div className="flex h-16 items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs shrink-0 font-bold">
-                  <GraduationCap className="h-4 w-4" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-700 text-white shadow-xs shrink-0 font-bold">
+                  <GraduationCap className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="flex flex-col truncate">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  <span className="text-[13px] font-bold text-slate-900 dark:text-white truncate">
                     EDU 360
                   </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <span className="text-xs text-slate-600 dark:text-slate-400 truncate">
                     Oakridge International School
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs font-bold">
-                <GraduationCap className="h-4 w-4" />
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-blue-700 text-white shadow-xs font-bold">
+                <GraduationCap className="h-4 w-4" aria-hidden="true" />
               </div>
             )}
 
             {/* Desktop Collapse Trigger */}
             <button
+              type="button"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
               title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-              className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
             >
-              <ChevronLeft className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+              <ChevronLeft className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {/* Mobile Close Button */}
             <button
+              type="button"
               onClick={() => setMobileDrawerOpen(false)}
-              className="md:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+              aria-label="Close Navigation Menu"
+              className="md:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
               title="Close Navigation Menu"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -752,21 +756,23 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           {sidebarCollapsed && (
             <div className="pt-2 hidden md:flex justify-center">
               <button
+                type="button"
                 onClick={() => setSidebarCollapsed(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                aria-label="Expand Sidebar"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                 title="Expand Sidebar"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           )}
 
           {/* Vertical Sidebar Navigation Groups */}
-          <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4 text-xs">
+          <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
             {navGroups.map((group, gIdx) => (
               <div key={gIdx}>
                 {!sidebarCollapsed && (
-                  <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1.5">
+                  <span className="px-3 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-1.5">
                     {group.title}
                   </span>
                 )}
@@ -776,25 +782,26 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                     const isActive = activeNav === item.id;
                     return (
                       <button
+                        type="button"
                         key={item.id}
                         onClick={() => {
                           setActiveNav(item.id);
                           setMobileDrawerOpen(false);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] transition-colors cursor-pointer ${
                           isActive
-                            ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                            ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 font-semibold border-r-[3px] border-blue-700 dark:border-blue-400'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                         }`}
                         title={item.label}
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                          <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`} aria-hidden="true" />
                           {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                         </div>
                         {!sidebarCollapsed && item.badge && (
-                          <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold shrink-0 ${item.badgeColor}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums shrink-0 ${item.badgeColor}`}>
                             {item.badge}
                           </span>
                         )}

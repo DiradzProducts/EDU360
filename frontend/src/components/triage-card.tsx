@@ -1,16 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  AlertCircle, 
-  AlertTriangle, 
-  CheckCircle2, 
-  ArrowRight, 
-  Clock, 
-  Users, 
-  PhoneCall,
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRight,
+  Users,
   Check,
-  ShieldAlert
 } from 'lucide-react';
 import { TriageAlert } from '@/lib/types';
 
@@ -24,30 +21,40 @@ export function TriageCard({ alert, onAction }: TriageCardProps) {
 
   const isRed = alert.level === 'red';
   const isOrange = alert.level === 'orange';
-  const isGreen = alert.level === 'green';
 
-  const statusConfig = isRed 
+  const severity = alert.resolved
     ? {
-        dot: 'bg-rose-500',
-        label: 'Critical Triage',
-        icon: AlertCircle,
-        iconColor: 'text-rose-500'
-      }
-    : isOrange 
-    ? {
-        dot: 'bg-amber-500',
-        label: 'Warning Alert',
-        icon: AlertTriangle,
-        iconColor: 'text-amber-500'
-      }
-    : {
-        dot: 'bg-emerald-500',
-        label: 'Scheduled Task',
+        border: 'border-l-[#0D9488] dark:border-l-[#14B8A6]',
+        badge: 'edu-badge-teal',
+        label: 'Resolved',
         icon: CheckCircle2,
-        iconColor: 'text-emerald-500'
-      };
+        iconColor: 'text-[#38BDF8]',
+      }
+    : isRed
+      ? {
+          border: 'border-l-[#DC2626] dark:border-l-[#EF4444]',
+          badge: 'edu-badge-critical',
+          label: 'Critical',
+          icon: AlertCircle,
+          iconColor: 'text-[#DC2626] dark:text-[#FCA5A5]',
+        }
+      : isOrange
+        ? {
+            border: 'border-l-[#F97316] dark:border-l-[#FB923C]',
+            badge: 'edu-badge-warning',
+            label: 'Warning',
+            icon: AlertTriangle,
+            iconColor: 'text-[#F97316] dark:text-[#FB923C]',
+          }
+        : {
+            border: 'border-l-[#2563EB] dark:border-l-[#3B82F6]',
+            badge: 'edu-badge-info',
+            label: 'Scheduled',
+            icon: CheckCircle2,
+            iconColor: 'text-[#2563EB]',
+          };
 
-  const Icon = statusConfig.icon;
+  const Icon = severity.icon;
 
   const handleAct = async () => {
     setLoading(true);
@@ -59,65 +66,65 @@ export function TriageCard({ alert, onAction }: TriageCardProps) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0F172A] p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 group">
-      {/* Corner Status Indicator Mark */}
-      <div className="absolute top-4 right-4 flex items-center gap-1.5" title={statusConfig.label}>
-        <span className={`h-2.5 w-2.5 rounded-full ${statusConfig.dot} ${isRed ? 'animate-pulse' : ''}`} />
-      </div>
-
-      <div className="flex flex-col justify-between h-full space-y-4">
-        <div>
-          {/* Header row: level badge with dot, category, affected count */}
-          <div className="flex items-center justify-between gap-2 pr-6">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 dark:bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
-                {statusConfig.label}
-              </span>
-              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                {alert.category}
-              </span>
-            </div>
-
+    <div
+      className={`rounded-2xl border border-[#E2E8F0] border-l-4 ${severity.border} bg-[#FFFFFF] px-5 py-4 transition-colors hover:border-[#CBD5E1] dark:hover:border-[#334155]`}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Left: Severity + Context */}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${severity.badge}`}>
+              <Icon className={`h-3.5 w-3.5 ${severity.iconColor}`} aria-hidden="true" />
+              {severity.label}
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#475569]">
+              {alert.category}
+            </span>
             {alert.count_affected > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80">
-                <Users className="h-3 w-3 text-slate-400" />
-                {alert.count_affected}
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] dark:bg-[#1E293B] px-2 py-0.5 text-xs font-semibold text-[#475569] tabular-nums">
+                <Users className="h-3 w-3 text-[#475569]" aria-hidden="true" />
+                {alert.count_affected} affected
               </span>
             )}
           </div>
 
-          {/* Title & Description */}
-          <h4 className="mt-3 text-sm font-bold text-slate-900 dark:text-white leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+          <h4 className="text-sm font-bold text-[#0F172A] leading-snug">
             {alert.title}
           </h4>
-          <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="text-[13px] text-[#475569] leading-relaxed max-w-3xl">
             {alert.description}
           </p>
         </div>
 
-        {/* Action Button / Resolution Status */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+        {/* Right: Single Compact Action / Resolution Status */}
+        <div className="shrink-0 flex items-center sm:justify-end">
           {alert.resolved ? (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 w-full">
-              <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <span>{alert.resolution_note || 'Action Dispatched & Assigned'}</span>
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#38BDF8] dark:text-[#5EEAD4] bg-[#F0FDFA] dark:bg-[#38BDF8]/20 px-3 py-2 rounded-xl border border-[#38BDF8]/40">
+              <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{alert.resolution_note || 'Dispatched'}</span>
             </div>
           ) : (
             <button
+              type="button"
               onClick={handleAct}
               disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all duration-200 active:scale-98 disabled:opacity-50 w-full cursor-pointer"
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap ${
+                isRed
+                  ? 'bg-[#DC2626] hover:bg-[#B91C1C] text-white'
+                  : isOrange
+                    ? 'bg-[#F97316] hover:bg-[#EA580C] text-white'
+                    : 'bg-[#2563EB] hover:bg-[#3B82F6] text-[#FFFFFF] font-extrabold'
+              }`}
             >
               {loading ? (
                 <span className="flex items-center gap-1.5">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Executing...
+                  Working...
                 </span>
               ) : (
                 <>
                   <span>{alert.action_label}</span>
-                  <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </>
               )}
             </button>

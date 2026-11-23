@@ -27,6 +27,7 @@ import {
   UserCheck,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CreditCard,
   ArrowRight,
   ArrowLeft,
@@ -183,6 +184,7 @@ export default function AdminPage() {
   // Task board filter & expand state
   const [taskDomainFilter, setTaskDomainFilter] = useState<string>('all');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
+  const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
   const [taskCockpit, setTaskCockpit] = useState<TaskExecutiveCockpitResponse | null>(null);
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
@@ -211,6 +213,7 @@ export default function AdminPage() {
   const [studentClassFilter, setStudentClassFilter] = useState('All');
   const [studentSectionFilter, setStudentSectionFilter] = useState('All');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentRiskOnly, setStudentRiskOnly] = useState(false);
   const [sisActiveSubTab, setSisActiveSubTab] = useState<'profile' | 'academic' | 'certificates' | 'fees'>('profile');
 
   // Staff Directory Search & Modal State
@@ -319,7 +322,7 @@ export default function AdminPage() {
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [staffRoleFilter, setStaffRoleFilter] = useState('All');
   const [permFilter, setPermFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
-  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'pacing'>('all');
+  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'pacing' | 'resolved'>('all');
   const [taskOriginFilter, setTaskOriginFilter] = useState<'all' | 'auto' | 'staff' | 'critical' | 'relief'>('all');
   const [examClassFilter, setExamClassFilter] = useState('All');
 
@@ -1028,7 +1031,7 @@ export default function AdminPage() {
 
   return (
     <RoleGuard allowedRole="admin">
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#F1F5F9] dark:bg-[#070B14]">
         
         {/* ===================================================== */}
         {/* FIXED LEFT SIDEBAR (STICKY, INDEPENDENT SCROLL)      */}
@@ -1042,140 +1045,148 @@ export default function AdminPage() {
         />
       )}
 
-      {/* ── Harmonized Left Collapsible Sidebar ── */}
+            {/* ── Harmonized Left Collapsible Sidebar ── */}
       <aside 
         className={`
           fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
           h-screen md:h-[calc(100vh-4rem)] md:self-start
           ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'}
-          transition-all duration-300 ease-in-out shrink-0 select-none
-          bg-white text-slate-800 border-r border-slate-200/90
-          dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90
-          flex flex-col justify-between overflow-hidden
+          transition-all duration-200 ease-out shrink-0 select-none
+          bg-[#0B1120] text-slate-100 border-r border-[#1E293B]
+          flex flex-col justify-between overflow-hidden shadow-xl
         `}
       >
         {/* Top Brand & Workspace Header */}
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
+          <div className="flex h-16 items-center justify-between px-3.5 border-b border-[#1E293B] shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
-                  AD
-                </div>
+                <div className="h-8 w-8 rounded-xl bg-[#2563EB] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/25">AD</div>
                 <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Super Admin Command</span>
+                  <h3 className="text-[13px] font-bold text-white truncate">Oakridge International</h3>
+                  <span className="text-xs font-medium text-slate-400 truncate block">Super Admin Command</span>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
-                AD
-              </div>
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[#2563EB] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-blue-500/25">AD</div>
             )}
 
             <button
+              type="button"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className={`p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
+              aria-label="Collapse Sidebar"
+              className={`p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
               title="Collapse Sidebar"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
+              type="button"
               onClick={() => setMobileDrawerOpen(false)}
-              className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+              aria-label="Close Sidebar"
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
               title="Close Sidebar"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
           {sidebarCollapsed && (
             <div className="hidden md:flex justify-center pt-2">
               <button
+                type="button"
                 onClick={() => setSidebarCollapsed(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                aria-label="Expand Sidebar"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Expand Sidebar"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           )}
 
           {/* Navigation Menu List */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3.5">
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
             
             {/* GROUP 1: DAILY OPERATIONS & TRIAGE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Daily Operations
                 </span>
               )}
 
               {/* Executive Cockpit */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('cockpit'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'cockpit'
-                    ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Principal Dashboard"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className="h-4 w-4 shrink-0 text-amber-400" />
+                  <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'cockpit' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Principal Dashboard</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/20 text-white">
-                    Live
-                  </span>
-                )}
               </button>
 
               {/* Priority Triage */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('triage'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'triage'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Action Alerts"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${urgentTriageCount > 0 ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
-                  <AlertCircle className={`h-4 w-4 shrink-0 ${activeTab === 'triage' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <AlertCircle className={`h-4 w-4 shrink-0 transition-colors ${
+                    activeTab === 'triage' 
+                      ? 'text-white' 
+                      : urgentTriageCount > 0 
+                        ? 'text-rose-400' 
+                        : 'text-slate-600 dark:text-slate-400'
+                  }`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Action Alerts</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    urgentTriageCount > 0
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
-                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                {!sidebarCollapsed && urgentTriageCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'triage'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                   }`}>
-                    {urgentTriageCount} Red
+                    {urgentTriageCount}
                   </span>
                 )}
               </button>
 
               {/* Tasks */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('tasks'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'tasks'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="School Tasks"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <CheckSquare className={`h-4 w-4 shrink-0 ${activeTab === 'tasks' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CheckSquare className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'tasks' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">School Tasks</span>}
                 </div>
                 {!sidebarCollapsed && pendingTasksCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'tasks'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
                     {pendingTasksCount}
                   </span>
                 )}
@@ -1183,65 +1194,67 @@ export default function AdminPage() {
 
               {/* Admissions CRM */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('crm'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'crm'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="New Admissions"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <UserPlus className={`h-4 w-4 shrink-0 ${activeTab === 'crm' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <UserPlus className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'crm' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">New Admissions</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    {enquiries.length} Leads
+                {!sidebarCollapsed && enquiries.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'crm'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                  }`}>
+                    {enquiries.length}
                   </span>
                 )}
               </button>
 
               {/* SIS Document Vault */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('sis'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'sis'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Student Directory (SIS)"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Lock className={`h-4 w-4 shrink-0 ${activeTab === 'sis' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Lock className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'sis' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student Directory</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Roster
-                  </span>
-                )}
               </button>
 
               {/* Student Leaves & Overrides */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('student_leaves'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'student_leaves'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Student Leaves & Attendance Overrides"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <UserCheck className={`h-4 w-4 shrink-0 ${activeTab === 'student_leaves' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <UserCheck className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'student_leaves' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student Leaves</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    studentLeaves.filter(l => l.status === 'Pending').length > 0
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 font-mono'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                {!sidebarCollapsed && studentLeaves.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'student_leaves'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
                     {studentLeaves.length}
                   </span>
@@ -1252,52 +1265,58 @@ export default function AdminPage() {
             {/* GROUP 2: FACULTY & ACADEMIC GOVERNANCE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Teachers &amp; Academics
                 </span>
               )}
 
               {/* Substitution & Cover */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('substitutions'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'substitutions'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Teacher Absences & Class Cover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Shuffle className={`h-4 w-4 shrink-0 ${activeTab === 'substitutions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Shuffle className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'substitutions' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Teacher Cover</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    unassignedSubCount > 0 
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 animate-pulse'
-                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                {!sidebarCollapsed && unassignedSubCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'substitutions'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
-                    {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered'}
+                    {unassignedSubCount}
                   </span>
                 )}
               </button>
 
               {/* Faculty Directory */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('staff'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'staff'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Teacher &amp; Staff Directory"
+                title="Teacher & Staff Directory"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Users className={`h-4 w-4 shrink-0 ${activeTab === 'staff' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Users className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'staff' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Staff Directory</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                {!sidebarCollapsed && staffMembers.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'staff'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                  }`}>
                     {staffMembers.length}
                   </span>
                 )}
@@ -1305,165 +1324,164 @@ export default function AdminPage() {
 
               {/* Faculty Permissions & Shifts */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('permissions'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'permissions'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Teacher Leaves &amp; Permissions"
+                title="Teacher Leaves & Permissions"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'permissions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Clock className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'permissions' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Teacher Leaves</span>}
                 </div>
                 {!sidebarCollapsed && pendingPermissionCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {pendingPermissionCount} Req
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'permissions'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {pendingPermissionCount}
                   </span>
                 )}
               </button>
 
               {/* Examination Center */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('exams'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'exams'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Exams &amp; Timetables"
+                title="Exams & Timetables"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'exams' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <BookOpen className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'exams' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Exams</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60">
-                    Term-2
-                  </span>
-                )}
               </button>
 
               {/* Academic Rollover */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('rollover'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'rollover'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Class Promotion &amp; Rollover"
+                title="Class Promotion & Rollover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <TrendingUp className={`h-4 w-4 shrink-0 ${activeTab === 'rollover' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <TrendingUp className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'rollover' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Class Promotion</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Annual
-                  </span>
-                )}
               </button>
             </div>
 
             {/* GROUP 3: FINANCE & OPERATIONS */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Finance &amp; Operations
                 </span>
               )}
 
               {/* Fee Milestones & Receipts */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('fees'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'fees'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Fee Collections &amp; Pending Dues"
+                title="Fee Collections & Pending Dues"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'fees' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CreditCard className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'fees' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Fee Collections</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {overdueDefaultersCount} Due
+                {!sidebarCollapsed && overdueDefaultersCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'fees'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {overdueDefaultersCount}
                   </span>
                 )}
               </button>
 
               {/* Staff Payroll & Compensation */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('payroll'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'payroll'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Staff Salaries &amp; Payroll"
+                title="Staff Salaries & Payroll"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Receipt className={`h-4 w-4 shrink-0 ${activeTab === 'payroll' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Receipt className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'payroll' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Staff Salaries</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                    Monthly
-                  </span>
-                )}
               </button>
 
               {/* School Event Center */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('events'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'events'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="School Events &amp; Activities"
+                title="School Events & Activities"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'events' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'events' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">School Events</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                    Active
-                  </span>
-                )}
               </button>
             </div>
 
             {/* GROUP 4: REGULATORY & LEGAL */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Regulatory &amp; Legal
                 </span>
               )}
 
               {/* Exit & TC Clearance */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('exit'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'exit'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Student TC &amp; Clearances"
+                title="Student TC & Clearances"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <GraduationCap className={`h-4 w-4 shrink-0 ${activeTab === 'exit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <GraduationCap className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'exit' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student TC</span>}
                 </div>
                 {!sidebarCollapsed && pendingExitCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {pendingExitCount} Pending
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'exit'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {pendingExitCount}
                   </span>
                 )}
               </button>
@@ -1473,18 +1491,18 @@ export default function AdminPage() {
         </div>
 
         {/* Bottom Status Footer */}
-        <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
+        <div className="p-3 border-t border-slate-800 shrink-0">
           {!sidebarCollapsed ? (
-            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+              <span className="flex items-center gap-1.5 font-semibold">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" aria-hidden="true" />
                 Academic Term 2
               </span>
-              <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
+              <span className="font-semibold text-slate-600 dark:text-slate-400 text-xs font-mono">2026-27</span>
             </div>
           ) : (
             <div className="flex justify-center py-1">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" title="Academic Term 2 · CBSE 2026-27" />
             </div>
           )}
         </div>
@@ -1510,10 +1528,15 @@ export default function AdminPage() {
         {/* TOAST FEEDBACK NOTIFICATION */}
         {toastMessage && (
           <div className="fixed top-16 right-6 z-50 flex items-center gap-2 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden="true" />
             <span>{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
-              <X className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              aria-label="Dismiss notification"
+              className="ml-2 text-slate-300 hover:text-white cursor-pointer rounded-md p-0.5"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -1524,14 +1547,14 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setSelectedStudentForSIS(null)}
-              className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs transition-all cursor-pointer hover:border-blue-400 active:scale-95"
+              className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-blue-700 dark:hover:text-blue-300 bg-white dark:bg-[#111827] px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 shadow-xs transition-colors cursor-pointer hover:border-blue-500 active:scale-95"
             >
-              <ArrowLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <ArrowLeft className="h-4 w-4 text-blue-700 dark:text-blue-400" aria-hidden="true" />
               <span>Back to Roster Directory</span>
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-medium">Viewing Record:</span>
-              <span className="rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-3 py-1 text-xs font-black">
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Viewing Record:</span>
+              <span className="rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-3 py-1 text-xs font-bold tabular-nums">
                 {selectedStudentForSIS.name} &bull; Roll #{selectedStudentForSIS.roll_no}
               </span>
             </div>
@@ -1539,82 +1562,61 @@ export default function AdminPage() {
         )}
 
         {/* ===================================================== */}
-                {activeTab !== 'cockpit' && (
+        {activeTab !== 'cockpit' && (
           /* ===================================================== */
-          /* ISOLATED MODULE HEADER (CLEAN, NO REDUNDANT DASHBOARD) */
+          /* STREAMLINED SINGLE-ROW MODULE HEADER (NO REDUNDANCY)  */
           /* ===================================================== */
-          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
-                  {activeTab === 'crm' ? 'Admissions & Inquiries'
-                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Student Dossier • Roll #${selectedStudentForSIS.roll_no}` : 'Student Directory & Records (SIS)')
-                    : activeTab === 'student_leaves' ? 'Student Leaves & Administrative Overrides'
-                    : activeTab === 'triage' ? "Today's Action Alerts"
-                    : activeTab === 'substitutions' ? 'Teacher Attendance & Class Cover'
+          <div className="rounded-2xl border border-slate-300/90 dark:border-slate-800 bg-white dark:bg-[#111827] px-5 py-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+                {activeTab === 'crm' ? <UserPlus className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'student_leaves' ? <UserCheck className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'fees' ? <CreditCard className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'staff' ? <Users className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'permissions' ? <Clock className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'payroll' ? <Receipt className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'tasks' ? <CheckSquare className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'exit' ? <GraduationCap className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'rollover' ? <TrendingUp className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'exams' ? <BookOpen className="h-5 w-5" aria-hidden="true" />
+                  : <Sparkles className="h-5 w-5" aria-hidden="true" />}
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
+                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
+                    : activeTab === 'student_leaves' ? 'Student Leave Applications & Administrative Overrides'
+                    : activeTab === 'triage' ? "Today's School Action Alerts"
+                    : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
                     : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
                     : activeTab === 'staff' ? 'Teacher & Staff Directory'
-                    : activeTab === 'permissions' ? 'Teacher Leaves & Permissions'
-                    : activeTab === 'payroll' ? 'Staff Salaries & Payroll'
-                    : activeTab === 'tasks' ? 'School Tasks & Delegations'
-                    : activeTab === 'exit' ? 'Student TC & Leaving Certificates'
-                    : activeTab === 'rollover' ? 'Class Promotion & Rollover'
-                    : activeTab === 'exams' ? 'Exams & Timetables'
+                    : activeTab === 'permissions' ? 'Teacher Leave & Permission Requests'
+                    : activeTab === 'payroll' ? 'Staff Salaries & Monthly Compensation'
+                    : activeTab === 'tasks' ? 'School Tasks & Staff Assignments'
+                    : activeTab === 'exit' ? 'Student Transfer Certificates (TC) & Clearances'
+                    : activeTab === 'rollover' ? 'Annual Class Promotion & Academic Year Rollover'
+                    : activeTab === 'exams' ? 'Examinations & Class Timetables'
                     : 'School Events & Activities'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
-                  {activeTab === 'crm' ? <UserPlus className="h-5 w-5" />
-                    : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" />
-                    : activeTab === 'student_leaves' ? <UserCheck className="h-5 w-5" />
-                    : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" />
-                    : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" />
-                    : activeTab === 'fees' ? <CreditCard className="h-5 w-5" />
-                    : activeTab === 'staff' ? <Users className="h-5 w-5" />
-                    : activeTab === 'permissions' ? <Clock className="h-5 w-5" />
-                    : activeTab === 'payroll' ? <Receipt className="h-5 w-5" />
-                    : activeTab === 'tasks' ? <CheckSquare className="h-5 w-5" />
-                    : activeTab === 'exit' ? <GraduationCap className="h-5 w-5" />
-                    : activeTab === 'rollover' ? <TrendingUp className="h-5 w-5" />
-                    : activeTab === 'exams' ? <BookOpen className="h-5 w-5" />
-                    : <Sparkles className="h-5 w-5" />}
-                </div>
-                <div>
-                  <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
-                      : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
-                      : activeTab === 'student_leaves' ? 'Student Leave Applications & Administrative Overrides'
-                      : activeTab === 'triage' ? "Today's School Action Alerts"
-                      : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
-                      : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
-                      : activeTab === 'staff' ? 'Teacher & Staff Directory'
-                      : activeTab === 'permissions' ? 'Teacher Leave & Permission Requests'
-                      : activeTab === 'payroll' ? 'Staff Salaries & Monthly Compensation'
-                      : activeTab === 'tasks' ? 'School Tasks & Staff Assignments'
-                      : activeTab === 'exit' ? 'Student Transfer Certificates (TC) & Clearances'
-                      : activeTab === 'rollover' ? 'Annual Class Promotion & Academic Year Rollover'
-                      : activeTab === 'exams' ? 'Examinations & Class Timetables'
-                      : 'School Events & Activities'}
-                  </h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
+                </h1>
+                <p className="text-[13px] text-slate-600 dark:text-slate-300 mt-0.5 max-w-3xl">
+                  {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
                     : activeTab === 'sis' ? (selectedStudentForSIS ? `Complete academic standing, biometrics, legal documents vault, and fee ledger for ${selectedStudentForSIS.name}.` : 'Complete student roster, class and section filters, 360° student records, and certificates')
                     : activeTab === 'student_leaves' ? 'Executive governance over parent student leave applications: audit medical certificates, evaluate teacher determinations, and exercise Principal attendance overrides.'
-                      : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
-                      : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
-                      : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
-                      : activeTab === 'staff' ? 'Manage teacher profiles, department duties, contact info, and daily attendance'
-                      : activeTab === 'permissions' ? 'Review teacher leave applications, half-day permissions, and substitute teacher cover'
-                      : activeTab === 'payroll' ? 'Monthly salary disbursements, bank statements, statutory deductions, and digital pay slips'
-                      : activeTab === 'tasks' ? 'Delegate administrative and campus tasks to coordinators and track completion'
-                      : activeTab === 'exit' ? 'Issue verified transfer certificates (TC), check departmental dues, and complete exit files'
-                      : activeTab === 'rollover' ? 'Batch promotion of student classes into the new academic year'
-                      : activeTab === 'exams' ? 'Term exam timetables, room seating plans, invigilator assignments, and hall passes'
-                      : 'Annual Day celebrations, sports day, science exhibitions, and student committees'}
-                  </p>
-                </div>
+                    : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
+                    : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
+                    : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
+                    : activeTab === 'staff' ? 'Manage teacher profiles, department duties, contact info, and daily attendance'
+                    : activeTab === 'permissions' ? 'Review teacher leave applications, half-day permissions, and substitute teacher cover'
+                    : activeTab === 'payroll' ? 'Monthly salary disbursements, bank statements, statutory deductions, and digital pay slips'
+                    : activeTab === 'tasks' ? 'Delegate administrative and campus tasks to coordinators and track completion'
+                    : activeTab === 'exit' ? 'Issue verified transfer certificates (TC), check departmental dues, and complete exit files'
+                    : activeTab === 'rollover' ? 'Batch promotion of student classes into the new academic year'
+                    : activeTab === 'exams' ? 'Term exam timetables, room seating plans, invigilator assignments, and hall passes'
+                    : 'Annual Day celebrations, sports day, science exhibitions, and student committees'}
+                </p>
               </div>
             </div>
 
@@ -1665,136 +1667,171 @@ export default function AdminPage() {
             <AdminCockpit onNavigateTab={(tab: string) => setActiveTab(tab as AdminTab)} />
           )}
 
-          {activeTab === 'triage' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              
-              {/* Filter Tabs for Action Alerts */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1 flex items-center gap-1.5">
-                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    Alert Type:
-                  </span>
-                  {[
-                    { id: 'all', label: 'All Alerts', count: triageAlerts.filter(a => !a.resolved).length + (remedialOverview?.early_warning_pacing_triage.length || 0) },
-                    { id: 'urgent', label: '🔴 Urgent School Alerts', count: triageAlerts.filter(a => !a.resolved).length },
-                    { id: 'pacing', label: '🟠 Remedial Inactivity', count: remedialOverview?.early_warning_pacing_triage.length || 0 },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setAlertFilter(tab.id as any)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        alertFilter === tab.id
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <span>{tab.label}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                        alertFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                      }`}>
-                        {tab.count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="text-xs text-slate-500 font-medium">
-                  Auto-detected exceptions requiring administrative intervention
-                </div>
-              </div>
+          {activeTab === 'triage' && (() => {
+            const activeAlerts = triageAlerts.filter((a) => !a.resolved);
+            const resolvedAlerts = triageAlerts.filter((a) => a.resolved);
+            const pacingAlerts = remedialOverview?.early_warning_pacing_triage || [];
+            const totalOpenAlerts = activeAlerts.length + pacingAlerts.length;
 
-              {/* SECTION A: Remedial Pacing Early Warnings (Orange Alert Cards) */}
-              {(alertFilter === 'all' || alertFilter === 'pacing') && remedialOverview && remedialOverview.early_warning_pacing_triage.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-amber-200/60 dark:border-amber-900/40 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-orange-500 animate-ping" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 dark:text-orange-300">
-                        🟠 Remedial Pacing Warnings: Students Inactive for 2+ Days
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-500">Requires Class Teacher Contact</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {remedialOverview.early_warning_pacing_triage.map((warn) => (
-                      <div
-                        key={warn.student_id}
-                        className="rounded-2xl border border-orange-200/80 dark:border-orange-900/60 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs flex flex-col justify-between"
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900 dark:text-white">
-                              {warn.name}
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
-                              {warn.class_name}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                            <span>{warn.subject}: <strong>{warn.exam_score_pct}%</strong></span>
-                            <span className="text-orange-600 font-bold">Day {warn.current_day} ({warn.days_inactive}d Inactive)</span>
-                          </div>
-
-                          <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
-                            <strong>Weak Concept:</strong> {warn.weak_concept}
-                          </p>
-
-                          <div className="pt-1 text-[10px] text-slate-400">
-                            Parent: <strong className="text-slate-600 dark:text-slate-300">{warn.parent_name}</strong> ({warn.parent_phone})
-                          </div>
-                        </div>
-
+            return (
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* Clean Segmented Filter Strip (Zero Emojis) */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: 'All Active', count: totalOpenAlerts },
+                      { id: 'urgent', label: 'Operational', count: activeAlerts.length },
+                      { id: 'pacing', label: 'Pacing Warnings', count: pacingAlerts.length },
+                      { id: 'resolved', label: 'Resolved', count: resolvedAlerts.length },
+                    ].map((tab) => {
+                      const active = alertFilter === tab.id;
+                      return (
                         <button
+                          key={tab.id}
                           type="button"
-                          disabled={notifyingStudentId === warn.student_id}
-                          onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                          onClick={() => setAlertFilter(tab.id as 'all' | 'urgent' | 'pacing' | 'resolved')}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
+                          }`}
                         >
-                          {notifyingStudentId === warn.student_id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Bell className="h-3 w-3" />
-                          )}
-                          <span>Notify Class Teacher &amp; Briefing</span>
+                          <span>{tab.label}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${
+                              active
+                                ? 'bg-white/20 text-white'
+                                : 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
                         </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                </div>
-              )}
 
-              {/* SECTION B: Critical Operational Exceptions (Red / Amber Cards) */}
-              {(alertFilter === 'all' || alertFilter === 'urgent') && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                        🔴 Immediate Operational Alerts (Attendance, Fees &amp; Academics)
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-medium px-1">
+                    {totalOpenAlerts === 0
+                      ? 'All operational alerts resolved'
+                      : `${totalOpenAlerts} open items requiring review`}
+                  </span>
+                </div>
+
+                {/* SECTION A: Remedial Pacing Warnings (Clean Left-Bordered Rows) */}
+                {(alertFilter === 'all' || alertFilter === 'pacing') && pacingAlerts.length > 0 && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-[#F97316]" aria-hidden="true" />
+                        <span>Remedial Pacing Warnings · Inactive 2+ Days</span>
                       </h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        {pacingAlerts.length} student{pacingAlerts.length === 1 ? '' : 's'}
+                      </span>
                     </div>
-                    <span className="text-[11px] text-slate-500">
-                      {triageAlerts.filter(a => !a.resolved).length} Pending
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {triageAlerts.map((alert) => (
-                      <TriageCard 
-                        key={alert.id} 
-                        alert={alert} 
-                        onAction={handleTriageAction} 
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+                    <div className="space-y-2.5">
+                      {pacingAlerts.map((warn) => (
+                        <div
+                          key={warn.student_id}
+                          className="rounded-2xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-[#F97316] bg-white dark:bg-slate-800/90 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                {warn.name}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-xs font-semibold font-mono bg-[#F1F5F9] dark:bg-[#1E293B] text-slate-600 dark:text-slate-400">
+                                {warn.class_name}
+                              </span>
+                              <span className="edu-badge-warning px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums">
+                                Day {warn.current_day} · {warn.days_inactive}d Inactive
+                              </span>
+                              <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                                {warn.subject}: <strong className="text-slate-900 dark:text-white">{warn.exam_score_pct}%</strong>
+                              </span>
+                            </div>
 
-            </div>
-          )}
+                            <p className="text-[13px] text-slate-600 dark:text-slate-400">
+                              <strong className="text-slate-900 dark:text-white">Focus gap:</strong> {warn.weak_concept}
+                              <span className="text-slate-600 dark:text-slate-400">
+                                {' '}· Parent: {warn.parent_name} ({warn.parent_phone})
+                              </span>
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={notifyingStudentId === warn.student_id}
+                            onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white px-4 py-2 text-xs font-bold transition-colors shadow-xs cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap"
+                          >
+                            {notifyingStudentId === warn.student_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            <span>Notify Class Teacher</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION B: Active Operational Alerts (Clean Horizontal Inbox List) */}
+                {(alertFilter === 'all' || alertFilter === 'urgent') && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#B91C1C] dark:text-[#FCA5A5] flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>Active Operational Alerts</span>
+                      </h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        {activeAlerts.length} pending
+                      </span>
+                    </div>
+
+                    {activeAlerts.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-10 text-center space-y-1.5">
+                        <CheckCircle2 className="h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto" aria-hidden="true" />
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">No pending operational alerts</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">Attendance, fees, and academics are on track.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {activeAlerts.map((alert) => (
+                          <TriageCard key={alert.id} alert={alert} onAction={handleTriageAction} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SECTION C: Collapsible Resolved Today Drawer */}
+                {resolvedAlerts.length > 0 && (alertFilter === 'all' || alertFilter === 'resolved') && (
+                  <details
+                    open={alertFilter === 'resolved'}
+                    className="group rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#F1F5F9]/60 dark:bg-[#0B0F19] overflow-hidden"
+                  >
+                    <summary className="px-5 py-3.5 flex items-center justify-between cursor-pointer list-none select-none">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                        <span>Resolved Today ({resolvedAlerts.length})</span>
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+                    </summary>
+                    <div className="px-4 pb-4 space-y-2.5">
+                      {resolvedAlerts.map((alert) => (
+                        <TriageCard key={alert.id} alert={alert} onAction={handleTriageAction} />
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            );
+          })()}
           {/* ===================================================== */}
           {/* TAB 2: ADMISSIONS & ENQUIRY CRM                      */}
           {/* ===================================================== */}
@@ -1821,7 +1858,7 @@ export default function AdminPage() {
           {/* TAB 3: STUDENT DIRECTORY & COMPLETE CLARIFIED SIS     */}
           {/* ===================================================== */}
           {activeTab === 'sis' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {selectedStudentForSIS ? (
                 <UnifiedSISView
                   studentId={selectedStudentForSIS.id}
@@ -1830,188 +1867,224 @@ export default function AdminPage() {
                   onBack={() => setSelectedStudentForSIS(null)}
                   hideBack={true}
                 />
-              ) : (
-                /* ======================================================= */
-                /* STUDENT DIRECTORY PAGE (ROSTER & FILTERS)               */
-                /* ======================================================= */
-                <div className="space-y-6">
-                  {/* Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                          Central Roster
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">AY 2026–27 &bull; CBSE Affiliated</span>
-                      </div>
-                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                        👥 Student Directory &amp; Records (SIS)
-                      </h1>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Complete student directory with class and section filters. Open student profiles to inspect full clarified SIS and manage official certificates.
-                      </p>
-                    </div>
+              ) : (() => {
+                const atRiskCount = studentsList.filter((s) => (s.attendance_pct ?? 90) < 75).length;
+                const filteredStudents = studentsList.filter((s) => {
+                  const matchClass =
+                    studentClassFilter === 'All' ||
+                    s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
+                  const matchSec =
+                    studentSectionFilter === 'All' ||
+                    s.section.toUpperCase() === studentSectionFilter.toUpperCase();
+                  const matchRisk = !studentRiskOnly || (s.attendance_pct ?? 90) < 75;
+                  const q = studentSearchQuery.trim().toLowerCase();
+                  const matchQ =
+                    !q ||
+                    s.name.toLowerCase().includes(q) ||
+                    s.admission_no.toLowerCase().includes(q) ||
+                    s.guardian_name.toLowerCase().includes(q) ||
+                    s.roll_no.toLowerCase().includes(q);
+                  return matchClass && matchSec && matchRisk && matchQ;
+                });
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                        Total Students: <strong className="text-slate-900 dark:text-white font-mono">{studentsList.length}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* FILTERS & SEARCH ROW */}
-                  <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                      {/* Class Filter Chips */}
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                        <span className="text-xs font-bold text-slate-400 shrink-0">Class:</span>
-                        {['All', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map(cls => (
-                          <button
-                            key={cls}
-                            onClick={() => setStudentClassFilter(cls)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                              studentClassFilter === cls
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            {cls}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Section Filter Chips */}
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                        <span className="text-xs font-bold text-slate-400 shrink-0">Section:</span>
-                        {['All', 'A', 'B'].map(sec => (
-                          <button
-                            key={sec}
-                            onClick={() => setStudentSectionFilter(sec)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                              studentSectionFilter === sec
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            {sec === 'All' ? 'All Sections' : `Sec ${sec}`}
-                          </button>
-                        ))}
-                      </div>
-
+                return (
+                  <div className="space-y-4">
+                    {/* Single-Row Compact Filter & Search Toolbar (Duplicate Header Removed!) */}
+                    <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                       {/* Search Bar */}
-                      <div className="relative min-w-[240px]">
-                        <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <div className="relative flex-1 min-w-0">
+                        <Search className="h-4 w-4 text-slate-600 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
                         <input
                           type="text"
                           value={studentSearchQuery}
-                          onChange={e => setStudentSearchQuery(e.target.value)}
-                          placeholder="Search by student, roll no, parent..."
-                          className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => setStudentSearchQuery(e.target.value)}
+                          aria-label="Search students by name, roll number, admission ID, or parent"
+                          placeholder="Search student, roll no, admission ID, or parent..."
+                          className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-[13px] text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
                         />
                         {studentSearchQuery && (
-                          <button onClick={() => setStudentSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer">
-                            <X className="h-3.5 w-3.5" />
+                          <button
+                            type="button"
+                            onClick={() => setStudentSearchQuery('')}
+                            aria-label="Clear student search"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#475569] hover:text-[#0F172A] dark:text-[#95A89E] dark:hover:text-white cursor-pointer"
+                          >
+                            <X className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
                         )}
                       </div>
-                    </div>
-                  </div>
 
-                  {/* STUDENTS ROSTER TABLE */}
-                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                            <th className="py-3 px-4">Roll</th>
-                            <th className="py-3 px-4">Student Name &amp; ID</th>
-                            <th className="py-3 px-4">Class &amp; Sec</th>
-                            <th className="py-3 px-4">Parent / Guardian Contact</th>
-                            <th className="py-3 px-4">Attendance</th>
-                            <th className="py-3 px-4">Academic Avg</th>
-                            <th className="py-3 px-4">Status</th>
-                            <th className="py-3 px-4 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {studentsList
-                            .filter(s => {
-                              const matchClass = studentClassFilter === 'All' || s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
-                              const matchSec = studentSectionFilter === 'All' || s.section.toUpperCase() === studentSectionFilter.toUpperCase();
-                              const q = studentSearchQuery.trim().toLowerCase();
-                              const matchQ = !q || s.name.toLowerCase().includes(q) || s.admission_no.toLowerCase().includes(q) || s.guardian_name.toLowerCase().includes(q) || s.roll_no.toLowerCase().includes(q);
-                              return matchClass && matchSec && matchQ;
-                            })
-                            .map((student) => (
-                              <tr key={student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group">
-                                <td className="py-3.5 px-4 font-mono font-bold text-slate-500">
-                                  #{student.roll_no}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-                                      {student.name.split(' ').map(n => n[0]).join('')}
-                                    </div>
-                                    <div>
-                                      <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 transition-colors">
-                                        {student.name}
-                                      </span>
-                                      <span className="font-mono text-[10px] text-slate-400">
-                                        {student.admission_no}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                                    {student.class_name}-{student.section}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">
-                                    {student.guardian_name}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-slate-400">
-                                    {student.guardian_phone}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                    (student.attendance_pct || 90) >= 90
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                      : (student.attendance_pct || 90) >= 75
-                                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                        : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                                  }`}>
-                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                    {student.attendance_pct || 94.2}%
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
-                                  {student.academic_average_pct || 78.5}%
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-bold">
-                                    {student.status || 'Active'}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  <button
-                                    onClick={() => setSelectedStudentForSIS(student)}
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-white px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                                  >
-                                    <span>Open Full SIS</span>
-                                    <ArrowRight className="h-3 w-3" />
-                                  </button>
-                                </td>
+                      {/* Controls: Class Select + Section Toggle + At-Risk Filter + Total Count */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <select
+                          value={studentClassFilter}
+                          onChange={(e) => setStudentClassFilter(e.target.value)}
+                          aria-label="Filter roster by class"
+                          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-xs font-semibold text-slate-900 dark:text-white cursor-pointer"
+                        >
+                          {['All', 'Class 3', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map((cls) => (
+                            <option key={cls} value={cls}>
+                              {cls === 'All' ? 'All Classes' : cls}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-0.5">
+                          {['All', 'A', 'B'].map((sec) => (
+                            <button
+                              key={sec}
+                              type="button"
+                              onClick={() => setStudentSectionFilter(sec)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                studentSectionFilter === sec
+                                  ? 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white shadow-2xs'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
+                              }`}
+                            >
+                              {sec === 'All' ? 'All Sec' : `Sec ${sec}`}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setStudentRiskOnly(!studentRiskOnly)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                            studentRiskOnly
+                              ? 'bg-[#B91C1C] text-white border-[#991B1B]'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-[#EA580C] dark:text-[#FB923C] border-slate-200 dark:border-slate-700 hover:border-[#F97316]'
+                          }`}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>At-Risk &lt;75%</span>
+                          <span className="font-mono font-bold tabular-nums">({atRiskCount})</span>
+                        </button>
+
+                        <span className="px-2.5 py-1.5 rounded-xl bg-[#F1F5F9] dark:bg-[#1E293B] text-xs font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                          {filteredStudents.length} / {studentsList.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Refined Warm Forest Roster Table */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden">
+                      {filteredStudents.length === 0 ? (
+                        <div className="p-12 text-center space-y-1.5">
+                          <Users className="h-8 w-8 text-[#475569] mx-auto" aria-hidden="true" />
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">No students match this filter</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">Try adjusting class, section, or search terms.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="text-xs uppercase tracking-wider">
+                                <th className="py-3 px-4">Roll</th>
+                                <th className="py-3 px-4">Student &amp; ID</th>
+                                <th className="py-3 px-4">Class</th>
+                                <th className="py-3 px-4">Parent / Guardian</th>
+                                <th className="py-3 px-4">Attendance</th>
+                                <th className="py-3 px-4">Avg Score</th>
+                                <th className="py-3 px-4 text-right">Dossier</th>
                               </tr>
-                            ))}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1E322B] text-[13px]">
+                              {filteredStudents.map((student) => {
+                                const attPct = student.attendance_pct ?? 94.2;
+                                const attBarColor =
+                                  attPct >= 90
+                                    ? 'bg-[#2563EB] dark:bg-[#3B82F6]'
+                                    : attPct >= 75
+                                      ? 'bg-[#F97316] dark:bg-[#E08B49]'
+                                      : 'bg-[#B91C1C] dark:bg-[#F87171]';
+                                const attTextColor =
+                                  attPct >= 90
+                                    ? 'text-blue-600 dark:text-blue-400'
+                                    : attPct >= 75
+                                      ? 'text-[#EA580C] dark:text-[#FB923C]'
+                                      : 'text-[#B91C1C] dark:text-[#FCA5A5]';
+
+                                return (
+                                  <tr
+                                    key={student.id}
+                                    onClick={() => setSelectedStudentForSIS(student)}
+                                    className="cursor-pointer group"
+                                  >
+                                    <td className="py-3.5 px-4 font-mono text-xs font-bold text-slate-600 dark:text-slate-400 tabular-nums">
+                                      #{student.roll_no}
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                          {student.name
+                                            .split(' ')
+                                            .map((n) => n[0])
+                                            .join('')
+                                            .slice(0, 2)}
+                                        </div>
+                                        <div>
+                                          <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-[#60A5FA] transition-colors">
+                                            {student.name}
+                                          </span>
+                                          <span className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                            {student.admission_no}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      <span className="font-semibold text-slate-900 dark:text-white">
+                                        {student.class_name}-{student.section}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <span className="font-semibold text-slate-600 dark:text-slate-400 block text-xs">
+                                        {student.guardian_name}
+                                      </span>
+                                      <span className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                        {student.guardian_phone}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-16 h-1.5 rounded-full bg-[#F1F5F9] dark:bg-[#1E293B] overflow-hidden shrink-0">
+                                          <div
+                                            className={`h-full rounded-full ${attBarColor}`}
+                                            style={{ width: `${Math.min(100, Math.max(0, attPct))}%` }}
+                                          />
+                                        </div>
+                                        <span className={`text-xs font-bold tabular-nums ${attTextColor}`}>
+                                          {attPct}%
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white tabular-nums whitespace-nowrap">
+                                      {student.academic_average_pct || 78.5}%
+                                    </td>
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedStudentForSIS(student);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                      >
+                                        <span>Open 360°</span>
+                                        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -2040,453 +2113,471 @@ export default function AdminPage() {
               return true;
             });
 
+            const calcLeaveDays = (fromStr: string, toStr: string) => {
+              const start = new Date(fromStr);
+              const end = new Date(toStr);
+              if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+              const diff = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+              return `${diff} ${diff === 1 ? 'day' : 'days'}`;
+            };
+
             return (
-              <div className="space-y-6">
-                {/* 1. TOP METRICS STRIP */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-                  <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+              <div className="space-y-5">
+                {/* 1. COMPACT 4-STAT EXECUTIVE STRIP (NO LOUD PURPLE / NO DARK BANNER) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      pendingLeaves > 0
+                        ? 'bg-[#FFF7ED] dark:bg-[#2A190E] border-[#FED7AA] dark:border-[#7C2D12]'
+                        : 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Applications</span>
-                      <FileText className="h-4 w-4 text-blue-500" />
+                      <span className="text-xs font-semibold text-[#EA580C] dark:text-[#FB923C]">Pending Review</span>
+                      <Clock className="h-4 w-4 text-[#F97316] dark:text-[#FB923C]" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">{totalLeaves}</p>
-                    <span className="text-[11px] font-medium text-slate-400">Parent Submissions</span>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{pendingLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Awaiting determination</span>
                   </div>
 
-                  <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Pending Review</span>
-                      <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Approved / Excused</span>
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-amber-900 dark:text-amber-300 mt-2">{pendingLeaves}</p>
-                    <span className="text-[11px] font-semibold text-amber-600/80 dark:text-amber-400/80">Awaiting Action</span>
+                    <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-2 tabular-nums">{approvedLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Attendance adjusted</span>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Excused Leaves</span>
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Rejected / Absent</span>
+                      <AlertCircle className="h-4 w-4 text-[#B91C1C] dark:text-[#FCA5A5]" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-emerald-900 dark:text-emerald-300 mt-2">{approvedLeaves}</p>
-                    <span className="text-[11px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">Attendance Adjusted</span>
+                    <p className="text-2xl font-extrabold text-[#B91C1C] dark:text-[#FCA5A5] mt-2 tabular-nums">{rejectedLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Unexcused absences</span>
                   </div>
 
-                  <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-700 dark:text-rose-400">Rejected / Absent</span>
-                      <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Admin Overrides</span>
+                      <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-rose-900 dark:text-rose-300 mt-2">{rejectedLeaves}</p>
-                    <span className="text-[11px] font-semibold text-rose-600/80 dark:text-rose-400/80">Unexcused Absences</span>
-                  </div>
-
-                  <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 shadow-xs col-span-2 sm:col-span-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-700 dark:text-purple-400">Admin Overrides</span>
-                      <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <p className="text-2xl font-black text-purple-900 dark:text-purple-300 mt-2">{adminOverriddenLeaves}</p>
-                    <span className="text-[11px] font-semibold text-purple-600/80 dark:text-purple-400/80">Principal Interventions</span>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{adminOverriddenLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">{medicalLeaves} medical slips</span>
                   </div>
                 </div>
 
-                {/* 2. STATUTORY CBES GOVERNANCE BANNER */}
-                <div className="rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 sm:p-5 shadow-lg border border-blue-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2.5 rounded-xl bg-white/10 border border-white/20 shrink-0">
-                      <ShieldAlert className="h-5 w-5 text-blue-300" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                        Institutional Attendance &amp; Medical Exemption Authority
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                          Sovereign Admin Lock
-                        </span>
-                      </h4>
-                      <p className="text-xs text-blue-100/90 mt-1 leading-relaxed max-w-3xl">
-                        Class teachers manage day-to-day attendance. When disputed medical requests, prolonged absences (&gt;3 days), or examination term exemptions arise, School Administration has sovereign authority to override decisions, lock the attendance ledger, and dispatch certified compliance receipts.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-blue-200 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 font-mono">
-                      {medicalLeaves} Medical Certificates Attached
-                    </span>
-                  </div>
-                </div>
-
-                {/* 3. SEARCH & FILTER TOOLBAR */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                {/* 2. SEARCH & FILTER TOOLBAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700">
                   <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
                     <input
                       type="text"
                       placeholder="Search student, parent, or medical reason..."
                       value={studentLeaveSearch}
                       onChange={(e) => setStudentLeaveSearch(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      aria-label="Search student leave applications"
+                      className="w-full pl-9 pr-4 py-2 text-[13px] rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
                     />
                   </div>
 
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                    {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map(tab => (
+                    {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map((tab) => (
                       <button
                         key={tab}
+                        type="button"
                         onClick={() => setStudentLeaveFilter(tab)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                           studentLeaveFilter === tab
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                            : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
                         }`}
                       >
-                        {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : tab === 'APPROVED' ? 'Approved' : tab === 'REJECTED' ? 'Rejected' : 'Medical Slips'}
+                        {tab === 'ALL'
+                          ? `All (${totalLeaves})`
+                          : tab === 'PENDING'
+                            ? `Pending (${pendingLeaves})`
+                            : tab === 'APPROVED'
+                              ? 'Approved'
+                              : tab === 'REJECTED'
+                                ? 'Rejected'
+                                : 'Medical Slips'}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* 4. LEAVE APPLICATION QUEUE TABLE */}
-                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Student Leave Master Queue</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Showing {filteredLeaves.length} of {totalLeaves} applications across all grades</p>
+                {/* 3. STREAMLINED 5-COLUMN LEAVE APPLICATION TABLE */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Leave Applications Queue</h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        · Showing {filteredLeaves.length} of {totalLeaves}
+                      </span>
                     </div>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                      <span>{medicalLeaves} medical certificates on file · Principal override active</span>
+                    </span>
                   </div>
 
                   {filteredLeaves.length === 0 ? (
                     <div className="p-12 text-center">
-                      <UserCheck className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No student leave applications match your criteria</p>
-                      <p className="text-xs text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
+                      <UserCheck className="h-10 w-10 text-[#475569] mx-auto mb-2" aria-hidden="true" />
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">No leave applications match your criteria</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
+                      <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                          <tr className="text-xs uppercase tracking-wider">
                             <th className="py-3 px-4">Student &amp; Parent</th>
-                            <th className="py-3 px-4">Dates &amp; Duration</th>
-                            <th className="py-3 px-4">Type &amp; Medical Slip</th>
-                            <th className="py-3 px-4">Parent Justification</th>
-                            <th className="py-3 px-4">Current Decision Status</th>
-                            <th className="py-3 px-4">Admin Override Status</th>
-                            <th className="py-3 px-4 text-right">Adjudication Action</th>
+                            <th className="py-3 px-4">Dates &amp; Type</th>
+                            <th className="py-3 px-4">Reason</th>
+                            <th className="py-3 px-4">Status &amp; Audit</th>
+                            <th className="py-3 px-4 text-right">Action</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {filteredLeaves.map((lr) => (
-                            <tr key={lr.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                              {/* Student & Parent */}
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                  <span>{lr.student_name}</span>
-                                </div>
-                                <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                  <span>Parent: <b className="text-slate-600 dark:text-slate-300">{lr.parent_name}</b></span>
-                                  <span>&bull;</span>
-                                  <span>ID #{lr.student_id}</span>
-                                </div>
-                              </td>
+                        <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1E322B] text-[13px]">
+                          {filteredLeaves.map((lr) => {
+                            const duration = calcLeaveDays(lr.from_date, lr.to_date);
+                            return (
+                              <tr key={lr.id}>
+                                {/* 1. Student & Parent */}
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900 dark:text-white">
+                                    {lr.student_name}
+                                  </div>
+                                  <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                    {lr.parent_name} · <span className="font-mono">#{lr.student_id}</span>
+                                  </div>
+                                </td>
 
-                              {/* Dates & Duration */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="font-mono text-slate-700 dark:text-slate-300 font-semibold">
-                                  {lr.from_date} &rarr; {lr.to_date}
-                                </div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  Applied {new Date(lr.applied_at).toLocaleDateString()}
-                                </div>
-                              </td>
+                                {/* 2. Dates & Type + Attachment */}
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <div className="font-mono text-xs font-semibold text-slate-900 dark:text-white tabular-nums">
+                                    {lr.from_date} → {lr.to_date}
+                                    {duration && (
+                                      <span className="ml-1.5 font-sans font-medium text-slate-600 dark:text-slate-400">
+                                        ({duration})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    {lr.is_medical ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                        Medical
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F1F5F9] dark:bg-[#1E293B] text-slate-600 dark:text-slate-400">
+                                        Casual
+                                      </span>
+                                    )}
+                                    {lr.attachment_name && (
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerToast(`Verified Medical Certificate on file: ${lr.attachment_name}`)}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                      >
+                                        <FileText className="h-3 w-3" aria-hidden="true" />
+                                        <span className="truncate max-w-[140px]">{lr.attachment_name}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
 
-                              {/* Type & Certificate */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                {lr.is_medical ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80">
-                                    <AlertCircle className="h-3 w-3" />
-                                    Medical Leave
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                                    Casual Leave
-                                  </span>
-                                )}
-                                {lr.attachment_name && (
-                                  <div className="mt-1">
-                                    <span 
-                                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                                      onClick={() => triggerToast(`Verified Medical Certificate on file: ${lr.attachment_name}`)}
+                                {/* 3. Reason */}
+                                <td className="py-3.5 px-4 max-w-xs">
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed" title={lr.reason}>
+                                    &ldquo;{lr.reason}&rdquo;
+                                  </p>
+                                </td>
+
+                                {/* 4. Merged Status & Audit */}
+                                <td className="py-3.5 px-4">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {lr.status === 'Approved' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-success">
+                                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                        Approved
+                                      </span>
+                                    ) : lr.status === 'Rejected' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                        <X className="h-3 w-3" aria-hidden="true" />
+                                        Rejected
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-warning">
+                                        <Clock className="h-3 w-3" aria-hidden="true" />
+                                        Pending
+                                      </span>
+                                    )}
+
+                                    {lr.is_admin_override && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700">
+                                        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                                        Overridden
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(lr.admin_notes || lr.teacher_notes) && (
+                                    <p
+                                      className="text-xs text-slate-600 dark:text-slate-400 truncate max-w-[220px] mt-1"
+                                      title={lr.admin_notes || lr.teacher_notes || ''}
                                     >
-                                      <FileText className="h-3 w-3" />
-                                      {lr.attachment_name}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Reason */}
-                              <td className="py-3.5 px-4 max-w-xs">
-                                <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed" title={lr.reason}>
-                                  &ldquo;{lr.reason}&rdquo;
-                                </p>
-                              </td>
-
-                              {/* Current Decision Status */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="flex flex-col gap-1 items-start">
-                                  {lr.status === 'Approved' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                                      <CheckCircle2 className="h-3 w-3" />
-                                      Approved (Excused)
-                                    </span>
-                                  ) : lr.status === 'Rejected' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                                      <X className="h-3 w-3" />
-                                      Rejected (Absent)
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
-                                      <Clock className="h-3 w-3" />
-                                      Pending Teacher
-                                    </span>
+                                      {lr.admin_notes
+                                        ? `Principal: ${lr.admin_notes}`
+                                        : `Teacher: ${lr.teacher_notes}`}
+                                    </p>
                                   )}
-                                  {lr.teacher_notes && (
-                                    <span className="text-[10px] text-slate-500 italic max-w-xs truncate" title={lr.teacher_notes}>
-                                      Teacher: &quot;{lr.teacher_notes}&quot;
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
+                                </td>
 
-                              {/* Admin Override Status */}
-                              <td className="py-3.5 px-4">
-                                {lr.is_admin_override ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 w-fit">
-                                      <ShieldCheck className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                                      Admin Overridden
-                                    </span>
-                                    {lr.admin_notes && (
-                                      <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium line-clamp-1" title={lr.admin_notes}>
-                                        Note: {lr.admin_notes}
-                                      </span>
-                                    )}
-                                    {lr.overridden_by && (
-                                      <span className="text-[9px] text-slate-400 font-mono">
-                                        By {lr.overridden_by}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-slate-400 font-medium">Standard Teacher Evaluation</span>
-                                )}
-                              </td>
-
-                              {/* Action */}
-                              <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOverrideModalLeave(lr);
-                                    setOverrideStatus(lr.status === 'Approved' ? 'Rejected' : 'Approved');
-                                    setOverrideNotes('');
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                                >
-                                  <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                                  <span>{lr.is_admin_override ? 'Modify Override' : 'Admin Override'}</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                {/* 5. Action */}
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOverrideModalLeave(lr);
+                                      setOverrideStatus(lr.status === 'Approved' ? 'Rejected' : 'Approved');
+                                      setOverrideNotes('');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-[#2563EB] hover:text-white hover:border-blue-600 text-slate-900 dark:text-white text-xs font-semibold transition-colors cursor-pointer"
+                                  >
+                                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                    <span>{lr.is_admin_override ? 'Edit Override' : 'Review / Override'}</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   )}
                 </div>
 
-                {/* 5. ADMINISTRATIVE OVERRIDE MODAL */}
+                {/* 5. CLEAN, VIEWPORT-SAFE LEAVE DECISION & OVERRIDE MODAL */}
                 {overrideModalLeave && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-                    <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl animate-in zoom-in-95 space-y-5">
-                      {/* Modal Header */}
-                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200/60 dark:border-purple-800/60 text-purple-600 dark:text-purple-400">
-                            <ShieldCheck className="h-5 w-5" />
+                  <div
+                    onClick={() => !overrideSubmitting && setOverrideModalLeave(null)}
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0B0F19]/65 backdrop-blur-xs animate-in fade-in"
+                  >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="leave-override-title"
+                      className="relative w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95"
+                    >
+                      {/* Sticky Modal Header */}
+                      <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                           </div>
-                          <div>
-                            <h3 className="text-base font-black text-slate-900 dark:text-white">
-                              Administrative Leave Adjudication
+                          <div className="min-w-0">
+                            <h3 id="leave-override-title" className="text-base font-extrabold text-slate-900 dark:text-white">
+                              Review &amp; Override Leave
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Exercising Principal &amp; Board Supervisory Override
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              Principal decision updates attendance &amp; notifies parent
                             </p>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setOverrideModalLeave(null)}
-                          className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          aria-label="Close modal"
+                          className="p-1.5 rounded-xl text-[#475569] hover:text-[#0F172A] dark:text-[#95A89E] dark:hover:text-white hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] cursor-pointer"
                         >
-                          <X className="h-5 w-5" />
+                          <X className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </div>
 
-                      {/* Student & Leave Info Summary */}
-                      <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200/80 dark:border-slate-700 space-y-2 text-xs">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Student</span>
-                            <span className="font-bold text-slate-900 dark:text-white text-sm">{overrideModalLeave.student_name}</span>
-                            <span className="text-slate-400 block">Roll / ID: #{overrideModalLeave.student_id}</span>
+                      {/* Scrollable Modal Body */}
+                      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                        {/* Compact Student & Reason Summary */}
+                        <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 p-3.5 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div>
+                              <span className="font-bold text-sm text-slate-900 dark:text-white">
+                                {overrideModalLeave.student_name}
+                              </span>
+                              <span className="ml-2 font-mono text-xs text-slate-600 dark:text-slate-400">
+                                #{overrideModalLeave.student_id}
+                              </span>
+                              <span className="block text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                Parent: <strong>{overrideModalLeave.parent_name}</strong>
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="inline-block px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
+                                {overrideModalLeave.from_date} → {overrideModalLeave.to_date}
+                              </span>
+                              {overrideModalLeave.is_medical && (
+                                <span className="block text-xs font-semibold text-[#B91C1C] dark:text-[#FCA5A5] mt-1">
+                                  Medical {overrideModalLeave.attachment_name ? `· ${overrideModalLeave.attachment_name}` : ''}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">{overrideModalLeave.parent_name}</span>
-                            <span className="text-slate-400 block">Dates: {overrideModalLeave.from_date} &rarr; {overrideModalLeave.to_date}</span>
-                          </div>
-                        </div>
 
-                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent's Stated Reason</span>
-                          <p className="text-slate-700 dark:text-slate-300 italic mt-0.5">&ldquo;{overrideModalLeave.reason}&rdquo;</p>
-                          {overrideModalLeave.is_medical && (
-                            <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                              <AlertCircle className="h-3 w-3" />
-                              Medical Exemption Request {overrideModalLeave.attachment_name ? `(${overrideModalLeave.attachment_name})` : ''}
-                            </span>
+                          <p className="text-[13px] text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700 leading-relaxed">
+                            &ldquo;{overrideModalLeave.reason}&rdquo;
+                          </p>
+
+                          {overrideModalLeave.teacher_notes && (
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              <strong className="text-slate-600 dark:text-slate-400">Teacher note:</strong> {overrideModalLeave.teacher_notes}
+                            </p>
                           )}
                         </div>
 
-                        {overrideModalLeave.teacher_notes && (
-                          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Class Teacher Feedback</span>
-                            <p className="text-slate-600 dark:text-slate-400 font-medium mt-0.5">{overrideModalLeave.teacher_notes}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Override Action Selection */}
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          Select Administrative Adjudication Decision:
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setOverrideStatus('Approved')}
-                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                              overrideStatus === 'Approved'
-                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
-                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 font-bold text-xs text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="h-4 w-4" />
-                              Grant Official Approval
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Excused Leave&rsquo;. Removes from unexcused absence radar.
-                            </p>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setOverrideStatus('Rejected')}
-                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                              overrideStatus === 'Rejected'
-                                ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500/20'
-                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 font-bold text-xs text-rose-700 dark:text-rose-400">
-                              <X className="h-4 w-4" />
-                              Enforce Disciplinary Rejection
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Absent&rsquo;. Flags for welfare phone check if consecutive.
-                            </p>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Required Justification & Predefined Chips */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                          <span>Statutory Justification / Audit Remarks:</span>
-                          <span className="text-[10px] text-rose-500">* Required for CBSE Audit</span>
-                        </label>
-
-                        {/* Quick justification chips */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {[
-                            'Principal Medical Waiver (CBSE Reg 14)',
-                            'Doctor Certificate Authenticated & Excused',
-                            'Unexcused Absence During Scheduled Term Exam',
-                            'Disciplinary Action: Attendance Shortage Not Condoned'
-                          ].map(chip => (
+                        {/* Decision Toggle */}
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            Decision
+                          </span>
+                          <div className="grid grid-cols-2 gap-3">
                             <button
-                              key={chip}
                               type="button"
-                              onClick={() => setOverrideNotes(chip)}
-                              className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                              onClick={() => setOverrideStatus('Approved')}
+                              className={`p-3.5 rounded-xl border-2 text-left transition-colors cursor-pointer ${
+                                overrideStatus === 'Approved'
+                                  ? 'border-2 border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40'
+                                  : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 hover:border-emerald-400'
+                              }`}
                             >
-                              + {chip}
+                              <div className="flex items-center gap-2 font-bold text-[13px] text-emerald-700 dark:text-emerald-300">
+                                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <span>Approve Leave</span>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                Marks dates as Excused Leave.
+                              </p>
                             </button>
-                          ))}
+
+                            <button
+                              type="button"
+                              onClick={() => setOverrideStatus('Rejected')}
+                              className={`p-3.5 rounded-xl border-2 text-left transition-colors cursor-pointer ${
+                                overrideStatus === 'Rejected'
+                                  ? 'border-2 border-rose-500 bg-rose-50/70 dark:bg-rose-950/40'
+                                  : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 hover:border-rose-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 font-bold text-[13px] text-[#B91C1C] dark:text-[#FCA5A5]">
+                                <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <span>Reject Leave</span>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                Marks dates as Unexcused Absent.
+                              </p>
+                            </button>
+                          </div>
                         </div>
 
-                        <textarea
-                          rows={3}
-                          value={overrideNotes}
-                          onChange={(e) => setOverrideNotes(e.target.value)}
-                          placeholder="Provide the administrative rationale for overriding this leave request (e.g. medical board clearance, compassionate grounds, or exam unreadiness)..."
-                          className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-purple-500 resize-none"
-                        />
-                      </div>
+                        {/* Remarks + Compact Quick-Fill Chips */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="leave-override-notes" className="text-xs font-bold text-slate-900 dark:text-white">
+                              Remarks
+                            </label>
+                            <span className="text-xs font-semibold text-[#B91C1C] dark:text-[#FCA5A5]">Required</span>
+                          </div>
 
-                      {/* Legal & Cascade Warning Box */}
-                      <div className="rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 p-3.5 border border-purple-200/80 dark:border-purple-800/80 text-[11px] text-purple-900 dark:text-purple-300 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                          <span>Administrative Closed-Loop Invariant:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              'Medical Waiver Approved',
+                              'Doctor Certificate Verified',
+                              'Exam Absence — Not Excused',
+                              'Attendance Shortage — Rejected',
+                            ].map((chip) => {
+                              const activeChip = overrideNotes === chip;
+                              return (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => setOverrideNotes(chip)}
+                                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                                    activeChip
+                                      ? 'bg-blue-50 text-blue-700 border-blue-400 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-500 font-bold'
+                                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium'
+                                  }`}
+                                >
+                                  + {chip}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <textarea
+                            id="leave-override-notes"
+                            rows={2}
+                            value={overrideNotes}
+                            onChange={(e) => setOverrideNotes(e.target.value)}
+                            placeholder="Write a brief reason for this decision..."
+                            className="w-full text-[13px] p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E] resize-none"
+                          />
                         </div>
-                        <ul className="list-disc list-inside space-y-0.5 text-purple-800/90 dark:text-purple-300/90 pl-1">
-                          <li>Synchronizes attendance records across all dates: {overrideModalLeave.from_date} to {overrideModalLeave.to_date}.</li>
-                          <li>Generates an immutable entry in <code className="font-mono text-[10px] bg-purple-100 dark:bg-purple-900/60 px-1 py-0.5 rounded">SecurityAuditLog</code> under Principal Dr. Rajesh Sharma.</li>
-                          <li>Dispatches automated notification alerts to both Parent and Class Teacher.</li>
-                        </ul>
+
+                        {/* Administrative Closed-Loop Invariant Notice */}
+                        <div className="rounded-xl p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-bold text-[#38BDF8]">
+                            <ShieldCheck className="h-4 w-4 shrink-0 text-[#38BDF8]" aria-hidden="true" />
+                            <span>Administrative Closed-Loop Invariants:</span>
+                          </div>
+                          <ul className="text-slate-700 dark:text-slate-300 text-xs space-y-0.5 pl-5 list-disc leading-relaxed font-medium">
+                            <li>Synchronizes attendance records across requested dates: {overrideModalLeave.from_date} → {overrideModalLeave.to_date}.</li>
+                            <li>Generates an immutable CBSE audit trail entry under Principal Dr. Sunita Kapoor.</li>
+                            <li>Dispatches automated notification alerts to both Parent and Class Teacher.</li>
+                          </ul>
+                        </div>
                       </div>
 
-                      {/* Modal Footer Buttons */}
-                      <div className="flex items-center justify-end gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setOverrideModalLeave(null)}
-                          disabled={overrideSubmitting}
-                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleExecuteLeaveOverride}
-                          disabled={overrideSubmitting || !overrideNotes.trim()}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
-                        >
-                          {overrideSubmitting ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Enforcing Override...</span>
-                            </>
-                          ) : (
-                            <>
-                              <ShieldCheck className="h-4 w-4" />
-                              <span>Enforce Admin Override</span>
-                            </>
-                          )}
-                        </button>
+                      {/* Sticky Modal Footer (Always Visible!) */}
+                      <div className="shrink-0 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 flex items-center justify-between gap-3">
+                        <span className="text-xs text-slate-600 dark:text-slate-400 hidden sm:inline">
+                          Logged in audit trail · Notifies parent &amp; teacher
+                        </span>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => setOverrideModalLeave(null)}
+                            disabled={overrideSubmitting}
+                            className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleExecuteLeaveOverride}
+                            disabled={overrideSubmitting || !overrideNotes.trim()}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-xs cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                              overrideStatus === 'Rejected'
+                                ? 'bg-[#B91C1C] hover:bg-[#991B1B]'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold'
+                            }`}
+                          >
+                            {overrideSubmitting ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                <span>
+                                  {overrideStatus === 'Rejected' ? 'Reject & Notify' : 'Approve & Notify'}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4033,103 +4124,161 @@ export default function AdminPage() {
           {/* TAB 9: DEDICATED TASK MANAGEMENT                      */}
           {/* ===================================================== */}
           {activeTab === 'tasks' && (() => {
-            const DOMAIN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-              academic:   { label: 'Academic & Curriculum', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', icon: '📚' },
-              exam:       { label: 'Examination Cell',      color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800', icon: '📝' },
-              admissions: { label: 'Admissions & CRM',      color: 'text-sky-700 dark:text-sky-300',       bg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',           icon: '🎓' },
-              finance:    { label: 'Finance & Accounts',    color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
-              executive:  { label: 'Principal Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
-              campus_ops: { label: 'Campus Operations',     color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800', icon: '🏫' },
+            const DOMAIN_META: Record<string, { label: string; icon: React.ReactNode }> = {
+              academic:   { label: 'Academic',   icon: <BookOpen className="h-3.5 w-3.5" aria-hidden="true" /> },
+              exam:       { label: 'Exams',      icon: <FileText className="h-3.5 w-3.5" aria-hidden="true" /> },
+              admissions: { label: 'Admissions', icon: <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" /> },
+              finance:    { label: 'Accounts',   icon: <Receipt className="h-3.5 w-3.5" aria-hidden="true" /> },
+              executive:  { label: 'Executive',  icon: <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> },
+              campus_ops: { label: 'Operations', icon: <Building2 className="h-3.5 w-3.5" aria-hidden="true" /> },
             };
 
-            const PRIORITY_BADGE: Record<string, string> = {
-              Critical: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-              High:     'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800',
-              Medium:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-              Low:      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+            const PRIORITY_DOT: Record<string, string> = {
+              Critical: 'bg-[#B91C1C]',
+              High:     'bg-[#F97316]',
+              Medium:   'bg-[#D97706]',
+              Low:      'bg-[#94A3B8]',
             };
 
             const STATUS_BADGE: Record<string, string> = {
-              'Pending':        'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-              'In Progress':    'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-              'Pending Review': 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-              'Completed':      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+              'Pending':        'edu-badge-critical',
+              'In Progress':    'edu-badge-info',
+              'Pending Review': 'edu-badge-warning',
+              'Completed':      'edu-badge-success',
             };
 
-            const filteredTasks = tasks.filter(t => {
+            const filteredTasks = tasks.filter((t) => {
               const statusMatch = taskStatusFilter === 'all' || t.status === taskStatusFilter;
-              if (taskOriginFilter === 'auto') return t.is_auto_generated && statusMatch;
-              if (taskOriginFilter === 'staff') return !t.is_auto_generated && statusMatch;
-              if (taskOriginFilter === 'critical') return (t.is_escalated || t.priority === 'Critical') && statusMatch;
-              if (taskOriginFilter === 'relief') return t.relief_requested && statusMatch;
-              return statusMatch;
+              const q = taskSearchQuery.trim().toLowerCase();
+              const searchMatch =
+                !q ||
+                t.title.toLowerCase().includes(q) ||
+                (t.assigned_to || '').toLowerCase().includes(q) ||
+                (t.description || '').toLowerCase().includes(q);
+              if (!statusMatch || !searchMatch) return false;
+              if (taskOriginFilter === 'auto') return Boolean(t.is_auto_generated);
+              if (taskOriginFilter === 'staff') return !t.is_auto_generated;
+              if (taskOriginFilter === 'critical') return Boolean(t.is_escalated || t.priority === 'Critical');
+              if (taskOriginFilter === 'relief') return Boolean(t.relief_requested);
+              return true;
             });
 
-            const openCount   = tasks.filter(t => t.status !== 'Completed').length;
-            const autoCount   = tasks.filter(t => t.is_auto_generated).length;
-            const criticalCount = tasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
-            const completedCount = tasks.filter(t => t.status === 'Completed').length;
-            const reliefCount = tasks.filter(t => t.relief_requested).length;
+            const openCount = tasks.filter((t) => t.status !== 'Completed').length;
+            const autoCount = tasks.filter((t) => t.is_auto_generated).length;
+            const criticalCount = tasks.filter((t) => t.is_escalated || t.priority === 'Critical').length;
+            const completedCount = tasks.filter((t) => t.status === 'Completed').length;
+            const reliefCount = tasks.filter((t) => t.relief_requested).length;
 
             return (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                {/* ── 4 Crisp High-Level KPI Cards ── */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-                  {[
-                    { label: 'Active School Tasks', value: openCount, color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50/70 dark:bg-blue-950/30', border: 'border-blue-200/60 dark:border-blue-800/60', icon: <ClipboardCheck className="h-4 w-4" /> },
-                    { label: '⚡ Auto-Triggered Rules', value: autoCount, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50/70 dark:bg-violet-950/30', border: 'border-violet-200/60 dark:border-violet-800/60', icon: <Sparkles className="h-4 w-4" /> },
-                    { label: '🚨 Critical Priorities', value: criticalCount, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50/70 dark:bg-rose-950/30', border: 'border-rose-200/60 dark:border-rose-800/60', icon: <AlertTriangle className="h-4 w-4" /> },
-                    { label: '✓ Completed Tasks', value: completedCount, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50/70 dark:bg-emerald-950/30', border: 'border-emerald-200/60 dark:border-emerald-800/60', icon: <CheckCircle2 className="h-4 w-4" /> },
-                  ].map((kpi) => (
-                    <div key={kpi.label} className={`rounded-2xl border ${kpi.border} ${kpi.bg} p-4 flex items-center gap-3.5 shadow-2xs`}>
-                      <span className={`p-2 rounded-xl bg-white dark:bg-slate-900 ${kpi.color} shadow-2xs`}>{kpi.icon}</span>
-                      <div>
-                        <div className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">{kpi.label}</div>
-                      </div>
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* ── 1. CALM 4-CARD EXECUTIVE KPI STRIP ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Active Tasks</span>
+                      <ClipboardCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                  ))}
-                </div>
-
-                {/* ── Filter Toolbar ── */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  {/* Task Origin / Type Pills */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1">Task Type:</span>
-                    {[
-                      { id: 'all', label: 'All Tasks', count: tasks.length },
-                      { id: 'auto', label: '⚡ Auto-Triggered', count: autoCount },
-                      { id: 'staff', label: '👤 Staff Delegated', count: tasks.length - autoCount },
-                      { id: 'critical', label: '🚨 Critical Only', count: criticalCount },
-                      { id: 'relief', label: '⚠️ Workload Relief', count: reliefCount },
-                    ].map(tab => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setTaskOriginFilter(tab.id as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          taskOriginFilter === tab.id
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        <span>{tab.label}</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                          taskOriginFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}>
-                          {tab.count}
-                        </span>
-                      </button>
-                    ))}
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{openCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Open across departments</span>
                   </div>
 
-                  {/* Status Dropdown */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-500">Status:</span>
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Auto-Triggered</span>
+                      <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{autoCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">System SLA rules</span>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      criticalCount > 0
+                        ? 'bg-[#FFF7ED] dark:bg-[#2A190E] border-[#FED7AA] dark:border-[#7C2D12]'
+                        : 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#EA580C] dark:text-[#FB923C]">Critical Priority</span>
+                      <AlertTriangle className="h-4 w-4 text-[#F97316] dark:text-[#FB923C]" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-[#B91C1C] dark:text-[#FCA5A5] mt-2 tabular-nums">{criticalCount}</p>
+                    <span className="text-xs text-[#7C2D12] dark:text-[#E5B891] tabular-nums">{reliefCount} relief requests</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Completed</span>
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-2 tabular-nums">{completedCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Verified &amp; closed</span>
+                  </div>
+                </div>
+
+                {/* ── 2. SINGLE-ROW FILTER, SEARCH & STATUS TOOLBAR ── */}
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: 'All', count: tasks.length },
+                      { id: 'auto', label: 'Auto', count: autoCount },
+                      { id: 'staff', label: 'Delegated', count: tasks.length - autoCount },
+                      { id: 'critical', label: 'Critical', count: criticalCount },
+                      { id: 'relief', label: 'Relief', count: reliefCount },
+                    ].map((tab) => {
+                      const active = taskOriginFilter === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setTaskOriginFilter(tab.id as any)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
+                          }`}
+                        >
+                          <span>{tab.label}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${
+                              active ? 'bg-white/20 text-white' : 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                    <div className="relative flex-1 sm:w-56">
+                      <Search className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                      <input
+                        type="text"
+                        value={taskSearchQuery}
+                        onChange={(e) => setTaskSearchQuery(e.target.value)}
+                        aria-label="Search school tasks"
+                        placeholder="Search tasks or assignee..."
+                        className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
+                      />
+                      {taskSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskSearchQuery('')}
+                          aria-label="Clear task search"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#475569] hover:text-[#0F172A] cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+
                     <select
                       value={taskStatusFilter}
-                      onChange={e => setTaskStatusFilter(e.target.value)}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      onChange={(e) => setTaskStatusFilter(e.target.value)}
+                      aria-label="Filter tasks by status"
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-white text-xs font-semibold px-3 py-1.5 cursor-pointer"
                     >
                       <option value="all">All Statuses</option>
                       <option value="Pending">Pending</option>
@@ -4140,84 +4289,83 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* ── Clean Task List Cards ── */}
-                <div className="space-y-3">
+                {/* ── 3. LINEAR-STYLE UNIFIED TASK LIST ── */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden divide-y divide-[#E2E8F0] dark:divide-[#1E322B]">
                   {filteredTasks.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center">
-                      <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-3" />
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No tasks match this filter.</p>
-                      <p className="text-xs text-slate-400 mt-1">Try switching to All Tasks or change status filter.</p>
+                    <div className="p-12 text-center space-y-1.5">
+                      <CheckCircle2 className="h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto" aria-hidden="true" />
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">No tasks match this filter</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">Try switching to All or clearing the search box.</p>
                     </div>
                   )}
 
                   {filteredTasks.map((task) => {
                     const meta = DOMAIN_META[task.domain as string] || DOMAIN_META['executive'];
                     const isExpanded = taskExpandedId === task.id;
-                    const priorityClass = PRIORITY_BADGE[task.priority as string] || PRIORITY_BADGE['Low'];
+                    const dotColor = PRIORITY_DOT[task.priority as string] || PRIORITY_DOT['Low'];
                     const statusClass = STATUS_BADGE[task.status as string] || STATUS_BADGE['Pending'];
 
                     return (
                       <div
                         key={task.id}
-                        className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all overflow-hidden ${
-                          task.is_escalated
-                            ? 'border-rose-300 dark:border-rose-700 ring-1 ring-rose-200 dark:ring-rose-900'
-                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        className={`transition-colors ${
+                          task.is_escalated ? 'border-l-4 border-l-[#B91C1C]' : ''
                         }`}
                       >
-                        {/* Task Header Row */}
+                        {/* Compact Unified Task Row */}
                         <div
-                          className="flex items-start justify-between gap-4 p-4.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setTaskExpandedId(isExpanded ? null : task.id);
+                            }
+                          }}
+                          className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#F1F5F9]/55 dark:hover:bg-[#1E293B]/60 cursor-pointer"
                         >
-                          <div className="flex items-start gap-3.5 min-w-0">
-                            {/* Domain Icon */}
-                            <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border text-base font-black ${meta.bg}`}>
-                              {meta.icon}
-                            </div>
-
-                            <div className="space-y-1 min-w-0">
-                              {/* Badges */}
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${meta.bg} ${meta.color}`}>
-                                  {meta.label}
-                                </span>
-                                {task.is_auto_generated && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 border border-violet-200 dark:border-violet-800 flex items-center gap-1">
-                                    <Sparkles className="h-3 w-3" /> Auto-Triggered Rule
-                                  </span>
-                                )}
+                          <div className="flex items-start md:items-center gap-3 min-w-0 flex-1">
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1.5 md:mt-0 ${dotColor}`}
+                              title={`Priority: ${task.priority}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4
+                                  className={`text-[13px] font-bold leading-snug ${
+                                    task.status === 'Completed'
+                                      ? 'line-through text-slate-600 dark:text-slate-400'
+                                      : 'text-slate-900 dark:text-white'
+                                  }`}
+                                >
+                                  {task.title}
+                                </h4>
                                 {task.is_escalated && (
-                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse">
-                                    🚨 Escalated to Principal
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                    Escalated
                                   </span>
                                 )}
                                 {task.relief_requested && (
-                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                                    <AlertCircle className="h-3 w-3 text-amber-600" /> Relief Requested ({task.relief_reason || 'Workload'})
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-warning">
+                                    Relief Req.
                                   </span>
                                 )}
                               </div>
-
-                              {/* Title */}
-                              <h4 className={`text-sm font-bold ${
-                                task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'
-                              }`}>
-                                {task.title}
-                              </h4>
-
-                              {/* Meta Info */}
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5">
-                                <span className="font-medium text-slate-700 dark:text-slate-300">
-                                  👤 Assigned: <strong>{task.assigned_to}</strong>
+                              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-slate-400">
+                                  {meta.icon}
+                                  {meta.label}
                                 </span>
-                                <span>•</span>
-                                <span>Due: <strong>{task.due_date}</strong></span>
+                                <span>·</span>
+                                <span>{task.assigned_to}</span>
+                                <span>·</span>
+                                <span className="tabular-nums">Due {task.due_date}</span>
                                 {task.sla_hours && (
                                   <>
-                                    <span>•</span>
-                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                      ⏱️ SLA {task.sla_hours}h
+                                    <span>·</span>
+                                    <span className="font-semibold text-[#EA580C] dark:text-[#FB923C] tabular-nums">
+                                      SLA {task.sla_hours}h
                                     </span>
                                   </>
                                 )}
@@ -4225,48 +4373,53 @@ export default function AdminPage() {
                             </div>
                           </div>
 
-                          {/* Status and Priority Badges */}
-                          <div className="shrink-0 flex flex-col items-end gap-1.5">
-                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg ${statusClass}`}>
-                              {task.status}
-                            </span>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${priorityClass}`}>
+                          <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 hidden sm:inline">
                               {task.priority}
                             </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusClass}`}>
+                              {task.status}
+                            </span>
+                            <ChevronDown
+                              className={`h-4 w-4 text-slate-600 dark:text-slate-400 transition-transform ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
                           </div>
                         </div>
 
-                        {/* Expanded Panel */}
+                        {/* Expanded Detail Drawer */}
                         {isExpanded && (
-                          <div className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 space-y-3">
+                          <div className="px-5 pb-5 pt-3.5 border-t border-[#E2E8F0] dark:border-[#1E322B] bg-[#F8FAFC]/70 dark:bg-[#0B0F19]/70 space-y-3.5">
                             {task.description && (
-                              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                              <p className="text-[13px] text-slate-600 dark:text-slate-400 leading-relaxed max-w-3xl">
                                 {task.description}
                               </p>
                             )}
 
-                            {/* Faculty Relief Request Callout with 1-Click Approval */}
+                            {/* Faculty Relief Request Callout */}
                             {task.relief_requested && (
-                              <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/40 p-3.5 space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                                    <AlertCircle className="h-4 w-4 text-amber-600" />
-                                    Faculty Relief Request Submitted ({task.relief_reason || 'Workload Surge'})
+                              <div className="rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-[#FFF7ED] dark:bg-[#2A190E] p-4 space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="text-xs font-bold text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                                    <AlertCircle className="h-4 w-4 text-[#F97316]" aria-hidden="true" />
+                                    Faculty Relief Request ({task.relief_reason || 'Workload Surge'})
                                   </span>
-                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
-                                    SLA Paused (Zero Penalty)
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FFFFFF] dark:bg-[#1E293B] text-[#EA580C] dark:text-[#FB923C] border border-[#FED7AA] dark:border-[#7C2D12]">
+                                    SLA Paused
                                   </span>
                                 </div>
 
                                 {task.relief_justification && (
-                                  <p className="text-xs text-amber-900 dark:text-amber-200 italic bg-white/80 dark:bg-slate-900/70 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900">
-                                    "{task.relief_justification}"
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 italic bg-white dark:bg-slate-800/90 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    &ldquo;{task.relief_justification}&rdquo;
                                   </p>
                                 )}
 
                                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                                  <span className="text-amber-800 dark:text-amber-300">
-                                    Suggested Peer Faculty: <strong>{task.suggested_peer_teacher || 'Mrs. Neha Roy'}</strong>
+                                  <span className="text-[#7C2D12] dark:text-[#E5B891]">
+                                    Suggested Peer: <strong>{task.suggested_peer_teacher || 'Mrs. Neha Roy'}</strong>
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <button
@@ -4276,7 +4429,7 @@ export default function AdminPage() {
                                         setReassignTaskId(task.id);
                                         setReassignPeer(task.suggested_peer_teacher || 'Mrs. Neha Roy');
                                       }}
-                                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-all shadow-xs"
+                                      className="px-3 py-1.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold cursor-pointer transition-colors"
                                     >
                                       Approve Peer Migration
                                     </button>
@@ -4286,27 +4439,26 @@ export default function AdminPage() {
                                         e.stopPropagation();
                                         handleExtendSla(task.id);
                                       }}
-                                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold cursor-pointer transition-all"
+                                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] text-[#EA580C] dark:text-[#FB923C] border border-[#FED7AA] dark:border-[#7C2D12] font-semibold cursor-pointer transition-colors"
                                     >
                                       +24h SLA Extension
                                     </button>
                                   </div>
                                 </div>
 
-                                {/* Inline Peer Selection Confirmation */}
                                 {reassignTaskId === task.id && (
-                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300 dark:border-amber-800 space-y-2 mt-2">
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                      Confirm Peer Faculty to Reassign Mandate (SLA will reset to fresh 48 Hours):
+                                  <div className="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 mt-2">
+                                    <label className="block text-xs font-semibold text-slate-900 dark:text-white">
+                                      Confirm Peer Faculty to Reassign (Resets SLA to 48h):
                                     </label>
                                     <div className="flex flex-wrap items-center gap-2">
                                       <select
                                         value={reassignPeer}
                                         onChange={(e) => setReassignPeer(e.target.value)}
-                                        className="flex-1 min-w-[200px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                        className="flex-1 min-w-[200px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 text-xs text-slate-900 dark:text-white"
                                       >
                                         <option value="Mrs. Ananya Verma">Mrs. Ananya Verma (Math Lead)</option>
-                                        <option value="Dr. K. Raman">Dr. K. Raman (Science & Physics)</option>
+                                        <option value="Dr. K. Raman">Dr. K. Raman (Science &amp; Physics)</option>
                                         <option value="Mrs. Neha Roy">Mrs. Neha Roy (English)</option>
                                         <option value="Dr. Hemanth Sen">Dr. Hemanth Sen (Biology)</option>
                                         <option value="Mr. Vikram Joshi">Mr. Vikram Joshi (Sports/Discipline)</option>
@@ -4318,7 +4470,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           handleApproveRelief(task, reassignPeer);
                                         }}
-                                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                                        className="px-3 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold font-bold text-xs cursor-pointer"
                                       >
                                         Confirm Reassignment
                                       </button>
@@ -4328,7 +4480,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           setReassignTaskId(null);
                                         }}
-                                        className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+                                        className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold cursor-pointer hover:bg-[#F1F5F9]"
                                       >
                                         Cancel
                                       </button>
@@ -4338,12 +4490,13 @@ export default function AdminPage() {
                               </div>
                             )}
 
-                            {/* Escalation Callout with Principal Resolve Action */}
+                            {/* Escalation Callout */}
                             {task.is_escalated && (
-                              <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3.5 space-y-2">
+                              <div className="rounded-xl border border-[#F5C2C2] dark:border-[#7F1D1D] bg-[#FCECEC] dark:bg-[#2B1517] p-4 space-y-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                                    🚨 Escalation Rationale: {task.escalation_reason || 'Critical Priority'}
+                                  <p className="text-xs font-bold text-[#B91C1C] dark:text-[#FCA5A5] flex items-center gap-1.5">
+                                    <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    Escalation Rationale: {task.escalation_reason || 'Critical Priority'}
                                   </p>
                                   <button
                                     type="button"
@@ -4352,22 +4505,23 @@ export default function AdminPage() {
                                       setResolveEscalateTaskId(task.id);
                                       setResolveEscalateNotes('Discussed with faculty, issue resolved and resumed normally.');
                                     }}
-                                    className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all flex items-center gap-1"
+                                    className="px-3 py-1.5 rounded-xl bg-[#B91C1C] hover:bg-[#991B1B] text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Resolve Escalation
+                                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Resolve Escalation
                                   </button>
                                 </div>
 
                                 {resolveEscalateTaskId === task.id && (
-                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-rose-300 dark:border-rose-800 space-y-2 mt-2">
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                      Principal Resolution Note (Restores task to standard monitoring queue):
+                                  <div className="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 mt-2">
+                                    <label className="block text-xs font-semibold text-slate-900 dark:text-white">
+                                      Principal Resolution Note:
                                     </label>
                                     <input
                                       type="text"
                                       value={resolveEscalateNotes}
                                       onChange={(e) => setResolveEscalateNotes(e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 text-xs text-slate-900 dark:text-white"
                                       placeholder="e.g. Counseled teacher, parent contacted, workload stabilized."
                                     />
                                     <div className="flex items-center justify-end gap-2 pt-1">
@@ -4377,7 +4531,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           setResolveEscalateTaskId(null);
                                         }}
-                                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold hover:bg-[#F1F5F9] cursor-pointer"
                                       >
                                         Cancel
                                       </button>
@@ -4387,7 +4541,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           handleResolveEscalation(task.id);
                                         }}
-                                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                                        className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold text-xs font-bold cursor-pointer"
                                       >
                                         Confirm Resolution
                                       </button>
@@ -4399,66 +4553,78 @@ export default function AdminPage() {
 
                             {/* Governance & Verification Lifecycle */}
                             {task.status === 'Pending Review' ? (
-                              <div className="p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 space-y-2.5">
+                              <div className="p-4 rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-[#FFF7ED] dark:bg-[#2A190E] space-y-2.5">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                                    <Icon3D name="memo" className="h-4 w-4" /> Work Submitted for Verification
+                                  <span className="text-xs font-bold text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                                    <FileCheck className="h-4 w-4 text-[#F97316]" aria-hidden="true" />
+                                    Work Submitted for Verification
                                   </span>
                                   {task.submitted_at && (
-                                    <span className="text-[10px] text-amber-700/80 dark:text-amber-400">
+                                    <span className="text-xs text-[#7C2D12] dark:text-[#E5B891] tabular-nums">
                                       {new Date(task.submitted_at).toLocaleDateString()}
                                     </span>
                                   )}
                                 </div>
                                 {task.submission_notes && (
-                                  <div className="text-xs text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-900">
-                                    <span className="font-semibold text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Assignee Notes:</span>
+                                  <div className="text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-800/90 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <span className="font-semibold text-slate-600 dark:text-slate-400 block text-xs mb-0.5">
+                                      Assignee Notes
+                                    </span>
                                     {task.submission_notes}
                                   </div>
                                 )}
                                 {task.completion_proof_url && (
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={task.completion_proof_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800"
-                                    >
-                                      📎 View Attached Proof / Dossier
-                                    </a>
-                                  </div>
+                                  <a
+                                    href={task.completion_proof_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    View Attached Proof / Dossier
+                                  </a>
                                 )}
                                 <div className="flex items-center gap-2 pt-1">
                                   <button
                                     type="button"
-                                    onClick={() => { setReviewModalTask(task); setReviewRemarks('Verified all documents & compliance requirements.'); setShowRevisionInput(false); }}
-                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                                    onClick={() => {
+                                      setReviewModalTask(task);
+                                      setReviewRemarks('Verified all documents & compliance requirements.');
+                                      setShowRevisionInput(false);
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Verify &amp; Sign-off
+                                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Verify &amp; Sign-off
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => { setReviewModalTask(task); setShowRevisionInput(true); }}
-                                    className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 text-xs font-bold hover:bg-amber-100 cursor-pointer"
+                                    onClick={() => {
+                                      setReviewModalTask(task);
+                                      setShowRevisionInput(true);
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-white dark:bg-slate-800/90 text-[#EA580C] dark:text-[#FB923C] text-xs font-semibold hover:bg-[#F1F5F9] cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    ↺ Request Revision
+                                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Request Revision
                                   </button>
                                 </div>
                               </div>
                             ) : task.status === 'Completed' ? (
-                              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 dark:bg-[#2563EB]/25 border border-slate-200 dark:border-slate-700 text-xs text-blue-600 dark:text-blue-400 dark:text-[#93C5FD]">
                                 <div className="flex items-center gap-2">
-                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                                   <div>
                                     <span className="font-bold">Verified &amp; Closed</span>
                                     {task.approved_by && (
-                                      <span className="text-slate-600 dark:text-slate-400 text-[11px] block">
-                                        Approved by {task.approved_by} {task.approved_at ? `on ${new Date(task.approved_at).toLocaleDateString()}` : ''}
+                                      <span className="text-slate-600 dark:text-slate-400 block">
+                                        Approved by {task.approved_by}{' '}
+                                        {task.approved_at ? `on ${new Date(task.approved_at).toLocaleDateString()}` : ''}
                                       </span>
                                     )}
                                     {task.is_admin_override && (
-                                      <span className="text-rose-600 dark:text-rose-400 text-[10px] block font-semibold">
-                                        [Force Closed]: {task.admin_override_reason}
+                                      <span className="text-[#B91C1C] dark:text-[#FCA5A5] block font-semibold">
+                                        Force Closed: {task.admin_override_reason}
                                       </span>
                                     )}
                                   </div>
@@ -4468,22 +4634,21 @@ export default function AdminPage() {
                                     href={task.completion_proof_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
                                   >
-                                    View Dossier ↗
+                                    <span>View Dossier</span>
+                                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
                                   </a>
                                 )}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-slate-500">Assignee Status:</span>
-                                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-                                    task.status === 'In Progress'
-                                      ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                                  }`}>
-                                    {task.status === 'In Progress' ? '⚡ In Progress by Assignee' : '⏳ Awaiting Assignee Action'}
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#E2E8F0] dark:border-[#1E322B]">
+                                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                                  <span>
+                                    {task.status === 'In Progress'
+                                      ? 'In progress with assignee'
+                                      : 'Awaiting assignee action'}
                                   </span>
                                 </div>
 
@@ -4494,10 +4659,10 @@ export default function AdminPage() {
                                       setOverrideModalTask(task);
                                       setOverrideReason('');
                                     }}
-                                    className="rounded-xl px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                                    className="rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
                                     title="Use only if assignee is on leave or task completed externally"
                                   >
-                                    Force Close (Override)
+                                    Force Close
                                   </button>
                                   {!task.is_escalated && (
                                     <button
@@ -4507,9 +4672,10 @@ export default function AdminPage() {
                                         setEscalateTaskId(task.id);
                                         setEscalateReason('');
                                       }}
-                                      className="rounded-xl px-3 py-1 text-xs font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer"
+                                      className="rounded-xl px-3 py-1.5 text-xs font-bold border border-[#F5C2C2] dark:border-[#7F1D1D] bg-[#FCECEC] dark:bg-[#2B1517] text-[#B91C1C] dark:text-[#FCA5A5] hover:bg-[#B91C1C] hover:text-white transition-colors cursor-pointer inline-flex items-center gap-1.5"
                                     >
-                                      🚨 Escalate
+                                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                                      Escalate
                                     </button>
                                   )}
                                 </div>
@@ -4518,29 +4684,29 @@ export default function AdminPage() {
 
                             {/* Escalation Form */}
                             {escalateTaskId === task.id && (
-                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 p-3.5 space-y-2 mt-2">
-                                <p className="text-xs font-bold text-rose-700 dark:text-rose-300">
-                                  State rationale for escalating this task to Principal:
+                              <div className="rounded-xl border border-[#F5C2C2] dark:border-[#7F1D1D] bg-white dark:bg-slate-800/90 p-3.5 space-y-2 mt-2">
+                                <p className="text-xs font-bold text-[#B91C1C] dark:text-[#FCA5A5]">
+                                  State rationale for escalating this task:
                                 </p>
                                 <textarea
                                   rows={2}
                                   value={escalateReason}
-                                  onChange={e => setEscalateReason(e.target.value)}
+                                  onChange={(e) => setEscalateReason(e.target.value)}
                                   placeholder="e.g. Teacher requested medical relief or deadline exceeded by 48 hours..."
-                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none"
                                 />
                                 <div className="flex gap-2 justify-end">
                                   <button
                                     type="button"
                                     onClick={() => setEscalateTaskId(null)}
-                                    className="text-xs px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 cursor-pointer"
+                                    className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] cursor-pointer font-semibold"
                                   >
                                     Cancel
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleEscalateTask(task.id)}
-                                    className="text-xs px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                                    className="text-xs px-3 py-1.5 rounded-xl bg-[#B91C1C] hover:bg-[#991B1B] text-white font-bold cursor-pointer"
                                   >
                                     Confirm Escalation
                                   </button>
