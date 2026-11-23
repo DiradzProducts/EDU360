@@ -687,28 +687,125 @@ html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.
   font-weight: 700 !important;
 }
 
-/* 4. Primary Interactive Buttons -> Dynamically themed per palette */
+/* ========================================================================== */
+/* 4. DYNAMIC BRAND ACCENT HARMONIZATION (ALL 6 PALETTES)                     */
+/* Ensures buttons, text, badges, borders & rings update on palette change    */
+/* ========================================================================== */
+
+/* A. Primary Interactive Solid Buttons & Active Badges */
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600,
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\] {
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-700,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-700 {
   background-color: var(--primary) !important;
   color: var(--primary-foreground) !important;
 }
 
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600 svg,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700 svg,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\] svg,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600 span,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700 span,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\] span {
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\] *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-700 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-700 * {
   color: var(--primary-foreground) !important;
 }
 
+/* B. Hover States for Primary Buttons */
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-blue-700:hover,
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-blue-800:hover,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-\[\#1D4ED8\]:hover {
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-\[\#1D4ED8\]:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-violet-700:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-violet-800:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-indigo-700:hover {
   background-color: var(--primary-hover) !important;
   color: var(--primary-foreground) !important;
+}
+
+/* C. Dynamic Brand Primary Text & Icon Colors */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-500,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-violet-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-indigo-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-violet-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-indigo-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-indigo-300 {
+  color: var(--primary) !important;
+}
+
+/* D. Dynamic Soft Backgrounds (Pills, Chips, Notification Centers) */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/60,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/40,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/70,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/80,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-900\/80,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-violet-950,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-indigo-950 {
+  background-color: var(--primary-soft) !important;
+}
+
+/* E. Dynamic Soft Borders (Pills, Chips, Inputs) */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-blue-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-violet-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-violet-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-violet-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-indigo-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-indigo-800 {
+  border-color: var(--primary-soft-border) !important;
+}
+
+/* F. High-Contrast Text inside Soft Badges (Light mode legible dark, Dark mode bright) */
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-700,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-800,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-violet-700,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-indigo-700 {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+}
+
+/* G. Focus Rings */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-blue-500:focus,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-blue-600:focus,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-violet-500:focus {
+  outline-color: var(--focus-ring) !important;
+  --tw-ring-color: var(--focus-ring) !important;
+}
+
+/* H. Brand Logo Gradient & Highlights */
+html[data-palette="lime"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #65A30D, #84CC16, #A3E635) !important;
+}
+html[data-palette="amber"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #B45309, #D97706, #F59E0B) !important;
+}
+html[data-palette="violet"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #6D28D9, #7C3AED, #A855F7) !important;
+}
+html[data-palette="ocean"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #0369A1, #0284C7, #38BDF8) !important;
+}
+html[data-palette="crimson"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #9F1239, #BE123C, #E11D48) !important;
 }
 
 /* 5. Standard Badges */
@@ -851,11 +948,7 @@ html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:t
   color: var(--text-muted) !important;
 }
 
-html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-400,
-html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-300,
-html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-200 {
-  color: #60A5FA !important;
-}
+/* Removed hardcoded #60A5FA - mapped dynamically below */
 
 html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-blue-950\/60,
 html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-blue-950\/70,
