@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon3D } from '@/components/ui/icon-3d';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, 
   AlertCircle, 
@@ -86,8 +86,11 @@ import {
   TaskDomain,
   RemedialAdminOverview,
   RemedialEarlyWarning,
-  PayrollBatchItem
+  PayrollBatchItem,
+  PaymentTransactionItem,
+  ExamScheduleItem
 } from '@/lib/types';
+import { TodayReceiptItem, getLiveTodayReceipts, recordLiveReceipt, resetLiveLedger, formatSystemTime, setupReceiptSync } from '@/lib/fee-ledger';
 import { TriageCard } from '@/components/triage-card';
 import { CRMBoard } from '@/components/crm-board';
 import { ExitClearanceView } from '@/components/exit-clearance-modal';
@@ -132,8 +135,111 @@ export default function AdminPage() {
   const [teacherPermissions, setTeacherPermissions] = useState<TeacherPermissionRequest[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryRecord[]>([]);
   const [feeDefaulters, setFeeDefaulters] = useState<FeeDefaulter[]>([]);
+  const [todayReceipts, setTodayReceipts] = useState<TodayReceiptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Unified receipt sync via setupReceiptSync (handles BroadcastChannel, storage, CustomEvent, focus, polling)
+  useEffect(() => {
+    setTodayReceipts(getLiveTodayReceipts());
+    return setupReceiptSync({
+      onReceipts: setTodayReceipts
+    });
+  }, []);
+
+  // Re-sync todayReceipts when switching to fees or cockpit
+  useEffect(() => {
+    if (activeTab === 'fees' || activeTab === 'cockpit') {
+      setTodayReceipts(getLiveTodayReceipts());
+    }
+  }, [activeTab]);
+
+  const totalCollectedToday = useMemo<number>(() => {
+    return todayReceipts.reduce((acc: number, r: TodayReceiptItem) => acc + (Number(r.amount) || 0), 0);
+  }, [todayReceipts]);
+
+  const upiReceipts = useMemo<TodayReceiptItem[]>(() => {
+    return todayReceipts.filter((r: TodayReceiptItem) => {
+      const m = (r.mode || '').toLowerCase();
+      return m.includes('upi') || m.includes('gpay') || m.includes('phonepe') || m.includes('paytm');
+    });
+  }, [todayReceipts]);
+
+  const upiCollectedToday = useMemo<number>(() => {
+    return upiReceipts.reduce((acc: number, r: TodayReceiptItem) => acc + (Number(r.amount) || 0), 0);
+  }, [upiReceipts]);
+
+  const neftReceipts = useMemo<TodayReceiptItem[]>(() => {
+    return todayReceipts.filter((r: TodayReceiptItem) => {
+      const m = (r.mode || '').toLowerCase();
+      return m.includes('neft') || m.includes('netbanking') || m.includes('wire') || m.includes('bank') || m.includes('sbi') || m.includes('hdfc') || m.includes('icici');
+    });
+  }, [todayReceipts]);
+
+  const neftCollectedToday = useMemo<number>(() => {
+    return neftReceipts.reduce((acc: number, r: TodayReceiptItem) => acc + (Number(r.amount) || 0), 0);
+  }, [neftReceipts]);
+
+  const cashReceipts = useMemo<TodayReceiptItem[]>(() => {
+    return todayReceipts.filter((r: TodayReceiptItem) => {
+      const m = (r.mode || '').toLowerCase();
+      return m.includes('cash') || m.includes('counter');
+    });
+  }, [todayReceipts]);
+
+  const cashCollectedToday = useMemo<number>(() => {
+    return cashReceipts.reduce((acc: number, r: TodayReceiptItem) => acc + (Number(r.amount) || 0), 0);
+  }, [cashReceipts]);
+
+  const handleSimulateParentPayment = () => {
+    const pool = [
+      { name: 'Aarav Sharma', class: 'Class 8-B', amount: 35000, head: 'Term 2 Tuition Fee', mode: 'UPI (PhonePe)' },
+      { name: 'Diya Patel', class: 'Class 8-B', amount: 28500, head: 'Term 2 Tuition & Lab', mode: 'UPI (Google Pay)' },
+      { name: 'Rohan Verma', class: 'Class 9-A', amount: 22000, head: 'Term 2 Tuition Fee', mode: 'UPI (Paytm)' },
+      { name: 'Ananya Iyer', class: 'Class 9-A', amount: 18500, head: 'Annual STEM & Robotics', mode: 'UPI (PhonePe)' }
+    ];
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    const randomUtr = `UPI-${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const recNo = `REC-2026-FEE-${Math.floor(1000 + Math.random() * 9000)}`;
+    const nowTime = formatSystemTime(new Date());
+    const newReceipt: TodayReceiptItem = {
+      recNo,
+      name: picked.name,
+      classSec: picked.class,
+      head: picked.head,
+      amount: picked.amount,
+      mode: picked.mode,
+      ref: randomUtr,
+      time: nowTime,
+      status: 'Bank Cleared'
+    };
+    const updated = recordLiveReceipt(newReceipt);
+    setTodayReceipts(updated);
+    setToastMessage(`✓ Captured Live UPI Collection: ₹${picked.amount.toLocaleString('en-IN')} for ${picked.name} (${recNo})`);
+
+    // Dispatch real-time system notifications
+    api.publishClientNotification({
+      recipient_role: 'admin',
+      sender_name: 'UPI Gateway Webhook Engine',
+      sender_role: 'system',
+      notification_type: 'ONLINE_PAYMENT',
+      title: 'Live UPI Collection Captured',
+      message: `₹${picked.amount.toLocaleString('en-IN')} received via ${picked.mode} for ${picked.name} (${picked.class}). Receipt #${recNo}.`,
+      priority: 'Normal',
+      action_url: '/admin'
+    });
+
+    api.publishClientNotification({
+      recipient_role: 'accounts_coordinator',
+      sender_name: 'Parent Online Portal',
+      sender_role: 'parent',
+      notification_type: 'ONLINE_PAYMENT',
+      title: 'Online Fee Payment Captured',
+      message: `₹${picked.amount.toLocaleString('en-IN')} received via ${picked.mode} for ${picked.name} (${picked.class}). Receipt #${recNo}.`,
+      priority: 'MEDIUM',
+      action_url: '/accounts_coordinator?tab=reconciliation'
+    });
+  };
 
   // Student Leaves & Administrative Override State
   const [studentLeaves, setStudentLeaves] = useState<LeaveRequest[]>([]);
@@ -167,6 +273,7 @@ export default function AdminPage() {
   const [adminPayrollBatches, setAdminPayrollBatches] = useState<PayrollBatchItem[]>([]);
   const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
   const [isAuthorizingPayroll, setIsAuthorizingPayroll] = useState(false);
+  const [isRequestingPayrollRevision, setIsRequestingPayrollRevision] = useState(false);
   const [selectedAdminBatchId, setSelectedAdminBatchId] = useState<number | null>(null);
   const [principalAuthNotes, setPrincipalAuthNotes] = useState('Reviewed faculty attendance, EPFO statutory 12%, and TDS withholding. Digitally authorized for bank wire.');
 
@@ -227,9 +334,21 @@ export default function AdminPage() {
 
   // Exams & Re-Exam Requests State
   const [examSubTab, setExamSubTab] = useState<'upcoming' | 'overdue' | 'reexam'>('upcoming');
+  const [examSchedules, setExamSchedules] = useState<ExamScheduleItem[]>([]);
   const [reExamRequests, setReExamRequests] = useState<ReExamRequestItem[]>([]);
   const [selectedReExamModal, setSelectedReExamModal] = useState<ReExamRequestItem | null>(null);
   const [reExamAdminRemarks, setReExamAdminRemarks] = useState('');
+
+  // Staff Leave Issuance (Admin Direct Mandate) State
+  const [showIssueLeaveModal, setShowIssueLeaveModal] = useState(false);
+  const [issueLeaveStaffName, setIssueLeaveStaffName] = useState('Mrs. Ananya Verma');
+  const [issueLeaveCategory, setIssueLeaveCategory] = useState('On-Duty OD');
+  const [issueLeaveFromDate, setIssueLeaveFromDate] = useState('Today, 26 Oct 2026');
+  const [issueLeaveToDate, setIssueLeaveToDate] = useState('Today, 26 Oct 2026');
+  const [issueLeavePeriods, setIssueLeavePeriods] = useState('Period 2, Period 3');
+  const [issueLeaveSubstitute, setIssueLeaveSubstitute] = useState('Mrs. Neha Roy (TGT Science)');
+  const [issueLeaveReason, setIssueLeaveReason] = useState('CBSE Regional Academic Seminar & Science Fair Deputation');
+  const [issueLeaveTotalDays, setIssueLeaveTotalDays] = useState(1);
 
   // Fee Collections Sub-tab State
   const [feeSubTab, setFeeSubTab] = useState<'today' | 'aging' | 'milestones'>('today');
@@ -288,7 +407,7 @@ export default function AdminPage() {
   const [regEmail, setRegEmail] = useState('');
   const [regGrade, setRegGrade] = useState('Class 8');
   const [regSource, setRegSource] = useState('Direct Call / Walk-in');
-  const [regTemperature, setRegTemperature] = useState<'hot' | 'warm' | 'cold'>('warm');
+  const [regCategory, setRegCategory] = useState<'active' | 'passive'>('active');
   const [regNotes, setRegNotes] = useState('');
 
   // School Events State & Modal
@@ -327,7 +446,7 @@ export default function AdminPage() {
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [staffRoleFilter, setStaffRoleFilter] = useState('All');
   const [permFilter, setPermFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
-  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'pacing'>('all');
+  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'financial'>('all');
   const [taskOriginFilter, setTaskOriginFilter] = useState<'all' | 'auto' | 'staff' | 'critical' | 'relief'>('all');
   const [examClassFilter, setExamClassFilter] = useState('All');
 
@@ -366,6 +485,29 @@ export default function AdminPage() {
     setTimeout(() => {
       setToastMessage(null);
     }, 4000);
+  };
+
+  // Guard against on-hold domains (transport, inventory, legacy board exam LOC)
+  const isExcludedTriage = (a: TriageAlert) => {
+    const cat = (a.category || '').toLowerCase();
+    const title = (a.title || '').toLowerCase();
+    const desc = (a.description || '').toLowerCase();
+    return (
+      cat === 'transport' ||
+      cat === 'inventory' ||
+      title.includes('bus') ||
+      title.includes('telemetry delay') ||
+      title.includes('board exam') ||
+      title.includes('loc verification') ||
+      desc.includes('bus route') ||
+      desc.includes('cbse loc')
+    );
+  };
+
+  const isExcludedTask = (t: AdminTask) => {
+    const d = (t.domain || '').toLowerCase();
+    const title = (t.title || '').toLowerCase();
+    return d === 'transport' || d === 'inventory' || title.includes('bus') || title.includes('acid & apparatus');
   };
 
   // Listen for global command palette navigation events
@@ -410,11 +552,13 @@ export default function AdminPage() {
           api.getStudents(),
           api.getReExamRequests(),
           api.getAdminStudentLeaves(),
-          api.getPayrollBatches()
+          api.getPayrollBatches(),
+          api.getPaymentTransactions(),
+          api.getExamSchedules()
         ]);
 
-        if (results[0].status === 'fulfilled') setTriageAlerts(results[0].value);
-        if (results[1].status === 'fulfilled') setTasks(results[1].value);
+        if (results[0].status === 'fulfilled') setTriageAlerts((results[0].value || []).filter(a => !isExcludedTriage(a)));
+        if (results[1].status === 'fulfilled') setTasks((results[1].value || []).filter(t => !isExcludedTask(t)));
         if (results[2].status === 'fulfilled') setEnquiries(results[2].value);
         if (results[3].status === 'fulfilled') setDocuments(results[3].value);
         if (results[4].status === 'fulfilled') setExitClearances(results[4].value);
@@ -433,6 +577,8 @@ export default function AdminPage() {
         if (results[17] && results[17].status === 'fulfilled') setReExamRequests(results[17].value as ReExamRequestItem[]);
         if (results[18] && results[18].status === 'fulfilled') setStudentLeaves(results[18].value as LeaveRequest[]);
         if (results[19] && results[19].status === 'fulfilled') setAdminPayrollBatches((results[19].value as PayrollBatchItem[]) || []);
+        if (results[21] && results[21].status === 'fulfilled') setExamSchedules((results[21].value as ExamScheduleItem[]) || []);
+        // Today receipts initialized via fee-ledger getLiveTodayReceipts()
       } catch (err) {
         console.error("Error loading admin dashboard", err);
       } finally {
@@ -443,6 +589,129 @@ export default function AdminPage() {
 
     // Also directly load remedial overview with resilient fallback
     api.getRemedialAdminOverview().then(res => setRemedialOverview(res)).catch(() => {});
+  }, []);
+
+  // Real-time synchronization for Four-Eye Staff Payroll Batches & Notifications
+  useEffect(() => {
+    if (activeTab === 'payroll') {
+      loadAdminPayroll();
+    } else if (activeTab === 'substitutions') {
+      Promise.all([
+        api.getSubstitutions(),
+        api.getAvailableFaculty()
+      ]).then(([subs, facs]) => {
+        setSubstitutions(subs);
+        setAvailableFaculty(facs);
+      }).catch(() => {});
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handlePayrollSync = (e: any) => {
+      const notif = e.detail;
+      const type = notif?.notification_type || notif?.type;
+      if (type === 'ONLINE_PAYMENT') {
+        setTodayReceipts(getLiveTodayReceipts());
+        triggerToast(`💳 ${notif?.title || 'Live Fee Collection Received'}: ${notif?.message}`);
+      } else if (type === 'PAYROLL_READY' || type === 'PAYROLL_AUDIT' || type === 'PAYROLL_RESUBMITTED') {
+        loadAdminPayroll();
+        triggerToast(`🔔 ${notif?.title || 'Monthly Staff Payroll batch ready for Principal Sign-off!'}`);
+      } else if (type === 'SUBSTITUTION_ASSIGNED' || type === 'PROXY_REQUIRED' || type === 'TEACHER_LEAVE_APPROVED') {
+        Promise.all([
+          api.getSubstitutions(),
+          api.getAvailableFaculty(),
+          api.getTeacherPermissions()
+        ]).then(([subs, facs, perms]) => {
+          setSubstitutions(subs);
+          setAvailableFaculty(facs);
+          setTeacherPermissions(perms);
+          triggerToast(notif?.message || '🔔 Timetable substitution gaps updated.');
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('edu360_notification_event', handlePayrollSync);
+
+    const handleNav = (e: any) => {
+      const url = typeof e.detail === 'string' ? e.detail : (e.detail?.url || '');
+      try {
+        const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+        const tabParam = parsed.searchParams.get('tab') as AdminTab | null;
+        if (tabParam) {
+          setActiveTab(tabParam);
+          if (tabParam === 'fees') setTodayReceipts(getLiveTodayReceipts());
+          else if (tabParam === 'payroll') loadAdminPayroll();
+          else if (tabParam === 'substitutions') {
+            Promise.all([
+              api.getSubstitutions(),
+              api.getAvailableFaculty()
+            ]).then(([subs, facs]) => {
+              setSubstitutions(subs);
+              setAvailableFaculty(facs);
+            }).catch(() => {});
+          }
+        }
+      } catch {
+        if (url.includes('tab=fees')) {
+          setActiveTab('fees');
+          setTodayReceipts(getLiveTodayReceipts());
+        } else if (url.includes('tab=payroll')) {
+          setActiveTab('payroll');
+          loadAdminPayroll();
+        } else if (url.includes('tab=substitutions')) {
+          setActiveTab('substitutions');
+          Promise.all([
+            api.getSubstitutions(),
+            api.getAvailableFaculty()
+          ]).then(([subs, facs]) => {
+            setSubstitutions(subs);
+            setAvailableFaculty(facs);
+          }).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('edu360-navigate-url', handleNav);
+
+    let bc: BroadcastChannel | null = null;
+    let txChannel: BroadcastChannel | null = null;
+    try {
+      txChannel = new BroadcastChannel('edu360_global_transactions');
+      txChannel.onmessage = (msg) => {
+        if (msg.data?.type === 'TRANSACTION_RECORDED' || msg.data?.type === 'TRANSACTION_RECONCILED') {
+          setTodayReceipts(getLiveTodayReceipts());
+        }
+      };
+    } catch {}
+
+    try {
+      bc = new BroadcastChannel('edu360_global_notifications');
+      bc.onmessage = (msg) => {
+        const type = msg.data?.notification?.notification_type || msg.data?.type;
+        if (type === 'ONLINE_PAYMENT') {
+          setTodayReceipts(getLiveTodayReceipts());
+          triggerToast(`💳 ${msg.data?.notification?.title || 'Fee Collection Received'}: ${msg.data?.notification?.message}`);
+        } else if (type === 'PAYROLL_READY' || type === 'PAYROLL_AUDIT' || type === 'PAYROLL_RESUBMITTED') {
+          loadAdminPayroll();
+          triggerToast('🔔 Accounts Coordinator submitted a monthly staff payroll batch for Principal executive authorization!');
+        } else if (type === 'SUBSTITUTION_ASSIGNED' || type === 'PROXY_REQUIRED' || type === 'TEACHER_LEAVE_APPROVED') {
+          Promise.all([
+            api.getSubstitutions(),
+            api.getAvailableFaculty(),
+            api.getTeacherPermissions()
+          ]).then(([subs, facs, perms]) => {
+            setSubstitutions(subs);
+            setAvailableFaculty(facs);
+            setTeacherPermissions(perms);
+          }).catch(() => {});
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('edu360_notification_event', handlePayrollSync);
+      window.removeEventListener('edu360-navigate-url', handleNav);
+      if (bc) bc.close();
+      if (txChannel) txChannel.close();
+    };
   }, []);
 
   const loadAdminPayroll = async () => {
@@ -476,6 +745,28 @@ export default function AdminPage() {
       triggerToast(err?.message || 'Failed to authorize payroll batch.');
     } finally {
       setIsAuthorizingPayroll(false);
+    }
+  };
+
+  const handleRequestPayrollRevision = async (batchId: number) => {
+    try {
+      setIsRequestingPayrollRevision(true);
+      const notes = principalAuthNotes.trim() || 'Please re-verify faculty attendance, LOP deductions, and statutory EPF/TDS withholdings.';
+      await api.requestPayrollRevision(batchId, {
+        requested_by: 'Dr. Sunita Kapoor (Principal)',
+        notes
+      });
+      setAdminPayrollBatches(prev => prev.map(b => b.id === batchId ? {
+        ...b,
+        status: 'Revision Requested',
+        notes: (b.notes || '') + ` | [Revision Requested by Dr. Sunita Kapoor]: ${notes}`
+      } : b));
+      triggerToast('✓ Revision query successfully dispatched to Accounts Coordinator!');
+      await loadAdminPayroll();
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to dispatch revision request.');
+    } finally {
+      setIsRequestingPayrollRevision(false);
     }
   };
 
@@ -523,7 +814,7 @@ export default function AdminPage() {
   const handleTriageAction = async (alert: TriageAlert) => {
     await api.actOnTriageAlert(alert.id);
     const updated = await api.getTriageAlerts();
-    setTriageAlerts(updated);
+    setTriageAlerts((updated || []).filter(a => !isExcludedTriage(a)));
     triggerToast(`Action executed: ${alert.action_label}`);
   };
 
@@ -772,7 +1063,7 @@ export default function AdminPage() {
       phone: regPhone.trim(),
       email: emailVal,
       target_grade: regGrade,
-      lead_temperature: regTemperature,
+      lead_temperature: regCategory === 'passive' ? 'cold' : 'warm',
       source: regSource,
       notes: regNotes.trim() || `Admitted by Principal Office: Direct enrollment candidate for ${regGrade}.`
     });
@@ -788,7 +1079,7 @@ export default function AdminPage() {
     setRegEmail('');
     setRegGrade('Class 8');
     setRegSource('Direct Call / Walk-in');
-    setRegTemperature('warm');
+    setRegCategory('active');
     setRegNotes('');
 
     triggerToast(`🎉 Candidate ${regStudentName.trim()} registered in Admissions CRM!`);
@@ -826,9 +1117,39 @@ export default function AdminPage() {
 
   const handleReviewPermission = async (id: number, status: 'Approved' | 'Rejected') => {
     await api.reviewTeacherPermission(id, status);
-    const updated = await api.getTeacherPermissions();
-    setTeacherPermissions(updated);
+    const [updatedPerms, updatedSubs] = await Promise.all([
+      api.getTeacherPermissions(),
+      api.getSubstitutions()
+    ]);
+    setTeacherPermissions(updatedPerms);
+    setSubstitutions(updatedSubs);
     triggerToast(`Teacher permission request marked as ${status}`);
+  };
+
+  const handleIssueStaffLeave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.issueTeacherPermission({
+        staff_name: issueLeaveStaffName,
+        leave_category: issueLeaveCategory,
+        from_date: issueLeaveFromDate,
+        to_date: issueLeaveToDate,
+        affected_periods: issueLeavePeriods,
+        suggested_substitute: issueLeaveSubstitute,
+        reason: issueLeaveReason,
+        total_days: Number(issueLeaveTotalDays)
+      });
+      const [updatedPerms, updatedSubs] = await Promise.all([
+        api.getTeacherPermissions(),
+        api.getSubstitutions()
+      ]);
+      setTeacherPermissions(updatedPerms);
+      setSubstitutions(updatedSubs);
+      setShowIssueLeaveModal(false);
+      triggerToast(res?.message || `Granted ${issueLeaveCategory} to ${issueLeaveStaffName}`);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to issue staff leave.');
+    }
   };
 
   const handleSendFeeReminder = async (defaulterId: number, studentName: string) => {
@@ -1709,7 +2030,9 @@ export default function AdminPage() {
             <AdminCockpit onNavigateTab={(tab: string) => setActiveTab(tab as AdminTab)} />
           )}
 
-          {activeTab === 'triage' && (
+          {activeTab === 'triage' && (() => {
+            const cleanTriageAlerts = triageAlerts.filter(a => !isExcludedTriage(a));
+            return (
             <div className="space-y-6 animate-in fade-in duration-200">
               
               {/* Filter Tabs for Action Alerts */}
@@ -1717,12 +2040,12 @@ export default function AdminPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1 flex items-center gap-1.5">
                     <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    Alert Type:
+                    Alert Filter:
                   </span>
                   {[
-                    { id: 'all', label: 'All Alerts', count: triageAlerts.filter(a => !a.resolved).length + (remedialOverview?.early_warning_pacing_triage.length || 0) },
-                    { id: 'urgent', label: '🔴 Urgent School Alerts', count: triageAlerts.filter(a => !a.resolved).length },
-                    { id: 'pacing', label: '🟠 Remedial Inactivity', count: remedialOverview?.early_warning_pacing_triage.length || 0 },
+                    { id: 'all', label: 'All Operational Alerts', count: cleanTriageAlerts.filter(a => !a.resolved).length },
+                    { id: 'urgent', label: '🔴 Urgent Exceptions', count: cleanTriageAlerts.filter(a => !a.resolved && a.level === 'red').length },
+                    { id: 'financial', label: '🟠 Financial & Approvals', count: cleanTriageAlerts.filter(a => !a.resolved && (a.category === 'fees' || a.category === 'finance')).length },
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -1744,101 +2067,48 @@ export default function AdminPage() {
                   ))}
                 </div>
                 <div className="text-xs text-slate-500 font-medium">
-                  Auto-detected exceptions requiring administrative intervention
+                  Autonomous exception monitors (Attendance, Substitutions, Fees &amp; Escalations)
                 </div>
               </div>
 
-              {/* SECTION A: Remedial Pacing Early Warnings (Orange Alert Cards) */}
-              {(alertFilter === 'all' || alertFilter === 'pacing') && remedialOverview && remedialOverview.early_warning_pacing_triage.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-amber-200/60 dark:border-amber-900/40 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-orange-500 animate-ping" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 dark:text-orange-300">
-                        🟠 Remedial Pacing Warnings: Students Inactive for 2+ Days
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-500">Requires Class Teacher Contact</span>
+              {/* Immediate Administrative Alerts Grid */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      🚨 Immediate Administrative Alerts (Attendance, Substitutions, Fees &amp; Escalations)
+                    </h3>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {remedialOverview.early_warning_pacing_triage.map((warn) => (
-                      <div
-                        key={warn.student_id}
-                        className="rounded-2xl border border-orange-200/80 dark:border-orange-900/60 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs flex flex-col justify-between"
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900 dark:text-white">
-                              {warn.name}
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
-                              {warn.class_name}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                            <span>{warn.subject}: <strong>{warn.exam_score_pct}%</strong></span>
-                            <span className="text-orange-600 font-bold">Day {warn.current_day} ({warn.days_inactive}d Inactive)</span>
-                          </div>
-
-                          <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
-                            <strong>Weak Concept:</strong> {warn.weak_concept}
-                          </p>
-
-                          <div className="pt-1 text-[10px] text-slate-400">
-                            Parent: <strong className="text-slate-600 dark:text-slate-300">{warn.parent_name}</strong> ({warn.parent_phone})
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={notifyingStudentId === warn.student_id}
-                          onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                        >
-                          {notifyingStudentId === warn.student_id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Bell className="h-3 w-3" />
-                          )}
-                          <span>Notify Class Teacher &amp; Briefing</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {cleanTriageAlerts.filter(a => !a.resolved).length} Pending Action
+                  </span>
                 </div>
-              )}
 
-              {/* SECTION B: Critical Operational Exceptions (Red / Amber Cards) */}
-              {(alertFilter === 'all' || alertFilter === 'urgent') && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                        🔴 Immediate Operational Alerts (Attendance, Fees &amp; Academics)
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-500">
-                      {triageAlerts.filter(a => !a.resolved).length} Pending
-                    </span>
+                {cleanTriageAlerts.filter(a => alertFilter === 'all' || (alertFilter === 'urgent' && a.level === 'red') || (alertFilter === 'financial' && (a.category === 'fees' || a.category === 'finance'))).length === 0 ? (
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-8 text-center">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
+                    <h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">All Administrative Alerts Resolved</h4>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">No pending chronic absences, unassigned substitutions, fee overdue alerts, or escalations.</p>
                   </div>
-
+                ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {triageAlerts.map((alert) => (
-                      <TriageCard 
-                        key={alert.id} 
-                        alert={alert} 
-                        onAction={handleTriageAction} 
-                      />
-                    ))}
+                    {cleanTriageAlerts
+                      .filter(a => alertFilter === 'all' || (alertFilter === 'urgent' && a.level === 'red') || (alertFilter === 'financial' && (a.category === 'fees' || a.category === 'finance')))
+                      .map((alert) => (
+                        <TriageCard 
+                          key={alert.id} 
+                          alert={alert} 
+                          onAction={handleTriageAction} 
+                        />
+                      ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
             </div>
-          )}
+            );
+          })()}
           {/* ===================================================== */}
           {/* TAB 2: ADMISSIONS & ENQUIRY CRM                      */}
           {/* ===================================================== */}
@@ -2185,27 +2455,27 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* 2. STATUTORY CBES GOVERNANCE BANNER */}
-                <div className="rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 sm:p-5 shadow-lg border border-blue-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                {/* 2. STUDENT LEAVE & ATTENDANCE OVERSIGHT BANNER */}
+                <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 shadow-md border border-blue-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
                     <div className="p-2.5 rounded-xl bg-white/10 border border-white/20 shrink-0">
-                      <ShieldAlert className="h-5 w-5 text-blue-300" />
+                      <ShieldCheck className="h-5 w-5 text-blue-300" />
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                        Institutional Attendance &amp; Medical Exemption Authority
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                          Sovereign Admin Lock
+                        Student Leave &amp; Absence Management
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                          Administrative Review
                         </span>
                       </h4>
                       <p className="text-xs text-blue-100/90 mt-1 leading-relaxed max-w-3xl">
-                        Class teachers manage day-to-day attendance. When disputed medical requests, prolonged absences (&gt;3 days), or examination term exemptions arise, School Administration has sovereign authority to override decisions, lock the attendance ledger, and dispatch certified compliance receipts.
+                        Review leave applications, manage medical absence certificates, and update student attendance status across classes.
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-blue-200 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 font-mono">
-                      {medicalLeaves} Medical Certificates Attached
+                    <span className="text-xs text-blue-200 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 font-medium">
+                      {medicalLeaves} Medical Certificate{medicalLeaves === 1 ? '' : 's'} Attached
                     </span>
                   </div>
                 </div>
@@ -2440,36 +2710,36 @@ export default function AdminPage() {
                   )}
                 </div>
 
-                {/* 5. ADMINISTRATIVE OVERRIDE MODAL */}
+                {/* 5. ADMINISTRATIVE LEAVE REVIEW MODAL */}
                 {overrideModalLeave && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-                    <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl animate-in zoom-in-95 space-y-5">
+                    <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl animate-in zoom-in-95 space-y-5">
                       {/* Modal Header */}
                       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                         <div className="flex items-center gap-2.5">
-                          <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200/60 dark:border-purple-800/60 text-purple-600 dark:text-purple-400">
+                          <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400">
                             <ShieldCheck className="h-5 w-5" />
                           </div>
                           <div>
                             <h3 className="text-base font-black text-slate-900 dark:text-white">
-                              Administrative Leave Adjudication
+                              Review Student Leave Application
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Exercising Principal &amp; Board Supervisory Override
+                              Verify parent application and set attendance disposition
                             </p>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setOverrideModalLeave(null)}
-                          className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                         >
                           <X className="h-5 w-5" />
                         </button>
                       </div>
 
                       {/* Student & Leave Info Summary */}
-                      <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200/80 dark:border-slate-700 space-y-2 text-xs">
+                      <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200/80 dark:border-slate-700 space-y-2.5 text-xs">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400 block">Student</span>
@@ -2479,7 +2749,7 @@ export default function AdminPage() {
                           <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent</span>
                             <span className="font-bold text-slate-800 dark:text-slate-200">{overrideModalLeave.parent_name}</span>
-                            <span className="text-slate-400 block">Dates: {overrideModalLeave.from_date} &rarr; {overrideModalLeave.to_date}</span>
+                            <span className="text-slate-400 block font-medium">Dates: {overrideModalLeave.from_date} &rarr; {overrideModalLeave.to_date}</span>
                           </div>
                         </div>
 
@@ -2496,16 +2766,16 @@ export default function AdminPage() {
 
                         {overrideModalLeave.teacher_notes && (
                           <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Class Teacher Feedback</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Class Teacher Feedback</span>
                             <p className="text-slate-600 dark:text-slate-400 font-medium mt-0.5">{overrideModalLeave.teacher_notes}</p>
                           </div>
                         )}
                       </div>
 
-                      {/* Override Action Selection */}
-                      <div className="space-y-3">
+                      {/* Decision Selection */}
+                      <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          Select Administrative Adjudication Decision:
+                          Administrative Decision:
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                           <button
@@ -2519,10 +2789,10 @@ export default function AdminPage() {
                           >
                             <div className="flex items-center gap-2 font-bold text-xs text-emerald-700 dark:text-emerald-400">
                               <CheckCircle2 className="h-4 w-4" />
-                              Grant Official Approval
+                              Approve Leave
                             </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Excused Leave&rsquo;. Removes from unexcused absence radar.
+                              Marks attendance as &lsquo;Excused Leave&rsquo;.
                             </p>
                           </button>
 
@@ -2537,65 +2807,31 @@ export default function AdminPage() {
                           >
                             <div className="flex items-center gap-2 font-bold text-xs text-rose-700 dark:text-rose-400">
                               <X className="h-4 w-4" />
-                              Enforce Disciplinary Rejection
+                              Reject Leave
                             </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Absent&rsquo;. Flags for welfare phone check if consecutive.
+                              Marks attendance as &lsquo;Unexcused Absent&rsquo;.
                             </p>
                           </button>
                         </div>
                       </div>
 
-                      {/* Required Justification & Predefined Chips */}
-                      <div className="space-y-2">
+                      {/* Optional Notes */}
+                      <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                          <span>Statutory Justification / Audit Remarks:</span>
-                          <span className="text-[10px] text-rose-500">* Required for CBSE Audit</span>
+                          <span>Remarks / Notes (Optional):</span>
                         </label>
-
-                        {/* Quick justification chips */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {[
-                            'Principal Medical Waiver (CBSE Reg 14)',
-                            'Doctor Certificate Authenticated & Excused',
-                            'Unexcused Absence During Scheduled Term Exam',
-                            'Disciplinary Action: Attendance Shortage Not Condoned'
-                          ].map(chip => (
-                            <button
-                              key={chip}
-                              type="button"
-                              onClick={() => setOverrideNotes(chip)}
-                              className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                            >
-                              + {chip}
-                            </button>
-                          ))}
-                        </div>
-
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={overrideNotes}
                           onChange={(e) => setOverrideNotes(e.target.value)}
-                          placeholder="Provide the administrative rationale for overriding this leave request (e.g. medical board clearance, compassionate grounds, or exam unreadiness)..."
-                          className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-purple-500 resize-none"
+                          placeholder="Add an optional note for the parent and class teacher..."
+                          className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none"
                         />
                       </div>
 
-                      {/* Legal & Cascade Warning Box */}
-                      <div className="rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 p-3.5 border border-purple-200/80 dark:border-purple-800/80 text-[11px] text-purple-900 dark:text-purple-300 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                          <span>Administrative Closed-Loop Invariant:</span>
-                        </div>
-                        <ul className="list-disc list-inside space-y-0.5 text-purple-800/90 dark:text-purple-300/90 pl-1">
-                          <li>Synchronizes attendance records across all dates: {overrideModalLeave.from_date} to {overrideModalLeave.to_date}.</li>
-                          <li>Generates an immutable entry in <code className="font-mono text-[10px] bg-purple-100 dark:bg-purple-900/60 px-1 py-0.5 rounded">SecurityAuditLog</code> under Principal Dr. Rajesh Sharma.</li>
-                          <li>Dispatches automated notification alerts to both Parent and Class Teacher.</li>
-                        </ul>
-                      </div>
-
                       {/* Modal Footer Buttons */}
-                      <div className="flex items-center justify-end gap-3 pt-2">
+                      <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <button
                           type="button"
                           onClick={() => setOverrideModalLeave(null)}
@@ -2607,18 +2843,18 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={handleExecuteLeaveOverride}
-                          disabled={overrideSubmitting || !overrideNotes.trim()}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
+                          disabled={overrideSubmitting}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
                         >
                           {overrideSubmitting ? (
                             <>
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Enforcing Override...</span>
+                              <span>Saving Decision...</span>
                             </>
                           ) : (
                             <>
-                              <ShieldCheck className="h-4 w-4" />
-                              <span>Enforce Admin Override</span>
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Confirm Decision</span>
                             </>
                           )}
                         </button>
@@ -2674,7 +2910,7 @@ export default function AdminPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {[
                   { key: 'aging', label: '⏳ Overdue & Recovery Ledger', badge: `${feeDefaulters.length} Accounts` },
-                  { key: 'today', label: "💵 Today's Live Collections", badge: "₹1.45 L Today" },
+                  { key: 'today', label: "💵 Today's Live Collections", badge: `₹${(totalCollectedToday / 100000).toFixed(2)} L Today` },
                   { key: 'milestones', label: '📊 Budget Milestones & Health', badge: 'AY 2026–27' }
                 ].map(tab => (
                   <button
@@ -2703,38 +2939,74 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Collected Today</span>
-                      <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">₹1,45,000</span>
-                      <span className="text-[11px] text-slate-500 block">7 Verified Receipts</span>
+                      <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                        ₹{totalCollectedToday.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        {todayReceipts.length} Verified Receipts
+                      </span>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">UPI / Razorpay Gateway</span>
-                      <span className="text-xl font-black text-blue-600 dark:text-blue-400">₹95,000</span>
-                      <span className="text-[11px] text-slate-500 block">4 Instant Auto-Settled</span>
+                      <span className="text-xl font-black text-blue-600 dark:text-blue-400">
+                        ₹{upiCollectedToday.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        {upiReceipts.length} Instant Auto-Settled
+                      </span>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">Bank Transfer / NEFT</span>
-                      <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">₹35,000</span>
-                      <span className="text-[11px] text-slate-500 block">2 Verified by Accounts</span>
+                      <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                        ₹{neftCollectedToday.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        {neftReceipts.length} Verified by Accounts
+                      </span>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">School Cash Counter</span>
-                      <span className="text-xl font-black text-amber-600 dark:text-amber-400">₹15,000</span>
-                      <span className="text-[11px] text-slate-500 block">1 Physical Cash Slip</span>
+                      <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+                        ₹{cashCollectedToday.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        {cashReceipts.length} Physical Cash Slip
+                      </span>
                     </div>
                   </div>
 
                   {/* Today's Transactions Table */}
                   <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Today&apos;s Receipts Ledger (28 Oct 2026)
-                      </span>
-                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                        Real-time Bank Integration Active
-                      </span>
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                          Today&apos;s Receipts Ledger
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Reconciled live stream from Parent Portal UPI, Counter Desks &amp; Bank Direct
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            const resetResult = resetLiveLedger();
+                            setTodayReceipts(resetResult.receipts);
+                            setToastMessage('✓ Demo ledger reset! All test payments undone.');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                          title="Undo test payments and restore baseline receipts"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Undo / Reset Test Receipts</span>
+                        </button>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <span>Live Bank Stream &amp; Webhook Synchronized</span>
+                        </span>
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
@@ -2752,15 +3024,7 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {[
-                            { recNo: 'REC-2026-1028-01', name: 'Aarav Sharma', classSec: 'Class 8-B', head: 'Term 2 Tuition Fee', amount: 25000, mode: 'UPI (GPay)', ref: 'UPI-984210982', time: '10:45 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-02', name: 'Diya Patel', classSec: 'Class 8-B', head: 'Term 2 Tuition & Lab', amount: 28500, mode: 'HDFC NetBanking', ref: 'NEFT-202610289', time: '10:30 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-03', name: 'Kabir Mehta', classSec: 'Class 8-B', head: 'Term 2 Transport Fee', amount: 15000, mode: 'Cash Counter', ref: 'CASH-REC-0082', time: '10:15 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-04', name: 'Rohan Verma', classSec: 'Class 9-A', head: 'Term 2 Tuition Fee', amount: 22000, mode: 'UPI (PhonePe)', ref: 'UPI-778219012', time: '09:50 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-05', name: 'Ananya Iyer', classSec: 'Class 9-A', head: 'Annual STEM & Robotics', amount: 18500, mode: 'UPI (Paytm)', ref: 'UPI-661298411', time: '09:40 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-06', name: 'Ishaan Reddy', classSec: 'Class 10-A', head: 'Term 2 Tuition Fee', amount: 20000, mode: 'ICICI NetBanking', ref: 'NEFT-441298410', time: '09:15 AM', status: 'Bank Cleared' },
-                            { recNo: 'REC-2026-1028-07', name: 'Sneha Nair', classSec: 'Class 6-A', head: 'Term 2 Tuition Fee', amount: 16000, mode: 'UPI (GPay)', ref: 'UPI-334190822', time: '08:55 AM', status: 'Bank Cleared' },
-                          ].map(row => (
+                          {todayReceipts.map((row: TodayReceiptItem) => (
                             <tr key={row.recNo} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
                                 {row.recNo}
@@ -2773,7 +3037,7 @@ export default function AdminPage() {
                                 {row.head}
                               </td>
                               <td className="py-3 px-4 font-black text-slate-900 dark:text-white">
-                                ₹{row.amount.toLocaleString()}
+                                ₹{row.amount.toLocaleString('en-IN')}
                               </td>
                               <td className="py-3 px-4">
                                 <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
@@ -2816,38 +3080,60 @@ export default function AdminPage() {
               {/* SUB-SECTION 2: AGING & OVERDUE DEFAULTERS */}
               {feeSubTab === 'aging' && (
                 <div className="space-y-5">
-                  {/* Aging Analysis Bar */}
-                  {feeAnalytics && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 via-amber-500/5 to-blue-500/5 border border-red-500/20 space-y-3">
-                      <div className="flex items-center justify-between text-xs font-bold">
-                        <span className="text-slate-900 dark:text-white">Overdue Dues Aging Maturity Breakdown</span>
-                        <span className="text-red-600 font-extrabold">Total Overdue: ₹{(feeAnalytics.total_overdue / 100000).toFixed(2)} L</span>
+                  {/* Aging Analysis Bar - Dynamically computed from live feeDefaulters ledger */}
+                  {(() => {
+                    let d0_15 = 0;
+                    let d16_30 = 0;
+                    let d30_plus = 0;
+                    let totalOverdue = 0;
+
+                    feeDefaulters.forEach(d => {
+                      if (d.status === 'Paid') return;
+                      const due = Number(d.amount_due) || 0;
+                      const days = Number(d.days_overdue) || 0;
+                      totalOverdue += due;
+
+                      if (days <= 15) {
+                        d0_15 += due;
+                      } else if (days <= 30) {
+                        d16_30 += due;
+                      } else {
+                        d30_plus += due;
+                      }
+                    });
+
+                    return (
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 via-amber-500/5 to-blue-500/5 border border-red-500/20 space-y-3">
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="text-slate-900 dark:text-white">Overdue Dues Aging Maturity Breakdown</span>
+                          <span className="text-red-600 font-extrabold">Total Overdue: ₹{(totalOverdue / 100000).toFixed(2)} L</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                            <span className="text-[10px] uppercase font-bold text-blue-600 block">0–15 Days (Early Overdue)</span>
+                            <span className="text-base font-black text-slate-900 dark:text-white">
+                              ₹{(d0_15 / 100000).toFixed(2)} L
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">Gentle WhatsApp Notification</span>
+                          </div>
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                            <span className="text-[10px] uppercase font-bold text-amber-600 block">16–30 Days (Mid-Tier Overdue)</span>
+                            <span className="text-base font-black text-slate-900 dark:text-white">
+                              ₹{(d16_30 / 100000).toFixed(2)} L
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">Automated SMS &amp; Email Notice</span>
+                          </div>
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                            <span className="text-[10px] uppercase font-bold text-red-600 block">30+ Days (Critical Action)</span>
+                            <span className="text-base font-black text-red-600 dark:text-red-400">
+                              ₹{(d30_plus / 100000).toFixed(2)} L
+                            </span>
+                            <span className="text-[10px] text-red-500 block mt-0.5">Coordinator Direct Call Priority</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <span className="text-[10px] uppercase font-bold text-blue-600 block">0–15 Days (Early Overdue)</span>
-                          <span className="text-base font-black text-slate-900 dark:text-white">
-                            ₹{(feeAnalytics.aging_summary.days_0_to_15 / 100000).toFixed(2)} L
-                          </span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">Gentle WhatsApp Notification</span>
-                        </div>
-                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <span className="text-[10px] uppercase font-bold text-amber-600 block">16–30 Days (Mid-Tier Overdue)</span>
-                          <span className="text-base font-black text-slate-900 dark:text-white">
-                            ₹{(feeAnalytics.aging_summary.days_16_to_30 / 100000).toFixed(2)} L
-                          </span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">Automated SMS &amp; Email Notice</span>
-                        </div>
-                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <span className="text-[10px] uppercase font-bold text-red-600 block">30+ Days (Critical Action)</span>
-                          <span className="text-base font-black text-red-600 dark:text-red-400">
-                            ₹{(feeAnalytics.aging_summary.days_over_30 / 100000).toFixed(2)} L
-                          </span>
-                          <span className="text-[10px] text-red-500 block mt-0.5">Coordinator Direct Call Priority</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Enrolment Intake Queue Banner if any new admission fee is pending */}
                   {feeDefaulters.some(d => d.is_admission_fee) && (
@@ -3678,9 +3964,19 @@ export default function AdminPage() {
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-slate-500 font-medium">
-                  {teacherPermissions.filter(p => permFilter === 'All' || p.status === permFilter).length} Records
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowIssueLeaveModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Issue Staff Leave / OD</span>
+                  </button>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {teacherPermissions.filter(p => permFilter === 'All' || p.status === permFilter).length} Records
+                  </span>
+                </div>
               </div>
 
               {/* Permissions List */}
@@ -3701,9 +3997,11 @@ export default function AdminPage() {
                           &ldquo;{req.reason}&rdquo;
                         </p>
                         <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                          <span>Shift Coverage: Period 3 (Class 8-B)</span>
+                          <span>Shift Coverage: {req.affected_periods || 'All Scheduled Periods'}</span>
                           <span>•</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Auto-Proxy: Mr. Vikram Sharma</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                            Proxy: {req.suggested_substitute || 'Pending Assignment'}
+                          </span>
                         </div>
                       </div>
 
@@ -3832,6 +4130,31 @@ export default function AdminPage() {
                         </div>
                       </div>
 
+                      {/* Accounts Officer Maker Verification Notes Display */}
+                      {pendingBatch.notes && (
+                        <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                              <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                              Accounts Officer Verification Remarks (Maker):
+                            </span>
+                            <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full">
+                              Mr. Arvind Krishnan
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-blue-950 dark:text-blue-100 pl-5.5 italic font-medium">
+                            "{pendingBatch.notes.split(' | [')[0] || pendingBatch.notes}"
+                          </p>
+                          {pendingBatch.notes.includes(' | [') && (
+                            <div className="mt-1 pl-5.5 pt-1 border-t border-blue-200/60 dark:border-blue-800/60 text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5 font-mono">
+                              {pendingBatch.notes.split(' | [').slice(1).map((part, i) => (
+                                <div key={i}>[{part}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Principal Sign-off Form */}
                       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
                         <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
@@ -3851,12 +4174,11 @@ export default function AdminPage() {
                           <div className="flex items-center gap-2 w-full sm:w-auto">
                             <button
                               type="button"
-                              onClick={() => {
-                                triggerToast('Audit query dispatched to Accounts Coordinator. Batch retained in Audit Pending.');
-                              }}
-                              className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
+                              disabled={isRequestingPayrollRevision}
+                              onClick={() => handleRequestPayrollRevision(pendingBatch.id)}
+                              className="px-3.5 py-2 rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50/50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                             >
-                              Request Revision
+                              {isRequestingPayrollRevision ? 'Dispatching...' : 'Request Revision ⚠️'}
                             </button>
                             <button
                               type="button"
@@ -3870,6 +4192,30 @@ export default function AdminPage() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  );
+                }
+
+                const revisionBatches = adminPayrollBatches.filter(b => b.status === 'Revision Requested');
+                if (revisionBatches.length > 0) {
+                  return (
+                    <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-start gap-2.5 text-amber-900 dark:text-amber-200">
+                        <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0 animate-pulse" />
+                        <div>
+                          <span className="font-bold">Revision Requested from Accounts Office:</span>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                            {revisionBatches.map(b => b.payroll_month).join(', ')} payroll returned to Accounts Officer (Mr. Arvind Krishnan) for audit resolution. Awaiting revised batch resubmission.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={loadAdminPayroll}
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-bold hover:bg-amber-50 transition-colors cursor-pointer shrink-0 text-xs"
+                      >
+                        Refresh Batches
+                      </button>
                     </div>
                   );
                 }
@@ -4149,14 +4495,28 @@ export default function AdminPage() {
 
               {/* SUB-VIEW 1: UPCOMING EXAMS */}
               {examSubTab === 'upcoming' && (() => {
-                const upcomingExams = [
-                  { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                  { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
-                  { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                  { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Gamma (Camera AI)', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
-                  { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
-                  { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
-                ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
+                const upcomingExams = (examSchedules.length > 0
+                  ? examSchedules
+                      .filter(s => s.lifecycle_status !== 'CONCLUDED' && s.session_status !== 'CONCLUDED')
+                      .map(s => ({
+                        id: s.id,
+                        name: s.title || s.exam_name || s.subject,
+                        class: s.class_name,
+                        date: s.exam_date,
+                        time: `${s.start_time || '09:00'} - ${s.end_time || '11:30'}`,
+                        hall: s.hall_name || s.room_no || 'Virtual Room Alpha (Camera AI)',
+                        invigilator: s.invigilator_name || s.chief_invigilator_name || 'Mrs. Ananya Verma',
+                        status: s.lifecycle_status === 'LIVE' ? 'In Progress' : 'Scheduled'
+                      }))
+                  : [
+                      { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
+                      { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
+                      { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
+                      { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Gamma (Camera AI)', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
+                      { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
+                      { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
+                    ]
+                ).filter(e => examClassFilter === 'All' || e.class.toLowerCase().includes(examClassFilter.toLowerCase()));
 
                 if (upcomingExams.length === 0) {
                   return (
@@ -4209,9 +4569,23 @@ export default function AdminPage() {
 
               {/* SUB-VIEW 2: OVERDUE EXAMS */}
               {examSubTab === 'overdue' && (() => {
-                const overdueExams = [
-                  { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
-                ].filter(e => examClassFilter === 'All' || e.class === examClassFilter);
+                const overdueExams = (examSchedules.length > 0
+                  ? examSchedules
+                      .filter(s => s.lifecycle_status === 'CONCLUDED' || s.session_status === 'CONCLUDED')
+                      .map(s => ({
+                        id: s.id,
+                        name: `${s.title || s.subject} Paper Re-evaluation`,
+                        class: s.class_name,
+                        date: s.exam_date,
+                        time: `${s.start_time || '09:00'} - ${s.end_time || '11:30'}`,
+                        hall: s.hall_name || s.room_no || 'Virtual Room Alpha (Camera AI)',
+                        invigilator: s.invigilator_name || s.chief_invigilator_name || 'Mrs. Ananya Verma',
+                        status: 'Overdue Scoring'
+                      }))
+                  : [
+                      { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
+                    ]
+                ).filter(e => examClassFilter === 'All' || e.class.toLowerCase().includes(examClassFilter.toLowerCase()));
 
                 if (overdueExams.length === 0) {
                   return (
@@ -4384,7 +4758,9 @@ export default function AdminPage() {
               'Completed':      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
             };
 
-            const filteredTasks = tasks.filter(t => {
+            const cleanTasks = tasks.filter(t => !isExcludedTask(t));
+
+            const filteredTasks = cleanTasks.filter(t => {
               const statusMatch = taskStatusFilter === 'all' || t.status === taskStatusFilter;
               if (taskOriginFilter === 'auto') return t.is_auto_generated && statusMatch;
               if (taskOriginFilter === 'staff') return !t.is_auto_generated && statusMatch;
@@ -4393,11 +4769,11 @@ export default function AdminPage() {
               return statusMatch;
             });
 
-            const openCount   = tasks.filter(t => t.status !== 'Completed').length;
-            const autoCount   = tasks.filter(t => t.is_auto_generated).length;
-            const criticalCount = tasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
-            const completedCount = tasks.filter(t => t.status === 'Completed').length;
-            const reliefCount = tasks.filter(t => t.relief_requested).length;
+            const openCount   = cleanTasks.filter(t => t.status !== 'Completed').length;
+            const autoCount   = cleanTasks.filter(t => t.is_auto_generated).length;
+            const criticalCount = cleanTasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
+            const completedCount = cleanTasks.filter(t => t.status === 'Completed').length;
+            const reliefCount = cleanTasks.filter(t => t.relief_requested).length;
 
             return (
               <div className="space-y-6 animate-in fade-in duration-200">
@@ -4937,18 +5313,10 @@ export default function AdminPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={handleAutoResolveSubstitutions}
-                    disabled={unassignedSubCount === 0}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer ${
-                      unassignedSubCount === 0
-                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                        : 'bg-violet-600 hover:bg-violet-700 text-white'
-                    }`}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>Auto-Resolve Free Faculty Matrix</span>
-                  </button>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
+                    <ShieldCheck className="h-4 w-4 text-violet-600" />
+                    Manual Proxy Allocation Active
+                  </span>
                 </div>
               </div>
 
@@ -5438,158 +5806,120 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateTask} className="space-y-4">
+                <form onSubmit={handleCreateTask} className="space-y-3.5">
                   {/* Title */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Task Title *</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Task Title *</label>
                     <input
                       type="text" required
-                      placeholder="e.g. Audit Lab Inventory for Pre-Board Practicals"
+                      placeholder="e.g. Review & Finalize Term 2 Marks Gradebook"
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                     />
                   </div>
 
                   {/* Description */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description / Instructions</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">About Task / Instructions</label>
                     <textarea
                       rows={2}
-                      placeholder="Brief context, dependencies, or action steps..."
+                      placeholder="Context, dependencies, or specific action steps..."
                       value={newTaskDescription}
                       onChange={(e) => setNewTaskDescription(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
-                  {/* Domain + Category */}
+                  {/* Domain & Assignee */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Department Domain *</label>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Department Domain *</label>
                       <select
                         value={newTaskDomain}
                         onChange={(e) => setNewTaskDomain(e.target.value as TaskDomain)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                       >
                         <option value="academic">📚 Academic & Curriculum</option>
                         <option value="exam">📝 Examination Cell</option>
-                        <option value="transport">🚌 Yellow Bus Fleet</option>
-                        <option value="inventory">📦 Asset & Lab Store</option>
+                        <option value="finance">₹ Finance & Accounts</option>
                         <option value="admissions">🎓 Admissions & CRM</option>
-                        <option value="finance">₹ Finance & Bursar</option>
-                        <option value="executive">⚡ Executive Mandates</option>
+                        <option value="executive">⚡ Principal Mandate</option>
                         <option value="campus_ops">🏫 Campus Operations</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
-                      <select
-                        value={newTaskCategory}
-                        onChange={(e) => setNewTaskCategory(e.target.value as any)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="urgent">Urgent (Today/Tomorrow)</option>
-                        <option value="upcoming">Upcoming Operational</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Coordinator + Priority */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Assign To Faculty / Teacher / Coordinator *
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Assign To *
                       </label>
                       <select
                         value={newTaskAssignee}
                         onChange={(e) => setNewTaskAssignee(e.target.value)}
                         className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                       >
-                        <optgroup label="Academic Faculty & Subject Teachers">
-                          <option value="Mrs. Ananya Verma">Mrs. Ananya Verma — Senior Math Lead (Class 10-A)</option>
-                          <option value="Dr. K. Raman">Dr. K. Raman — Head of Science & Physics Lead</option>
-                          <option value="Mrs. Neha Roy">Mrs. Neha Roy — Senior English & Humanities</option>
-                          <option value="Dr. Hemanth Sen">Dr. Hemanth Sen — Biology & Senior Science</option>
-                          <option value="Mr. Vikram Joshi">Mr. Vikram Joshi — Physical Education & Discipline</option>
-                          <option value="Ms. Priya Sen">Ms. Priya Sen — Arts & Cultural Lead</option>
-                          {staffMembers
-                            .filter(s => s.department === 'Academics' && !['Mrs. Ananya Verma', 'Dr. K. Raman'].includes(s.name))
-                            .map(s => (
-                              <option key={s.id} value={s.name}>
-                                {s.name} — {s.role} ({s.department})
-                              </option>
-                            ))}
+                        <optgroup label="Academic Faculty & Subject Leads">
+                          <option value="Mrs. Ananya Verma">Mrs. Ananya Verma — Math Lead</option>
+                          <option value="Dr. K. Raman">Dr. K. Raman — Science Head</option>
+                          <option value="Mrs. Neha Roy">Mrs. Neha Roy — English Lead</option>
+                          <option value="Dr. Hemanth Sen">Dr. Hemanth Sen — Senior Science</option>
+                          <option value="Mr. Vikram Joshi">Mr. Vikram Joshi — Discipline Lead</option>
                         </optgroup>
 
-                        <optgroup label="Department & Cell Coordinators">
+                        <optgroup label="Department Coordinators">
                           <option value="Dr. Ananya Krishnan">Dr. Ananya Krishnan — Academic Coordinator</option>
-                          <option value="Ms. Rekha Iyer">Ms. Rekha Iyer — Exam Cell Coordinator</option>
-                          <option value="Mr. Suresh Pillai">Mr. Suresh Pillai — Transport Fleet Lead</option>
-                          <option value="Mr. Vikram Rao">Mr. Vikram Rao — Lab & Inventory Store</option>
-                          <option value="Ms. Priya Nair">Ms. Priya Nair — Admissions & Student CRM</option>
-                          <option value="Mrs. Lakshmi Narayan">Mrs. Lakshmi Narayan — Accounts & Bursar</option>
+                          <option value="Ms. Rekha Iyer">Ms. Rekha Iyer — Exam Coordinator</option>
+                          <option value="Ms. Priya Nair">Ms. Priya Nair — Admissions Lead</option>
+                          <option value="Mrs. Lakshmi Narayan">Mrs. Lakshmi Narayan — Accounts Lead</option>
                         </optgroup>
 
-                        <optgroup label="Leadership & Campus Operations">
-                          <option value="Dr. Sunita Kapoor">Dr. Sunita Kapoor — Principal & Administrator</option>
-                          <option value="Principal Sharma">Principal Sharma — Executive Institutional Board</option>
-                          <option value="Ramesh Kumar">Ramesh Kumar — Senior Transport Lead</option>
-                          {staffMembers
-                            .filter(s => !['Academics'].includes(s.department || '') && !['Dr. Sunita Kapoor', 'Ramesh Kumar', 'Horizon AV Tech Solutions'].includes(s.name))
-                            .map(s => (
-                              <option key={s.id} value={s.name}>
-                                {s.name} — {s.role} ({s.department})
-                              </option>
-                            ))}
+                        <optgroup label="Institutional Leadership">
+                          <option value="Dr. Sunita Kapoor">Dr. Sunita Kapoor — Administrator</option>
+                          <option value="Principal Sharma">Principal Sharma — Executive Board</option>
                         </optgroup>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority Level</label>
-                      <select
-                        value={newTaskPriority}
-                        onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="Critical">🔴 Critical</option>
-                        <option value="High">🟠 High</option>
-                        <option value="Medium">🟡 Medium</option>
-                        <option value="Low">⚪ Low</option>
                       </select>
                     </div>
                   </div>
 
-                  {/* Deadline + SLA */}
+                  {/* Priority & Deadline (SLA & Category auto-derived) */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deadline</label>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
+                      <select
+                        value={newTaskPriority}
+                        onChange={(e) => {
+                          const p = e.target.value as any;
+                          setNewTaskPriority(p);
+                          const defaultSla = p === 'Critical' ? 12 : p === 'High' ? 24 : p === 'Medium' ? 48 : 72;
+                          setNewTaskSlaHours(defaultSla);
+                          setNewTaskCategory(p === 'Critical' || p === 'High' ? 'urgent' : 'upcoming');
+                        }}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                      >
+                        <option value="Critical">🔴 Critical (12h)</option>
+                        <option value="High">🟠 High (24h)</option>
+                        <option value="Medium">🟡 Medium (48h)</option>
+                        <option value="Low">⚪ Low (72h)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deadline *</label>
                       <input
                         type="text" required
                         value={newTaskDueDate}
                         onChange={(e) => setNewTaskDueDate(e.target.value)}
                         placeholder="e.g. Today, 5:00 PM"
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">SLA Hours</label>
-                      <input
-                        type="number" min={1} max={720}
-                        value={newTaskSlaHours}
-                        onChange={(e) => setNewTaskSlaHours(Number(e.target.value))}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                     <button type="button" onClick={() => setShowTaskModal(false)}
                       className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                     >Cancel</button>
                     <button type="submit"
-                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-sm cursor-pointer"
-                    >Delegate Task</button>
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 text-xs font-bold shadow-sm cursor-pointer transition-all active:scale-98"
+                    >Assign Task</button>
                   </div>
                 </form>
               </div>
@@ -5715,11 +6045,13 @@ export default function AdminPage() {
                       onChange={(e) => setChosenFacultyId(Number(e.target.value))}
                       className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                     >
-                      {availableFaculty.map(f => (
-                        <option key={f.id} value={f.id}>
-                          {f.name} ({f.department}) — {f.free_periods_today} periods free
-                        </option>
-                      ))}
+                      {availableFaculty
+                        .filter(f => f.name !== selectedSubSlot?.absent_teacher_name)
+                        .map(f => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} ({f.department}) — {f.free_periods_today} periods free
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -5945,15 +6277,14 @@ export default function AdminPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Initial Priority / Temperature</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Lead Category</label>
                   <select 
-                    value={regTemperature} 
-                    onChange={e => setRegTemperature(e.target.value as any)}
+                    value={regCategory} 
+                    onChange={e => setRegCategory(e.target.value as 'active' | 'passive')}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
                   >
-                    <option value="hot">🔥 Hot (High Intent / Ready)</option>
-                    <option value="warm">🌤️ Warm (In Consideration)</option>
-                    <option value="cold">❄️ Cold (Casual Inquiry)</option>
+                    <option value="active">🟢 Active Lead (High Intent / Campus Visit)</option>
+                    <option value="passive">⚪ Passive Lead (Casual / Next Year Inquiry)</option>
                   </select>
                 </div>
               </div>
@@ -6541,6 +6872,173 @@ export default function AdminPage() {
                 Confirm Force Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ISSUE STAFF LEAVE / ON-DUTY (ADMIN DIRECT) ── */}
+      {showIssueLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Issue Staff Leave / OD</h3>
+                  <span className="text-[11px] text-slate-500">Executive Discretionary Administrative Leave</span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowIssueLeaveModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleIssueStaffLeave} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Staff Member / Faculty
+                </label>
+                <select
+                  value={issueLeaveStaffName}
+                  onChange={(e) => setIssueLeaveStaffName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  {staffMembers.length > 0 ? (
+                    staffMembers.map(s => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.role} - {s.department})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Mrs. Ananya Verma">Mrs. Ananya Verma (Teacher - Mathematics)</option>
+                      <option value="Mr. Vikram Sharma">Mr. Vikram Sharma (Teacher - Physics)</option>
+                      <option value="Ms. Priya Sen">Ms. Priya Sen (Teacher - English)</option>
+                      <option value="Dr. Suresh Babu">Dr. Suresh Babu (Teacher - Science)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Leave Category
+                  </label>
+                  <select
+                    value={issueLeaveCategory}
+                    onChange={(e) => setIssueLeaveCategory(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  >
+                    <option value="On-Duty OD">On-Duty (OD)</option>
+                    <option value="Casual Leave (CL)">Casual Leave (CL)</option>
+                    <option value="Medical Leave">Medical Leave</option>
+                    <option value="Administrative Leave">Administrative Leave</option>
+                    <option value="Half Day">Half Day</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Total Duration (Days)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={issueLeaveTotalDays}
+                    onChange={(e) => setIssueLeaveTotalDays(parseFloat(e.target.value) || 1)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Effective From
+                  </label>
+                  <input
+                    type="text"
+                    value={issueLeaveFromDate}
+                    onChange={(e) => setIssueLeaveFromDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Affected Timetable Periods
+                  </label>
+                  <input
+                    type="text"
+                    value={issueLeavePeriods}
+                    onChange={(e) => setIssueLeavePeriods(e.target.value)}
+                    placeholder="e.g. Period 2, Period 3"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Suggested Substitute Faculty
+                </label>
+                <select
+                  value={issueLeaveSubstitute}
+                  onChange={(e) => setIssueLeaveSubstitute(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  {availableFaculty.length > 0 ? (
+                    availableFaculty.map(f => (
+                      <option key={f.id} value={`${f.name} (${f.department})`}>
+                        {f.name} ({f.department} - Free: {f.free_periods?.join(', ') || 'Available'})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Mrs. Neha Roy (TGT Science)">Mrs. Neha Roy (TGT Science)</option>
+                      <option value="Mr. Vikram Sharma (PGT Physics)">Mr. Vikram Sharma (PGT Physics)</option>
+                      <option value="Ms. Priya Sen (TGT English)">Ms. Priya Sen (TGT English)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Reason / Administrative Order
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={issueLeaveReason}
+                  onChange={(e) => setIssueLeaveReason(e.target.value)}
+                  placeholder="e.g. Deputation for CBSE Science Exhibition / Evaluation Duty"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowIssueLeaveModal(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
+                >
+                  Issue &amp; Open Proxy Gap
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

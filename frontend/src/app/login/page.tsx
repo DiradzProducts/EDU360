@@ -71,7 +71,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 transition-colors duration-200">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col justify-center items-center py-10 px-4 sm:px-6 lg:px-8 bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 transition-colors duration-200">
       
       {/* Subtle Background Glows (Active in both light and dark modes) */}
       <div className="fixed top-20 left-1/3 h-72 w-72 rounded-full bg-blue-400/10 dark:bg-blue-600/10 blur-3xl pointer-events-none" />
@@ -229,8 +229,9 @@ export default function LoginPage() {
         <p className="text-center text-[11px] text-slate-400 dark:text-slate-600 mt-6">
           Encrypted Institutional Node • EDU360 Unified Outcomes
         </p>
-        <Footer className="mt-4 border-t-0 py-2" />
       </div>
+
+      <Footer className="mt-6 border-t-0 py-2" />
     </div>
   );
 }

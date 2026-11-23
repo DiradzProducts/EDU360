@@ -447,7 +447,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
   // Open 1-Click SIS Convert Modal
   const openConvertModal = (enq: AdmissionEnquiry) => {
     setConvertModalEnquiry(enq);
-    setConvertSection('A');
+    setConvertSection('B');
     setConvertAdmissionFee(25000);
     setConvertFeeStatus('Paid');
     setConvertPaymentMethod('UPI (Google Pay)');

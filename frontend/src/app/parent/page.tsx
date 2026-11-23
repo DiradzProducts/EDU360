@@ -150,7 +150,8 @@ export type ParentNavSection =
   | 'chat'
   | 'fees'
   | 'leave'
-  | 'exit';
+  | 'exit'
+  | 'calendar';
 
 export default function ParentPage() {
   // Navigation & Layout State
@@ -228,6 +229,51 @@ export default function ParentPage() {
     ? dynamicChildren 
     : (isFernandesParent ? FERNANDES_CHILDREN : (isSharmaParent ? SHARMA_CHILDREN : []));
 
+  const [schoolEvents, setSchoolEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const handleNav = (e: any) => {
+      const url = typeof e.detail === 'string' ? e.detail : (e.detail?.url || '');
+      try {
+        const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+        const tabParam = parsed.searchParams.get('tab');
+        if (tabParam) {
+          if (tabParam === 'calendar' || tabParam === 'events') setActiveNav('calendar');
+          else if (tabParam === 'fees') setActiveNav('fees');
+          else if (tabParam === 'chat') setActiveNav('chat');
+          else if (tabParam === 'ptm' || tabParam === 'ptm_connect') setActiveNav('ptm_connect');
+          else if (tabParam === 'leave') setActiveNav('leave');
+          else if (tabParam === 'exit' || tabParam === 'exit_clearance') setActiveNav('exit');
+          else if (tabParam === 'marks') setActiveNav('marks');
+          else if (tabParam === 'focus' || tabParam === 'focus_table') setActiveNav('focus_table');
+          else if (tabParam === 'sis' || tabParam === 'child_sis') setActiveNav('child_sis');
+        }
+      } catch {
+        if (url.includes('tab=calendar')) setActiveNav('calendar');
+        else if (url.includes('tab=fees')) setActiveNav('fees');
+      }
+    };
+    window.addEventListener('edu360-navigate-url', handleNav);
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        if (tabParam === 'calendar' || tabParam === 'events') setActiveNav('calendar');
+        else if (tabParam === 'fees') setActiveNav('fees');
+        else if (tabParam === 'chat') setActiveNav('chat');
+        else if (tabParam === 'ptm' || tabParam === 'ptm_connect') setActiveNav('ptm_connect');
+        else if (tabParam === 'leave') setActiveNav('leave');
+        else if (tabParam === 'exit' || tabParam === 'exit_clearance') setActiveNav('exit');
+        else if (tabParam === 'marks') setActiveNav('marks');
+        else if (tabParam === 'focus' || tabParam === 'focus_table') setActiveNav('focus_table');
+        else if (tabParam === 'sis' || tabParam === 'child_sis') setActiveNav('child_sis');
+      }
+    }
+
+    return () => window.removeEventListener('edu360-navigate-url', handleNav);
+  }, []);
+
   const activeKid: ParentChildProfile = currentParentChildren.find((k: ParentChildProfile) => k.id === activeKidId) || currentParentChildren[0] || {
     id: 0,
     name: user?.name ? user.name.replace(/^Parent of\s+/i, '') : 'Student',
@@ -250,72 +296,90 @@ export default function ParentPage() {
   };
 
   // Dynamic School Clock evaluation for Parent Portal
-  const { parentAttendanceStatus, parentCurrentClass, isParentSchoolConcluded } = useMemo(() => {
-    const now = new Date();
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+  const [parentClockState, setParentClockState] = useState<{
+    parentAttendanceStatus: string;
+    parentCurrentClass: string;
+    isParentSchoolConcluded: boolean;
+  }>({
+    parentAttendanceStatus: 'Present Today ✓ • Campus Active',
+    parentCurrentClass: 'Live Virtual Class: Active',
+    isParentSchoolConcluded: false
+  });
 
-    if (currentMins >= 14 * 60 + 30) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • 6/6 Periods Attended (Day Concluded)',
-        parentCurrentClass: 'Classes Dismissed for Today',
-        isParentSchoolConcluded: true
-      };
-    } else if (currentMins < 8 * 60 + 30) {
-      return {
-        parentAttendanceStatus: 'Check-In Active • Campus Turnstile Gate',
-        parentCurrentClass: 'Assembly & Morning Homeroom (Starts 08:30 AM)',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 10 * 60 && currentMins < 10 * 60 + 30) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Morning Recess Break',
-        parentCurrentClass: 'Recess Break • Period 3 Commences 10:30 AM',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 12 * 60 && currentMins < 13 * 60) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Lunch Break in Dining Hall',
-        parentCurrentClass: 'Lunch Interval • Period 5 Commences 01:00 PM',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 8 * 60 + 30 && currentMins < 9 * 60 + 15) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 1 Active',
-        parentCurrentClass: 'Live Virtual Class: Period 1 Active',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 9 * 60 + 15 && currentMins < 10 * 60) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 2 Active',
-        parentCurrentClass: 'Live Virtual Class: Period 2 Active',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 10 * 60 + 30 && currentMins < 11 * 60 + 15) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 3 Mathematics (Room 204)',
-        parentCurrentClass: 'Live Virtual Class: Period 3 Active',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 11 * 60 + 15 && currentMins < 12 * 60) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 4 Computer Science (Lab 1)',
-        parentCurrentClass: 'Live Virtual Class: Period 4 Active',
-        isParentSchoolConcluded: false
-      };
-    } else if (currentMins >= 13 * 60 && currentMins < 13 * 60 + 45) {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 5 Social Science (Room 204)',
-        parentCurrentClass: 'Live Virtual Class: Period 5 Active',
-        isParentSchoolConcluded: false
-      };
-    } else {
-      return {
-        parentAttendanceStatus: 'Present Today ✓ • Period 6 Western Choir',
-        parentCurrentClass: 'Live Virtual Class: Period 6 Active',
-        isParentSchoolConcluded: false
-      };
-    }
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const currentMins = now.getHours() * 60 + now.getMinutes();
+
+      if (currentMins >= 14 * 60 + 30) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • 6/6 Periods Attended (Day Concluded)',
+          parentCurrentClass: 'Classes Dismissed for Today',
+          isParentSchoolConcluded: true
+        });
+      } else if (currentMins < 8 * 60 + 30) {
+        setParentClockState({
+          parentAttendanceStatus: 'Check-In Active • Campus Turnstile Gate',
+          parentCurrentClass: 'Assembly & Morning Homeroom (Starts 08:30 AM)',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 10 * 60 && currentMins < 10 * 60 + 30) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Morning Recess Break',
+          parentCurrentClass: 'Recess Break • Period 3 Commences 10:30 AM',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 12 * 60 && currentMins < 13 * 60) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Lunch Break in Dining Hall',
+          parentCurrentClass: 'Lunch Interval • Period 5 Commences 01:00 PM',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 8 * 60 + 30 && currentMins < 9 * 60 + 15) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 1 Active',
+          parentCurrentClass: 'Live Virtual Class: Period 1 Active',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 9 * 60 + 15 && currentMins < 10 * 60) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 2 Active',
+          parentCurrentClass: 'Live Virtual Class: Period 2 Active',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 10 * 60 + 30 && currentMins < 11 * 60 + 15) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 3 Mathematics (Room 204)',
+          parentCurrentClass: 'Live Virtual Class: Period 3 Active',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 11 * 60 + 15 && currentMins < 12 * 60) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 4 Computer Science (Lab 1)',
+          parentCurrentClass: 'Live Virtual Class: Period 4 Active',
+          isParentSchoolConcluded: false
+        });
+      } else if (currentMins >= 13 * 60 && currentMins < 13 * 60 + 45) {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 5 Social Science (Room 204)',
+          parentCurrentClass: 'Live Virtual Class: Period 5 Active',
+          isParentSchoolConcluded: false
+        });
+      } else {
+        setParentClockState({
+          parentAttendanceStatus: 'Present Today ✓ • Period 6 Western Choir',
+          parentCurrentClass: 'Live Virtual Class: Period 6 Active',
+          isParentSchoolConcluded: false
+        });
+      }
+    };
+
+    updateClock();
+    const interval = setInterval(updateClock, 60000);
+    return () => clearInterval(interval);
   }, []);
+
+  const { parentAttendanceStatus, parentCurrentClass, isParentSchoolConcluded } = parentClockState;
 
   const [parentToast, setParentToast] = useState<string | null>(null);
 
@@ -413,15 +477,17 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   useEffect(() => {
     async function loadData() {
       try {
-        const [ftRes, feesRes, subRes, exitsRes, hwRes, leaveRes] = await Promise.all([
+        const [ftRes, feesRes, subRes, exitsRes, hwRes, leaveRes, calRes] = await Promise.all([
           api.getFocusTable(activeKidId),
           api.getFees(activeKidId),
           api.getSubmission(activeKidId),
           api.getExitClearances(),
           api.getTodayHomework(activeKidId),
-          api.getParentLeaveRequests(activeKidId)
+          api.getParentLeaveRequests(activeKidId),
+          api.getCalendarEvents()
         ]);
         setFocusTable(ftRes);
+        if (calRes && Array.isArray(calRes)) setSchoolEvents(calRes);
         if (feesRes && feesRes.length > 0) { 
           setFees(feesRes); 
         } else { 
@@ -724,6 +790,13 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           icon: FileText,
           badge: '1 Pending',
           badgeColor: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
+        },
+        {
+          id: 'calendar' as ParentNavSection,
+          label: 'Events & Holidays',
+          icon: Calendar,
+          badge: `${schoolEvents.length > 0 ? schoolEvents.length : 3} Listed`,
+          badgeColor: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
         }
       ]
     },
@@ -773,6 +846,8 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
         return { title: 'Fee Milestones & Instant Online Receipts', subtitle: 'Installment breakdown, instant UPI/Card mock payment, and verified PDF receipts' };
       case 'leave':
         return { title: 'Student Leave Application & Attendance Sync', subtitle: 'Submit medical and casual leave requests directly to the class teacher' };
+      case 'calendar':
+        return { title: 'Official Academic Calendar & School Events', subtitle: 'Institutional holidays, administrative functions, examinations & sports schedules announced by Administration' };
       default:
         return { title: 'Parent Portal', subtitle: 'EDU360 K–12 Outcomes & Intelligence Platform' };
     }
@@ -2315,6 +2390,62 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================== */}
+            {/* VIEW 9: OFFICIAL ACADEMIC CALENDAR & SCHOOL EVENTS     */}
+            {/* ===================================================== */}
+            {activeNav === 'calendar' && (
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-0.5 text-xs font-bold">
+                          Official Institutional Calendar
+                        </span>
+                        <span className="text-xs text-slate-500">Session 2026-27</span>
+                      </div>
+                      <h2 className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                        School Events, Holidays &amp; Examination Timetables
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Official CBSE calendar events, administrative assemblies, sports days, and scheduled school holidays announced by Administration.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+                    {schoolEvents.length > 0 ? (
+                      schoolEvents.map((ev: any, idx: number) => (
+                        <div key={ev.id || idx} className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40 p-4 space-y-2.5 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                              {ev.status || 'Scheduled'}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-slate-500">
+                              {ev.date}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-black text-slate-900 dark:text-white line-clamp-2">
+                            {ev.title}
+                          </h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-3">
+                            {ev.description || 'Official school function / scheduled holiday.'}
+                          </p>
+                          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-500">
+                            <span>📍 {ev.location || 'Campus Main Ground / Auditorium'}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-full py-12 text-center text-slate-500 text-xs">
+                        No upcoming school events registered.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

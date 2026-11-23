@@ -58,12 +58,24 @@ import {
   FleetExpenseItem
 } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
+import { 
+  TodayReceiptItem, 
+  getLiveTodayReceipts, 
+  recordLiveReceipt, 
+  resetLiveLedger, 
+  formatSystemTime, 
+  setupReceiptSync,
+  getLivePaymentTransactions,
+  reconcileLiveTransaction,
+  bulkReconcileLiveTransactions
+} from '@/lib/fee-ledger';
 
-type AccountsTab = 'dashboard' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'dispatch_logs';
+type AccountsTab = 'dashboard' | 'today_collections' | 'fee_defaulters' | 'payroll' | 'vendor_invoices' | 'reconciliation' | 'dispatch_logs';
 
 export default function AccountsCoordinatorPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<AccountsTab>('dashboard');
+  const [todayReceipts, setTodayReceipts] = useState<TodayReceiptItem[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,7 +84,7 @@ export default function AccountsCoordinatorPage() {
   // Core Data States
   const [tasks, setTasks] = useState<AdminTask[]>([]);
   const [defaulters, setDefaulters] = useState<FeeDefaulter[]>([]);
-  const [transactions, setTransactions] = useState<PaymentTransactionItem[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransactionItem[]>(() => getLivePaymentTransactions());
   const [invoices, setInvoices] = useState<VendorInvoiceItem[]>([]);
   const [dispatchLogs, setDispatchLogs] = useState<FinanceDispatchLogItem[]>([]);
   
@@ -89,17 +101,22 @@ export default function AccountsCoordinatorPage() {
   const [inquiryFilterStatus, setInquiryFilterStatus] = useState<'ALL' | 'Pending' | 'Resolved' | 'Rejected'>('ALL');
   const [isResolvingInquiry, setIsResolvingInquiry] = useState(false);
 
-  // Dynamic Month Selector: Computes recent and upcoming calendar months relative to today
+  // Dynamic Academic Year Month Selector: Computes all months in active Academic Year plus upcoming cycles
   const dynamicPayrollMonths = React.useMemo(() => {
-    const list: string[] = [];
-    const now = new Date();
-    for (let offset = -2; offset <= 2; offset++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-      const mStr = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      list.push(mStr);
-    }
-    return list;
+    // Academic Year 2026-27: June 2026 through May 2027
+    const ayMonths: string[] = [
+      'June 2026', 'July 2026', 'August 2026', 'September 2026', 
+      'October 2026', 'November 2026', 'December 2026', 'January 2027', 
+      'February 2027', 'March 2027', 'April 2027', 'May 2027'
+    ];
+    return ayMonths;
   }, []);
+
+  const [useCustomMonth, setUseCustomMonth] = useState(false);
+  const [customMonthName, setCustomMonthName] = useState('November');
+  const [customYear, setCustomYear] = useState('2026');
+  const [lopPreview, setLopPreview] = useState<any>(null);
+  const [isLoadingLop, setIsLoadingLop] = useState(false);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderItem[]>([]);
   const [fleetExpenses, setFleetExpenses] = useState<FleetExpenseItem[]>([]);
   const [dispatchSearchQuery, setDispatchSearchQuery] = useState('');
@@ -192,6 +209,9 @@ export default function AccountsCoordinatorPage() {
   const [newBatchNotes, setNewBatchNotes] = useState('Regular monthly payroll run based on biometric attendance and statutory deductions.');
   const [showDisburseModal, setShowDisburseModal] = useState(false);
   const [disburseBatchRef, setDisburseBatchRef] = useState('HDFC-CMS-BATCH-9941');
+  const [showResubmitModal, setShowResubmitModal] = useState(false);
+  const [isResubmittingPayroll, setIsResubmittingPayroll] = useState(false);
+  const [resubmitBatchNotes, setResubmitBatchNotes] = useState('Adjusted biometric attendance LOP and EPF 12% statutory slabs per Principal audit review.');
 
   // Purchase Order Modals & Controls
   const [showNewPOModal, setShowNewPOModal] = useState(false);
@@ -221,6 +241,15 @@ export default function AccountsCoordinatorPage() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Unified receipt and online verification transaction sync (handles BroadcastChannel, storage, CustomEvent, focus, polling)
+  useEffect(() => {
+    setTodayReceipts(getLiveTodayReceipts());
+    return setupReceiptSync({
+      onReceipts: setTodayReceipts,
+      onTransactions: setTransactions
+    });
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -266,7 +295,90 @@ export default function AccountsCoordinatorPage() {
 
   useEffect(() => {
     loadData();
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['dashboard', 'today_collections', 'fee_defaulters', 'payroll', 'vendor_invoices', 'reconciliation', 'dispatch_logs'].includes(tabParam)) {
+        setActiveTab(tabParam as AccountsTab);
+      }
+
+      const handleNav = (e: any) => {
+        const url = typeof e.detail === 'string' ? e.detail : (e.detail?.url || '');
+        if (url.includes('tab=today_collections')) setActiveTab('today_collections');
+        else if (url.includes('tab=payroll')) setActiveTab('payroll');
+        else if (url.includes('tab=fee_defaulters')) setActiveTab('fee_defaulters');
+        else if (url.includes('tab=vendor_invoices')) setActiveTab('vendor_invoices');
+        else if (url.includes('tab=reconciliation')) setActiveTab('reconciliation');
+        else if (url.includes('tab=dispatch_logs')) setActiveTab('dispatch_logs');
+      };
+      window.addEventListener('edu360-navigate-url', handleNav);
+
+      const handleLiveNotification = (e: any) => {
+        const notif = e.detail;
+        if (notif?.notification_type === 'ONLINE_PAYMENT') {
+          setTodayReceipts(getLiveTodayReceipts());
+          triggerToast(`💳 ${notif.title || 'Online Payment Received'}: ${notif.message}`);
+          api.getPaymentTransactions().then(txs => setTransactions(txs)).catch(() => {});
+        } else if (notif?.notification_type === 'PAYROLL_REVISION_REQUESTED' || notif?.notification_type === 'PAYROLL_READY' || notif?.notification_type === 'PAYROLL_AUTHORIZED') {
+          api.getPayrollBatches().then(batches => {
+            setPayrollBatches(batches);
+            triggerToast(notif.message || (notif.notification_type === 'PAYROLL_AUTHORIZED' ? '✓ Principal authorized monthly staff payroll batch for bank wire!' : '⚠️ Payroll batch update received!'));
+          }).catch(() => {});
+        }
+      };
+      window.addEventListener('edu360_notification_event', handleLiveNotification);
+
+      // Notification channel for payroll events from admin (non-receipt notifications)
+      let notifChannel: BroadcastChannel | null = null;
+      try {
+        notifChannel = new BroadcastChannel('edu360_global_notifications');
+        notifChannel.onmessage = (msg) => {
+          const type = msg.data?.notification?.notification_type;
+          if (type === 'ONLINE_PAYMENT') {
+            setTodayReceipts(getLiveTodayReceipts());
+            triggerToast(`💳 ${msg.data?.notification?.title || 'Online Payment Received'}: ${msg.data?.notification?.message}`);
+            api.getPaymentTransactions().then(txs => setTransactions(txs)).catch(() => {});
+          } else if (type === 'PAYROLL_REVISION_REQUESTED' || type === 'PAYROLL_AUTHORIZED') {
+            api.getPayrollBatches().then(batches => {
+              setPayrollBatches(batches);
+              triggerToast(type === 'PAYROLL_AUTHORIZED' ? '✓ Principal Dr. Sunita Kapoor digitally authorized the payroll batch! Ready for wire.' : '⚠️ Principal Dr. Sunita Kapoor requested revisions for monthly payroll.');
+            }).catch(() => {});
+          }
+        };
+      } catch {}
+
+      return () => {
+        window.removeEventListener('edu360-navigate-url', handleNav);
+        window.removeEventListener('edu360_notification_event', handleLiveNotification);
+        if (notifChannel) notifChannel.close();
+      };
+    }
   }, []);
+
+  // Tab switch re-sync so navigating to Today's Collections always shows latest live entries
+  useEffect(() => {
+    if (activeTab === 'today_collections' || activeTab === 'dashboard') {
+      setTodayReceipts(getLiveTodayReceipts());
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'payroll') {
+      api.getPayrollBatches().then(batches => setPayrollBatches(batches)).catch(() => {});
+    }
+  }, [activeTab]);
+
+  // Fetch real-time biometric muster & LOP projection whenever target month changes
+  useEffect(() => {
+    if (showGenerateBatchModal && newBatchMonth) {
+      setIsLoadingLop(true);
+      api.getPayrollLopPreview(newBatchMonth)
+        .then(res => setLopPreview(res))
+        .catch(() => setLopPreview(null))
+        .finally(() => setIsLoadingLop(false));
+    }
+  }, [showGenerateBatchModal, newBatchMonth]);
 
   // --- Actions ---
 
@@ -332,6 +444,32 @@ export default function AccountsCoordinatorPage() {
         notes: paymentNotes || undefined,
         received_by: user?.name || 'Mr. Arvind Krishnan (Accounts Officer)'
       });
+
+      const recNo = `REC-2026-CASH-${Math.floor(1000 + Math.random() * 9000)}`;
+      const nowTime = formatSystemTime(new Date());
+      recordLiveReceipt({
+        recNo,
+        name: paymentModalDefaulter.student_name,
+        classSec: paymentModalDefaulter.class_name,
+        head: paymentModalDefaulter.milestone_title || 'Term Fee Counter Recovery',
+        amount: paymentAmount,
+        mode: paymentMethod || 'Cash Counter',
+        ref: paymentUtr || `CASH-REC-${Math.floor(1000 + Math.random() * 9000)}`,
+        time: nowTime,
+        status: 'Bank Cleared'
+      });
+
+      api.publishClientNotification({
+        recipient_role: 'admin',
+        sender_name: user?.name || 'Mr. Arvind Krishnan (Accounts Officer)',
+        sender_role: 'accounts_coordinator',
+        notification_type: 'PAYMENT_RECEIVED',
+        title: 'Counter Fee Collection Recorded',
+        message: `₹${paymentAmount.toLocaleString('en-IN')} collected at counter (${paymentMethod}) for ${paymentModalDefaulter.student_name} (${paymentModalDefaulter.class_name}). Receipt #${recNo}`,
+        priority: 'Normal',
+        action_url: '/admin'
+      });
+
       const remainingDue = Math.max(0, paymentModalDefaulter.amount_due - paymentAmount);
       triggerToast(`✓ Recorded ₹${paymentAmount.toLocaleString('en-IN')} counter collection for ${paymentModalDefaulter.student_name}. Remaining due: ₹${remainingDue.toLocaleString('en-IN')}`);
       setPaymentModalDefaulter(null);
@@ -379,6 +517,7 @@ export default function AccountsCoordinatorPage() {
 
   const handleReconcileTx = async (txId: number) => {
     try {
+      reconcileLiveTransaction(txId);
       await api.reconcileTransaction(txId);
       triggerToast(`Bank reconciliation verified and ledger updated.`);
       loadData();
@@ -401,8 +540,10 @@ export default function AccountsCoordinatorPage() {
   const handleConfirmBulkReconcile = async () => {
     try {
       setIsReconcilingBulk(true);
+      const pendingIds = pendingTransactions.map(t => t.id);
+      bulkReconcileLiveTransactions(pendingIds, 'Mr. Arvind Krishnan (Senior Accounts Officer)');
       const res = await api.bulkReconcileTransactions(
-        pendingTransactions.map(t => t.id),
+        pendingIds,
         'Mr. Arvind Krishnan (Senior Accounts Officer)'
       );
       triggerToast(res?.message || `✓ Batch reconciliation completed: ${pendingTransactions.length} transactions verified against bank statement.`);
@@ -573,6 +714,23 @@ export default function AccountsCoordinatorPage() {
     }
   };
 
+  const handleResubmitBatchSubmit = async (batchId: number) => {
+    try {
+      setIsResubmittingPayroll(true);
+      await api.resubmitPayrollBatch(batchId, {
+        resubmitted_by: 'Mr. Arvind Krishnan (Accounts Officer)',
+        notes: resubmitBatchNotes.trim() || 'Addressed audit queries, updated deduction slabs, and resubmitted for Principal executive sign-off.'
+      });
+      triggerToast('✓ Revised payroll batch resubmitted to Principal for executive authorization!');
+      setShowResubmitModal(false);
+      await loadData();
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to resubmit payroll batch.');
+    } finally {
+      setIsResubmittingPayroll(false);
+    }
+  };
+
   const handleExportNachCsv = () => {
     const activeBatch = payrollBatches.find(b => b.id === selectedBatchId);
     const headers = ['Staff Name', 'Designation', 'Department', 'Bank Account No', 'Bank IFSC', 'Gross Earnings', 'Total Deductions', 'Net Payable', 'Disbursement Status', 'Payment UTR'];
@@ -590,6 +748,35 @@ export default function AccountsCoordinatorPage() {
     ]);
     exportToCsv(`EDU360_NACH_Bank_Wire_${activeBatch?.payroll_month.replace(/\s+/g, '_') || 'Payroll'}`, headers, rows);
     triggerToast('Bank Corporate NACH file exported as CSV.');
+  };
+
+  const handleDownloadHdfcCmsFile = (batchId: number) => {
+    const b = payrollBatches.find(x => x.id === batchId);
+    const month = b?.payroll_month.replace(/\s+/g, '_') || 'Payroll';
+    const headers = [
+      'Transaction Type',
+      'Beneficiary Account Number',
+      'Beneficiary Name',
+      'Amount',
+      'Debit Account Number',
+      'Beneficiary IFSC',
+      'Customer Reference Number',
+      'Payment Date',
+      'Narration'
+    ];
+    const rows = payslips.map((p, idx) => [
+      'CMS_SALARY',
+      p.bank_account_no,
+      p.staff_name,
+      p.net_salary.toFixed(2),
+      '50200088912344',
+      p.bank_ifsc,
+      `${disburseBatchRef || 'HDFC-CMS'}_${idx + 1}`,
+      new Date().toLocaleDateString('en-GB'),
+      `Salary for ${b?.payroll_month || 'Current Month'}`
+    ]);
+    exportToCsv(`HDFC_ENET_CMS_PAYROLL_${month}`, headers, rows);
+    triggerToast('✓ HDFC E-Net Corporate CMS disbursement batch file downloaded.');
   };
 
   const handleCreatePOSubmit = async (e: React.FormEvent) => {
@@ -843,8 +1030,29 @@ export default function AccountsCoordinatorPage() {
             )}
             {[
               { id: 'dashboard', label: 'Accounts Dashboard', icon: LayoutDashboard },
+              { 
+                id: 'today_collections', 
+                label: "Today's Live Collections", 
+                icon: CreditCard, 
+                badge: `₹${(todayReceipts.reduce((a, r) => a + r.amount, 0) / 100000).toFixed(2)}L`, 
+                badgeType: 'emerald' 
+              },
               { id: 'fee_defaulters', label: 'Fee Collections & Aging', icon: AlertTriangle, badge: `${stats.overdue_students_count || defaulters.length} Due`, badgeType: 'rose' },
-              { id: 'payroll', label: 'Staff Salaries & Payroll', icon: Users, badge: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? `${salaryInquiries.filter(i => i.status === 'Pending').length} Queries` : (payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'), badgeType: salaryInquiries.filter(i => i.status === 'Pending').length > 0 ? 'rose' : 'emerald' },
+              { 
+                id: 'payroll', 
+                label: 'Staff Salaries & Payroll', 
+                icon: Users, 
+                badge: payrollBatches.some(b => b.status === 'Revision Requested')
+                  ? 'Revision Needed ⚠️'
+                  : salaryInquiries.filter(i => i.status === 'Pending').length > 0 
+                  ? `${salaryInquiries.filter(i => i.status === 'Pending').length} Queries` 
+                  : (payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'), 
+                badgeType: payrollBatches.some(b => b.status === 'Revision Requested')
+                  ? 'rose'
+                  : salaryInquiries.filter(i => i.status === 'Pending').length > 0 
+                  ? 'rose' 
+                  : 'emerald' 
+              },
               { id: 'vendor_invoices', label: 'Vendor Bills & Payables', icon: Receipt, badge: `${stats.pending_vendor_invoices_count} Transfers`, badgeType: 'blue' },
               { id: 'reconciliation', label: 'Online Bank Verification', icon: RefreshCw, badge: `${stats.pending_reconciliation_count} To Verify`, badgeType: 'amber' },
               { id: 'dispatch_logs', label: 'Fee Reminders & Audit', icon: FileText }
@@ -928,6 +1136,7 @@ export default function AccountsCoordinatorPage() {
               </div>
               <h1 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
                 {activeTab === 'dashboard' && 'Financial Overview & Solvency'}
+                {activeTab === 'today_collections' && "Today's Live Collections & Receipts"}
                 {activeTab === 'fee_defaulters' && 'Student Fee Collections & Aging'}
                 {activeTab === 'payroll' && 'Staff Salaries & Monthly Payroll'}
                 {activeTab === 'vendor_invoices' && 'Vendor Invoices & Accounts Payable'}
@@ -941,6 +1150,42 @@ export default function AccountsCoordinatorPage() {
                 {/* ── TAB 0: ACCOUNTS EXECUTIVE DASHBOARD (BENTO) ── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* Urgent Payroll Revision Callout if Principal requested review */}
+            {payrollBatches.some(b => b.status === 'Revision Requested') && (
+              <div 
+                onClick={() => setActiveTab('payroll')}
+                className="p-4 rounded-3xl bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-amber-500/15 border-2 border-rose-500/40 dark:border-rose-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs shadow-md cursor-pointer hover:border-rose-500 transition-all group animate-in fade-in slide-in-from-top-2"
+              >
+                <div className="flex items-center gap-3 text-rose-950 dark:text-rose-200">
+                  <div className="p-2.5 rounded-2xl bg-rose-600 text-white shrink-0 shadow-md">
+                    <AlertTriangle className="h-5 w-5 animate-bounce" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-sm block">⚠️ Principal Executive Action: Payroll Revision Requested</span>
+                      <span className="px-2 py-0.5 rounded-full bg-rose-200 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 text-[10px] font-extrabold uppercase tracking-wide">
+                        Four-Eye Audit Query
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-1">
+                      Dr. Sunita Kapoor (Principal) returned the {payrollBatches.find(b => b.status === 'Revision Requested')?.payroll_month} staff salary batch with audit remarks. Click to view notes, re-evaluate deductions, and resubmit.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveTab('payroll');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Resolve &amp; Resubmit</span>
+                  <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
+            )}
+
             {/* 6 Core Financial Metric Bento Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Card 1: Total Collections MTD */}
@@ -1093,8 +1338,14 @@ export default function AccountsCoordinatorPage() {
                       <p className="text-[10px] text-slate-400">8 Faculty &amp; Support staff</p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                    {payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft'}
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    payrollBatches.some(b => b.status === 'Revision Requested')
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 border border-rose-300 dark:border-rose-700 animate-pulse'
+                      : 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                  }`}>
+                    {payrollBatches.some(b => b.status === 'Revision Requested')
+                      ? 'Revision Requested ⚠️'
+                      : (payrollBatches.length > 0 ? payrollBatches[0].status : 'Draft')}
                   </span>
                 </div>
                 <div className="my-3">
@@ -1389,6 +1640,179 @@ export default function AccountsCoordinatorPage() {
             </div>
           </div>
         )}
+
+        {/* ── TAB: TODAY'S LIVE COLLECTIONS & RECEIPTS LEDGER ── */}
+        {activeTab === 'today_collections' && (() => {
+          const totalToday = todayReceipts.reduce((a, r) => a + r.amount, 0);
+          const upiReceipts = todayReceipts.filter(r => r.mode.toLowerCase().includes('upi') || r.mode.toLowerCase().includes('gpay') || r.mode.toLowerCase().includes('phonepe') || r.mode.toLowerCase().includes('paytm'));
+          const upiTotal = upiReceipts.reduce((a, r) => a + r.amount, 0);
+          const bankReceipts = todayReceipts.filter(r => r.mode.toLowerCase().includes('netbanking') || r.mode.toLowerCase().includes('neft') || r.mode.toLowerCase().includes('bank') || r.mode.toLowerCase().includes('card'));
+          const bankTotal = bankReceipts.reduce((a, r) => a + r.amount, 0);
+          const cashReceipts = todayReceipts.filter(r => r.mode.toLowerCase().includes('cash') || r.mode.toLowerCase().includes('counter'));
+          const cashTotal = cashReceipts.reduce((a, r) => a + r.amount, 0);
+
+          return (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white">
+                    Today&apos;s Live Fee Collections &amp; Verified Receipts
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Real-time consolidated stream across Parent Online Portal (UPI / Cards), HDFC Direct Wires, and School Counter Slips.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const resetResult = resetLiveLedger();
+                      setTodayReceipts(resetResult.receipts);
+                      setTransactions(resetResult.transactions);
+                      triggerToast('✓ Demo ledger reset! All test payments undone.');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                    title="Undo test payments and restore baseline receipts"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>Undo / Reset Test Receipts</span>
+                  </button>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Real-time Bank Integration Active</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* 4 Summary Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Total Collected Today
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    ₹{totalToday.toLocaleString('en-IN')}
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 block mt-1">
+                    {todayReceipts.length} Verified Receipts
+                  </span>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    UPI / Online Gateway
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                    ₹{upiTotal.toLocaleString('en-IN')}
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 block mt-1">
+                    {upiReceipts.length} Instant Auto-Settled
+                  </span>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Bank Transfer / NEFT
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
+                    ₹{bankTotal.toLocaleString('en-IN')}
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 block mt-1">
+                    {bankReceipts.length} Verified by Accounts
+                  </span>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    School Cash Counter
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                    ₹{cashTotal.toLocaleString('en-IN')}
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 block mt-1">
+                    {cashReceipts.length} Physical Cash Slip
+                  </span>
+                </div>
+              </div>
+
+              {/* Today's Receipts Ledger Table */}
+              <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Today&apos;s Receipts Ledger
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Reconciled live stream from Parent Portal UPI, Counter Desks &amp; Bank Direct
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                        <th className="py-3 px-4">Receipt #</th>
+                        <th className="py-3 px-4">Student &amp; Class</th>
+                        <th className="py-3 px-4">Fee Head</th>
+                        <th className="py-3 px-4">Amount</th>
+                        <th className="py-3 px-4">Payment Mode</th>
+                        <th className="py-3 px-4">Ref UTR / Transaction</th>
+                        <th className="py-3 px-4">Time</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {todayReceipts.map((r, i) => (
+                        <tr key={r.recNo || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {r.recNo}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="font-extrabold text-slate-900 dark:text-white block">{r.name}</span>
+                            <span className="text-[11px] text-slate-400">{r.classSec}</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-medium">
+                            {r.head}
+                          </td>
+                          <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white tabular-nums">
+                            ₹{r.amount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {r.mode}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
+                            {r.ref}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 text-[11px]">
+                            {r.time}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
+                              ✓ {r.status || 'Bank Cleared'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() => triggerToast(`Downloading official verified receipt PDF for ${r.recNo}...`)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer transition-colors"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>PDF</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── TAB 1: AGING FEE DEFAULTERS & RECOVERY LEDGER ── */}
         {activeTab === 'fee_defaulters' && (
@@ -2326,6 +2750,8 @@ export default function AccountsCoordinatorPage() {
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
                                 : activeBatch.status === 'Approved for Wire'
                                 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                : activeBatch.status === 'Revision Requested'
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 border border-rose-300 dark:border-rose-700 animate-pulse'
                                 : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
                             }`}>
                               ● {activeBatch.status}
@@ -2339,10 +2765,41 @@ export default function AccountsCoordinatorPage() {
                           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                             {activeBatch.notes || 'Monthly institutional salary disbursement across all faculty, administration, and support staff.'}
                           </p>
+
+                          {/* Principal Revision Callout Alert Box */}
+                          {activeBatch.status === 'Revision Requested' && (
+                            <div className="mt-3 p-3.5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs space-y-1.5">
+                              <div className="flex items-center gap-2 text-rose-900 dark:text-rose-200 font-bold">
+                                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                                <span>Principal Executive Audit Feedback (Dr. Sunita Kapoor):</span>
+                              </div>
+                              <p className="text-[11px] text-rose-800 dark:text-rose-300 pl-6 italic font-medium">
+                                "{activeBatch.notes?.includes('[Revision Requested')
+                                  ? activeBatch.notes.split('[Revision Requested').pop()?.replace(/^.*?]:\s*/, '')
+                                  : activeBatch.notes || 'Please re-verify faculty attendance, LOP deductions, and statutory EPF/TDS withholdings.'}"
+                              </p>
+                              <div className="pl-6 pt-1 flex items-center gap-2 text-[10px] text-rose-600 dark:text-rose-400 font-semibold">
+                                <span>Action: Review slips below, make adjustments, and click "Resolve &amp; Resubmit to Principal".</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Batch Action Buttons (Four-Eye Separation of Duties Enforced) */}
                         <div className="flex items-center gap-2 flex-wrap shrink-0">
+                          {activeBatch.status === 'Revision Requested' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedBatchId(activeBatch.id);
+                                setShowResubmitModal(true);
+                              }}
+                              className="flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer animate-pulse"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              <span>Resolve &amp; Resubmit to Principal ⚠️</span>
+                            </button>
+                          )}
                           {activeBatch.status === 'Audit Pending' && (
                             <div className="flex items-center gap-2">
                               <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-semibold shadow-2xs">
@@ -3259,31 +3716,60 @@ export default function AccountsCoordinatorPage() {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Select Target Payroll Month Cycle *
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {dynamicPayrollMonths.map((m) => {
-                    const alreadyExists = payrollBatches.some(b => b.payroll_month.toLowerCase() === m.toLowerCase());
-                    const isSelected = newBatchMonth === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        disabled={alreadyExists}
-                        onClick={() => setNewBatchMonth(m)}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-500 dark:text-emerald-300 shadow-2xs ring-2 ring-emerald-500'
-                            : alreadyExists
-                              ? 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed opacity-60'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="font-bold text-xs">{m}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {alreadyExists ? 'Batch Exists ✓' : 'Ready to Draft'}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Month</span>
+                    <select
+                      value={customMonthName}
+                      onChange={(e) => {
+                        const m = e.target.value;
+                        setCustomMonthName(m);
+                        setNewBatchMonth(`${m} ${customYear}`);
+                      }}
+                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(mn => (
+                        <option key={mn} value={mn}>{mn}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Calendar Year</span>
+                    <select
+                      value={customYear}
+                      onChange={(e) => {
+                        const y = e.target.value;
+                        setCustomYear(y);
+                        setNewBatchMonth(`${customMonthName} ${y}`);
+                      }}
+                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      {['2025', '2026', '2027', '2028', '2029', '2030'].map(yr => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:self-end pb-0.5">
+                    {(() => {
+                      const batchMonth = `${customMonthName} ${customYear}`;
+                      const alreadyExists = payrollBatches.some(b => b.payroll_month.toLowerCase() === batchMonth.toLowerCase());
+                      return (
+                        <div className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
+                          alreadyExists
+                            ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300'
+                            : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300'
+                        }`}>
+                          <span className="block text-[10px] uppercase font-semibold text-slate-400">Target Cycle</span>
+                          <span className="font-extrabold">{batchMonth}</span>
+                          <span className="text-[10px] ml-1.5 font-bold">
+                            {alreadyExists ? '(Batch Exists ✓)' : '(Ready to Draft)'}
+                          </span>
                         </div>
-                      </button>
-                    );
-                  })}
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 
@@ -3295,20 +3781,36 @@ export default function AccountsCoordinatorPage() {
                     Biometric Muster &amp; Pre-Audit Projection
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                    Active Roster Synced
+                    {isLoadingLop ? 'Auditing Muster...' : 'Active Roster Synced ✓'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] text-slate-400 block">Faculty &amp; Staff Headcount</span>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">48 Personnel</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {isLoadingLop ? 'Syncing...' : lopPreview?.total_staff ? `${lopPreview.total_staff} Personnel` : '44 Personnel'}
+                    </span>
                   </div>
                   <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] text-slate-400 block">Attendance &amp; LOP Integration</span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Pro-Rata Sync Active</span>
+                    <span className={`text-xs font-bold ${lopPreview?.staff_with_lop_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {isLoadingLop ? 'Computing...' : lopPreview?.staff_with_lop_count > 0 ? `${lopPreview.staff_with_lop_count} Staff LOP Flagged` : '100% Present / Zero LOP'}
+                    </span>
                   </div>
                 </div>
+
+                {lopPreview?.staff_with_lop_count > 0 && (
+                  <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[10px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                    <span className="font-bold block">Flagged LOP Deductions for {newBatchMonth}:</span>
+                    {lopPreview.lop_details.map((d: any) => (
+                      <div key={d.staff_id} className="flex items-center justify-between">
+                        <span>• {d.staff_name} ({d.role}):</span>
+                        <span className="font-bold">{d.lop_days} Day(s) LOP (-₹{d.estimated_deduction.toLocaleString('en-IN')})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                   <div className="flex items-center justify-between">
@@ -3350,12 +3852,23 @@ export default function AccountsCoordinatorPage() {
                 </span>
               </div>
 
-              <button 
-                type="submit" 
-                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer transition-colors"
-              >
-                Compute &amp; Submit Draft Batch to Principal
-              </button>
+              {(() => {
+                const batchMonth = `${customMonthName} ${customYear}`;
+                const alreadyExists = payrollBatches.some(b => b.payroll_month.toLowerCase() === batchMonth.toLowerCase());
+                return (
+                  <button 
+                    type="submit" 
+                    disabled={alreadyExists}
+                    className={`w-full rounded-xl py-2.5 font-bold shadow-md transition-colors text-xs flex items-center justify-center gap-1.5 ${
+                      alreadyExists
+                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-80'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                    }`}
+                  >
+                    <span>{alreadyExists ? `Batch for ${batchMonth} Already Exists ✓` : `Compute & Submit ${batchMonth} Batch to Principal`}</span>
+                  </button>
+                );
+              })()}
             </form>
           </div>
         </div>
@@ -3385,18 +3898,113 @@ export default function AccountsCoordinatorPage() {
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
                 />
               </div>
+
+              {/* Source Operating Account Details */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                <span className="font-bold text-slate-900 dark:text-white block">Institutional Source Account:</span>
+                <div>• Bank: <b>HDFC Bank Ltd (Corporate Banking Branch)</b></div>
+                <div>• Account No: <b>50200088912344</b> (Operating Salary Fund)</div>
+                <div>• IFSC: <b>HDFC0000240</b> • Balance: <b className="text-emerald-600">₹48,50,000 Verified</b></div>
+              </div>
+
               <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
                 <div>• Beneficiaries: <b>{payslips.length} Employees</b></div>
                 <div>• Total Direct Transfer: <b>₹{payrollBatches.find(b => b.id === selectedBatchId)?.net_payable.toLocaleString('en-IN')}</b></div>
                 <div>• Rail: HDFC Corporate Banking NACH Direct Debit</div>
               </div>
-              <button 
-                type="button" 
-                onClick={() => handleDisburseBatchSubmit(selectedBatchId)}
-                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer"
-              >
-                Confirm Wire Transfer Now
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadHdfcCmsFile(selectedBatchId)}
+                  className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 font-bold shadow-xs cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Download HDFC File</span>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => handleDisburseBatchSubmit(selectedBatchId)}
+                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer transition-colors text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Confirm Wire Now</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: RESOLVE & RESUBMIT REVISED PAYROLL BATCH ── */}
+      {showResubmitModal && selectedBatchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
+                  <RefreshCw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Resubmit Revised Payroll Batch to Principal
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Addressing Four-Eye Audit Feedback</p>
+                </div>
+              </div>
+              <button onClick={() => setShowResubmitModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X className="h-4 w-4" />
               </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Principal Feedback Display */}
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] space-y-1">
+                <span className="font-bold text-amber-900 dark:text-amber-200 block">Principal Audit Query (Dr. Sunita Kapoor):</span>
+                <p className="text-amber-800 dark:text-amber-300 italic">
+                  "{payrollBatches.find(b => b.id === selectedBatchId)?.notes?.includes('[Revision Requested')
+                    ? payrollBatches.find(b => b.id === selectedBatchId)?.notes?.split('[Revision Requested').pop()?.replace(/^.*?]:\s*/, '')
+                    : 'Please re-verify faculty attendance, LOP deductions, and statutory EPF/TDS withholdings.'}"
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Accounts Officer Resolution &amp; Rectification Remarks *
+                </label>
+                <textarea
+                  rows={3}
+                  value={resubmitBatchNotes}
+                  onChange={e => setResubmitBatchNotes(e.target.value)}
+                  placeholder="e.g. Reconciled biometric LOP records, updated TDS deductions for faculty, and re-computed Net Wire Disbursement."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                <div>• Batch Target: <b>{payrollBatches.find(b => b.id === selectedBatchId)?.payroll_month}</b></div>
+                <div>• Re-evaluated Net Payable: <b>₹{payrollBatches.find(b => b.id === selectedBatchId)?.net_payable.toLocaleString('en-IN')}</b></div>
+                <div>• Next Step: Returns to <code>Audit Pending</code> and dispatches executive alert to Principal's desk.</div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResubmitModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isResubmittingPayroll}
+                  onClick={() => handleResubmitBatchSubmit(selectedBatchId)}
+                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold shadow-md cursor-pointer transition-colors disabled:opacity-50 text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>{isResubmittingPayroll ? 'Resubmitting...' : 'Confirm & Resubmit'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

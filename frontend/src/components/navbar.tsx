@@ -38,6 +38,93 @@ export function Navbar() {
   }
   const { theme, toggleTheme } = useTheme();
 
+  const isAuthPage = pathname === '/login' || pathname?.startsWith('/login/') || pathname === '/register' || pathname?.startsWith('/register/');
+
+  // Dedicated Clean Auth Navbar for Login & Registration screens
+  if (isAuthPage) {
+    return (
+      <header className="sticky top-0 z-50 w-full h-16 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-md transition-colors duration-150">
+        <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
+          
+          {/* Left: Brand Logo (EDU360 • K-12 Intelligence, Action & Outcomes Platform) */}
+          <div className="flex items-center gap-3">
+            <Link href="/" className="group flex items-center gap-3">
+              <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-indigo-500 text-white shadow-md shadow-indigo-500/25 transition-transform duration-200 group-hover:scale-105">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                    EDU<span className="text-indigo-600 dark:text-indigo-400">360</span>
+                  </span>
+                  <span className="hidden xs:inline-flex sm:inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-pulse" />
+                    K–12 Intelligence
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-tight">Action &amp; Outcomes Platform</p>
+              </div>
+            </Link>
+          </div>
+
+          {/* Center: Clean whitespace, NO search bar, NO portal text */}
+          <div className="flex-1" />
+
+          {/* Right: Theme Toggle & Navigation Buttons */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Theme Toggle Button (Dark / Light) */}
+            <button
+              type="button"
+              id="auth-navbar-theme-toggle"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-4 w-4 text-amber-400 transition-transform rotate-0 hover:rotate-45" />
+              ) : (
+                <Moon className="h-4 w-4 text-slate-600 transition-transform hover:-rotate-12" />
+              )}
+            </button>
+
+            {/* Navigation Buttons: Register / Sign In + Explore Platform */}
+            {pathname?.startsWith('/register') ? (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 shadow-2xs"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/"
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs shadow-indigo-600/20"
+                >
+                  <span>Explore Platform</span>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/register"
+                  className="rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 shadow-2xs"
+                >
+                  Register
+                </Link>
+                <Link
+                  href="/"
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs shadow-indigo-600/20"
+                >
+                  <span>Explore Platform</span>
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -58,24 +145,24 @@ export function Navbar() {
     setMounted(true);
   }, []);
 
-  const isAuthPage = pathname === '/login' || pathname === '/register';
-
   return (
     <header className="sticky top-0 z-50 w-full h-16 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-md transition-colors duration-150">
       <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
         
         {/* Left: Brand Logo & Uniform Role Pill */}
         <div className="flex items-center gap-3">
-          <Link href={`/${role}`} className="group flex items-center gap-2.5">
+          <Link href={user ? `/${role}` : '/'} className="group flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-500 text-white shadow-md shadow-blue-500/20 transition-transform duration-200 group-hover:scale-105">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">EDU<span className="text-blue-600 dark:text-blue-400">360</span></span>
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 tracking-wide uppercase">
-                  {role.replace('_', ' ')} PORTAL
-                </span>
+                {user && (
+                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 tracking-wide uppercase">
+                    {role.replace('_', ' ')} PORTAL
+                  </span>
+                )}
               </div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Action &amp; Intelligence Platform</p>
             </div>
@@ -83,36 +170,42 @@ export function Navbar() {
         </div>
 
         {/* Center: Global Omnisearch / Command Palette Trigger */}
-        <div className="flex-1 max-w-lg mx-3 sm:mx-6 hidden md:block">
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="w-full flex items-center justify-between px-4 py-2 rounded-2xl bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 transition-all shadow-2xs group cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <Search className="h-4 w-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-              <span className="font-medium text-slate-600 dark:text-slate-300">
-                Search students, modules, tasks...
-              </span>
-            </div>
-            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400 shadow-2xs">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </button>
-        </div>
+        {user ? (
+          <div className="flex-1 max-w-lg mx-3 sm:mx-6 hidden md:block">
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="w-full flex items-center justify-between px-4 py-2 rounded-2xl bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 transition-all shadow-2xs group cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <Search className="h-4 w-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+                <span className="font-medium text-slate-600 dark:text-slate-300">
+                  Search students, modules, tasks...
+                </span>
+              </div>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400 shadow-2xs">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         {/* Right Section: Theme Toggle, Notifications, Authenticated User Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
           
           {/* Mobile Search Button */}
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs cursor-pointer"
-            title="Search (Ctrl + K)"
-          >
-            <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs cursor-pointer"
+              title="Search (Ctrl + K)"
+            >
+              <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </button>
+          )}
 
           {/* THEME TOGGLE BUTTON (Dark / Light) */}
           <button

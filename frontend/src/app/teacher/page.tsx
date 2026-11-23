@@ -3192,9 +3192,11 @@ export default function TeacherPage() {
 
   const handleSimulateJoin = async (studentId: number, minutesElapsed: number) => {
 
-    await api.simulateJoin(1, studentId, minutesElapsed);
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
 
-    const updated = await api.getAttendanceRoster(1);
+    await api.simulateJoin(activeClassId, studentId, minutesElapsed);
+
+    const updated = await api.getAttendanceRoster(activeClassId);
 
     setAttendance(updated);
 
@@ -3208,9 +3210,11 @@ export default function TeacherPage() {
 
   const handleOverrideAttendance = async (recordId: number, status: string) => {
 
-    await api.overrideAttendance(1, recordId, status);
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
 
-    const updated = await api.getAttendanceRoster(1);
+    await api.overrideAttendance(activeClassId, recordId, status);
+
+    const updated = await api.getAttendanceRoster(activeClassId);
 
     setAttendance(updated);
 
@@ -3224,13 +3228,15 @@ export default function TeacherPage() {
 
     await api.reviewLeaveRequest(id, status, `Reviewed and ${status.toLowerCase()} by Class Teacher Mrs. Ananya Verma`);
 
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
+
     const [updatedLeaves, updatedStudents, updatedAttendance] = await Promise.all([
 
       api.getLeaveRequests(),
 
       api.getTeacherStudents(),
 
-      api.getAttendanceRoster(1)
+      api.getAttendanceRoster(activeClassId)
 
     ]);
 

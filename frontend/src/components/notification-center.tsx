@@ -20,7 +20,10 @@ import {
   CreditCard,
   Calendar,
   TrendingDown,
-  Users
+  Users,
+  Receipt,
+  MessageSquare,
+  BookOpen
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { NotificationItem } from '@/lib/types';
@@ -175,9 +178,13 @@ export function NotificationCenter({
   const formatRelativeTime = (isoString?: string) => {
     if (!isoString) return 'Recent';
     try {
-      const date = new Date(isoString);
+      const normalized = (!isoString.endsWith('Z') && !isoString.includes('+')) 
+        ? `${isoString}Z` 
+        : isoString;
+      const date = new Date(normalized);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
+      if (diffMs < 0 && Math.abs(diffMs) < 120000) return 'Just now';
       const diffMins = Math.floor(diffMs / 60000);
       if (diffMins < 1) return 'Just now';
       if (diffMins < 60) return `${diffMins}m ago`;
@@ -201,7 +208,7 @@ export function NotificationCenter({
       if (categoryFilter === 'ACADEMIC') {
         const t = (n.notification_type || '').toLowerCase();
         const txt = (n.title + ' ' + n.message).toLowerCase();
-        return t.includes('homework') || t.includes('remedial') || t.includes('proxy') || t.includes('class') || txt.includes('homework') || txt.includes('class') || txt.includes('remedial');
+        return t.includes('homework') || t.includes('remedial') || t.includes('proxy') || t.includes('class') || t.includes('ptm') || txt.includes('ptm') || txt.includes('homework') || txt.includes('class') || txt.includes('remedial');
       }
       if (categoryFilter === 'EXAMS') {
         const t = (n.notification_type || '').toLowerCase();
@@ -218,6 +225,12 @@ export function NotificationCenter({
   });
 
   const getTypeIcon = (type: string, priority: string) => {
+    switch (type) {
+      case 'PTM_SLOT_BOOKED':
+        return <Calendar className="h-4 w-4 text-emerald-500" />;
+      case 'PTM_SLOT_CANCELLED':
+        return <Calendar className="h-4 w-4 text-rose-500" />;
+    }
     if (priority === 'CRITICAL') {
       return <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />;
     }
@@ -231,6 +244,11 @@ export function NotificationCenter({
       case 'PAYMENT_RECEIVED':
       case 'EXAM_HOLD_TRIGGERED':
         return <CreditCard className="h-4 w-4 text-emerald-500" />;
+      case 'PAYROLL_REVISION_REQUESTED':
+      case 'PAYROLL_READY':
+      case 'PAYROLL_AUTHORIZED':
+      case 'PAYROLL_AUDIT':
+        return <Receipt className="h-4 w-4 text-amber-500" />;
       case 'PROXY_ASSIGNED':
       case 'UNMANNED_PERIOD':
         return <Calendar className="h-4 w-4 text-indigo-500" />;
@@ -256,6 +274,18 @@ export function NotificationCenter({
       case 'REMEDIAL_DAY_READY':
       case 'FOCUS_PLAN_REVIEW':
         return <Award className="h-4 w-4 text-amber-500" />;
+      case 'PARENT_NOTE':
+      case 'PARENT_CHAT':
+        return <MessageSquare className="h-4 w-4 text-sky-500" />;
+      case 'HOMEWORK_SUBMISSION':
+        return <BookOpen className="h-4 w-4 text-indigo-500" />;
+      case 'LEAVE_APPLICATION':
+      case 'ADMIN_OVERRIDE_ALERT':
+        return <Calendar className="h-4 w-4 text-amber-500" />;
+      case 'DUTY_ASSIGNED':
+        return <Award className="h-4 w-4 text-purple-500" />;
+      case 'LATE_JOIN_APPROVAL':
+        return <Clock className="h-4 w-4 text-rose-500" />;
       default:
         return <Sparkles className="h-4 w-4 text-indigo-500" />;
     }

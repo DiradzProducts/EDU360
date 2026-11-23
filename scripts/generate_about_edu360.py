@@ -1,7 +1,8 @@
 """
 Generate updated ABOUT_EDU360.docx and PRD Word Documents
-Synchronized with Production Architecture v2.0 (8 Canonical Roles, Dynamic Admit Cards,
-Staff Leaves & LOP Payroll, Administrative Overrides, ClockProvider, and Notification Center).
+Synchronized with Production Architecture v2.5 (Cross-Role Synchronizations, 8 Canonical Roles,
+Inter-Coordinator Exam Sync, Medical Re-Exam, PTM Closed-Loop Attendance, Dynamic Admit Cards,
+Authentic QR Fee Ledger, ClockProvider, and Targeted Notifications).
 """
 
 import os
@@ -150,7 +151,7 @@ def generate_doc():
     r2.font.bold = True
     r2.font.color.rgb = RGBColor(0x38, 0xBD, 0xF8)
 
-    r3 = p.add_run("Document Version: 2.0 (Production Architecture Baseline) | Platforms: 8 Role Portals (Web & Mobile)")
+    r3 = p.add_run("Document Version: 2.5 (Cross-Role Synchronized) | Platforms: 8 Canonical Roles (Web & Mobile)")
     r3.font.name = 'Calibri'
     r3.font.size = Pt(10)
     r3.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
@@ -169,22 +170,22 @@ def generate_doc():
     p1 = doc.add_paragraph()
     r = p1.add_run("1. Actionable Management Intelligence: ")
     r.bold = True
-    p1.add_run("Highlights what needs attention today, why it matters, and who needs to take action via a real-time Red / Orange / Green Priority Triage Engine.")
+    p1.add_run("Highlights what needs attention today, why it matters, and who needs to take action via a real-time Red / Orange / Green Priority Triage Engine. Deprecated non-operational domains (transport and inventory) are purged from active triage.")
 
     p2 = doc.add_paragraph()
     r = p2.add_run("2. Outcome-Oriented Parent Involvement: ")
     r.bold = True
-    p2.add_run("Eliminates spam via an anti-spam moving-slider dashboard on mobile for routine updates, coupled with a shared Student Focus Table for weak-subject improvement.")
+    p2.add_run("Eliminates spam via an anti-spam moving-slider dashboard on mobile for routine updates, coupled with a shared Student Focus Table for weak-subject improvement and multi-student family profile switching.")
 
     p3 = doc.add_paragraph()
     r = p3.add_run("3. Zero Extra Burden for Teachers: ")
     r.bold = True
-    p3.add_run("Online class attendance via a 10-minute WebRTC telemetry rule, period-wise subject attendance auto-excused upon approved leave, and homework evaluated inside a browser-based SpeedGrader canvas.")
+    p3.add_run("Online class attendance via a 10-minute WebRTC telemetry rule, period-wise subject attendance auto-excused upon approved leave, curriculum delivery checked off directly to PostgreSQL, and SpeedGrader inline canvas correction.")
 
     p4 = doc.add_paragraph()
     r = p4.add_run("4. Deterministic Time-Alignment & Governance-First Security: ")
     r.bold = True
-    p4.add_run("Centralized ClockProvider simulation engine synchronizing timetables, period bells, and exam lifecycles across all 8 portals, backed by HMAC-SHA256 tokens and pessimistic row locking.")
+    p4.add_run("Centralized ClockProvider simulation engine synchronizing timetables, period bells, and exam lifecycles across all 8 portals, backed by HMAC-SHA256 tokens, targeted user-id notifications, and pessimistic row locking.")
 
     # 2. Platform Strategy
     add_heading(doc, "2. Platform Strategy & Multi-Portal Architecture", level=1)
@@ -193,14 +194,14 @@ def generate_doc():
     strat_headers = ["User Role", "Route / Portal", "Primary Platform", "Secondary Platform", "Operational Rationale"]
     strat_widths = [1.3, 1.2, 1.3, 1.2, 2.2]
     strat_data = [
-        ["Super Admin / Principal", "/admin", "Web App (Desktop 1080p+)", "Mobile Web (Urgent)", "High-density priority triage, task delegation, document vault lock, and administrative override governance."],
-        ["Academic Coordinator", "/academic_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "Curriculum pacing audit, conflict-free teacher timetable substitutions, and faculty workload balancing."],
-        ["Exam Coordinator", "/exam_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "Atomic batch class exam scheduling, hall deployment, seat allocation, clearance gating, and dynamic admit cards."],
-        ["Accounts Coordinator", "/accounts_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "3-tier fee aging, physical counter cash/cheque collection, fee waivers, and monthly staff payroll with LOP deductions (Maker)."],
-        ["Admissions Coordinator", "/admissions_coordinator", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "24/7 AI chatbot lead CRM, follow-up call tracking, and 1-click atomic conversion into SIS profiles with sibling discounts."],
-        ["Teachers", "/teacher", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "Desktop displays optimal for LiveKit classroom hosting, browser-based SpeedGrader, and staff leave/permission applications."],
-        ["Parents", "/parent", "Mobile App (Android / iOS)", "Responsive Web", "Mobile-first for on-the-go push notifications, 1-tap UPI fee payments, moving sliders, live bus GPS tracking, and PTM booking."],
-        ["Students (Secondary)", "/student", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "Full-width displays for distraction-free LiveKit classes, digital notes, dynamic admit cards, online exams, and homework uploads."]
+        ["Super Admin / Principal", "/admin", "Web App (Desktop 1080p+)", "Mobile Web (Urgent)", "High-density priority triage, task delegation, document vault lock, medical re-exam adjudication, and administrative overrides."],
+        ["Academic Coordinator", "/academic_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "Curriculum pacing audit, teacher substitutions, faculty workload balancing, and inter-coordinator exam-syllabus sync."],
+        ["Exam Coordinator", "/exam_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "Atomic batch class exam scheduling, hall deployment, seat allocation, clearance gating, dynamic admit cards, and re-exams."],
+        ["Accounts Coordinator", "/accounts_coordinator", "Web App (Desktop/Laptop)", "Tablet Web", "3-tier fee aging, authentic counter collection, fee structures, online bank reconciliation, and staff payroll with LOP deductions."],
+        ["Admissions Coordinator", "/admissions_coordinator", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "24/7 AI chatbot lead CRM, follow-up call tracking, and 1-click atomic conversion into SIS with 15% sibling discount."],
+        ["Teachers", "/teacher", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "Desktop displays optimal for LiveKit classroom hosting, browser SpeedGrader, PTM attendance & summary notes, and categorized staff leave."],
+        ["Parents", "/parent", "Mobile App (Android / iOS)", "Responsive Web", "Mobile-first for on-the-go push notifications, multi-child switching, 1-tap UPI fee payments with authentic QR codes, and PTM booking."],
+        ["Students (Secondary)", "/student", "Web App (Desktop/Laptop)", "Mobile App / Tablet", "Full-width displays for distraction-free LiveKit classes, digital notes, dynamic admit cards with seating details, online exams, and homework uploads."]
     ]
     t = doc.add_table(rows=1, cols=5)
     format_table(t, strat_widths, strat_headers, strat_data, header_bg="1E3A8A")
@@ -218,15 +219,19 @@ def generate_doc():
         ["SIS Document Vault Control", "Full (Lock)", "View Only", "View Only", "View Only", "View Only", "View Only", "View Only", "View Only"],
         ["Administrative Override Engine", "Full (Bypass)", "None", "None", "None", "None", "None", "None", "None"],
         ["Admissions CRM & Conversion", "Full (Audit)", "View Only", "View Only", "Fee Sync", "Full (Lead CRM)", "None", "None", "None"],
+        ["Sibling 15% Fee Waiver", "Full (Audit)", "None", "None", "Auto-Invoice", "Apply Link", "None", "None", "Verify Link"],
         ["Batch Exam Scheduling & Hall Alloc.", "Full (Audit)", "Sync Pacing", "Full (Batch)", "Fee Clearance", "None", "View Duty", "View Admit", "View Admit"],
+        ["Inter-Coord Exam Sync Protocol", "Full (Audit)", "Request/Align", "Resolve/Cutoff", "None", "None", "Pacing Feed", "None", "None"],
+        ["Medical Re-Exam Protocol", "Approve", "Pacing Sync", "Schedule Hall", "Fee Audit", "None", "Invigilate", "View Admit", "Apply (Docs)"],
         ["Dynamic Admit Card Generation", "Full (Audit)", "View Only", "Full (Publish)", "Fee Clearance", "None", "View Only", "Live Download", "View Only"],
         ["3-Tier Fee Aging & Counter Pay", "Full (Audit)", "None", "Clearance Lock", "Full (Counter)", "None", "None", "View Status", "Pay (Online)"],
+        ["Authentic QR Bank Reconcile", "Full (Audit)", "None", "None", "Reconcile", "None", "None", "View Receipt", "Scan & Pay"],
         ["Staff Payroll & LOP Deductions", "Authorize (Check)", "Workload Sync", "None", "Draft Batch (Maker)", "None", "View Payslip", "None", "None"],
         ["Live Online Class Hosting", "Full (Audit)", "Monitor Class", "None", "None", "None", "Full (Host)", "Join/Replay", "None"],
         ["Auto-Attendance (10-Min Rule)", "Full (Audit)", "View Register", "None", "None", "None", "Live Roster", "Status Stamp", "View Child"],
         ["SpeedGrader Inline Canvas", "Full (Audit)", "Audit Pacing", "None", "None", "None", "Grade & Mark", "Submit/View", "View Child"],
         ["Staff Leave (CL/SL/EL/LOP)", "Approve/Reject", "Substitute Match", "None", "Payroll LOP Sync", "None", "Apply/Track", "None", "None"],
-        ["PTM Concurrency Booking (Locks)", "Full (Audit)", "Monitor Slots", "None", "None", "None", "Create Slots", "None", "Hold & Book"],
+        ["PTM Concurrency Booking & Notes", "Full (Audit)", "Faculty Audit", "None", "None", "None", "Create & Notes", "None", "Hold, Cancel, Notes"],
         ["Dual-Signature Student Exit/TC", "Sign & Seal", "Inventory Sync", "None", "Dues Clearance", "None", "View Only", "View Status", "Digital Sign"]
     ]
     t = doc.add_table(rows=1, cols=9)
@@ -239,6 +244,7 @@ def generate_doc():
     doc.add_paragraph("• Live Classroom Cockpit (LMS): Direct in-browser LiveKit WebRTC connection with active speaker spotlighting and screen sharing.\n"
                       "• Dynamic 10-Minute Auto-Attendance Tracker: Background telemetry logs attendance status; period-level statuses auto-excused on approved leave.\n"
                       "• Dynamic Admit Cards & Seating Roster: Live dynamic hall tickets pulling directly from Exam Coordinator batch database with hall name, seat number, chief invigilator, QR code, and academic clearance.\n"
+                      "• Medical Re-Exam Admit Card: Instant delivery of rescheduled admit cards with venue and timing upon admin approval.\n"
                       "• Homework Vault & Submission Engine: Multi-file upload dropzone with mobile camera capture and SpeedGrader feedback viewer.\n"
                       "• Side-by-Side Portfolio: 2-pane portfolio separating institutional events from uploaded merit certificates.\n"
                       "• Shared Student Focus Table: Weekly study timetable highlighting weak concepts co-tracked with parents and teachers.")
@@ -246,44 +252,54 @@ def generate_doc():
     add_heading(doc, "4.2 Teacher Portal & SpeedGrader", level=2)
     doc.add_paragraph("• Teacher Home Dashboard: Dynamic schedule ticker driven by ClockProvider highlighting active period and duty assignments.\n"
                       "• SpeedGrader Studio (Browser Canvas): 2-pane evaluation workspace displaying student submissions alongside rubrics with freehand vector stylus annotations.\n"
-                      "• Staff Leave & Short-Permission Management: Apply for categorized leaves (CL, SL, EL, LOP) specifying affected teaching periods, auto-feeding LOP deductions into payroll.\n"
-                      "• Period-Wise Attendance Register: Fast-key bulk attendance marker (P, A, L, E) with automated leave-synchronization.\n"
-                      "• Student Focus Table Builder & Parental Connection Hub: Generate recovery plans and schedule PTM slots with buffer intervals.")
+                      "• Curriculum Delivery Check-Off: Logs unit completion directly into PostgreSQL CurriculumPacing, auto-calculating Ahead/On Track/Lagging status.\n"
+                      "• PTM Closed-Loop Attendance & Notes: Marks teacher and parent attendance (COMPLETED, ABSENT), recording conference summary notes pushed to parent app.\n"
+                      "• Staff Leave Management: Apply for categorized leaves (CL, SL, EL, LOP) specifying affected teaching periods, auto-feeding LOP deductions into payroll.\n"
+                      "• Period-Wise Attendance Register: Fast-key bulk attendance marker (P, A, L, E) with automated leave-synchronization.")
 
     add_heading(doc, "4.3 Parent Portal & Family Engagement", level=2)
-    doc.add_paragraph("• Anti-Spam Moving Slider Carousel: Routine announcements glide as top interactive slides, onboarding parents to open the app once daily.\n"
-                      "• High-Signal Push Alerts: Reserved strictly for urgent items: Teacher Remarks, Focus Table updates, 3-day absence warnings, and fee alerts.\n"
-                      "• Dynamic Child Admit Card Viewer: Inspect child's official exam admit card, hall location, seat number, and clearance status.\n"
-                      "• Concurrency-Safe PTM Booking: 15-minute slot selector with a 5-minute temporary reservation timer backed by pessimistic database row locks.\n"
-                      "• 3-Tier Fee Milestones & Live Bus Radar: 1-click UPI payments, counter payment receipts, and real-time school bus GPS tracking.")
+    doc.add_paragraph("• Multi-Student Account Switching: Seamless switching between enrolled siblings without re-authenticating via Student.parent_user_id.\n"
+                      "• Anti-Spam Moving Slider Carousel: Routine announcements glide as top interactive slides, onboarding parents to open the app once daily.\n"
+                      "• Authentic QR Code Fee Checkout: Dynamic UPI QR code generator (authentic-qr.tsx), instant settlements, counter payment history receipts, and PDF tax receipts.\n"
+                      "• Medical Re-Exam Application: Apply for missed examination re-scheduling with attached medical certificate.\n"
+                      "• PTM Booking & Cancellation: 15-minute slot selector with 5-minute lock timer and cancellation protocol with reason logging.\n"
+                      "• High-Signal Push Alerts: Reserved strictly for urgent items: Teacher Remarks, Focus Table updates, 3-day absence warnings, and fee alerts.")
 
     add_heading(doc, "4.4 Super Admin & Principal Console", level=2)
-    doc.add_paragraph("• Priority Triage Command Center: Real-time Red/Orange/Green priority status indicators highlighting fee defaulters, teacher absence, and critical compliance.\n"
-                      "• Administrative Override & Governance Engine: 5 concrete executive bypass domains enabling Principal to override student leaves, force-close stalled tasks, and decouple exam locks with downstream lockout (403 Forbidden).\n"
+    doc.add_paragraph("• Priority Triage Command Center: Real-time Red/Orange/Green priority status indicators with purged inactive transport/inventory categories.\n"
+                      "• Administrative Override Engine: 5 concrete executive bypass domains enabling Principal to override student leaves, force-close stalled tasks, and decouple exam locks with downstream lockout (403 Forbidden).\n"
+                      "• Dynamic Homeroom Override Cascade: Resolves exact homeroom teacher user ID and dispatches high-priority alert with executive remarks.\n"
+                      "• Medical Re-Exam Adjudication: Reviews parent re-exam requests and verifies documentary evidence for Exam Coordinator scheduling.\n"
                       "• Four-Eye Payroll Authorization: Principal reviews monthly salary batch computed by Accounts Coordinator and applies executive authorization.\n"
                       "• Dual-Signature Student Exit / TC Clearance: Requires Parent Digital Approval (OTP) and Principal Scanned Physical Signature before vault sealing.")
 
     add_heading(doc, "4.5 Exam Coordinator Portal", level=2)
     doc.add_paragraph("• Atomic Batch Class Exam Scheduling: Schedule all subjects for a class in one atomic transaction, generating batch_id and series_name.\n"
+                      "• Inter-Coordinator Exam Sync Protocol: Resolves syllabus cut-offs and reschedules lagging exams with Academic Coordinator.\n"
+                      "• Medical Re-Exam Scheduling: Assigns exam dates, time slots, halls, and chief invigilators for approved medical re-exam candidates.\n"
                       "• Hall Deployment & Seating Allocation: Manages halls, capacities, and assigns Chief Invigilators per session.\n"
                       "• Dynamic Admit Card Generation Engine: Automates hall ticket publishing with fee clearance gates and verification QR codes.\n"
                       "• Academic Moderation Ledger & AI Scanning: Normalizes exam marks and processes scanned answer scripts via Gemini Flash Vision API.")
 
     add_heading(doc, "4.6 Accounts Coordinator Portal", level=2)
-    doc.add_paragraph("• 3-Tier Fee Aging Ledger & Defaulter Triage: Tracks receivables categorized into Aging Tiers (1–30d, 31–60d, 60+d) with 1-click reminders.\n"
+    doc.add_paragraph("• Institutional Fee Structure Configurator: Standardized class-wise fee structures (FeeStructure) across tuition, term milestones, and lab/library fees.\n"
+                      "• 3-Tier Fee Aging Ledger & Defaulter Triage: Tracks receivables categorized into Aging Tiers (1–30d, 31–60d, 60+d) with 1-click reminders.\n"
                       "• Physical Counter Collection Engine: Cashier modal for recording manual cash, cheque, Demand Draft, or POS card payments with zero-overpayment guards and row locks.\n"
+                      "• Online Bank Transaction Ledger: Real-time UTR reconciliation auto-syncing with parent fee payments (fee-ledger.ts).\n"
                       "• Staff Payroll & LOP Deduction Engine (Maker): Computes monthly payroll cross-referencing staff attendance and approved Loss of Pay (LOP) leaves.\n"
                       "• Four-Eye Separation of Duties Workflow: Submits draft payroll batches to the Principal for executive authorization before executing disbursement wire.")
 
     add_heading(doc, "4.7 Admissions Coordinator Portal", level=2)
     doc.add_paragraph("• 24/7 AI Chatbot & Lead Ingestion CRM: Captures incoming parent inquiries and routes high-intent prospects to counselors.\n"
-                      "• Single-Click Atomic SIS Conversion: Converts admitted candidates directly into enrolled students (POST /api/admin/crm/enquiries/{id}/convert).\n"
-                      "• Sibling Linking & Automated Discount Engine: Detects enrolled siblings and applies a 15% tuition fee waiver automatically.")
+                      "• Single-Click Atomic SIS Conversion: Converts admitted candidates directly into enrolled students (POST /api/admin/crm/enquiries/{id}/convert) with parent_user_id linkage.\n"
+                      "• Sibling Linking & Automated Discount Engine: Detects enrolled siblings and applies a 15% tuition fee waiver automatically.\n"
+                      "• Secondary Student Dossier: Captures emergency contacts, languages, dietary preferences, and career ambitions into SIS.")
 
     add_heading(doc, "4.8 Academic Coordinator Portal", level=2)
-    doc.add_paragraph("• Curriculum Pacing & Syllabus Tracker: Monitors chapter completion percentages against lesson plans across all sections.\n"
-                      "• Teacher Substitution & Workload Balancing: Real-time substitution engine recommending qualified replacement teachers without collisions.\n"
-                      "• Student Focus Table Oversight: Audits teacher-student recovery timetables and tracks remedial score progression.")
+    doc.add_paragraph("• Curriculum Pacing & Syllabus Tracker: Monitors chapter completion percentages against lesson plans across all sections reading live from PostgreSQL.\n"
+                      "• Inter-Coordinator Exam Sync Protocol: Initiates consultation meetings (ExamSyncRequest) when class syllabus delivery lags.\n"
+                      "• PTM Faculty Attendance Audit: Monitors institutional compliance for Parent-Teacher Meetings tracking faculty attendance rates and completed conferences.\n"
+                      "• Teacher Substitution & Workload Balancing: Real-time substitution engine recommending qualified replacement teachers without collisions.")
 
     # 5. Key System Workflows
     add_heading(doc, "5. Key System Workflows & Execution Matrices", level=1)
@@ -293,11 +309,13 @@ def generate_doc():
     wf_data = [
         ["Workflow 5.1: Online Class Auto-Attendance", "Teacher, Student, LiveKit, Admin", "10-Minute WebRTC join rule; 3 consecutive absences trigger Red Alert.", "Automated attendance register + administrative triage task."],
         ["Workflow 5.2: SpeedGrader Inline Canvas", "Teacher, Student, S3 Vault, Outcomes", "In-browser canvas drawing; corrected file auto-replaces original upload.", "Instant student/parent feedback + Focus Table recommendation."],
-        ["Workflow 5.3: Concurrency-Safe PTM Booking", "Parent A, Parent B, Teacher, DB Lock", "SELECT ... FOR UPDATE pessimistic row locks; 5-min temporary reservation hold.", "Zero double-bookings; immediate 409 Conflict rejection on collision."],
+        ["Workflow 5.3: PTM Closed-Loop Governance", "Parent, Teacher, DB Lock, Academics", "SELECT ... FOR UPDATE locks; cancellation protocol; attendance & summary notes.", "Zero double-bookings; meeting notes delivered to parent; audited by Academics."],
         ["Workflow 5.4: Dual-Signature Student Exit", "Parent, Principal, Library, Finance", "All dues verified; Parent Digital OTP + Principal Scanned Physical Seal.", "Tamper-evident digital TC issuance + permanent vault sealing."],
         ["Workflow 5.5: Batch Exam & Dynamic Admit Card", "Exam Coord, Accounts, Student, DB", "Atomic batch creation (batch_id, series_name); fee clearance gating.", "Dynamic admit card with hall name, seat number, and QR code."],
         ["Workflow 5.6: Four-Eye Staff Payroll & LOP", "Accounts (Maker), Principal (Checker), Staff", "Separation of duties; dynamic LOP leave deduction calculation.", "Executive-authorized monthly salary disbursement + itemized payslips."],
-        ["Workflow 5.7: Administrative Override Cascade", "Principal, Teacher, Parent, DB Lockout", "Hierarchical bypass; downstream roles locked out (403 Forbidden).", "Executive override stamped in SecurityAuditLog + dual notification cascade."]
+        ["Workflow 5.7: Administrative Override Cascade", "Principal, Teacher, Parent, DB Lockout", "Hierarchical bypass; downstream roles locked out (403 Forbidden).", "Executive override stamped in SecurityAuditLog + dual notification cascade."],
+        ["Workflow 5.8: Inter-Coord Exam Syllabus Sync", "Academic Coord, Exam Coord, Teacher", "ExamSyncRequest triggered when syllabus lag < 50%; joint resolution.", "Exam dates rescheduled or cut-offs trimmed without student disadvantage."],
+        ["Workflow 5.9: Medical Re-Examination Lifecycle", "Parent, Principal, Exam Coord, Student", "ReExamRequest submitted with medical certificate; Admin approval.", "Dedicated re-exam hall, date, and invigilator assigned; live admit card."]
     ]
     t = doc.add_table(rows=1, cols=4)
     format_table(t, wf_widths, wf_headers, wf_data, header_bg="1E3A8A")
@@ -309,12 +327,13 @@ def generate_doc():
     tech_data = [
         ["Web Frontend", "Next.js 14/16 (React 18/19)", "SSR for blazing initial loads + Client components for high-density administrative dashboards."],
         ["Mobile Application", "React Native (Expo) + TypeScript", "Cross-platform iOS/Android parent app sharing data types, schemas, and API contracts."],
-        ["Backend API", "FastAPI (Python 3.11+)", "High-throughput asynchronous ASGI runtime handling SIS, Attendance, Fees, and Exams endpoints."],
+        ["Backend API", "FastAPI (Python 3.11+)", "High-throughput asynchronous ASGI runtime handling SIS, Attendance, Fees, Academic, and Exams endpoints."],
         ["Primary Database", "PostgreSQL 15+ (asyncpg)", "Enterprise relational database with ACID compliance, JSON column indexing, and foreign keys."],
         ["ORM & Concurrency", "SQLAlchemy 2.0 Async", "Single-pass JOIN queries + Pessimistic Row Locking (SELECT ... FOR UPDATE) for zero race conditions."],
         ["Live Video & Audio", "LiveKit WebRTC Server & SDK", "Embedded in-browser live classrooms, screen sharing, auto-recording, and attendance webhooks."],
         ["Dynamic Timekeeping", "Centralized ClockProvider", "Reactive simulation hook with 30-second ticker aligning class timetables, period switches, and exam lifecycles."],
-        ["Real-Time Notifications", "In-App WebSocket + Web Audio", "Multi-target role dispatching with live sound chimes, unread count badges, and deep-link action navigation."],
+        ["Real-Time Notifications", "In-App WebSocket + Web Audio", "Targeted role & user-id dispatching with live sound chimes, unread count badges, and deep-link action navigation."],
+        ["Financial Ledger Engine", "fee-ledger.ts + authentic-qr.tsx", "Real-time bank reconciliation, counter POS collection guards, and dynamic QR code generation."],
         ["Security & Auth", "HMAC-SHA256 Signed Tokens", "Dual-mode authentication (Bearer Tokens + Scoped Role Headers) with zero unauthorized bypasses."],
         ["Artificial Intelligence", "Google Gemini 1.5/2.0 Flash Vision", "Multimodal diagram inspection, student notebook OCR analysis, remedial sprint generation, and Socratic doubt solving."],
         ["Compliance & Storage", "S3-Compatible Encrypted Vault", "Cloudflare R2 / AWS S3 for zero-egress storage of homework uploads, evaluated PDFs, and transfer certificates."]

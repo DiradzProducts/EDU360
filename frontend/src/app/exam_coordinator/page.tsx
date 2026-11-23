@@ -81,18 +81,14 @@ import {
   Users,
 
   Monitor,
-
-  QrCode
-
+  QrCode,
+  CalendarRange
 } from 'lucide-react';
 
 import { Footer } from '@/components/footer';
-
 import { api } from '@/lib/api';
-
 import { useAuth } from '@/lib/auth-context';
-
-import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem, ReExamRequestItem, StaffMemberItem } from '@/lib/types';
+import { AdminTask, QuestionPaperItem, ExamScheduleItem, ReportCardItem, ReExamRequestItem, StaffMemberItem, ExamSyncRequestItem } from '@/lib/types';
 
 import { exportToCsv, printDossierReport, downloadMarksMemoFile } from '@/lib/export-utils';
 
@@ -151,6 +147,22 @@ export default function ExamCoordinatorPage() {
   // Data State
 
   const [tasks, setTasks] = useState<AdminTask[]>([]);
+  const [academicSyncRequests, setAcademicSyncRequests] = useState<ExamSyncRequestItem[]>([]);
+  const [showResolveSyncModal, setShowResolveSyncModal] = useState(false);
+  const [resolvingSync, setResolvingSync] = useState<ExamSyncRequestItem | null>(null);
+  const [syncResolutionStatus, setSyncResolutionStatus] = useState<string>('action_accepted');
+  const [meetingTime, setMeetingTime] = useState('Today at 03:30 PM (Exam Cell Conference)');
+  const [resolutionNotes, setResolutionNotes] = useState('Approved syllabus adjustment. Exam timetable rescheduled by 3 days.');
+  const [resolvingSyncSubmit, setResolvingSyncSubmit] = useState(false);
+
+  const [showRaiseSyncModal, setShowRaiseSyncModal] = useState(false);
+  const [raiseSyncClass, setRaiseSyncClass] = useState('Class 8');
+  const [raiseSyncSubject, setRaiseSyncSubject] = useState('Mathematics');
+  const [raiseSyncLagUnits, setRaiseSyncLagUnits] = useState(2);
+  const [raiseSyncCurrentPct, setRaiseSyncCurrentPct] = useState(45);
+  const [raiseSyncAction, setRaiseSyncAction] = useState('ACCELERATE_PACE');
+  const [raiseSyncNotes, setRaiseSyncNotes] = useState('Mid-Term timetable approaching. Please complete remaining curriculum units immediately.');
+  const [raisingSyncSubmit, setRaisingSyncSubmit] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -566,7 +578,7 @@ export default function ExamCoordinatorPage() {
 
     try {
 
-      const [tRes, qpRes, schedRes, rcRes, sumRes, absRes, reExamsRes, staffRes] = await Promise.all([
+      const [tRes, qpRes, schedRes, rcRes, sumRes, absRes, reExamsRes, staffRes, syncRes] = await Promise.all([
 
         api.getAdminTasks('exam'),
 
@@ -582,7 +594,9 @@ export default function ExamCoordinatorPage() {
 
         api.getReExamRequests(),
 
-        api.getStaff()
+        api.getStaff(),
+
+        api.getExamSyncRequests()
 
       ]);
 
@@ -590,131 +604,9 @@ export default function ExamCoordinatorPage() {
 
       setFacultyRoster(staffRes || []);
 
-      if (tRes && tRes.length > 1) {
+      setAcademicSyncRequests(syncRes || []);
 
-        setTasks(tRes);
-
-      } else {
-
-        // Simple, realistic delegated exam tasks
-
-        setTasks([
-
-          {
-
-            id: 101,
-
-            title: 'Submit Class 8-B Mathematics Term 1 Question Paper & Rubric',
-
-            description: 'Provide 80-mark draft question paper, step-wise solution keys, and unit weightage breakdown.',
-
-            status: 'Pending',
-
-            priority: 'High',
-
-            category: 'urgent',
-
-            domain: 'exam',
-
-            assigned_to: 'Mrs. Ananya Verma (Math Teacher)',
-
-            due_date: '2026-10-26',
-
-            sla_hours: 48,
-
-            is_escalated: false,
-
-            task_label: '📑 Question Paper Submission'
-
-          },
-
-          {
-
-            id: 102,
-
-            title: 'Online Exam Invigilation Duty: Class 8-B Mathematics',
-
-            description: 'Monitor candidate live webcams, attendance roster, and proctor session for Virtual Room Alpha.',
-
-            status: 'In Progress',
-
-            priority: 'High',
-
-            category: 'urgent',
-
-            domain: 'exam',
-
-            assigned_to: 'Mrs. Ananya Verma (Math Teacher)',
-
-            due_date: '2026-11-02',
-
-            sla_hours: 24,
-
-            is_escalated: false,
-
-            task_label: '📋 Invigilation Duty'
-
-          },
-
-          {
-
-            id: 103,
-
-            title: 'Verify Blueprint Alignment & Syllabus Clearance for Class 8',
-
-            description: 'Audit syllabus pacing and ensure Class 8 Term 1 papers comply with CBSE blueprint guidelines.',
-
-            status: 'Pending',
-
-            priority: 'Critical',
-
-            category: 'urgent',
-
-            domain: 'exam',
-
-            assigned_to: 'Prof. Rajeshwari Nair (Academic Coordinator)',
-
-            due_date: '2026-10-28',
-
-            sla_hours: 36,
-
-            is_escalated: false,
-
-            task_label: '📐 Blueprint & Clearance'
-
-          },
-
-          {
-
-            id: 104,
-
-            title: 'Evaluate Class 8-B Science Answer Scripts & Upload Marks',
-
-            description: 'Grade submitted student answer papers and enter marks into portal for gradebook moderation.',
-
-            status: 'Pending',
-
-            priority: 'High',
-
-            category: 'upcoming',
-
-            domain: 'exam',
-
-            assigned_to: 'Dr. Suresh Babu (Science Faculty)',
-
-            due_date: '2026-11-08',
-
-            sla_hours: 72,
-
-            is_escalated: false,
-
-            task_label: '📝 Marks Evaluation'
-
-          }
-
-        ]);
-
-      }
+      setTasks(tRes || []);
 
       setQuestionPapers(qpRes);
 
@@ -781,35 +673,44 @@ export default function ExamCoordinatorPage() {
   // Listen for global command palette navigation events
 
   useEffect(() => {
-
     const handleSwitchTab = (e: any) => {
-
       if (e.detail?.tab) {
-
         setActiveTab(e.detail.tab);
-
       }
-
     };
-
     window.addEventListener('edu360:switch-tab', handleSwitchTab);
 
-    if (typeof window !== 'undefined') {
-
-      const params = new URLSearchParams(window.location.search);
-
-      const tabParam = params.get('tab');
-
-      if (tabParam) {
-
-        setActiveTab(tabParam as ExamTab);
-
+    const handleNav = (e: any) => {
+      const url = typeof e.detail === 'string' ? e.detail : (e.detail?.url || '');
+      try {
+        const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+        const tabParam = parsed.searchParams.get('tab');
+        if (tabParam && ['dashboard', 'secrecy_vault', 'schedules', 'moderation', 'report_cards', 'tasks'].includes(tabParam)) {
+          setActiveTab(tabParam as ExamTab);
+        }
+      } catch {
+        if (url.includes('tab=')) {
+          const m = url.match(/tab=([^&#]+)/);
+          if (m && m[1] && ['dashboard', 'secrecy_vault', 'schedules', 'moderation', 'report_cards', 'tasks'].includes(m[1])) {
+            setActiveTab(m[1] as ExamTab);
+          }
+        }
       }
+    };
+    window.addEventListener('edu360-navigate-url', handleNav);
 
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setActiveTab(tabParam as ExamTab);
+      }
     }
 
-    return () => window.removeEventListener('edu360:switch-tab', handleSwitchTab);
-
+    return () => {
+      window.removeEventListener('edu360:switch-tab', handleSwitchTab);
+      window.removeEventListener('edu360-navigate-url', handleNav);
+    };
   }, []);
 
 
@@ -830,6 +731,64 @@ export default function ExamCoordinatorPage() {
 
   }, [rcClassFilter, rcSectionFilter, rcTermFilter]);
 
+  const handleOpenResolveSync = (req: ExamSyncRequestItem) => {
+    setResolvingSync(req);
+    setSyncResolutionStatus('action_accepted');
+    setResolutionNotes(`Reviewed syllabus completion for ${req.class_name} ${req.subject}. Action agreed: ${req.proposed_action?.replace(/_/g, ' ') || 'Adjustment'}.`);
+    setMeetingTime('Today at 03:30 PM (Exam Cell Conference)');
+    setShowResolveSyncModal(true);
+  };
+
+  const handleSubmitResolveSync = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resolvingSync) return;
+    setResolvingSyncSubmit(true);
+    try {
+      const res = await api.resolveExamSyncRequest(resolvingSync.id, {
+        status: syncResolutionStatus,
+        meeting_time: meetingTime,
+        resolution_notes: resolutionNotes
+      });
+      triggerToast(res.message || 'Academic sync resolved & notification dispatched to Prof. Rajeshwari Nair');
+      setShowResolveSyncModal(false);
+      const updated = await api.getExamSyncRequests();
+      setAcademicSyncRequests(updated);
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to resolve sync request');
+    } finally {
+      setResolvingSyncSubmit(false);
+    }
+  };
+
+  const handleRaiseSyllabusSync = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRaisingSyncSubmit(true);
+    try {
+      const res = await api.requestExamSync({
+        title: `Pacing Alert: ${raiseSyncClass} ${raiseSyncSubject} - ${raiseSyncAction.replace('_', ' ')}`,
+        class_name: raiseSyncClass,
+        subject: raiseSyncSubject,
+        curriculum_lag_units: Number(raiseSyncLagUnits),
+        current_completion_pct: Number(raiseSyncCurrentPct),
+        proposed_resolution: raiseSyncAction,
+        notes: raiseSyncNotes,
+        meeting_date: "Tomorrow, 03:00 PM",
+        meeting_venue: "Exam Cell Conference / Virtual Room A",
+        requested_by_name: "Dr. Hemanth Sen",
+        requested_by_role: "exam_coordinator"
+      });
+      if (res.success) {
+        triggerToast('🔔 Syllabus pacing alert dispatched to Academic Coordinator & Faculty!');
+        setShowRaiseSyncModal(false);
+        const updated = await api.getExamSyncRequests();
+        setAcademicSyncRequests(updated);
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to dispatch pacing alert');
+    } finally {
+      setRaisingSyncSubmit(false);
+    }
+  };
 
 
   const handleUpdateStatus = async (taskId: number, newStatus: string) => {
@@ -893,52 +852,36 @@ export default function ExamCoordinatorPage() {
 
 
   const handleCreateTask = async (e: React.FormEvent) => {
-
     e.preventDefault();
-
     if (!newTaskTitle.trim()) return;
 
+    const targetRole = (newTaskAssignee.toLowerCase().includes('coordinator') || newTaskAssignee.toLowerCase().includes('rajeshwari'))
+      ? 'academic_coordinator'
+      : 'teacher';
+
     await api.createAdminTask({
-
       title: newTaskTitle.trim(),
-
       description: newTaskDesc.trim(),
-
       category: 'urgent',
-
       domain: 'exam',
-
       due_date: 'Within 3 Days',
-
       assigned_to: newTaskAssignee,
-
-      assigned_to_role: 'exam_coordinator',
-
+      assigned_to_role: targetRole,
       priority: newTaskPriority,
-
       sla_hours: newTaskSlaHours,
-
       status: 'Pending',
-
       task_label: newTaskLabel,
-
       task_type: newTaskLabel
-
     });
 
     const updated = await api.getAdminTasks('exam');
-
     setTasks(updated);
-
     setShowCreateModal(false);
-
     setNewTaskTitle('');
-
     setNewTaskDesc('');
-
-    triggerToast('Examination cell task logged into SQLite');
-
+    triggerToast('Examination cell task assigned & notification dispatched to faculty');
   };
+
 
 
 
@@ -1905,9 +1848,7 @@ export default function ExamCoordinatorPage() {
                     </div>
 
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-
-                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell').length} In Vault
-
+                      {questionPapers.filter(p => p.status === 'sent_to_exam_cell' || p.status === 'sealed_in_vault').length} In Vault
                     </span>
 
                   </div>
@@ -3139,9 +3080,7 @@ export default function ExamCoordinatorPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 {questionPapers
-
-                  .filter(qp => vaultFilter === 'in_custody' ? qp.status === 'sent_to_exam_cell' : true)
-
+                  .filter(qp => vaultFilter === 'in_custody' ? (qp.status === 'sent_to_exam_cell' || qp.status === 'sealed_in_vault') : true)
                   .map(qp => {
 
                     const isReadyInCell = qp.status === 'sent_to_exam_cell';
@@ -3380,10 +3319,97 @@ export default function ExamCoordinatorPage() {
 
               )}
 
+              {/* Academic Coordinator Syllabus Sync Requests Queue */}
+              <div className="rounded-2xl border-2 border-purple-300 dark:border-purple-800 bg-purple-50/70 dark:bg-purple-950/40 p-4.5 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CalendarRange className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <div>
+                      <h3 className="text-xs font-black text-purple-900 dark:text-purple-200 uppercase tracking-wide">
+                        Academic Office Syllabus Sync &amp; Alignment Requests ({academicSyncRequests.filter(r => r.status === 'pending').length} Pending)
+                      </h3>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                        Dispatched between Exam Office and Academic Coordinator regarding course pacing vs exam dates
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRaiseSyncModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <span>Raise Pacing Alert &rarr;</span>
+                    </button>
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200">
+                      Dean Channel
+                    </span>
+                  </div>
+                </div>
 
+                {academicSyncRequests && academicSyncRequests.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {academicSyncRequests.map(req => (
+                      <div key={req.id} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 shadow-xs flex flex-col justify-between space-y-2">
+                        <div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-900 dark:text-white">{req.class_name} · {req.subject}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              req.status === 'action_accepted' || req.status === 'meeting_scheduled'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            }`}>
+                              {req.status?.replace(/_/g, ' ') || 'Pending'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold mt-1">
+                            Proposed: <span className="underline">{req.proposed_action?.replace(/_/g, ' ')}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 line-clamp-2 italic">
+                            "{req.reason}"
+                          </p>
+                          {req.meeting_time && (
+                            <div className="text-[10px] text-emerald-600 font-bold mt-1">
+                              📅 Confirmed: {req.meeting_time}
+                            </div>
+                          )}
+                          {req.resolution_notes && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              Notes: {req.resolution_notes}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400">Pacing: {req.current_completion_pct || 0}%</span>
+                          {req.status === 'pending' ? (
+                            <button
+                              onClick={() => handleOpenResolveSync(req)}
+                              className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              Review &amp; Schedule Sync
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenResolveSync(req)}
+                              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                              Update Status
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 text-center text-xs text-purple-700 dark:text-purple-300 italic">
+                    No pending alignment requests. Click &quot;Raise Pacing Alert&quot; to request urgent syllabus completion from Academic Coordinator.
+                  </div>
+                )}
+              </div>
 
               {/* Principal Mandated Re-Examinations Section */}
-
               {reExamMandates.filter(r => r.status === 'Approved by Admin').length > 0 && (
 
                 <div className="rounded-2xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 p-4.5 shadow-sm">
@@ -4947,15 +4973,21 @@ export default function ExamCoordinatorPage() {
 
                   >
 
-                    <option value="Mrs. Ananya Verma (Math Teacher)">Mrs. Ananya Verma (Math Teacher)</option>
-
-                    <option value="Dr. Suresh Babu (Science Faculty)">Dr. Suresh Babu (Science Faculty)</option>
-
-                    <option value="Prof. Rajeshwari Nair (Academic Coordinator)">Prof. Rajeshwari Nair (Academic Coordinator)</option>
-
-                    <option value="Mr. Arvind Saxena (Social Sciences)">Mr. Arvind Saxena (Social Sciences)</option>
-
-                    <option value="Mrs. Neha Roy (English Faculty)">Mrs. Neha Roy (English Faculty)</option>
+                    {facultyRoster && facultyRoster.length > 0 ? (
+                      facultyRoster.map(s => (
+                        <option key={s.id} value={`${s.name} (${s.role || s.department || 'Faculty'})`}>
+                          {s.name} ({s.role || s.department || 'Faculty'})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Mrs. Ananya Verma (Math Teacher)">Mrs. Ananya Verma (Math Teacher)</option>
+                        <option value="Dr. Suresh Babu (Science Faculty)">Dr. Suresh Babu (Science Faculty)</option>
+                        <option value="Prof. Rajeshwari Nair (Academic Coordinator)">Prof. Rajeshwari Nair (Academic Coordinator)</option>
+                        <option value="Mr. Arvind Saxena (Social Sciences)">Mr. Arvind Saxena (Social Sciences)</option>
+                        <option value="Mrs. Neha Roy (English Faculty)">Mrs. Neha Roy (English Faculty)</option>
+                      </>
+                    )}
 
                   </select>
 
@@ -6791,6 +6823,219 @@ export default function ExamCoordinatorPage() {
             triggerToast('Proctoring audit verdict logged successfully.');
           }}
         />
+      )}
+
+      {/* ── RAISE SYLLABUS PACING ALERT MODAL ── */}
+      {showRaiseSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold">
+                  <CalendarRange className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Raise Syllabus Pacing Alert</h3>
+                  <p className="text-[11px] text-slate-500">Dispatch pacing speedup demand to Academic Coordinator &amp; Faculty</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRaiseSyncModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleRaiseSyllabusSync} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Class Cohort</label>
+                  <select
+                    value={raiseSyncClass}
+                    onChange={e => setRaiseSyncClass(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="Class 8">Class 8</option>
+                    <option value="Class 9">Class 9</option>
+                    <option value="Class 10">Class 10</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Subject</label>
+                  <select
+                    value={raiseSyncSubject}
+                    onChange={e => setRaiseSyncSubject(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="General Science">General Science</option>
+                    <option value="English Language">English Language</option>
+                    <option value="Social Sciences">Social Sciences</option>
+                    <option value="Hindi">Hindi</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Lag Units (Behind Schedule)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={raiseSyncLagUnits}
+                    onChange={e => setRaiseSyncLagUnits(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Current Syllabus Completion (%)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="95"
+                    value={raiseSyncCurrentPct}
+                    onChange={e => setRaiseSyncCurrentPct(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Proposed Action</label>
+                <select
+                  value={raiseSyncAction}
+                  onChange={e => setRaiseSyncAction(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                >
+                  <option value="ACCELERATE_PACE">⚡ Accelerate Pacing (Add Extra Classes)</option>
+                  <option value="TRIM_SYLLABUS_CUTOFF">✂️ Trim Syllabus Cut-off for Exam</option>
+                  <option value="POSTPONE_EXAM">📅 Postpone Exam by 3 Days</option>
+                  <option value="EXTRA_REMEDIAL">🎯 Extra Remedial Sessions</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Directives / Notes</label>
+                <textarea
+                  rows={3}
+                  value={raiseSyncNotes}
+                  onChange={e => setRaiseSyncNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  placeholder="Explain why pacing speedup is required before examination timetable..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRaiseSyncModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={raisingSyncSubmit}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {raisingSyncSubmit ? 'Dispatching...' : 'Dispatch Alert to Academic Office'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── RESOLVE ACADEMIC SYNC REQUEST MODAL ── */}
+      {showResolveSyncModal && resolvingSync && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold">
+                  <CalendarRange className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Resolve Academic Syllabus Sync</h3>
+                  <p className="text-[11px] text-slate-500">Align exam timetable with Prof. Rajeshwari Nair</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResolveSyncModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitResolveSync} className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-2xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40">
+                <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                  <span>{resolvingSync.class_name} · {resolvingSync.subject}</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-mono">Pacing: {resolvingSync.current_completion_pct || 0}%</span>
+                </div>
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                  Proposed: <b>{resolvingSync.proposed_action?.replace(/_/g, ' ')}</b>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 italic">"{resolvingSync.reason}"</p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Decision / Resolution</label>
+                <select
+                  value={syncResolutionStatus}
+                  onChange={e => setSyncResolutionStatus(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="action_accepted">Accept Academic Action (Adopt Proposed Timetable/Cutoff)</option>
+                  <option value="meeting_scheduled">Schedule In-Person / Virtual Alignment Meeting</option>
+                  <option value="rejected">Maintain Existing Exam Schedule</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Sync Meeting Time / Schedule Adjustment</label>
+                <input
+                  type="text"
+                  value={meetingTime}
+                  onChange={e => setMeetingTime(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white"
+                  placeholder="e.g. Today at 03:30 PM (Exam Cell Conference Room)"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Resolution Notes</label>
+                <textarea
+                  rows={3}
+                  value={resolutionNotes}
+                  onChange={e => setResolutionNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white resize-none"
+                  placeholder="Detail agreed modifications to examination calendar or question paper cutoff..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowResolveSyncModal(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resolvingSyncSubmit}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold shadow-xs cursor-pointer"
+                >
+                  {resolvingSyncSubmit ? 'Recording...' : 'Record Resolution & Notify Academic Office'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

@@ -24,6 +24,7 @@ import {
 import { api } from '@/lib/api';
 import { ParentTeacherChatMessage } from '@/lib/types';
 import { playButtonClick, playStarCollect } from '@/lib/sound-effects';
+import { useAuth } from '@/lib/auth-context';
 
 export interface SubjectTeacherProfile {
   id: string;
@@ -178,14 +179,19 @@ interface ParentTeacherChatViewProps {
   studentName: string;
   className: string;
   homeroomFaculty?: string;
+  parentName?: string;
 }
 
 export function ParentTeacherChatView({
   studentId,
   studentName,
   className,
-  homeroomFaculty = 'Mrs. Ananya Verma'
+  homeroomFaculty = 'Mrs. Ananya Verma',
+  parentName
 }: ParentTeacherChatViewProps) {
+  const { user } = useAuth();
+  const effectiveParentName = parentName || user?.name || (user?.username?.startsWith('parent_') ? user.username.replace('parent_', '').replace(/_/g, ' ') : 'Parent');
+
   // Determine faculty directory based on student tier
   const isJunior = className.includes('3') || className.includes('K5');
   const facultyList = isJunior ? JUNIOR_FACULTY_DIRECTORY : SECONDARY_FACULTY_DIRECTORY;
@@ -295,7 +301,7 @@ export function ParentTeacherChatView({
       const saved = await api.sendParentChatMessage({
         student_id: studentId,
         sender_role: 'PARENT',
-        sender_name: 'Rajesh Sharma',
+        sender_name: effectiveParentName,
         receiver_role: 'TEACHER',
         receiver_name: selectedTeacher.name,
         message_text: text || `[Attached file: ${currentAttachment?.name}]`,
@@ -518,7 +524,10 @@ export function ParentTeacherChatView({
             ) : (
               filteredMessages.map((msg) => {
                 const isParent = msg.sender_role === 'PARENT';
-                const formattedTime = new Date(msg.created_at).toLocaleTimeString([], {
+                const msgDateStr = msg.created_at && (!msg.created_at.endsWith('Z') && !msg.created_at.includes('+')) 
+                  ? `${msg.created_at}Z` 
+                  : msg.created_at;
+                const formattedTime = new Date(msgDateStr).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit'
                 });

@@ -28,7 +28,7 @@ export function ConfirmEnrollmentModal({
   enquiry,
   onSuccess
 }: ConfirmEnrollmentModalProps) {
-  const [enrollSection, setEnrollSection] = useState<string>('Section A');
+  const [enrollSection, setEnrollSection] = useState<string>('Section B');
   const [enrollFeeStatus, setEnrollFeeStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<string>('UPI Transfer');
   const [isEnrolling, setIsEnrolling] = useState<boolean>(false);
@@ -46,7 +46,7 @@ export function ConfirmEnrollmentModal({
   // Reset or initialize state when enquiry changes or modal opens
   useEffect(() => {
     if (enquiry) {
-      setEnrollSection('Section A');
+      setEnrollSection('Section B');
       setEnrollFeeStatus('Paid');
       setEnrollPaymentMethod('UPI Transfer');
       setEnrollDocReportCard(true);

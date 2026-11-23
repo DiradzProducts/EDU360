@@ -99,6 +99,12 @@ async def create_system_notification(
         logger.error(f"Failed to dispatch system notification: {e}")
         raise
 
+def _to_utc_iso(dt: Optional[datetime.datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    iso = dt.isoformat()
+    return iso if (iso.endswith("Z") or "+" in iso) else iso + "Z"
+
 @router.get("")
 async def get_notifications(
     user_id: Optional[int] = None,
@@ -173,8 +179,8 @@ async def get_notifications(
             "action_url": n.action_url,
             "metadata": meta,
             "is_read": n.is_read,
-            "created_at": n.created_at.isoformat() if n.created_at else None,
-            "read_at": n.read_at.isoformat() if n.read_at else None
+            "created_at": _to_utc_iso(n.created_at),
+            "read_at": _to_utc_iso(n.read_at)
         })
 
     return {

@@ -9,7 +9,7 @@ from sqlalchemy import select, update, or_, and_, func
 from app.core.database import get_db
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
-    FeeMilestone, Student, Notification, StaffMember, StaffPermission,
+    FeeMilestone, FeeStructure, Student, Notification, StaffMember, StaffPermission,
     PayrollBatch, StaffPayslip, StaffSalaryInquiry, PurchaseOrder, FleetExpenseRecord,
     SecurityAuditLog
 )
@@ -21,7 +21,7 @@ from app.schemas.schemas import (
     FinanceDispatchLogResponse, FinanceDashboardStats,
     ApplyWaiverRequest, RecordFeePaymentRequest, BulkReminderRequest,
     StaffPayslipResponse, PayrollBatchResponse, GeneratePayrollRequest, StaffSalaryInquiryCreate, StaffSalaryInquiryResolve, StaffSalaryInquiryResponse,
-    AuthorizePayrollRequest, DisbursePayrollRequest, PurchaseOrderCreate,
+    AuthorizePayrollRequest, DisbursePayrollRequest, RequestPayrollRevisionRequest, ResubmitPayrollRequest, PurchaseOrderCreate,
     PurchaseOrderResponse, VerifyGRNRequest, FleetExpenseCreate,
     FleetExpenseResponse, SettleFleetExpenseRequest
 )
@@ -56,6 +56,45 @@ async def log_financial_audit(db: AsyncSession, actor_name: str, actor_role: str
         await db.flush()
     except Exception as e:
         logger.warning(f"Failed to record financial audit log: {e}")
+
+@router.get("/fee-structures")
+async def get_class_fee_structures(db: AsyncSession = Depends(get_db)):
+    """List official class fee structures and term milestone templates."""
+    res = await db.execute(select(FeeStructure).order_by(FeeStructure.class_name.asc()))
+    structures = res.scalars().all()
+    return [{
+        "id": fs.id,
+        "class_name": fs.class_name,
+        "academic_year": fs.academic_year,
+        "tuition_fee": fs.tuition_fee,
+        "term1_amount": fs.term1_amount,
+        "term1_due_date": fs.term1_due_date,
+        "term2_amount": fs.term2_amount,
+        "term2_due_date": fs.term2_due_date,
+        "lms_digital_fee": fs.lms_digital_fee,
+        "lab_library_fee": fs.lab_library_fee,
+        "activity_fee": fs.activity_fee,
+        "total_annual_fee": fs.total_annual_fee
+    } for fs in structures]
+
+@router.get("/student-fees/{student_id}")
+async def get_accounts_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
+    """Fetch complete fee milestone ledger for any enrolled student."""
+    res = await db.execute(
+        select(FeeMilestone).where(FeeMilestone.student_id == student_id).order_by(FeeMilestone.id.asc())
+    )
+    milestones = res.scalars().all()
+    return [{
+        "id": m.id,
+        "student_id": m.student_id,
+        "title": m.title,
+        "amount": m.amount,
+        "due_date": m.due_date,
+        "status": m.status,
+        "receipt_no": m.receipt_no,
+        "paid_at": m.paid_at,
+        "payment_method": m.payment_method
+    } for m in milestones]
 
 # 1. DASHBOARD STATS
 # =========================================================================
@@ -645,6 +684,16 @@ async def reconcile_transaction(
     tx.reconciled = True
     tx.reconciled_at = datetime.datetime.utcnow()
     tx.reconciled_by = reconciled_by
+
+    await log_financial_audit(
+        db=db,
+        actor_name=reconciled_by,
+        actor_role="accounts_coordinator",
+        action_type="TRANSACTION_RECONCILE",
+        target=f"PaymentTransaction #{tx.id} ({tx.utr_number})",
+        status="VERIFIED",
+        details=f"Payment of ₹{float(tx.amount):,.2f} for {tx.student_name} ({tx.milestone_title}) reconciled against bank ledger."
+    )
 
     await db.commit()
     await db.refresh(tx)
@@ -1393,7 +1442,7 @@ async def generate_monthly_payroll(
         message=f"{req.payroll_month} Payroll Batch for {len(staff_list)} staff members computed. Net wire amount: ₹{total_net:,.2f}. Ready for Principal executive authorization.",
         notification_type="PAYROLL_AUDIT",
         priority="HIGH",
-        action_url="/admin"
+        action_url="/admin?tab=payroll"
     )
 
     await db.commit()
@@ -1444,10 +1493,122 @@ async def authorize_payroll_batch(
             message=f"Principal has signed off on {batch.payroll_month} payroll (Net: ₹{batch.net_payable:,.2f}). You can now execute the corporate bank disbursement wire.",
             notification_type="PAYROLL_AUTHORIZED",
             priority="HIGH",
-            action_url="/accounts_coordinator"
+            action_url="/accounts_coordinator?tab=payroll"
+        )
+        # Notify Teacher staff that their monthly salary slip is ready
+        await create_system_notification(
+            db=db,
+            sender_name="Accounts Office",
+            sender_role="accounts_coordinator",
+            recipient_role="teacher",
+            title=f"Monthly Salary Slip Ready: {batch.payroll_month}",
+            message=f"Your verified salary slip for {batch.payroll_month} has been released. You can review earnings, deductions, and download your authenticated PDF receipt in My Salary.",
+            notification_type="PAYROLL_READY",
+            priority="NORMAL",
+            action_url="/teacher?tab=my_salary",
+            metadata_dict={"batch_id": batch.id, "payroll_month": batch.payroll_month}
         )
     except Exception as e:
         logger.warning(f"Failed to send payroll authorization notification: {e}")
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.post("/payroll/batches/{batch_id}/request-revision", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "principal", "super_admin"]))])
+async def request_payroll_revision(
+    batch_id: int,
+    req: RequestPayrollRevisionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Principal executive sends payroll batch back to Accounts Coordinator for revision.
+    Enforces audit logging and dispatches high-priority notification to accounts coordinator.
+    """
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    batch.status = "Revision Requested"
+    revision_note = req.notes or "Please re-verify faculty attendance, LOP deductions, and statutory EPF/TDS withholdings."
+    batch.notes = (batch.notes or "") + f" | [Revision Requested by {req.requested_by}]: {revision_note}"
+
+    # Log Principal Action in Security Audit
+    await log_financial_audit(
+        db=db,
+        actor_name=req.requested_by,
+        actor_role="admin",
+        action_type="REQUEST_PAYROLL_REVISION",
+        target=f"PayrollBatch #{batch.id} ({batch.payroll_month})",
+        status="SUCCESS",
+        details=f"Principal executive returned monthly payroll for {batch.payroll_month} for revision. Notes: {revision_note}"
+    )
+
+    # High-Priority Notification to Accounts Coordinator
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.requested_by,
+            sender_role="admin",
+            recipient_role="accounts_coordinator",
+            title=f"⚠️ Payroll Revision Required: {batch.payroll_month}",
+            message=f"Principal {req.requested_by} has returned the {batch.payroll_month} payroll batch for revision. Remarks: \"{revision_note}\". Please adjust and resubmit.",
+            notification_type="PAYROLL_REVISION_REQUESTED",
+            priority="URGENT",
+            action_url="/accounts_coordinator?tab=payroll"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send payroll revision notification: {e}")
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.post("/payroll/batches/{batch_id}/resubmit", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator", "super_admin"]))])
+async def resubmit_payroll_batch(
+    batch_id: int,
+    req: ResubmitPayrollRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accounts Coordinator resubmits revised payroll batch back to Principal for authorization.
+    """
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    batch.status = "Audit Pending"
+    resubmit_note = req.notes or "Addressed audit queries, recalculated deduction slabs, and resubmitted for Principal executive sign-off."
+    batch.notes = (batch.notes or "") + f" | [Resubmitted by {req.resubmitted_by}]: {resubmit_note}"
+
+    await log_financial_audit(
+        db=db,
+        actor_name=req.resubmitted_by,
+        actor_role="accounts_coordinator",
+        action_type="RESUBMIT_PAYROLL_BATCH",
+        target=f"PayrollBatch #{batch.id} ({batch.payroll_month})",
+        status="SUCCESS",
+        details=f"Accounts Coordinator resubmitted {batch.payroll_month} payroll batch after addressing revision queries. Notes: {resubmit_note}"
+    )
+
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.resubmitted_by,
+            sender_role="accounts_coordinator",
+            recipient_role="admin",
+            title=f"Payroll Batch Resubmitted: {batch.payroll_month}",
+            message=f"{req.resubmitted_by} has resolved revision notes for {batch.payroll_month} payroll. Batch is ready for your Principal digital signature.",
+            notification_type="PAYROLL_READY",
+            priority="HIGH",
+            action_url="/admin?tab=payroll"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send payroll resubmission notification: {e}")
 
     await db.commit()
     await db.refresh(batch)

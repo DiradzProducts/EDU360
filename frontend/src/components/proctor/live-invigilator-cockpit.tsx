@@ -1115,19 +1115,35 @@ export function LiveInvigilatorCockpit() {
       };
     } catch {}
 
+    api.getExamSessionStatus(1).then(res => {
+      if (res && res.session_status === 'COMMENCED') {
+        setIsSessionInitiated(true);
+      } else if (res && res.session_status === 'CONCLUDED') {
+        setIsExamConcludedForEveryone(true);
+        setIsSessionInitiated(false);
+      }
+    }).catch(() => {});
+
     return () => {
       if (channel) channel.close();
     };
   }, []);
 
   // Initiate Live WebRTC Proctor Room
-  const handleInitiateSession = () => {
+  const handleInitiateSession = async () => {
     setIsSessionInitiated(true);
     try {
       localStorage.setItem('edu360_exam_commenced', 'true');
       localStorage.removeItem('edu360_exam_ended_signal');
     } catch {}
     triggerToast('🚀 Live Examination Commenced! All student question papers unlocked.');
+
+    try {
+      await api.commenceExamSession(1, 'Mrs. Ananya Verma');
+    } catch (e) {
+      console.warn('Backend commence sync warning:', e);
+    }
+
     try {
       const channel = new BroadcastChannel('edu360_exam_live_channel');
       channel.postMessage({
@@ -1166,6 +1182,12 @@ export function LiveInvigilatorCockpit() {
       }));
       localStorage.removeItem('edu360_exam_commenced');
     } catch {}
+
+    try {
+      await api.concludeExamSession(1, 'Mrs. Ananya Verma', 'All candidates finished early or scheduled exam time ended');
+    } catch (e) {
+      console.warn('Backend conclude sync warning:', e);
+    }
 
     // 1. Shuts down teacher local camera and audio tracks
     if (teacherStreamRef.current) {

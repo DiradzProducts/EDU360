@@ -120,6 +120,68 @@ export interface PTMGovernanceStatus {
   focus_students_requiring_brief: number;
 }
 
+export interface PTMFacultyAttendanceItem {
+  teacher_id: number | string;
+  teacher_name: string;
+  department?: string;
+  total_slots: number;
+  booked_slots: number;
+  completed_slots: number;
+  teacher_attended_count?: number;
+  teacher_missed_count?: number;
+  attendance_rate?: number;
+  scheduled_slots?: number;
+  teacher_absent_slots?: number;
+  parent_no_show_slots?: number;
+  attendance_rate_pct?: number;
+  is_fully_attended?: boolean;
+  status?: string;
+}
+
+export interface PTMFacultyAttendanceSummary {
+  event_id?: number | string;
+  event_title?: string;
+  total_teachers?: number;
+  teachers_attended?: number;
+  teachers_pending?: number;
+  overall_attendance_rate?: number;
+  total_faculty_count?: number;
+  total_slots_count?: number;
+  total_booked_count?: number;
+  total_completed_count?: number;
+  overall_attendance_rate_pct?: number;
+  faculty?: PTMFacultyAttendanceItem[];
+  faculty_attendance?: PTMFacultyAttendanceItem[];
+}
+
+export interface ExamSyncRequestItem {
+  id: number;
+  course_id?: number;
+  title?: string;
+  class_name: string;
+  section?: string;
+  subject: string;
+  proposed_action?: string;
+  proposed_resolution?: string;
+  current_completion_pct?: number;
+  target_completion_pct?: number;
+  curriculum_lag_units?: number;
+  reason?: string;
+  notes?: string;
+  status: string;
+  requested_by_name?: string;
+  requested_by_role?: string;
+  academic_coordinator_name?: string;
+  exam_coordinator_name?: string;
+  meeting_time?: string;
+  meeting_date?: string;
+  meeting_venue?: string;
+  resolution_notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  resolved_at?: string;
+}
+
 export interface PTMEventCreate {
   title: string;
   academic_term?: string;
@@ -1047,7 +1109,7 @@ export interface PTMSlot {
   teacher_id: string;
   start_time: string;           // "10:20 AM"
   end_time: string;             // "10:30 AM"
-  status: 'AVAILABLE' | 'HELD' | 'BOOKED' | 'BREAK';
+  status: 'AVAILABLE' | 'HELD' | 'BOOKED' | 'BREAK' | 'COMPLETED';
   interaction_scope: InteractionScope;
   booked_student_id?: number;
   booked_student_name?: string;
@@ -1064,6 +1126,11 @@ export interface PTMSlot {
   cancellation_reason?: string;
   cancelled_by?: string;
   cancelled_at?: string;
+  teacher_attended?: boolean;
+  parent_attended?: boolean;
+  attendance_status?: 'SCHEDULED' | 'COMPLETED' | 'TEACHER_ABSENT' | 'PARENT_NO_SHOW' | string;
+  meeting_notes?: string;
+  completed_at?: string;
 }
 
 export interface CurriculumPacingItem {
@@ -1263,6 +1330,10 @@ export interface ExamScheduleItem {
   capacity?: number;
   total_marks?: number;
   status?: 'draft' | 'scheduled' | 'published';
+  session_status?: 'SCHEDULED' | 'COMMENCED' | 'CONCLUDED';
+  commenced_at?: string;
+  commenced_by?: string;
+  concluded_at?: string;
   lifecycle_status?: 'UPCOMING' | 'LIVE' | 'CONCLUDED';
   is_published?: boolean;
   published_at?: string;
@@ -1815,4 +1886,42 @@ export interface StudentPunctualityLedgerResponse {
   punctuality_compliance_pct: number;
   subjects: SubjectAttendanceData[];
 }
+
+export interface ExamHistoryDetail {
+  id: number;
+  exam_title: string;
+  term: string;
+  exam_date: string;
+  marks_obtained: number;
+  total_marks: number;
+  percentage: number;
+  grade: string;
+  status: string;
+  teacher_remarks?: string;
+}
+
+export interface SubjectAcademicBreakdown {
+  subject: string;
+  average_marks: number;
+  max_marks: number;
+  latest_marks: number;
+  latest_exam_title: string;
+  grade: string;
+  teacher: string;
+  exams_count: number;
+  exam_history: ExamHistoryDetail[];
+}
+
+export interface StudentAcademicBreakdownResponse {
+  student_id: number;
+  student_name: string;
+  class_name: string;
+  section: string;
+  academic_year: string;
+  overall_percentage: number;
+  overall_grade: string;
+  performance_badge: string;
+  subjects: SubjectAcademicBreakdown[];
+}
+
 

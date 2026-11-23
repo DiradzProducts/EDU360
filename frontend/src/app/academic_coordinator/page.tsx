@@ -30,13 +30,14 @@ import {
   Lock,
   Menu,
   LayoutDashboard,
-  GraduationCap
+  GraduationCap,
+  UserPlus
 } from 'lucide-react';
 
 import { Footer } from '@/components/footer';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { AdminTask, SubstitutionSlot, AvailableFacultyItem, StaffMemberItem, CurriculumPacingItem, PTMGovernanceStatus, QuestionPaperItem, ExamScheduleItem } from '@/lib/types';
+import { AdminTask, SubstitutionSlot, AvailableFacultyItem, StaffMemberItem, CurriculumPacingItem, PTMGovernanceStatus, QuestionPaperItem, ExamScheduleItem, PTMFacultyAttendanceSummary, ExamSyncRequestItem } from '@/lib/types';
 import { exportToCsv, printDossierReport } from '@/lib/export-utils';
 
 type AcademicTab = 'dashboard' | 'substitutions' | 'curriculum' | 'paper_blueprints' | 'calendar_clearance' | 'faculty' | 'tasks';
@@ -56,6 +57,13 @@ export default function AcademicCoordinatorPage() {
   const [staff, setStaff] = useState<StaffMemberItem[]>([]);
   const [curriculum, setCurriculum] = useState<CurriculumPacingItem[]>([]);
   const [ptmGovernance, setPtmGovernance] = useState<PTMGovernanceStatus | null>(null);
+  const [facultyPtmAttendance, setFacultyPtmAttendance] = useState<PTMFacultyAttendanceSummary | null>(null);
+  const [examSyncRequests, setExamSyncRequests] = useState<ExamSyncRequestItem[]>([]);
+  const [showExamSyncModal, setShowExamSyncModal] = useState(false);
+  const [syncCourse, setSyncCourse] = useState<{ id?: number; class_name: string; subject: string; completion_pct?: number } | null>(null);
+  const [syncAction, setSyncAction] = useState<'postpone_exam' | 'trim_syllabus_cutoff' | 'extra_remedial' | 'general_sync'>('postpone_exam');
+  const [syncReason, setSyncReason] = useState('');
+  const [submittingSync, setSubmittingSync] = useState(false);
   
   // Filters
   const [curriculumFilter, setCurriculumFilter] = useState<'all' | 'lagging' | 'ontrack' | 'ahead'>('all');
@@ -118,6 +126,7 @@ export default function AcademicCoordinatorPage() {
   // Substitution Modal State
   const [selectedSubSlot, setSelectedSubSlot] = useState<SubstitutionSlot | null>(null);
   const [chosenFacultyId, setChosenFacultyId] = useState<number | null>(null);
+  const [subNotes, setSubNotes] = useState('');
 
   // Question Paper & Blueprint State
   const [questionPapers, setQuestionPapers] = useState<QuestionPaperItem[]>([]);
@@ -143,7 +152,7 @@ export default function AcademicCoordinatorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tRes, subRes, facRes, staffRes, curRes, ptmGovRes, qpRes, schedRes] = await Promise.all([
+      const [tRes, subRes, facRes, staffRes, curRes, ptmGovRes, qpRes, schedRes, ptmAttRes, syncReqRes] = await Promise.all([
         api.getAdminTasks('academic'),
         api.getSubstitutions(),
         api.getAvailableFaculty(),
@@ -151,7 +160,9 @@ export default function AcademicCoordinatorPage() {
         api.getCurriculumPacing(),
         api.getPTMGovernance(),
         api.getQuestionPapers(),
-        api.getExamSchedules()
+        api.getExamSchedules(),
+        api.getPTMFacultyAttendance(),
+        api.getExamSyncRequests()
       ]);
       setTasks(tRes);
       setSubstitutions(subRes);
@@ -161,6 +172,8 @@ export default function AcademicCoordinatorPage() {
       setPtmGovernance(ptmGovRes);
       setQuestionPapers(qpRes);
       setExamSchedules(schedRes);
+      setFacultyPtmAttendance(ptmAttRes);
+      setExamSyncRequests(syncReqRes);
     } catch (err) {
       console.error('Failed to load academic data', err);
     } finally {
@@ -238,9 +251,115 @@ export default function AcademicCoordinatorPage() {
     }
   };
 
+  const handleOpenExamSync = (course: { id?: number; class_name: string; subject: string; completion_pct?: number }) => {
+    setSyncCourse(course);
+    setSyncReason(`Syllabus pacing is at ${course.completion_pct || 0}% for ${course.class_name} ${course.subject}. Requesting alignment with exam schedule.`);
+    setShowExamSyncModal(true);
+  };
+
+  const handleSubmitExamSync = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!syncCourse) return;
+    setSubmittingSync(true);
+    try {
+      const res = await api.requestExamSync({
+        course_id: syncCourse.id,
+        class_name: syncCourse.class_name,
+        subject: syncCourse.subject,
+        proposed_action: syncAction,
+        current_completion_pct: syncCourse.completion_pct,
+        target_completion_pct: 100,
+        reason: syncReason.trim()
+      });
+      triggerToast(res.message || 'Exam Sync requested: Dispatched notification to Dr. Hemanth Sen');
+      setShowExamSyncModal(false);
+      const updatedSyncs = await api.getExamSyncRequests();
+      setExamSyncRequests(updatedSyncs);
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to submit exam sync request');
+    } finally {
+      setSubmittingSync(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['dashboard', 'substitutions', 'curriculum', 'paper_blueprints', 'calendar_clearance', 'faculty', 'tasks'].includes(tabParam)) {
+        setActiveTab(tabParam as AcademicTab);
+      }
+
+      const handleNav = (e: any) => {
+        const url = typeof e.detail === 'string' ? e.detail : (e.detail?.url || '');
+        if (url.includes('tab=substitutions')) setActiveTab('substitutions');
+        else if (url.includes('tab=curriculum')) setActiveTab('curriculum');
+        else if (url.includes('tab=paper_blueprints')) setActiveTab('paper_blueprints');
+        else if (url.includes('tab=tasks')) setActiveTab('tasks');
+        else if (url.includes('tab=faculty')) setActiveTab('faculty');
+        else if (url.includes('tab=calendar_clearance') || url.includes('tab=calendar')) setActiveTab('calendar_clearance');
+      };
+      window.addEventListener('edu360-navigate-url', handleNav);
+
+      const handleLiveNotification = (e: any) => {
+        const notif = e.detail;
+        const type = notif?.notification_type || notif?.type;
+        if (type === 'PROXY_REQUIRED' || type === 'TEACHER_LEAVE_APPROVED' || type === 'SUBSTITUTION_ASSIGNED') {
+          Promise.all([
+            api.getSubstitutions(),
+            api.getAdminTasks('academic'),
+            api.getAvailableFaculty()
+          ]).then(([updatedSubs, updatedTasks, updatedFaculty]) => {
+            setSubstitutions(updatedSubs);
+            setTasks(updatedTasks);
+            setFaculty(updatedFaculty);
+            triggerToast(notif?.message || '🔔 Teacher leave updated. Timetable substitution gaps synchronized.');
+          }).catch(() => {});
+        }
+      };
+      window.addEventListener('edu360_notification_event', handleLiveNotification);
+
+      let bc: BroadcastChannel | null = null;
+      try {
+        bc = new BroadcastChannel('edu360_global_notifications');
+        bc.onmessage = (msg) => {
+          const type = msg.data?.notification?.notification_type || msg.data?.type;
+          if (type === 'PROXY_REQUIRED' || type === 'TEACHER_LEAVE_APPROVED' || type === 'SUBSTITUTION_ASSIGNED') {
+            Promise.all([
+              api.getSubstitutions(),
+              api.getAdminTasks('academic'),
+              api.getAvailableFaculty()
+            ]).then(([updatedSubs, updatedTasks, updatedFaculty]) => {
+              setSubstitutions(updatedSubs);
+              setTasks(updatedTasks);
+              setFaculty(updatedFaculty);
+              triggerToast(msg.data?.notification?.message || '🔔 Timetable substitution gaps updated.');
+            }).catch(() => {});
+          }
+        };
+      } catch {}
+
+      return () => {
+        window.removeEventListener('edu360-navigate-url', handleNav);
+        window.removeEventListener('edu360_notification_event', handleLiveNotification);
+        if (bc) bc.close();
+      };
+    }
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'substitutions') {
+      Promise.all([
+        api.getSubstitutions(),
+        api.getAvailableFaculty()
+      ]).then(([s, f]) => {
+        setSubstitutions(s);
+        setFaculty(f);
+      }).catch(() => {});
+    }
+  }, [activeTab]);
 
 
   const handleUpdateStatus = async (taskId: number, newStatus: string) => {
@@ -404,14 +523,19 @@ export default function AcademicCoordinatorPage() {
     if (!selectedSubSlot || !chosenFacultyId) return;
     const fac = faculty.find(f => f.id === chosenFacultyId);
     if (!fac) return;
-    await api.assignSubstitution(selectedSubSlot.id, chosenFacultyId, fac.name, 'Cover period assigned by Academic Coordinator');
-    const updated = await api.getSubstitutions();
-    setSubstitutions(updated);
-    const updatedTasks = await api.getAdminTasks('academic');
+    await api.assignSubstitution(selectedSubSlot.id, chosenFacultyId, fac.name, subNotes || 'Manual cover allocated by Academic Coordinator');
+    const [updatedSubs, updatedTasks, updatedFaculty] = await Promise.all([
+      api.getSubstitutions(),
+      api.getAdminTasks('academic'),
+      api.getAvailableFaculty()
+    ]);
+    setSubstitutions(updatedSubs);
     setTasks(updatedTasks);
+    setFaculty(updatedFaculty);
     setSelectedSubSlot(null);
     setChosenFacultyId(null);
-    triggerToast(`Period substitution confirmed: ${fac.name} assigned to ${selectedSubSlot.class_name}`);
+    setSubNotes('');
+    triggerToast(`Period substitution confirmed: ${fac.name} assigned to ${selectedSubSlot.class_name} (Period ${selectedSubSlot.period_number})`);
   };
 
   const [autoResolving, setAutoResolving] = useState(false);
@@ -1155,6 +1279,77 @@ export default function AcademicCoordinatorPage() {
                       ))}
                     </div>
                   )}
+
+                  {/* Faculty PTM Attendance Monitor */}
+                  {facultyPtmAttendance && facultyPtmAttendance.faculty && facultyPtmAttendance.faculty.length > 0 && (
+                    <div className="mt-5 pt-4 border-t border-indigo-100 dark:border-indigo-900/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                        <div>
+                          <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5 text-indigo-600" />
+                            Faculty PTM Attendance &amp; Slot Fulfillment Monitor
+                          </h3>
+                          <p className="text-[11px] text-slate-500">PostgreSQL-verified attendance rollup of faculty during parent conferences</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                            Overall Attendance: <b className="text-indigo-600 dark:text-indigo-400">{facultyPtmAttendance.overall_attendance_rate}%</b>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <tr>
+                              <th className="p-2.5">Faculty Member</th>
+                              <th className="p-2.5">Department</th>
+                              <th className="p-2.5 text-center">Total Slots</th>
+                              <th className="p-2.5 text-center">Booked</th>
+                              <th className="p-2.5 text-center">Completed</th>
+                              <th className="p-2.5 text-center">Attended / Missed</th>
+                              <th className="p-2.5 text-center">Attendance %</th>
+                              <th className="p-2.5 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px]">
+                            {facultyPtmAttendance.faculty.map(f => (
+                              <tr key={f.teacher_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                                <td className="p-2.5 font-bold text-slate-900 dark:text-white">{f.teacher_name}</td>
+                                <td className="p-2.5 text-slate-500">{f.department || 'Academics'}</td>
+                                <td className="p-2.5 text-center font-mono">{f.total_slots}</td>
+                                <td className="p-2.5 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">{f.booked_slots}</td>
+                                <td className="p-2.5 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">{f.completed_slots}</td>
+                                <td className="p-2.5 text-center font-mono">
+                                  <span className="text-emerald-600 font-bold">{f.teacher_attended_count ?? 0}</span>
+                                  {' / '}
+                                  <span className={(f.teacher_missed_count ?? 0) > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}>{f.teacher_missed_count ?? 0}</span>
+                                </td>
+                                <td className="p-2.5 text-center font-mono font-bold">
+                                  <span className={(f.attendance_rate ?? 0) >= 80 ? 'text-emerald-600' : (f.attendance_rate ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'}>
+                                    {f.attendance_rate ?? 0}%
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-right">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    f.status === 'Attended'
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                      : f.status === 'Partial'
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                      : f.status === 'Pending'
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}>
+                                    {f.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1415,22 +1610,25 @@ export default function AcademicCoordinatorPage() {
 
           {/* ── TAB 2: PERIOD SUBSTITUTIONS ── */}
           {activeTab === 'substitutions' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-6">
+              {/* Header Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Daily Period Coverage &amp; Substitutions</h2>
-                  <p className="text-xs text-slate-500">Auto-interlocked with Admin leave approvals to ensure zero unmanned classrooms</p>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-bold border border-indigo-200 dark:border-indigo-800">
+                      Faculty &amp; Timetable Governance
+                    </span>
+                    <span className="text-xs text-slate-500">Live Period Coverage Matrix</span>
+                  </div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">Daily Period Coverage &amp; Substitutions</h2>
+                  <p className="text-xs text-slate-500">Manual proxy teacher allocation interlocked with approved faculty leaves to ensure zero unmanned classrooms.</p>
                 </div>
-                {substitutions.some(s => s.status === 'Unassigned') && (
-                  <button
-                    onClick={handleAutoResolveSubstitutions}
-                    disabled={autoResolving}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white px-3.5 py-2 text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
-                    <span>{autoResolving ? 'Matching Free Faculty...' : '⚡ AI Auto-Match & Cover All'}</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold">
+                    <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                    Manual Proxy Allocation Active
+                  </span>
+                </div>
               </div>
 
               {/* Status Alert Banner */}
@@ -1439,7 +1637,7 @@ export default function AcademicCoordinatorPage() {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
                     <span className="text-xs font-bold text-rose-900 dark:text-rose-200">
-                      {substitutions.filter(s => s.status === 'Unassigned').length} period(s) require proxy teacher assignment due to approved faculty leaves.
+                      {substitutions.filter(s => s.status === 'Unassigned').length} period(s) require manual proxy teacher assignment due to approved faculty leaves.
                     </span>
                   </div>
                   <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200">
@@ -1448,36 +1646,161 @@ export default function AcademicCoordinatorPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {substitutions.map(sub => (
-                  <div key={sub.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">Period {sub.period_number} · {sub.time_slot}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        sub.status === 'Assigned' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                      }`}>
-                        {sub.status}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">{sub.class_name} · {sub.subject}</h3>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Absent Faculty: <b className="text-rose-600 dark:text-rose-400">{sub.absent_teacher_name}</b> ({sub.absent_reason || sub.reason || 'Leave Approved'})
-                      </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                        Substitute: <b className="text-slate-900 dark:text-white">{sub.substitute_teacher_name || sub.assigned_substitute_name || 'Unassigned — Action Required'}</b>
-                      </div>
-                    </div>
-                    {sub.status === 'Unassigned' && (
-                      <button
-                        onClick={() => setSelectedSubSlot(sub)}
-                        className="w-full mt-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-2 text-xs font-bold transition-all shadow-xs"
-                      >
-                        Assign Substitute Teacher
-                      </button>
-                    )}
+              {/* Status Metric Pills */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Uncovered Gaps</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      substitutions.filter(s => s.status === 'Unassigned').length > 0 
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' 
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                    }`}>
+                      {substitutions.filter(s => s.status === 'Unassigned').length > 0 ? 'Urgent Action' : 'All Covered'}
+                    </span>
                   </div>
-                ))}
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    {substitutions.filter(s => s.status === 'Unassigned').length} <span className="text-xs font-normal text-slate-500">periods unmanned</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Proxy Covered</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      Confirmed
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                    {substitutions.filter(s => s.status === 'Assigned').length} <span className="text-xs font-normal text-slate-500">slots protected</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">On-Duty Free Faculty</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                      Available Today
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                    {faculty.length} <span className="text-xs font-normal text-slate-500">teachers ready</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Content Grid: Affected Timetable Periods + Standby Free Faculty */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                {/* Substitution Slots Column */}
+                <div className="xl:col-span-2 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Today&apos;s Affected Timetable Periods ({substitutions.length})
+                    </h3>
+                    <span className="text-[11px] text-slate-400">Classrooms monitored live</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {substitutions.map((sub) => (
+                      <div 
+                        key={sub.id} 
+                        className={`rounded-2xl border p-4 transition-all bg-white dark:bg-slate-900 shadow-sm ${
+                          sub.status === 'Unassigned'
+                            ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/10 dark:bg-rose-950/10'
+                            : 'border-slate-200 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center font-bold text-xs ${
+                              sub.status === 'Unassigned'
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                            }`}>
+                              P{sub.period_number}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                  {sub.class_name} • {sub.subject}
+                                </h4>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  sub.status === 'Unassigned'
+                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                }`}>
+                                  {sub.status}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                <Clock className="h-3 w-3" />
+                                <span>{sub.time_slot}</span>
+                                <span>•</span>
+                                <span>Absent: <b className="text-slate-700 dark:text-slate-300">{sub.absent_teacher_name}</b> ({sub.absent_reason || sub.reason || 'Leave Approved'})</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            {sub.status === 'Assigned' ? (
+                              <div className="text-right">
+                                <span className="text-[11px] text-slate-500 block">Proxy Assigned:</span>
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                  ✓ {sub.substitute_teacher_name || sub.assigned_substitute_name}
+                                </span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedSubSlot(sub);
+                                  const eligible = faculty.filter(f => f.name !== sub.absent_teacher_name);
+                                  setChosenFacultyId(sub.substitute_teacher_id || eligible[0]?.id || null);
+                                }}
+                                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                              >
+                                <UserPlus className="h-3.5 w-3.5" />
+                                <span>Assign Proxy</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {sub.notes && (
+                          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+                            <b>Handover Notes:</b> {sub.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Standby Free Faculty Column */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Standby Free Faculty ({faculty.length})
+                    </h3>
+                    <span className="text-[11px] text-blue-500 font-semibold">Zero conflict verified</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+                    {faculty.map((fac) => (
+                      <div key={fac.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{fac.name}</h4>
+                          <span className="text-[11px] text-slate-500 block">{fac.department} • {fac.free_periods_today} periods free</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            Status: {fac.current_status}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          Ready
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1531,6 +1854,49 @@ export default function AcademicCoordinatorPage() {
                 </div>
               </div>
 
+              {/* Inter-Coordinator Sync Queue Banner */}
+              {examSyncRequests && examSyncRequests.length > 0 && (
+                <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CalendarRange className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-purple-900 dark:text-purple-200">
+                        Exam Coordinator Syllabus Alignment Requests ({examSyncRequests.length})
+                      </h3>
+                    </div>
+                    <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
+                      Direct sync channel with Dr. Hemanth Sen
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {examSyncRequests.slice(0, 4).map(req => (
+                      <div key={req.id} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 text-xs flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {req.class_name} · {req.subject}
+                          </div>
+                          <div className="text-[10px] text-slate-500 capitalize">
+                            Action: <b className="text-purple-600 dark:text-purple-400">{req.proposed_action ? req.proposed_action.replace(/_/g, ' ') : 'Sync'}</b>
+                          </div>
+                          {req.meeting_time && (
+                            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                              📅 Meeting: {req.meeting_time}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          req.status === 'action_accepted' || req.status === 'meeting_scheduled'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          {req.status ? req.status.replace(/_/g, ' ') : 'Pending'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {curriculum
                   .filter(item => {
@@ -1576,20 +1942,30 @@ export default function AcademicCoordinatorPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                          Faculty direct checkoff
+                          Faculty checkoff
                         </span>
-                        {item.status.toLowerCase().includes('lag') && (
+                        <div className="flex items-center gap-1.5">
+                          {item.status.toLowerCase().includes('lag') && (
+                            <button
+                              onClick={() => handleIntervenePacing(item.id)}
+                              className="py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer"
+                              title="Create catchup session task with 48h SLA"
+                            >
+                              Remedial (48h)
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleIntervenePacing(item.id)}
-                            className="py-1.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs"
-                            title="Create catchup session task with 48h SLA"
+                            onClick={() => handleOpenExamSync({ id: item.id, class_name: item.class_name, subject: item.subject, completion_pct: item.completion_pct })}
+                            className="py-1.5 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                            title="Request sync meeting with Exam Coordinator Dr. Hemanth Sen"
                           >
-                            Remedial Task (48h SLA)
+                            <CalendarRange className="h-3 w-3" />
+                            <span>Request Exam Sync</span>
                           </button>
-                        )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1953,6 +2329,13 @@ export default function AcademicCoordinatorPage() {
                                 Flag Revision
                               </button>
                             )}
+                            <button
+                              onClick={() => handleOpenExamSync({ class_name: sched.class_name, subject: sched.subject })}
+                              className="px-2.5 py-1.5 rounded-xl border border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-[11px] font-bold cursor-pointer"
+                              title="Request alignment meeting with Exam Coordinator for this exam slot"
+                            >
+                              Sync Req
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2167,47 +2550,94 @@ export default function AcademicCoordinatorPage() {
       {/* ── ASSIGN SUBSTITUTION MODAL ── */}
       {selectedSubSlot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Assign Period Substitute</h3>
-              <button onClick={() => setSelectedSubSlot(null)}><X className="h-4 w-4 text-slate-400" /></button>
+              <div className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Manual Proxy Teacher Allocation</h3>
+              </div>
+              <button onClick={() => { setSelectedSubSlot(null); setChosenFacultyId(null); setSubNotes(''); }}><X className="h-4 w-4 text-slate-400" /></button>
             </div>
             <div className="text-xs space-y-3">
-              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 text-indigo-900 dark:text-indigo-200">
-                <b>{selectedSubSlot.class_name} · {selectedSubSlot.subject}</b> (Period {selectedSubSlot.period_number})
-                <div className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5">Absent: {selectedSubSlot.absent_teacher_name}</div>
+              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
+                <div>
+                  <b className="text-sm block">{selectedSubSlot.class_name} · {selectedSubSlot.subject}</b>
+                  <div className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5">Absent Faculty: <b>{selectedSubSlot.absent_teacher_name}</b> ({selectedSubSlot.absent_reason || 'Leave Approved'})</div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-200/80 dark:bg-indigo-900 font-black text-indigo-950 dark:text-indigo-200 text-xs">
+                  Period {selectedSubSlot.period_number}
+                </span>
               </div>
+
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Select Available Free Faculty</label>
-                <div className="space-y-1.5 mt-1.5 max-h-48 overflow-y-auto">
-                  {faculty.map(f => (
-                    <label 
-                      key={f.id} 
-                      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer ${
-                        chosenFacultyId === f.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950' : 'border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="radio" 
-                          name="fac" 
-                          checked={chosenFacultyId === f.id} 
-                          onChange={() => setChosenFacultyId(f.id)} 
-                        />
-                        <span className="font-bold text-slate-900 dark:text-white">{f.name}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-semibold">{f.department} · {f.free_periods_today} Free</span>
-                    </label>
-                  ))}
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Select On-Duty Free Faculty for Period {selectedSubSlot.period_number} *
+                </label>
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                  {faculty
+                    .filter(f => f.name !== selectedSubSlot.absent_teacher_name)
+                    .map(f => (
+                      <label 
+                        key={f.id} 
+                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                          chosenFacultyId === f.id ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 shadow-xs' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input 
+                            type="radio" 
+                            name="faculty-selection" 
+                            checked={chosenFacultyId === f.id} 
+                            onChange={() => setChosenFacultyId(f.id)} 
+                            className="text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-white block">{f.name}</span>
+                            <span className="text-[11px] text-slate-500">{f.department}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            {f.free_periods_today} Free Periods
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">{f.current_status}</span>
+                        </div>
+                      </label>
+                    ))}
                 </div>
               </div>
-              <button 
-                disabled={!chosenFacultyId} 
-                onClick={handleAssignSub}
-                className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 font-bold"
-              >
-                Confirm Substitute Assignment
-              </button>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Classroom Handover Notes &amp; Lesson Instructions (Optional)
+                </label>
+                <textarea 
+                  rows={2}
+                  value={subNotes}
+                  onChange={e => setSubNotes(e.target.value)}
+                  placeholder="e.g. Conduct Unit 3 practice exercises from textbook page 64. Supervise quiet study."
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button 
+                  type="button"
+                  onClick={() => { setSelectedSubSlot(null); setChosenFacultyId(null); setSubNotes(''); }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  disabled={!chosenFacultyId} 
+                  onClick={handleAssignSub}
+                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 font-bold shadow-md transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Confirm Proxy Allocation</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2773,6 +3203,84 @@ export default function AcademicCoordinatorPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EXAM COORDINATOR SYNC REQUEST MODAL ── */}
+      {showExamSyncModal && syncCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold">
+                  <CalendarRange className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Request Exam Coordinator Alignment</h3>
+                  <p className="text-[11px] text-slate-500">Initiate sync conference with Dr. Hemanth Sen regarding syllabus pacing</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExamSyncModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitExamSync} className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                  <span>{syncCourse.class_name} · {syncCourse.subject}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 font-mono">Pacing: {syncCourse.completion_pct || 0}%</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">Academic Lead: Prof. Rajeshwari Nair &rarr; Recipient: Dr. Hemanth Sen (Exam Cell)</p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Proposed Academic Action</label>
+                <select
+                  value={syncAction}
+                  onChange={(e: any) => setSyncAction(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="postpone_exam">Postpone Exam Date (Allow Syllabus Completion)</option>
+                  <option value="trim_syllabus_cutoff">Trim Exam Syllabus Cutoff (Exclude Unfinished Units)</option>
+                  <option value="extra_remedial">Schedule Zero-Hour Remedial Catchup (Keep Exam Date)</option>
+                  <option value="general_sync">Inter-Coordinator Alignment Meeting</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Pacing Context &amp; Justification</label>
+                <textarea
+                  rows={3}
+                  value={syncReason}
+                  onChange={e => setSyncReason(e.target.value)}
+                  required
+                  placeholder="Detail reason for syllabus lag, unit gaps, and proposed schedule adjustment..."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowExamSyncModal(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingSync}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold shadow-xs cursor-pointer"
+                >
+                  {submittingSync ? 'Dispatching...' : 'Dispatch Sync Request to Exam Cell'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
