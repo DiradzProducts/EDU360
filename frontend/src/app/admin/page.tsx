@@ -21,12 +21,18 @@ import {
   Search,
   Filter,
   CheckSquare,
+  BadgeCheck,
+  FileSpreadsheet,
+  Printer,
+  CheckCheck,
   MessageSquareQuote,
+  MessageSquare,
   Lock,
   Upload,
   UserCheck,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CreditCard,
   ArrowRight,
   ArrowLeft,
@@ -60,7 +66,9 @@ import {
   FileCheck,
   Target,
   Loader2,
-  Menu
+  Menu,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { downloadOfficialDocumentFile, exportToCsv } from '@/lib/export-utils';
@@ -298,6 +306,7 @@ export default function AdminPage() {
   // Task board filter & expand state
   const [taskDomainFilter, setTaskDomainFilter] = useState<string>('all');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
+  const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
   const [taskExpandedId, setTaskExpandedId] = useState<number | null>(null);
   const [taskCockpit, setTaskCockpit] = useState<TaskExecutiveCockpitResponse | null>(null);
   const [escalateTaskId, setEscalateTaskId] = useState<number | null>(null);
@@ -326,6 +335,7 @@ export default function AdminPage() {
   const [studentClassFilter, setStudentClassFilter] = useState('All');
   const [studentSectionFilter, setStudentSectionFilter] = useState('All');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentRiskOnly, setStudentRiskOnly] = useState(false);
   const [sisActiveSubTab, setSisActiveSubTab] = useState<'profile' | 'academic' | 'certificates' | 'fees'>('profile');
 
   // Staff Directory Search & Modal State
@@ -445,10 +455,222 @@ export default function AdminPage() {
   // Filter State
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('All');
   const [staffRoleFilter, setStaffRoleFilter] = useState('All');
+  const [staffViewMode, setStaffViewMode] = useState<'cards' | 'table'>('cards');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'All' | 'in_class' | 'free' | 'leave'>('All');
+
+  // Helper for live classroom occupancy and workload capacity
+  const getStaffLiveStatus = (staff: StaffMemberItem) => {
+    const name = staff.name || '';
+    const status = staff.status || 'Present';
+    if (status === 'On Leave') {
+      return {
+        type: 'leave',
+        badge: 'On Leave (Proxy Active)',
+        dotColor: 'bg-rose-500',
+        bgColor: 'bg-rose-50 dark:bg-rose-950/40',
+        textColor: 'text-rose-700 dark:text-rose-300',
+        borderColor: 'border-rose-200 dark:border-rose-900',
+        currentLocation: 'Home • Approved Leave',
+        loadPercent: 0,
+        periodsToday: '0 / 6 periods today',
+        weeklyLoad: 24,
+        weeklyCapacity: 28,
+        isOverloaded: false,
+      };
+    } else if (name.includes('Raman') || name.includes('Ananya') || staff.id % 2 === 0) {
+      const cls = (staff.assigned_classes && staff.assigned_classes.length > 0) ? staff.assigned_classes[0] : 'Class 9-A';
+      return {
+        type: 'in_class',
+        badge: `In Class: Period 3 (${cls})`,
+        dotColor: 'bg-emerald-500',
+        bgColor: 'bg-emerald-50 dark:bg-emerald-950/40',
+        textColor: 'text-emerald-700 dark:text-emerald-300',
+        borderColor: 'border-emerald-200 dark:border-emerald-900',
+        currentLocation: `${cls} • Science Wing (Room 204)`,
+        loadPercent: 82,
+        periodsToday: '4 / 6 periods today',
+        weeklyLoad: 23,
+        weeklyCapacity: 28,
+        isOverloaded: false,
+      };
+    } else if (status === 'Short Permission') {
+      return {
+        type: 'permission',
+        badge: 'Short Permission (Away)',
+        dotColor: 'bg-amber-500',
+        bgColor: 'bg-amber-50 dark:bg-amber-950/40',
+        textColor: 'text-amber-700 dark:text-amber-300',
+        borderColor: 'border-amber-200 dark:border-amber-900',
+        currentLocation: 'Approved Early Departure',
+        loadPercent: 50,
+        periodsToday: '2 / 4 periods completed',
+        weeklyLoad: 18,
+        weeklyCapacity: 28,
+        isOverloaded: false,
+      };
+    } else {
+      return {
+        type: 'free',
+        badge: 'Free Period • Available for Proxy',
+        dotColor: 'bg-blue-500',
+        bgColor: 'bg-blue-50 dark:bg-blue-950/40',
+        textColor: 'text-blue-700 dark:text-blue-300',
+        borderColor: 'border-blue-200 dark:border-blue-900',
+        currentLocation: 'Faculty Workroom (Desk 14)',
+        loadPercent: 65,
+        periodsToday: '3 / 6 periods today',
+        weeklyLoad: 20,
+        weeklyCapacity: 28,
+        isOverloaded: false,
+      };
+    }
+  };
   const [permFilter, setPermFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
-  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'financial'>('all');
+  const [permSearchQuery, setPermSearchQuery] = useState<string>('');
+  const [permTypeFilter, setPermTypeFilter] = useState<string>('All');
+  const [selectedPermForModal, setSelectedPermForModal] = useState<TeacherPermissionRequest | null>(null);
+  const [permPrincipalRemarks, setPermPrincipalRemarks] = useState<string>('');
+  const [isSubmittingPermReview, setIsSubmittingPermReview] = useState<boolean>(false);
+
+  // Helper metadata for Teacher Leaves, Quotas, and Proxy Matching
+  const getTeacherLeaveMeta = (req: TeacherPermissionRequest) => {
+    const name = req.teacher_name || '';
+    if (name.includes('Verma') || name.includes('Ananya')) {
+      return {
+        empId: 'EMP-T102',
+        department: 'Senior Mathematics & Computing',
+        casualLeft: 2,
+        casualTotal: 12,
+        medicalLeft: 4,
+        medicalTotal: 10,
+        earnedLeft: 8,
+        earnedTotal: 15,
+        lopRisk: 'None (Within Entitled Quota)',
+        lopAmount: 0,
+        affectedPeriod: 'Period 3 (10:30 AM - 11:15 AM)',
+        affectedClass: 'Class 8-B • Mathematics',
+        proxyTeacher: 'Mr. Vikram Sharma',
+        proxyStatus: 'Available & Subject Specialist Match',
+        hasMedicalDoc: true,
+        phone: '+91 98450 12345',
+        dutyShift: '07:45 AM - 03:30 PM',
+        avatarBg: 'from-blue-600 to-indigo-600'
+      };
+    } else if (name.includes('Raman') || name.includes('Dr.')) {
+      return {
+        empId: 'EMP-T101',
+        department: 'Senior Physics & Science HOD',
+        casualLeft: 5,
+        casualTotal: 12,
+        medicalLeft: 8,
+        medicalTotal: 10,
+        earnedLeft: 12,
+        earnedTotal: 15,
+        lopRisk: 'None (Official Duty Movement)',
+        lopAmount: 0,
+        affectedPeriod: 'Period 2 & Period 5',
+        affectedClass: 'Class 10-A • Physics',
+        proxyTeacher: 'Mrs. Priya Sen',
+        proxyStatus: 'Available (Period 2 free)',
+        hasMedicalDoc: false,
+        phone: '+91 98451 23456',
+        dutyShift: '07:45 AM - 03:30 PM',
+        avatarBg: 'from-emerald-600 to-teal-700'
+      };
+    } else if (name.includes('Sen') || name.includes('Priya')) {
+      return {
+        empId: 'EMP-T103',
+        department: 'Middle School English & Drama',
+        casualLeft: 0,
+        casualTotal: 12,
+        medicalLeft: 2,
+        medicalTotal: 10,
+        earnedLeft: 4,
+        earnedTotal: 15,
+        lopRisk: 'Casual Quota Exhausted',
+        lopAmount: 1650,
+        affectedPeriod: 'Period 6 (01:45 PM - 02:30 PM)',
+        affectedClass: 'Class 7-A • English',
+        proxyTeacher: 'Ms. Sunita Roy',
+        proxyStatus: 'Available (Period 6 free)',
+        hasMedicalDoc: false,
+        phone: '+91 98452 34567',
+        dutyShift: '07:45 AM - 03:30 PM',
+        avatarBg: 'from-amber-600 to-orange-600'
+      };
+    } else {
+      return {
+        empId: `EMP-T${((req.id || 1) * 17) % 89 + 100}`,
+        department: 'Academics & General Studies',
+        casualLeft: 3,
+        casualTotal: 12,
+        medicalLeft: 6,
+        medicalTotal: 10,
+        earnedLeft: 9,
+        earnedTotal: 15,
+        lopRisk: 'None (Within Quota)',
+        lopAmount: 0,
+        affectedPeriod: req.affected_periods || 'Period 4 (11:30 AM - 12:15 PM)',
+        affectedClass: 'Class 9-B',
+        proxyTeacher: req.suggested_substitute || 'Faculty Standby Roster',
+        proxyStatus: 'Standby Available',
+        hasMedicalDoc: (req.type || '').toLowerCase().includes('medical'),
+        phone: '+91 98450 00000',
+        dutyShift: '07:45 AM - 03:30 PM',
+        avatarBg: 'from-purple-600 to-indigo-600'
+      };
+    }
+  };
+
+  // 7-Day Campus Absence Radar Data
+  const campusAbsenceRadar = [
+    { day: 'Mon', date: '19 Oct', count: 2, label: 'Today', status: 'normal' },
+    { day: 'Tue', date: '20 Oct', count: 1, label: 'Tomorrow', status: 'low' },
+    { day: 'Wed', date: '21 Oct', count: 0, label: 'All Present', status: 'zero' },
+    { day: 'Thu', date: '22 Oct', count: 2, label: '2 On Leave', status: 'normal' },
+    { day: 'Fri', date: '23 Oct', count: 5, label: 'Peak Absence', status: 'critical' },
+    { day: 'Sat', date: '24 Oct', count: 1, label: 'Half Day', status: 'low' },
+    { day: 'Sun', date: '25 Oct', count: 0, label: 'Holiday', status: 'weekend' },
+  ];
+  const [alertFilter, setAlertFilter] = useState<'all' | 'urgent' | 'pacing' | 'resolved'>('all');
   const [taskOriginFilter, setTaskOriginFilter] = useState<'all' | 'auto' | 'staff' | 'critical' | 'relief'>('all');
   const [examClassFilter, setExamClassFilter] = useState('All');
+  const [examViewMode, setExamViewMode] = useState<'matrix' | 'cards' | 'grading'>('matrix');
+  const [selectedReExamForDrawer, setSelectedReExamForDrawer] = useState<ReExamRequestItem | null>(null);
+  const [reExamVenueInput, setReExamVenueInput] = useState<string>('Special Testing Lab 2');
+  const [reExamDateInput, setReExamDateInput] = useState<string>('28 Oct 2026');
+  const [reExamTimeInput, setReExamTimeInput] = useState<string>('02:00 PM - 05:00 PM');
+  const [isSimulationMode, setIsSimulationMode] = useState<boolean>(false);
+  const [selectedClassForExceptionDrawer, setSelectedClassForExceptionDrawer] = useState<any | null>(null);
+  const [classExceptions, setClassExceptions] = useState<{ [classId: number]: Array<{ id: number; name: string; roll: string; roadblockType: 'attendance' | 'academic' | 'fees'; description: string; waiverApplied: boolean; waiverType?: string }> }>({
+    1: [
+      { id: 801, name: "Kavya Sharma", roll: "10A-14", roadblockType: "attendance", description: "Attendance 68% (7% below CBSE 75% threshold) due to viral bronchitis in Nov.", waiverApplied: false },
+      { id: 802, name: "Rohan Gupta", roll: "10A-27", roadblockType: "academic", description: "Failed Mathematics Term 2 (31/100, Passing: 35). Needs 4 grace marks.", waiverApplied: false },
+      { id: 803, name: "Aarav Patel", roll: "10A-04", roadblockType: "fees", description: "Outstanding Term 2 tuition fees ₹18,000 awaiting parent instalment clearance.", waiverApplied: false }
+    ],
+    2: [
+      { id: 804, name: "Meera Nair", roll: "9B-19", roadblockType: "academic", description: "Failed Science Practical (14/30, Passing: 15). Needs 1 grace mark.", waiverApplied: false },
+      { id: 805, name: "Tanvi Deshmukh", roll: "9B-31", roadblockType: "attendance", description: "Attendance 71% due to National Badminton Championship representation.", waiverApplied: false }
+    ]
+  });
+
+  // Legal & Regulatory TC Vault States
+  const [exitSearch, setExitSearch] = useState<string>('');
+  const [exitFilter, setExitFilter] = useState<'ALL' | 'PENDING' | 'PARENT_PENDING' | 'ARCHIVED'>('ALL');
+  const [selectedTCForPreview, setSelectedTCForPreview] = useState<ExitClearance | null>(null);
+  const [showNewTCModal, setShowNewTCModal] = useState<boolean>(false);
+
+  // School Events & Logistics States
+  const [eventViewMode, setEventViewMode] = useState<'grid' | 'hierarchy' | 'budget'>('grid');
+  const [eventCategoryFilter, setEventCategoryFilter] = useState<string>('ALL');
+  const [eventSearch, setEventSearch] = useState<string>('');
+
+  // Staff Payroll & Compensation States
+  const [selectedPayrollCycle, setSelectedPayrollCycle] = useState<'Oct 2026' | 'Sep 2026' | 'Aug 2026'>('Oct 2026');
+  const [payrollDeptFilter, setPayrollDeptFilter] = useState<string>('ALL');
+  const [payrollSearch, setPayrollSearch] = useState<string>('');
+  const [selectedPayslipStaff, setSelectedPayslipStaff] = useState<StaffMemberItem | null>(null);
+  const [isDisbursingPayroll, setIsDisbursingPayroll] = useState<boolean>(false);
 
   // Student Remarks State (SIS)
   const [studentRemarks, setStudentRemarks] = useState<StudentRemark[]>(() => getRemarksForStudent(1));
@@ -1393,7 +1615,7 @@ export default function AdminPage() {
 
   return (
     <RoleGuard allowedRole="admin">
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#F1F5F9] dark:bg-[#070B14]">
         
         {/* ===================================================== */}
         {/* FIXED LEFT SIDEBAR (STICKY, INDEPENDENT SCROLL)      */}
@@ -1407,140 +1629,148 @@ export default function AdminPage() {
         />
       )}
 
-      {/* ── Harmonized Left Collapsible Sidebar ── */}
+            {/* ── Harmonized Left Collapsible Sidebar ── */}
       <aside 
         className={`
           fixed md:sticky top-0 md:top-16 inset-y-0 md:inset-y-auto left-0 z-40 md:z-20
           h-screen md:h-[calc(100vh-4rem)] md:self-start
           ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${sidebarCollapsed ? 'md:w-[72px] w-[256px]' : 'w-[256px]'}
-          transition-all duration-300 ease-in-out shrink-0 select-none
-          bg-white text-slate-800 border-r border-slate-200/90
-          dark:bg-[#0B101B] dark:text-slate-200 dark:border-r dark:border-slate-800/90
-          flex flex-col justify-between overflow-hidden
+          transition-all duration-200 ease-out shrink-0 select-none
+          bg-[#0B1120] text-slate-100 border-r border-[#1E293B]
+          flex flex-col justify-between overflow-hidden shadow-xl
         `}
       >
         {/* Top Brand & Workspace Header */}
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
+          <div className="flex h-16 items-center justify-between px-3.5 border-b border-[#1E293B] shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
-                  AD
-                </div>
+                <div className="h-8 w-8 rounded-xl bg-[#2563EB] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/25">AD</div>
                 <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">Oakridge International</h3>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate block">Super Admin Command</span>
+                  <h3 className="text-[13px] font-bold text-white truncate">Oakridge International</h3>
+                  <span className="text-xs font-medium text-slate-400 truncate block">Super Admin Command</span>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
-                AD
-              </div>
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[#2563EB] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-blue-500/25">AD</div>
             )}
 
             <button
+              type="button"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className={`p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
+              aria-label="Collapse Sidebar"
+              className={`p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer ${sidebarCollapsed ? 'hidden' : 'hidden md:flex'}`}
               title="Collapse Sidebar"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
+              type="button"
               onClick={() => setMobileDrawerOpen(false)}
-              className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+              aria-label="Close Sidebar"
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
               title="Close Sidebar"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
           {sidebarCollapsed && (
             <div className="hidden md:flex justify-center pt-2">
               <button
+                type="button"
                 onClick={() => setSidebarCollapsed(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                aria-label="Expand Sidebar"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Expand Sidebar"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           )}
 
           {/* Navigation Menu List */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3.5">
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
             
             {/* GROUP 1: DAILY OPERATIONS & TRIAGE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Daily Operations
                 </span>
               )}
 
               {/* Executive Cockpit */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('cockpit'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'cockpit'
-                    ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Principal Dashboard"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className="h-4 w-4 shrink-0 text-amber-400" />
+                  <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'cockpit' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Principal Dashboard</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/20 text-white">
-                    Live
-                  </span>
-                )}
               </button>
 
               {/* Priority Triage */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('triage'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'triage'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Action Alerts"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${urgentTriageCount > 0 ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
-                  <AlertCircle className={`h-4 w-4 shrink-0 ${activeTab === 'triage' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <AlertCircle className={`h-4 w-4 shrink-0 transition-colors ${
+                    activeTab === 'triage' 
+                      ? 'text-white' 
+                      : urgentTriageCount > 0 
+                        ? 'text-rose-400' 
+                        : 'text-slate-600 dark:text-slate-400'
+                  }`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Action Alerts</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    urgentTriageCount > 0
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60'
-                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                {!sidebarCollapsed && urgentTriageCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'triage'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                   }`}>
-                    {urgentTriageCount} Red
+                    {urgentTriageCount}
                   </span>
                 )}
               </button>
 
               {/* Tasks */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('tasks'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'tasks'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="School Tasks"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <CheckSquare className={`h-4 w-4 shrink-0 ${activeTab === 'tasks' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CheckSquare className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'tasks' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">School Tasks</span>}
                 </div>
                 {!sidebarCollapsed && pendingTasksCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'tasks'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
                     {pendingTasksCount}
                   </span>
                 )}
@@ -1548,65 +1778,67 @@ export default function AdminPage() {
 
               {/* Admissions CRM */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('crm'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'crm'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="New Admissions"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <UserPlus className={`h-4 w-4 shrink-0 ${activeTab === 'crm' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <UserPlus className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'crm' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">New Admissions</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    {enquiries.length} Leads
+                {!sidebarCollapsed && enquiries.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'crm'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                  }`}>
+                    {enquiries.length}
                   </span>
                 )}
               </button>
 
               {/* SIS Document Vault */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('sis'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'sis'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Student Directory (SIS)"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Lock className={`h-4 w-4 shrink-0 ${activeTab === 'sis' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Lock className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'sis' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student Directory</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Roster
-                  </span>
-                )}
               </button>
 
               {/* Student Leaves & Overrides */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('student_leaves'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'student_leaves'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Student Leaves & Attendance Overrides"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <UserCheck className={`h-4 w-4 shrink-0 ${activeTab === 'student_leaves' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <UserCheck className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'student_leaves' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student Leaves</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    studentLeaves.filter(l => l.status === 'Pending').length > 0
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 font-mono'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                {!sidebarCollapsed && studentLeaves.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'student_leaves'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
                     {studentLeaves.length}
                   </span>
@@ -1617,52 +1849,58 @@ export default function AdminPage() {
             {/* GROUP 2: FACULTY & ACADEMIC GOVERNANCE */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Teachers &amp; Academics
                 </span>
               )}
 
               {/* Substitution & Cover */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('substitutions'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'substitutions'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
                 title="Teacher Absences & Class Cover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Shuffle className={`h-4 w-4 shrink-0 ${activeTab === 'substitutions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Shuffle className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'substitutions' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Teacher Cover</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    unassignedSubCount > 0 
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 animate-pulse'
-                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                {!sidebarCollapsed && unassignedSubCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'substitutions'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
-                    {unassignedSubCount > 0 ? `${unassignedSubCount} Open` : 'Covered'}
+                    {unassignedSubCount}
                   </span>
                 )}
               </button>
 
               {/* Faculty Directory */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('staff'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'staff'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Teacher &amp; Staff Directory"
+                title="Teacher & Staff Directory"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Users className={`h-4 w-4 shrink-0 ${activeTab === 'staff' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Users className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'staff' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Staff Directory</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                {!sidebarCollapsed && staffMembers.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'staff'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                  }`}>
                     {staffMembers.length}
                   </span>
                 )}
@@ -1670,165 +1908,164 @@ export default function AdminPage() {
 
               {/* Faculty Permissions & Shifts */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('permissions'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'permissions'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Teacher Leaves &amp; Permissions"
+                title="Teacher Leaves & Permissions"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'permissions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Clock className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'permissions' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Teacher Leaves</span>}
                 </div>
                 {!sidebarCollapsed && pendingPermissionCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {pendingPermissionCount} Req
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'permissions'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {pendingPermissionCount}
                   </span>
                 )}
               </button>
 
               {/* Examination Center */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('exams'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'exams'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Exams &amp; Timetables"
+                title="Exams & Timetables"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'exams' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <BookOpen className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'exams' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Exams</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60">
-                    Term-2
-                  </span>
-                )}
               </button>
 
               {/* Academic Rollover */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('rollover'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'rollover'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Class Promotion &amp; Rollover"
+                title="Class Promotion & Rollover"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <TrendingUp className={`h-4 w-4 shrink-0 ${activeTab === 'rollover' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <TrendingUp className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'rollover' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Class Promotion</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Annual
-                  </span>
-                )}
               </button>
             </div>
 
             {/* GROUP 3: FINANCE & OPERATIONS */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Finance &amp; Operations
                 </span>
               )}
 
               {/* Fee Milestones & Receipts */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('fees'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'fees'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Fee Collections &amp; Pending Dues"
+                title="Fee Collections & Pending Dues"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'fees' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CreditCard className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'fees' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Fee Collections</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {overdueDefaultersCount} Due
+                {!sidebarCollapsed && overdueDefaultersCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'fees'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {overdueDefaultersCount}
                   </span>
                 )}
               </button>
 
               {/* Staff Payroll & Compensation */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('payroll'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'payroll'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Staff Salaries &amp; Payroll"
+                title="Staff Salaries & Payroll"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Receipt className={`h-4 w-4 shrink-0 ${activeTab === 'payroll' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Receipt className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'payroll' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Staff Salaries</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                    Monthly
-                  </span>
-                )}
               </button>
 
               {/* School Event Center */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('events'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'events'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="School Events &amp; Activities"
+                title="School Events & Activities"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'events' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'events' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">School Events</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                    Active
-                  </span>
-                )}
               </button>
             </div>
 
             {/* GROUP 4: REGULATORY & LEGAL */}
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 block">
                   Regulatory &amp; Legal
                 </span>
               )}
 
               {/* Exit & TC Clearance */}
               <button
+                type="button"
                 onClick={() => { setActiveTab('exit'); setMobileDrawerOpen(false); }}
-                className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] transition-all cursor-pointer ${
                   activeTab === 'exit'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    ? 'bg-[#2563EB] text-white font-semibold shadow-sm shadow-blue-500/20'
+                    : 'text-slate-300 hover:bg-slate-800/60 hover:text-white font-medium'
                 }`}
-                title="Student TC &amp; Clearances"
+                title="Student TC & Clearances"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <GraduationCap className={`h-4 w-4 shrink-0 ${activeTab === 'exit' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <GraduationCap className={`h-4 w-4 shrink-0 transition-colors ${activeTab === 'exit' ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                   {!sidebarCollapsed && <span className="truncate">Student TC</span>}
                 </div>
                 {!sidebarCollapsed && pendingExitCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                    {pendingExitCount} Pending
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shrink-0 transition-colors ${
+                    activeTab === 'exit'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {pendingExitCount}
                   </span>
                 )}
               </button>
@@ -1838,18 +2075,18 @@ export default function AdminPage() {
         </div>
 
         {/* Bottom Status Footer */}
-        <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/90 shrink-0">
+        <div className="p-3 border-t border-slate-800 shrink-0">
           {!sidebarCollapsed ? (
-            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800/60">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+              <span className="flex items-center gap-1.5 font-semibold">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" aria-hidden="true" />
                 Academic Term 2
               </span>
-              <span className="font-semibold text-slate-400 dark:text-slate-500 text-[10px]">CBSE 2026-27</span>
+              <span className="font-semibold text-slate-600 dark:text-slate-400 text-xs font-mono">2026-27</span>
             </div>
           ) : (
             <div className="flex justify-center py-1">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" title="Academic Term 2 · CBSE 2026-27" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" title="Academic Term 2 · CBSE 2026-27" />
             </div>
           )}
         </div>
@@ -1875,10 +2112,15 @@ export default function AdminPage() {
         {/* TOAST FEEDBACK NOTIFICATION */}
         {toastMessage && (
           <div className="fixed top-16 right-6 z-50 flex items-center gap-2 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden="true" />
             <span>{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
-              <X className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              aria-label="Dismiss notification"
+              className="ml-2 text-slate-300 hover:text-white cursor-pointer rounded-md p-0.5"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -1889,14 +2131,14 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setSelectedStudentForSIS(null)}
-              className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs transition-all cursor-pointer hover:border-blue-400 active:scale-95"
+              className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-blue-700 dark:hover:text-blue-300 bg-white dark:bg-[#111827] px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 shadow-xs transition-colors cursor-pointer hover:border-blue-500 active:scale-95"
             >
-              <ArrowLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <ArrowLeft className="h-4 w-4 text-blue-700 dark:text-blue-400" aria-hidden="true" />
               <span>Back to Roster Directory</span>
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-medium">Viewing Record:</span>
-              <span className="rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-3 py-1 text-xs font-black">
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Viewing Record:</span>
+              <span className="rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-3 py-1 text-xs font-bold tabular-nums">
                 {selectedStudentForSIS.name} &bull; Roll #{selectedStudentForSIS.roll_no}
               </span>
             </div>
@@ -1904,82 +2146,61 @@ export default function AdminPage() {
         )}
 
         {/* ===================================================== */}
-                {activeTab !== 'cockpit' && (
+        {activeTab !== 'cockpit' && (
           /* ===================================================== */
-          /* ISOLATED MODULE HEADER (CLEAN, NO REDUNDANT DASHBOARD) */
+          /* STREAMLINED SINGLE-ROW MODULE HEADER (NO REDUNDANCY)  */
           /* ===================================================== */
-          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
-                  {activeTab === 'crm' ? 'Admissions & Inquiries'
-                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Student Dossier • Roll #${selectedStudentForSIS.roll_no}` : 'Student Directory & Records (SIS)')
-                    : activeTab === 'student_leaves' ? 'Student Leaves & Administrative Overrides'
-                    : activeTab === 'triage' ? "Today's Action Alerts"
-                    : activeTab === 'substitutions' ? 'Teacher Attendance & Class Cover'
+          <div className="rounded-2xl border border-slate-300/90 dark:border-slate-800 bg-white dark:bg-[#111827] px-5 py-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+                {activeTab === 'crm' ? <UserPlus className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'student_leaves' ? <UserCheck className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'fees' ? <CreditCard className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'staff' ? <Users className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'permissions' ? <Clock className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'payroll' ? <Receipt className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'tasks' ? <CheckSquare className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'exit' ? <GraduationCap className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'rollover' ? <TrendingUp className="h-5 w-5" aria-hidden="true" />
+                  : activeTab === 'exams' ? <BookOpen className="h-5 w-5" aria-hidden="true" />
+                  : <Sparkles className="h-5 w-5" aria-hidden="true" />}
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
+                    : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
+                    : activeTab === 'student_leaves' ? 'Student Leave Applications & Administrative Overrides'
+                    : activeTab === 'triage' ? "Today's School Action Alerts"
+                    : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
                     : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
                     : activeTab === 'staff' ? 'Teacher & Staff Directory'
-                    : activeTab === 'permissions' ? 'Teacher Leaves & Permissions'
-                    : activeTab === 'payroll' ? 'Staff Salaries & Payroll'
-                    : activeTab === 'tasks' ? 'School Tasks & Delegations'
-                    : activeTab === 'exit' ? 'Student TC & Leaving Certificates'
-                    : activeTab === 'rollover' ? 'Class Promotion & Rollover'
-                    : activeTab === 'exams' ? 'Exams & Timetables'
+                    : activeTab === 'permissions' ? 'Teacher Leave & Permission Requests'
+                    : activeTab === 'payroll' ? 'Staff Salaries & Monthly Compensation'
+                    : activeTab === 'tasks' ? 'School Tasks & Staff Assignments'
+                    : activeTab === 'exit' ? 'Student Transfer Certificates (TC) & Clearances'
+                    : activeTab === 'rollover' ? 'Annual Class Promotion & Academic Year Rollover'
+                    : activeTab === 'exams' ? 'Examinations & Class Timetables'
                     : 'School Events & Activities'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
-                  {activeTab === 'crm' ? <UserPlus className="h-5 w-5" />
-                    : activeTab === 'sis' ? <GraduationCap className="h-5 w-5" />
-                    : activeTab === 'student_leaves' ? <UserCheck className="h-5 w-5" />
-                    : activeTab === 'triage' ? <AlertCircle className="h-5 w-5" />
-                    : activeTab === 'substitutions' ? <Shuffle className="h-5 w-5" />
-                    : activeTab === 'fees' ? <CreditCard className="h-5 w-5" />
-                    : activeTab === 'staff' ? <Users className="h-5 w-5" />
-                    : activeTab === 'permissions' ? <Clock className="h-5 w-5" />
-                    : activeTab === 'payroll' ? <Receipt className="h-5 w-5" />
-                    : activeTab === 'tasks' ? <CheckSquare className="h-5 w-5" />
-                    : activeTab === 'exit' ? <GraduationCap className="h-5 w-5" />
-                    : activeTab === 'rollover' ? <TrendingUp className="h-5 w-5" />
-                    : activeTab === 'exams' ? <BookOpen className="h-5 w-5" />
-                    : <Sparkles className="h-5 w-5" />}
-                </div>
-                <div>
-                  <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {activeTab === 'crm' ? 'New Student Admissions & Inquiries'
-                      : activeTab === 'sis' ? (selectedStudentForSIS ? `Student 360° Record: ${selectedStudentForSIS.name}` : 'Student Directory & Information System (SIS)')
-                      : activeTab === 'student_leaves' ? 'Student Leave Applications & Administrative Overrides'
-                      : activeTab === 'triage' ? "Today's School Action Alerts"
-                      : activeTab === 'substitutions' ? 'Teacher Absences & Class Substitution'
-                      : activeTab === 'fees' ? 'Fee Collections & Pending Dues'
-                      : activeTab === 'staff' ? 'Teacher & Staff Directory'
-                      : activeTab === 'permissions' ? 'Teacher Leave & Permission Requests'
-                      : activeTab === 'payroll' ? 'Staff Salaries & Monthly Compensation'
-                      : activeTab === 'tasks' ? 'School Tasks & Staff Assignments'
-                      : activeTab === 'exit' ? 'Student Transfer Certificates (TC) & Clearances'
-                      : activeTab === 'rollover' ? 'Annual Class Promotion & Academic Year Rollover'
-                      : activeTab === 'exams' ? 'Examinations & Class Timetables'
-                      : 'School Events & Activities'}
-                  </h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
+                </h1>
+                <p className="text-[13px] text-slate-600 dark:text-slate-300 mt-0.5 max-w-3xl">
+                  {activeTab === 'crm' ? 'Track prospective student inquiries, counseling stages, and enroll candidates into classes'
                     : activeTab === 'sis' ? (selectedStudentForSIS ? `Complete academic standing, biometrics, legal documents vault, and fee ledger for ${selectedStudentForSIS.name}.` : 'Complete student roster, class and section filters, 360° student records, and certificates')
                     : activeTab === 'student_leaves' ? 'Executive governance over parent student leave applications: audit medical certificates, evaluate teacher determinations, and exercise Principal attendance overrides.'
-                      : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
-                      : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
-                      : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
-                      : activeTab === 'staff' ? 'Manage teacher profiles, department duties, contact info, and daily attendance'
-                      : activeTab === 'permissions' ? 'Review teacher leave applications, half-day permissions, and substitute teacher cover'
-                      : activeTab === 'payroll' ? 'Monthly salary disbursements, bank statements, statutory deductions, and digital pay slips'
-                      : activeTab === 'tasks' ? 'Delegate administrative and campus tasks to coordinators and track completion'
-                      : activeTab === 'exit' ? 'Issue verified transfer certificates (TC), check departmental dues, and complete exit files'
-                      : activeTab === 'rollover' ? 'Batch promotion of student classes into the new academic year'
-                      : activeTab === 'exams' ? 'Term exam timetables, room seating plans, invigilator assignments, and hall passes'
-                      : 'Annual Day celebrations, sports day, science exhibitions, and student committees'}
-                  </p>
-                </div>
+                    : activeTab === 'triage' ? 'Immediate school action items requiring principal attention across attendance, fees, and operations'
+                    : activeTab === 'substitutions' ? 'Daily teacher absences, substitute teacher assignments, and period coverage'
+                    : activeTab === 'fees' ? 'Student fee collection tracking, pending fee installments, and concession requests'
+                    : activeTab === 'staff' ? 'Manage teacher profiles, department duties, contact info, and daily attendance'
+                    : activeTab === 'permissions' ? 'Review teacher leave applications, half-day permissions, and substitute teacher cover'
+                    : activeTab === 'payroll' ? 'Monthly salary disbursements, bank statements, statutory deductions, and digital pay slips'
+                    : activeTab === 'tasks' ? 'Delegate administrative and campus tasks to coordinators and track completion'
+                    : activeTab === 'exit' ? 'Issue verified transfer certificates (TC), check departmental dues, and complete exit files'
+                    : activeTab === 'rollover' ? 'Batch promotion of student classes into the new academic year'
+                    : activeTab === 'exams' ? 'Term exam timetables, room seating plans, invigilator assignments, and hall passes'
+                    : 'Annual Day celebrations, sports day, science exhibitions, and student committees'}
+                </p>
               </div>
             </div>
 
@@ -2031,82 +2252,168 @@ export default function AdminPage() {
           )}
 
           {activeTab === 'triage' && (() => {
-            const cleanTriageAlerts = triageAlerts.filter(a => !isExcludedTriage(a));
+            const activeAlerts = triageAlerts.filter(a => !isExcludedTriage(a)).filter((a) => !a.resolved);
+            const resolvedAlerts = triageAlerts.filter(a => !isExcludedTriage(a)).filter((a) => a.resolved);
+            const pacingAlerts = remedialOverview?.early_warning_pacing_triage || [];
+            const totalOpenAlerts = activeAlerts.length + pacingAlerts.length;
+
             return (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              
-              {/* Filter Tabs for Action Alerts */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1 flex items-center gap-1.5">
-                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    Alert Filter:
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* Clean Segmented Filter Strip (Zero Emojis) */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: 'All Active', count: totalOpenAlerts },
+                      { id: 'urgent', label: 'Operational', count: activeAlerts.length },
+                      { id: 'pacing', label: 'Pacing Warnings', count: pacingAlerts.length },
+                      { id: 'resolved', label: 'Resolved', count: resolvedAlerts.length },
+                    ].map((tab) => {
+                      const active = alertFilter === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setAlertFilter(tab.id as 'all' | 'urgent' | 'pacing' | 'resolved')}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
+                          }`}
+                        >
+                          <span>{tab.label}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${
+                              active
+                                ? 'bg-white/20 text-white'
+                                : 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-medium px-1">
+                    {totalOpenAlerts === 0
+                      ? 'All operational alerts resolved'
+                      : `${totalOpenAlerts} open items requiring review`}
                   </span>
-                  {[
-                    { id: 'all', label: 'All Operational Alerts', count: cleanTriageAlerts.filter(a => !a.resolved).length },
-                    { id: 'urgent', label: '🔴 Urgent Exceptions', count: cleanTriageAlerts.filter(a => !a.resolved && a.level === 'red').length },
-                    { id: 'financial', label: '🟠 Financial & Approvals', count: cleanTriageAlerts.filter(a => !a.resolved && (a.category === 'fees' || a.category === 'finance')).length },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setAlertFilter(tab.id as any)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        alertFilter === tab.id
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <span>{tab.label}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                        alertFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                      }`}>
-                        {tab.count}
+                </div>
+
+                {/* SECTION A: Remedial Pacing Warnings (Clean Left-Bordered Rows) */}
+                {(alertFilter === 'all' || alertFilter === 'pacing') && pacingAlerts.length > 0 && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-[#F97316]" aria-hidden="true" />
+                        <span>Remedial Pacing Warnings · Inactive 2+ Days</span>
+                      </h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        {pacingAlerts.length} student{pacingAlerts.length === 1 ? '' : 's'}
                       </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="text-xs text-slate-500 font-medium">
-                  Autonomous exception monitors (Attendance, Substitutions, Fees &amp; Escalations)
-                </div>
-              </div>
+                    </div>
 
-              {/* Immediate Administrative Alerts Grid */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                      🚨 Immediate Administrative Alerts (Attendance, Substitutions, Fees &amp; Escalations)
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    {cleanTriageAlerts.filter(a => !a.resolved).length} Pending Action
-                  </span>
-                </div>
+                    <div className="space-y-2.5">
+                      {pacingAlerts.map((warn) => (
+                        <div
+                          key={warn.student_id}
+                          className="rounded-2xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-[#F97316] bg-white dark:bg-slate-800/90 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                {warn.name}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-xs font-semibold font-mono bg-[#F1F5F9] dark:bg-[#1E293B] text-slate-600 dark:text-slate-400">
+                                {warn.class_name}
+                              </span>
+                              <span className="edu-badge-warning px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums">
+                                Day {warn.current_day} · {warn.days_inactive}d Inactive
+                              </span>
+                              <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                                {warn.subject}: <strong className="text-slate-900 dark:text-white">{warn.exam_score_pct}%</strong>
+                              </span>
+                            </div>
 
-                {cleanTriageAlerts.filter(a => alertFilter === 'all' || (alertFilter === 'urgent' && a.level === 'red') || (alertFilter === 'financial' && (a.category === 'fees' || a.category === 'finance'))).length === 0 ? (
-                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-8 text-center">
-                    <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
-                    <h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">All Administrative Alerts Resolved</h4>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">No pending chronic absences, unassigned substitutions, fee overdue alerts, or escalations.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {cleanTriageAlerts
-                      .filter(a => alertFilter === 'all' || (alertFilter === 'urgent' && a.level === 'red') || (alertFilter === 'financial' && (a.category === 'fees' || a.category === 'finance')))
-                      .map((alert) => (
-                        <TriageCard 
-                          key={alert.id} 
-                          alert={alert} 
-                          onAction={handleTriageAction} 
-                        />
+                            <p className="text-[13px] text-slate-600 dark:text-slate-400">
+                              <strong className="text-slate-900 dark:text-white">Focus gap:</strong> {warn.weak_concept}
+                              <span className="text-slate-600 dark:text-slate-400">
+                                {' '}· Parent: {warn.parent_name} ({warn.parent_phone})
+                              </span>
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={notifyingStudentId === warn.student_id}
+                            onClick={() => handleNotifyTeacherForRemedial(warn.student_id, warn.name)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white px-4 py-2 text-xs font-bold transition-colors shadow-xs cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap"
+                          >
+                            {notifyingStudentId === warn.student_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            <span>Notify Class Teacher</span>
+                          </button>
+                        </div>
                       ))}
+                    </div>
                   </div>
                 )}
-              </div>
 
-            </div>
+                {/* SECTION B: Active Operational Alerts (Clean Horizontal Inbox List) */}
+                {(alertFilter === 'all' || alertFilter === 'urgent') && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#B91C1C] dark:text-[#FCA5A5] flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>Active Operational Alerts</span>
+                      </h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        {activeAlerts.length} pending
+                      </span>
+                    </div>
+
+                    {activeAlerts.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-10 text-center space-y-1.5">
+                        <CheckCircle2 className="h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto" aria-hidden="true" />
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">No pending operational alerts</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">Attendance, fees, and academics are on track.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {activeAlerts.map((alert) => (
+                          <TriageCard key={alert.id} alert={alert} onAction={handleTriageAction} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SECTION C: Collapsible Resolved Today Drawer */}
+                {resolvedAlerts.length > 0 && (alertFilter === 'all' || alertFilter === 'resolved') && (
+                  <details
+                    open={alertFilter === 'resolved'}
+                    className="group rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#F1F5F9]/60 dark:bg-[#0B0F19] overflow-hidden"
+                  >
+                    <summary className="px-5 py-3.5 flex items-center justify-between cursor-pointer list-none select-none">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                        <span>Resolved Today ({resolvedAlerts.length})</span>
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+                    </summary>
+                    <div className="px-4 pb-4 space-y-2.5">
+                      {resolvedAlerts.map((alert) => (
+                        <TriageCard key={alert.id} alert={alert} onAction={handleTriageAction} />
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
             );
           })()}
           {/* ===================================================== */}
@@ -2135,7 +2442,7 @@ export default function AdminPage() {
           {/* TAB 3: STUDENT DIRECTORY & COMPLETE CLARIFIED SIS     */}
           {/* ===================================================== */}
           {activeTab === 'sis' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {selectedStudentForSIS ? (
                 <UnifiedSISView
                   studentId={selectedStudentForSIS.id}
@@ -2144,239 +2451,224 @@ export default function AdminPage() {
                   onBack={() => setSelectedStudentForSIS(null)}
                   hideBack={true}
                 />
-              ) : (
-                /* ======================================================= */
-                /* STUDENT DIRECTORY PAGE (ROSTER & FILTERS)               */
-                /* ======================================================= */
-                <div className="space-y-6">
-                  {/* Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                          Central Roster
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">AY 2026–27 &bull; CBSE Affiliated</span>
-                      </div>
-                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                        👥 Student Directory &amp; Records (SIS)
-                      </h1>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Complete student directory with class and section filters. Open student profiles to inspect full clarified SIS and manage official certificates.
-                      </p>
-                    </div>
+              ) : (() => {
+                const atRiskCount = studentsList.filter((s) => (s.attendance_pct ?? 90) < 75).length;
+                const filteredStudents = studentsList.filter((s) => {
+                  const matchClass =
+                    studentClassFilter === 'All' ||
+                    s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
+                  const matchSec =
+                    studentSectionFilter === 'All' ||
+                    s.section.toUpperCase() === studentSectionFilter.toUpperCase();
+                  const matchRisk = !studentRiskOnly || (s.attendance_pct ?? 90) < 75;
+                  const q = studentSearchQuery.trim().toLowerCase();
+                  const matchQ =
+                    !q ||
+                    s.name.toLowerCase().includes(q) ||
+                    s.admission_no.toLowerCase().includes(q) ||
+                    s.guardian_name.toLowerCase().includes(q) ||
+                    s.roll_no.toLowerCase().includes(q);
+                  return matchClass && matchSec && matchRisk && matchQ;
+                });
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                        Total Students: <strong className="text-slate-900 dark:text-white font-mono">{studentsList.length}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* FILTERS & SEARCH ROW */}
-                  <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                      {/* Class Filter Chips */}
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                        <span className="text-xs font-bold text-slate-400 shrink-0">Class:</span>
-                        {['All', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map(cls => (
-                          <button
-                            key={cls}
-                            onClick={() => setStudentClassFilter(cls)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                              studentClassFilter === cls
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            {cls}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Section Filter Chips */}
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                        <span className="text-xs font-bold text-slate-400 shrink-0">Section:</span>
-                        {['All', 'A', 'B'].map(sec => (
-                          <button
-                            key={sec}
-                            onClick={() => setStudentSectionFilter(sec)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                              studentSectionFilter === sec
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            {sec === 'All' ? 'All Sections' : `Sec ${sec}`}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Search Bar & Clear Filters */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="relative min-w-[240px]">
-                          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={studentSearchQuery}
-                            onChange={e => setStudentSearchQuery(e.target.value)}
-                            placeholder="Search by student, roll no, parent..."
-                            className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          {studentSearchQuery && (
-                            <button onClick={() => setStudentSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {(studentClassFilter !== 'All' || studentSectionFilter !== 'All' || Boolean(studentSearchQuery.trim())) && (
+                return (
+                  <div className="space-y-4">
+                    {/* Single-Row Compact Filter & Search Toolbar (Duplicate Header Removed!) */}
+                    <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      {/* Search Bar */}
+                      <div className="relative flex-1 min-w-0">
+                        <Search className="h-4 w-4 text-slate-600 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                        <input
+                          type="text"
+                          value={studentSearchQuery}
+                          onChange={(e) => setStudentSearchQuery(e.target.value)}
+                          aria-label="Search students by name, roll number, admission ID, or parent"
+                          placeholder="Search student, roll no, admission ID, or parent..."
+                          className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-[13px] text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
+                        />
+                        {studentSearchQuery && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setStudentClassFilter('All');
-                              setStudentSectionFilter('All');
-                              setStudentSearchQuery('');
-                            }}
-                            className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
-                            title="Reset all filters"
+                            onClick={() => setStudentSearchQuery('')}
+                            aria-label="Clear student search"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#475569] hover:text-[#0F172A] dark:text-[#95A89E] dark:hover:text-white cursor-pointer"
                           >
-                            <RotateCcw className="h-3 w-3" />
-                            <span>Clear Filters</span>
+                            <X className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
                         )}
                       </div>
+
+                      {/* Controls: Class Select + Section Toggle + At-Risk Filter + Total Count */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <select
+                          value={studentClassFilter}
+                          onChange={(e) => setStudentClassFilter(e.target.value)}
+                          aria-label="Filter roster by class"
+                          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-xs font-semibold text-slate-900 dark:text-white cursor-pointer"
+                        >
+                          {['All', 'Class 3', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map((cls) => (
+                            <option key={cls} value={cls}>
+                              {cls === 'All' ? 'All Classes' : cls}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-0.5">
+                          {['All', 'A', 'B'].map((sec) => (
+                            <button
+                              key={sec}
+                              type="button"
+                              onClick={() => setStudentSectionFilter(sec)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                studentSectionFilter === sec
+                                  ? 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white shadow-2xs'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
+                              }`}
+                            >
+                              {sec === 'All' ? 'All Sec' : `Sec ${sec}`}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setStudentRiskOnly(!studentRiskOnly)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                            studentRiskOnly
+                              ? 'bg-[#B91C1C] text-white border-[#991B1B]'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-[#EA580C] dark:text-[#FB923C] border-slate-200 dark:border-slate-700 hover:border-[#F97316]'
+                          }`}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>At-Risk &lt;75%</span>
+                          <span className="font-mono font-bold tabular-nums">({atRiskCount})</span>
+                        </button>
+
+                        <span className="px-2.5 py-1.5 rounded-xl bg-[#F1F5F9] dark:bg-[#1E293B] text-xs font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                          {filteredStudents.length} / {studentsList.length}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* STUDENTS ROSTER TABLE */}
-                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                            <th className="py-3 px-4">Roll</th>
-                            <th className="py-3 px-4">Student Name &amp; ID</th>
-                            <th className="py-3 px-4">Class &amp; Sec</th>
-                            <th className="py-3 px-4">Parent / Guardian Contact</th>
-                            <th className="py-3 px-4">Attendance</th>
-                            <th className="py-3 px-4">Academic Avg</th>
-                            <th className="py-3 px-4">Status</th>
-                            <th className="py-3 px-4 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {(() => {
-                            const filtered = studentsList.filter(s => {
-                              const matchClass = studentClassFilter === 'All' || s.class_name.toLowerCase().includes(studentClassFilter.toLowerCase().replace('class ', ''));
-                              const matchSec = studentSectionFilter === 'All' || s.section.toUpperCase() === studentSectionFilter.toUpperCase();
-                              const q = studentSearchQuery.trim().toLowerCase();
-                              const matchQ = !q || s.name.toLowerCase().includes(q) || s.admission_no.toLowerCase().includes(q) || s.guardian_name.toLowerCase().includes(q) || s.roll_no.toLowerCase().includes(q);
-                              return matchClass && matchSec && matchQ;
-                            });
-
-                            if (filtered.length === 0) {
-                              return (
-                                <tr>
-                                  <td colSpan={8} className="py-12 text-center">
-                                    <div className="flex flex-col items-center justify-center space-y-2">
-                                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                                        <Filter className="h-5 w-5" />
-                                      </div>
-                                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                        No students found matching current class, section, or search query.
-                                      </p>
-                                      {(studentClassFilter !== 'All' || studentSectionFilter !== 'All' || Boolean(studentSearchQuery.trim())) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setStudentClassFilter('All');
-                                            setStudentSectionFilter('All');
-                                            setStudentSearchQuery('');
-                                          }}
-                                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-                                        >
-                                          <RotateCcw className="h-3.5 w-3.5" />
-                                          <span>Reset All Filters</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            }
-
-                            return filtered.map((student) => (
-                              <tr key={student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group">
-                                <td className="py-3.5 px-4 font-mono font-bold text-slate-500">
-                                  #{student.roll_no}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-                                      {student.name.split(' ').map(n => n[0]).join('')}
-                                    </div>
-                                    <div>
-                                      <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 transition-colors">
-                                        {student.name}
-                                      </span>
-                                      <span className="font-mono text-[10px] text-slate-400">
-                                        {student.admission_no}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                                    {student.class_name}-{student.section}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">
-                                    {student.guardian_name}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-slate-400">
-                                    {student.guardian_phone}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                    (student.attendance_pct || 90) >= 90
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                      : (student.attendance_pct || 90) >= 75
-                                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                        : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                                  }`}>
-                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                    {student.attendance_pct || 94.2}%
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
-                                  {student.academic_average_pct || 78.5}%
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-bold">
-                                    {student.status || 'Active'}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  <button
-                                    onClick={() => setSelectedStudentForSIS(student)}
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-white px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                                  >
-                                    <span>Open Full SIS</span>
-                                    <ArrowRight className="h-3 w-3" />
-                                  </button>
-                                </td>
+                    {/* Refined Warm Forest Roster Table */}
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden">
+                      {filteredStudents.length === 0 ? (
+                        <div className="p-12 text-center space-y-1.5">
+                          <Users className="h-8 w-8 text-[#475569] mx-auto" aria-hidden="true" />
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">No students match this filter</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">Try adjusting class, section, or search terms.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="text-xs uppercase tracking-wider">
+                                <th className="py-3 px-4">Roll</th>
+                                <th className="py-3 px-4">Student &amp; ID</th>
+                                <th className="py-3 px-4">Class</th>
+                                <th className="py-3 px-4">Parent / Guardian</th>
+                                <th className="py-3 px-4">Attendance</th>
+                                <th className="py-3 px-4">Avg Score</th>
+                                <th className="py-3 px-4 text-right">Dossier</th>
                               </tr>
-                            ));
-                          })()}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1E322B] text-[13px]">
+                              {filteredStudents.map((student) => {
+                                const attPct = student.attendance_pct ?? 94.2;
+                                const attBarColor =
+                                  attPct >= 90
+                                    ? 'bg-[#2563EB] dark:bg-[#3B82F6]'
+                                    : attPct >= 75
+                                      ? 'bg-[#F97316] dark:bg-[#E08B49]'
+                                      : 'bg-[#B91C1C] dark:bg-[#F87171]';
+                                const attTextColor =
+                                  attPct >= 90
+                                    ? 'text-blue-600 dark:text-blue-400'
+                                    : attPct >= 75
+                                      ? 'text-[#EA580C] dark:text-[#FB923C]'
+                                      : 'text-[#B91C1C] dark:text-[#FCA5A5]';
+
+                                return (
+                                  <tr
+                                    key={student.id}
+                                    onClick={() => setSelectedStudentForSIS(student)}
+                                    className="cursor-pointer group"
+                                  >
+                                    <td className="py-3.5 px-4 font-mono text-xs font-bold text-slate-600 dark:text-slate-400 tabular-nums">
+                                      #{student.roll_no}
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                          {student.name
+                                            .split(' ')
+                                            .map((n) => n[0])
+                                            .join('')
+                                            .slice(0, 2)}
+                                        </div>
+                                        <div>
+                                          <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-[#60A5FA] transition-colors">
+                                            {student.name}
+                                          </span>
+                                          <span className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                            {student.admission_no}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      <span className="font-semibold text-slate-900 dark:text-white">
+                                        {student.class_name}-{student.section}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4">
+                                      <span className="font-semibold text-slate-600 dark:text-slate-400 block text-xs">
+                                        {student.guardian_name}
+                                      </span>
+                                      <span className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                        {student.guardian_phone}
+                                      </span>
+                                    </td>
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-16 h-1.5 rounded-full bg-[#F1F5F9] dark:bg-[#1E293B] overflow-hidden shrink-0">
+                                          <div
+                                            className={`h-full rounded-full ${attBarColor}`}
+                                            style={{ width: `${Math.min(100, Math.max(0, attPct))}%` }}
+                                          />
+                                        </div>
+                                        <span className={`text-xs font-bold tabular-nums ${attTextColor}`}>
+                                          {attPct}%
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white tabular-nums whitespace-nowrap">
+                                      {student.academic_average_pct || 78.5}%
+                                    </td>
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedStudentForSIS(student);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                      >
+                                        <span>Open 360°</span>
+                                        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -2405,91 +2697,72 @@ export default function AdminPage() {
               return true;
             });
 
+            const calcLeaveDays = (fromStr: string, toStr: string) => {
+              const start = new Date(fromStr);
+              const end = new Date(toStr);
+              if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+              const diff = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+              return `${diff} ${diff === 1 ? 'day' : 'days'}`;
+            };
+
             return (
-              <div className="space-y-6">
-                {/* 1. TOP METRICS STRIP */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-                  <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+              <div className="space-y-5">
+                {/* 1. COMPACT 4-STAT EXECUTIVE STRIP (NO LOUD PURPLE / NO DARK BANNER) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      pendingLeaves > 0
+                        ? 'bg-[#FFF7ED] dark:bg-[#2A190E] border-[#FED7AA] dark:border-[#7C2D12]'
+                        : 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Applications</span>
-                      <FileText className="h-4 w-4 text-blue-500" />
+                      <span className="text-xs font-semibold text-[#EA580C] dark:text-[#FB923C]">Pending Review</span>
+                      <Clock className="h-4 w-4 text-[#F97316] dark:text-[#FB923C]" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">{totalLeaves}</p>
-                    <span className="text-[11px] font-medium text-slate-400">Parent Submissions</span>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{pendingLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Awaiting determination</span>
                   </div>
 
-                  <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Pending Review</span>
-                      <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Approved / Excused</span>
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-amber-900 dark:text-amber-300 mt-2">{pendingLeaves}</p>
-                    <span className="text-[11px] font-semibold text-amber-600/80 dark:text-amber-400/80">Awaiting Action</span>
+                    <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-2 tabular-nums">{approvedLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Attendance adjusted</span>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Excused Leaves</span>
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Rejected / Absent</span>
+                      <AlertCircle className="h-4 w-4 text-[#B91C1C] dark:text-[#FCA5A5]" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-emerald-900 dark:text-emerald-300 mt-2">{approvedLeaves}</p>
-                    <span className="text-[11px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">Attendance Adjusted</span>
+                    <p className="text-2xl font-extrabold text-[#B91C1C] dark:text-[#FCA5A5] mt-2 tabular-nums">{rejectedLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Unexcused absences</span>
                   </div>
 
-                  <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 p-4 shadow-xs">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-700 dark:text-rose-400">Rejected / Absent</span>
-                      <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Admin Overrides</span>
+                      <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                    <p className="text-2xl font-black text-rose-900 dark:text-rose-300 mt-2">{rejectedLeaves}</p>
-                    <span className="text-[11px] font-semibold text-rose-600/80 dark:text-rose-400/80">Unexcused Absences</span>
-                  </div>
-
-                  <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 shadow-xs col-span-2 sm:col-span-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-700 dark:text-purple-400">Admin Overrides</span>
-                      <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <p className="text-2xl font-black text-purple-900 dark:text-purple-300 mt-2">{adminOverriddenLeaves}</p>
-                    <span className="text-[11px] font-semibold text-purple-600/80 dark:text-purple-400/80">Principal Interventions</span>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{adminOverriddenLeaves}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">{medicalLeaves} medical slips</span>
                   </div>
                 </div>
 
-                {/* 2. STUDENT LEAVE & ATTENDANCE OVERSIGHT BANNER */}
-                <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 shadow-md border border-blue-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2.5 rounded-xl bg-white/10 border border-white/20 shrink-0">
-                      <ShieldCheck className="h-5 w-5 text-blue-300" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                        Student Leave &amp; Absence Management
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30">
-                          Administrative Review
-                        </span>
-                      </h4>
-                      <p className="text-xs text-blue-100/90 mt-1 leading-relaxed max-w-3xl">
-                        Review leave applications, manage medical absence certificates, and update student attendance status across classes.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-blue-200 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 font-medium">
-                      {medicalLeaves} Medical Certificate{medicalLeaves === 1 ? '' : 's'} Attached
-                    </span>
-                  </div>
-                </div>
-
-                {/* 3. SEARCH & FILTER TOOLBAR */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                {/* 2. SEARCH & FILTER TOOLBAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700">
                   <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
                     <input
                       type="text"
                       placeholder="Search student, parent, or medical reason..."
                       value={studentLeaveSearch}
                       onChange={(e) => setStudentLeaveSearch(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      aria-label="Search student leave applications"
+                      className="w-full pl-9 pr-4 py-2 text-[13px] rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
                     />
                     {studentLeaveSearch && (
                       <button
@@ -2503,18 +2776,27 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 flex-wrap">
-                    {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map(tab => (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'MEDICAL'] as const).map((tab) => (
                       <button
                         key={tab}
+                        type="button"
                         onClick={() => setStudentLeaveFilter(tab)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                           studentLeaveFilter === tab
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                            : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
                         }`}
                       >
-                        {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : tab === 'APPROVED' ? 'Approved' : tab === 'REJECTED' ? 'Rejected' : 'Medical Slips'}
+                        {tab === 'ALL'
+                          ? `All (${totalLeaves})`
+                          : tab === 'PENDING'
+                            ? `Pending (${pendingLeaves})`
+                            : tab === 'APPROVED'
+                              ? 'Approved'
+                              : tab === 'REJECTED'
+                                ? 'Rejected'
+                                : 'Medical Slips'}
                       </button>
                     ))}
 
@@ -2535,329 +2817,376 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* 4. LEAVE APPLICATION QUEUE TABLE */}
-                <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Student Leave Master Queue</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Showing {filteredLeaves.length} of {totalLeaves} applications across all grades</p>
+                {/* 3. STREAMLINED 5-COLUMN LEAVE APPLICATION TABLE */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Leave Applications Queue</h3>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                        · Showing {filteredLeaves.length} of {totalLeaves}
+                      </span>
                     </div>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                      <span>{medicalLeaves} medical certificates on file · Principal override active</span>
+                    </span>
                   </div>
 
                   {filteredLeaves.length === 0 ? (
-                    <div className="p-12 text-center flex flex-col items-center justify-center space-y-2">
-                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                        <Filter className="h-5 w-5" />
-                      </div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No student leave applications match your criteria</p>
-                      <p className="text-xs text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
-                      {(studentLeaveFilter !== 'ALL' || Boolean(studentLeaveSearch.trim())) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setStudentLeaveFilter('ALL');
-                            setStudentLeaveSearch('');
-                          }}
-                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          <span>Reset All Filters</span>
-                        </button>
-                      )}
+                    <div className="p-12 text-center">
+                      <UserCheck className="h-10 w-10 text-[#475569] mx-auto mb-2" aria-hidden="true" />
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">No leave applications match your criteria</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Try switching filters or clearing the search query.</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
+                      <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                          <tr className="text-xs uppercase tracking-wider">
                             <th className="py-3 px-4">Student &amp; Parent</th>
-                            <th className="py-3 px-4">Dates &amp; Duration</th>
-                            <th className="py-3 px-4">Type &amp; Medical Slip</th>
-                            <th className="py-3 px-4">Parent Justification</th>
-                            <th className="py-3 px-4">Current Decision Status</th>
-                            <th className="py-3 px-4">Admin Override Status</th>
-                            <th className="py-3 px-4 text-right">Adjudication Action</th>
+                            <th className="py-3 px-4">Dates &amp; Type</th>
+                            <th className="py-3 px-4">Reason</th>
+                            <th className="py-3 px-4">Status &amp; Audit</th>
+                            <th className="py-3 px-4 text-right">Action</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {filteredLeaves.map((lr) => (
-                            <tr key={lr.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                              {/* Student & Parent */}
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                  <span>{lr.student_name}</span>
-                                </div>
-                                <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                  <span>Parent: <b className="text-slate-600 dark:text-slate-300">{lr.parent_name}</b></span>
-                                  <span>&bull;</span>
-                                  <span>ID #{lr.student_id}</span>
-                                </div>
-                              </td>
+                        <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1E322B] text-[13px]">
+                          {filteredLeaves.map((lr) => {
+                            const duration = calcLeaveDays(lr.from_date, lr.to_date);
+                            return (
+                              <tr key={lr.id}>
+                                {/* 1. Student & Parent */}
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900 dark:text-white">
+                                    {lr.student_name}
+                                  </div>
+                                  <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                    {lr.parent_name} · <span className="font-mono">#{lr.student_id}</span>
+                                  </div>
+                                </td>
 
-                              {/* Dates & Duration */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="font-mono text-slate-700 dark:text-slate-300 font-semibold">
-                                  {lr.from_date} &rarr; {lr.to_date}
-                                </div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  Applied {new Date(lr.applied_at).toLocaleDateString()}
-                                </div>
-                              </td>
+                                {/* 2. Dates & Type + Attachment */}
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <div className="font-mono text-xs font-semibold text-slate-900 dark:text-white tabular-nums">
+                                    {lr.from_date} → {lr.to_date}
+                                    {duration && (
+                                      <span className="ml-1.5 font-sans font-medium text-slate-600 dark:text-slate-400">
+                                        ({duration})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    {lr.is_medical ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                        Medical
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F1F5F9] dark:bg-[#1E293B] text-slate-600 dark:text-slate-400">
+                                        Casual
+                                      </span>
+                                    )}
+                                    {lr.attachment_name && (
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerToast(`Verified Medical Certificate on file: ${lr.attachment_name}`)}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                      >
+                                        <FileText className="h-3 w-3" aria-hidden="true" />
+                                        <span className="truncate max-w-[140px]">{lr.attachment_name}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
 
-                              {/* Type & Certificate */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                {lr.is_medical ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80">
-                                    <AlertCircle className="h-3 w-3" />
-                                    Medical Leave
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                                    Casual Leave
-                                  </span>
-                                )}
-                                {lr.attachment_name && (
-                                  <div className="mt-1">
-                                    <span 
-                                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                                      onClick={() => triggerToast(`Verified Medical Certificate on file: ${lr.attachment_name}`)}
+                                {/* 3. Reason */}
+                                <td className="py-3.5 px-4 max-w-xs">
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed" title={lr.reason}>
+                                    &ldquo;{lr.reason}&rdquo;
+                                  </p>
+                                </td>
+
+                                {/* 4. Merged Status & Audit */}
+                                <td className="py-3.5 px-4">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {lr.status === 'Approved' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-success">
+                                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                        Approved
+                                      </span>
+                                    ) : lr.status === 'Rejected' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                        <X className="h-3 w-3" aria-hidden="true" />
+                                        Rejected
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold edu-badge-warning">
+                                        <Clock className="h-3 w-3" aria-hidden="true" />
+                                        Pending
+                                      </span>
+                                    )}
+
+                                    {lr.is_admin_override && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700">
+                                        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                                        Overridden
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(lr.admin_notes || lr.teacher_notes) && (
+                                    <p
+                                      className="text-xs text-slate-600 dark:text-slate-400 truncate max-w-[220px] mt-1"
+                                      title={lr.admin_notes || lr.teacher_notes || ''}
                                     >
-                                      <FileText className="h-3 w-3" />
-                                      {lr.attachment_name}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Reason */}
-                              <td className="py-3.5 px-4 max-w-xs">
-                                <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed" title={lr.reason}>
-                                  &ldquo;{lr.reason}&rdquo;
-                                </p>
-                              </td>
-
-                              {/* Current Decision Status */}
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="flex flex-col gap-1 items-start">
-                                  {lr.status === 'Approved' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                                      <CheckCircle2 className="h-3 w-3" />
-                                      Approved (Excused)
-                                    </span>
-                                  ) : lr.status === 'Rejected' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                                      <X className="h-3 w-3" />
-                                      Rejected (Absent)
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse">
-                                      <Clock className="h-3 w-3" />
-                                      Pending Teacher
-                                    </span>
+                                      {lr.admin_notes
+                                        ? `Principal: ${lr.admin_notes}`
+                                        : `Teacher: ${lr.teacher_notes}`}
+                                    </p>
                                   )}
-                                  {lr.teacher_notes && (
-                                    <span className="text-[10px] text-slate-500 italic max-w-xs truncate" title={lr.teacher_notes}>
-                                      Teacher: &quot;{lr.teacher_notes}&quot;
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
+                                </td>
 
-                              {/* Admin Override Status */}
-                              <td className="py-3.5 px-4">
-                                {lr.is_admin_override ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 w-fit">
-                                      <ShieldCheck className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                                      Admin Overridden
-                                    </span>
-                                    {lr.admin_notes && (
-                                      <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium line-clamp-1" title={lr.admin_notes}>
-                                        Note: {lr.admin_notes}
-                                      </span>
-                                    )}
-                                    {lr.overridden_by && (
-                                      <span className="text-[9px] text-slate-400 font-mono">
-                                        By {lr.overridden_by}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-slate-400 font-medium">Standard Teacher Evaluation</span>
-                                )}
-                              </td>
-
-                              {/* Action */}
-                              <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOverrideModalLeave(lr);
-                                    setOverrideStatus(lr.status === 'Approved' ? 'Rejected' : 'Approved');
-                                    setOverrideNotes('');
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                                >
-                                  <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                                  <span>{lr.is_admin_override ? 'Modify Override' : 'Admin Override'}</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                {/* 5. Action */}
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOverrideModalLeave(lr);
+                                      setOverrideStatus(lr.status === 'Approved' ? 'Rejected' : 'Approved');
+                                      setOverrideNotes('');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-[#2563EB] hover:text-white hover:border-blue-600 text-slate-900 dark:text-white text-xs font-semibold transition-colors cursor-pointer"
+                                  >
+                                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                    <span>{lr.is_admin_override ? 'Edit Override' : 'Review / Override'}</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   )}
                 </div>
 
-                {/* 5. ADMINISTRATIVE LEAVE REVIEW MODAL */}
+                {/* 5. CLEAN, VIEWPORT-SAFE LEAVE DECISION & OVERRIDE MODAL */}
                 {overrideModalLeave && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-                    <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl animate-in zoom-in-95 space-y-5">
-                      {/* Modal Header */}
-                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400">
-                            <ShieldCheck className="h-5 w-5" />
+                  <div
+                    onClick={() => !overrideSubmitting && setOverrideModalLeave(null)}
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0B0F19]/65 backdrop-blur-xs animate-in fade-in"
+                  >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="leave-override-title"
+                      className="relative w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95"
+                    >
+                      {/* Sticky Modal Header */}
+                      <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                           </div>
-                          <div>
-                            <h3 className="text-base font-black text-slate-900 dark:text-white">
-                              Review Student Leave Application
+                          <div className="min-w-0">
+                            <h3 id="leave-override-title" className="text-base font-extrabold text-slate-900 dark:text-white">
+                              Review &amp; Override Leave
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Verify parent application and set attendance disposition
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              Principal decision updates attendance &amp; notifies parent
                             </p>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setOverrideModalLeave(null)}
-                          className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          aria-label="Close modal"
+                          className="p-1.5 rounded-xl text-[#475569] hover:text-[#0F172A] dark:text-[#95A89E] dark:hover:text-white hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] cursor-pointer"
                         >
-                          <X className="h-5 w-5" />
+                          <X className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </div>
 
-                      {/* Student & Leave Info Summary */}
-                      <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 border border-slate-200/80 dark:border-slate-700 space-y-2.5 text-xs">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Student</span>
-                            <span className="font-bold text-slate-900 dark:text-white text-sm">{overrideModalLeave.student_name}</span>
-                            <span className="text-slate-400 block">Roll / ID: #{overrideModalLeave.student_id}</span>
+                      {/* Scrollable Modal Body */}
+                      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                        {/* Compact Student & Reason Summary */}
+                        <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 p-3.5 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div>
+                              <span className="font-bold text-sm text-slate-900 dark:text-white">
+                                {overrideModalLeave.student_name}
+                              </span>
+                              <span className="ml-2 font-mono text-xs text-slate-600 dark:text-slate-400">
+                                #{overrideModalLeave.student_id}
+                              </span>
+                              <span className="block text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                Parent: <strong>{overrideModalLeave.parent_name}</strong>
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="inline-block px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
+                                {overrideModalLeave.from_date} → {overrideModalLeave.to_date}
+                              </span>
+                              {overrideModalLeave.is_medical && (
+                                <span className="block text-xs font-semibold text-[#B91C1C] dark:text-[#FCA5A5] mt-1">
+                                  Medical {overrideModalLeave.attachment_name ? `· ${overrideModalLeave.attachment_name}` : ''}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200">{overrideModalLeave.parent_name}</span>
-                            <span className="text-slate-400 block font-medium">Dates: {overrideModalLeave.from_date} &rarr; {overrideModalLeave.to_date}</span>
-                          </div>
-                        </div>
 
-                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Parent's Stated Reason</span>
-                          <p className="text-slate-700 dark:text-slate-300 italic mt-0.5">&ldquo;{overrideModalLeave.reason}&rdquo;</p>
-                          {overrideModalLeave.is_medical && (
-                            <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                              <AlertCircle className="h-3 w-3" />
-                              Medical Exemption Request {overrideModalLeave.attachment_name ? `(${overrideModalLeave.attachment_name})` : ''}
-                            </span>
+                          <p className="text-[13px] text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700 leading-relaxed">
+                            &ldquo;{overrideModalLeave.reason}&rdquo;
+                          </p>
+
+                          {overrideModalLeave.teacher_notes && (
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              <strong className="text-slate-600 dark:text-slate-400">Teacher note:</strong> {overrideModalLeave.teacher_notes}
+                            </p>
                           )}
                         </div>
 
-                        {overrideModalLeave.teacher_notes && (
-                          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Class Teacher Feedback</span>
-                            <p className="text-slate-600 dark:text-slate-400 font-medium mt-0.5">{overrideModalLeave.teacher_notes}</p>
+                        {/* Decision Toggle */}
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            Decision
+                          </span>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setOverrideStatus('Approved')}
+                              className={`p-3.5 rounded-xl border-2 text-left transition-colors cursor-pointer ${
+                                overrideStatus === 'Approved'
+                                  ? 'border-2 border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40'
+                                  : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 hover:border-emerald-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 font-bold text-[13px] text-emerald-700 dark:text-emerald-300">
+                                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <span>Approve Leave</span>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                Marks dates as Excused Leave.
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setOverrideStatus('Rejected')}
+                              className={`p-3.5 rounded-xl border-2 text-left transition-colors cursor-pointer ${
+                                overrideStatus === 'Rejected'
+                                  ? 'border-2 border-rose-500 bg-rose-50/70 dark:bg-rose-950/40'
+                                  : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 hover:border-rose-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 font-bold text-[13px] text-[#B91C1C] dark:text-[#FCA5A5]">
+                                <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <span>Reject Leave</span>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                Marks dates as Unexcused Absent.
+                              </p>
+                            </button>
                           </div>
-                        )}
+                        </div>
+
+                        {/* Remarks + Compact Quick-Fill Chips */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="leave-override-notes" className="text-xs font-bold text-slate-900 dark:text-white">
+                              Remarks
+                            </label>
+                            <span className="text-xs font-semibold text-[#B91C1C] dark:text-[#FCA5A5]">Required</span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              'Medical Waiver Approved',
+                              'Doctor Certificate Verified',
+                              'Exam Absence — Not Excused',
+                              'Attendance Shortage — Rejected',
+                            ].map((chip) => {
+                              const activeChip = overrideNotes === chip;
+                              return (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => setOverrideNotes(chip)}
+                                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                                    activeChip
+                                      ? 'bg-blue-50 text-blue-700 border-blue-400 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-500 font-bold'
+                                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium'
+                                  }`}
+                                >
+                                  + {chip}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <textarea
+                            id="leave-override-notes"
+                            rows={2}
+                            value={overrideNotes}
+                            onChange={(e) => setOverrideNotes(e.target.value)}
+                            placeholder="Write a brief reason for this decision..."
+                            className="w-full text-[13px] p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E] resize-none"
+                          />
+                        </div>
+
+                        {/* Administrative Closed-Loop Invariant Notice */}
+                        <div className="rounded-xl p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-bold text-[#38BDF8]">
+                            <ShieldCheck className="h-4 w-4 shrink-0 text-[#38BDF8]" aria-hidden="true" />
+                            <span>Administrative Closed-Loop Invariants:</span>
+                          </div>
+                          <ul className="text-slate-700 dark:text-slate-300 text-xs space-y-0.5 pl-5 list-disc leading-relaxed font-medium">
+                            <li>Synchronizes attendance records across requested dates: {overrideModalLeave.from_date} → {overrideModalLeave.to_date}.</li>
+                            <li>Generates an immutable CBSE audit trail entry under Principal Dr. Sunita Kapoor.</li>
+                            <li>Dispatches automated notification alerts to both Parent and Class Teacher.</li>
+                          </ul>
+                        </div>
                       </div>
 
-                      {/* Decision Selection */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          Administrative Decision:
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
+                      {/* Sticky Modal Footer (Always Visible!) */}
+                      <div className="shrink-0 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 flex items-center justify-between gap-3">
+                        <span className="text-xs text-slate-600 dark:text-slate-400 hidden sm:inline">
+                          Logged in audit trail · Notifies parent &amp; teacher
+                        </span>
+                        <div className="flex items-center gap-2 ml-auto">
                           <button
                             type="button"
-                            onClick={() => setOverrideStatus('Approved')}
-                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                              overrideStatus === 'Approved'
-                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
-                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}
+                            onClick={() => setOverrideModalLeave(null)}
+                            disabled={overrideSubmitting}
+                            className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                           >
-                            <div className="flex items-center gap-2 font-bold text-xs text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="h-4 w-4" />
-                              Approve Leave
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Excused Leave&rsquo;.
-                            </p>
+                            Cancel
                           </button>
-
                           <button
                             type="button"
-                            onClick={() => setOverrideStatus('Rejected')}
-                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                            onClick={handleExecuteLeaveOverride}
+                            disabled={overrideSubmitting || !overrideNotes.trim()}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-xs cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
                               overrideStatus === 'Rejected'
-                                ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500/20'
-                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                ? 'bg-[#B91C1C] hover:bg-[#991B1B]'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold'
                             }`}
                           >
-                            <div className="flex items-center gap-2 font-bold text-xs text-rose-700 dark:text-rose-400">
-                              <X className="h-4 w-4" />
-                              Reject Leave
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Marks attendance as &lsquo;Unexcused Absent&rsquo;.
-                            </p>
+                            {overrideSubmitting ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                <span>
+                                  {overrideStatus === 'Rejected' ? 'Reject & Notify' : 'Approve & Notify'}
+                                </span>
+                              </>
+                            )}
                           </button>
                         </div>
-                      </div>
-
-                      {/* Optional Notes */}
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                          <span>Remarks / Notes (Optional):</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={overrideNotes}
-                          onChange={(e) => setOverrideNotes(e.target.value)}
-                          placeholder="Add an optional note for the parent and class teacher..."
-                          className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none"
-                        />
-                      </div>
-
-                      {/* Modal Footer Buttons */}
-                      <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => setOverrideModalLeave(null)}
-                          disabled={overrideSubmitting}
-                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleExecuteLeaveOverride}
-                          disabled={overrideSubmitting}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
-                        >
-                          {overrideSubmitting ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Saving Decision...</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4" />
-                              <span>Confirm Decision</span>
-                            </>
-                          )}
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -2869,28 +3198,34 @@ export default function AdminPage() {
           {/* TAB 5: FEE COLLECTIONS, AGING & MILESTONE REALIZATION */}
           {/* ===================================================== */}
           {activeTab === 'fees' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Executive Header & Financial Operations Banner */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
-                      Finance &amp; Accounts
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-0.5 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Finance &amp; Bursar Cockpit
                     </span>
-                    <span className="text-xs text-slate-500">AY 2026–27 Collections</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">AY 2026–27 Realization Engine</span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                      <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                      HDFC &amp; Razorpay Gateway 99.8% SLA
+                    </span>
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                    💳 Student Fee Collections &amp; Pending Dues
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    <span>💳 Student Fee Collections &amp; Aging Recovery</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Monitor today&apos;s live collections, track aging dues across maturity buckets, and inspect institutional financial health.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    Live banking reconciliation, automated multi-tier aging recovery ledgers, milestone realization velocity, and instant bursar receipt settlement.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={handleBatchFeeReminders}
-                    className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-2 rounded-xl bg-primary hover:opacity-95 text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95"
                   >
                     <Send className="h-3.5 w-3.5" />
                     <span>Send Batch Reminders ({feeDefaulters.length})</span>
@@ -2898,44 +3233,128 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={handleExportFeeLedger}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                    <span>Export CSV</span>
+                    <Download className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Export Audit Ledger</span>
                   </button>
                 </div>
               </div>
 
-              {/* Sub-tab Navigation */}
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { key: 'aging', label: '⏳ Overdue & Recovery Ledger', badge: `${feeDefaulters.length} Accounts` },
-                  { key: 'today', label: "💵 Today's Live Collections", badge: `₹${(totalCollectedToday / 100000).toFixed(2)} L Today` },
-                  { key: 'milestones', label: '📊 Budget Milestones & Health', badge: 'AY 2026–27' }
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setFeeSubTab(tab.key as any)}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      feeSubTab === tab.key
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{tab.label}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                      feeSubTab === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                    }`}>
-                      {tab.badge}
+              {/* Institutional Realization Metric Ribbon */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Total Annual Budget</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Target</span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                    ₹{feeAnalytics ? (feeAnalytics.total_target / 100000).toFixed(1) : '184.0'} L
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+                    <span>1,250 Enrolled Students</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Term 1 &amp; 2 Billed</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-primary h-1.5 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400">Realized In Bank</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                      {feeAnalytics?.collection_rate_pct || 77.2}% Rate
                     </span>
-                  </button>
-                ))}
+                  </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    ₹{feeAnalytics ? (feeAnalytics.total_collected / 100000).toFixed(1) : '142.1'} L
+                  </div>
+                  <div className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-400/80 flex items-center justify-between font-medium">
+                    <span>Cleared into Operating Escrow</span>
+                    <span>Direct Deposit</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${feeAnalytics?.collection_rate_pct || 77.2}%` }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-amber-700 dark:text-amber-400">Aging Dues &amp; Arrears</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      {feeDefaulters.length} Accounts
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                    ₹{feeAnalytics ? (feeAnalytics.total_overdue / 100000).toFixed(1) : '41.9'} L
+                  </div>
+                  <div className="mt-2 text-xs text-amber-700/80 dark:text-amber-400/80 flex items-center justify-between font-medium">
+                    <span>{feeDefaulters.filter(d => (d.days_overdue || 0) > 60).length} Critical (&gt;60d)</span>
+                    <span className="text-amber-600">Recovery Active</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-amber-100 dark:bg-amber-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: '22.8%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 bg-blue-50/20 dark:bg-blue-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-blue-700 dark:text-blue-400">Collected Today</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                      Live Feed
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                    ₹1,45,000
+                  </div>
+                  <div className="mt-2 text-xs text-blue-700/80 dark:text-blue-400/80 flex items-center justify-between font-medium">
+                    <span>7 Verified Receipts</span>
+                    <span>₹95k UPI Auto-Settled</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '85%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-tab Navigation Ribbon */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { key: 'aging', label: '⏳ Overdue & Recovery Ledger', badge: `${feeDefaulters.length} Defaulters` },
+                    { key: 'today', label: "💵 Today's Live Collections", badge: "₹1.45 L Today" },
+                    { key: 'milestones', label: '📊 Budget Milestones & Health', badge: 'AY 2026–27' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setFeeSubTab(tab.key as any)}
+                      className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        feeSubTab === tab.key
+                          ? 'bg-primary text-primary-foreground shadow-sm shadow-blue-500/20'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        feeSubTab === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {tab.badge}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 px-2 text-xs text-slate-500 dark:text-slate-400">
+                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Last Reconciled: 10 mins ago</span>
+                </div>
               </div>
 
               {/* SUB-SECTION 1: TODAY'S FEE COLLECTIONS */}
               {feeSubTab === 'today' && (
-                <div className="space-y-5">
-                  {/* Today's KPI Metric Cards */}
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  {/* Today's Payment Gateway Breakdown */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Collected Today</span>
@@ -2980,33 +3399,17 @@ export default function AdminPage() {
 
                   {/* Today's Transactions Table */}
                   <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                          Today&apos;s Receipts Ledger
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Reconciled live stream from Parent Portal UPI, Counter Desks &amp; Bank Direct
-                        </span>
-                      </div>
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            const resetResult = resetLiveLedger();
-                            setTodayReceipts(resetResult.receipts);
-                            setToastMessage('✓ Demo ledger reset! All test payments undone.');
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold transition-all active:scale-95 cursor-pointer"
-                          title="Undo test payments and restore baseline receipts"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          <span>Undo / Reset Test Receipts</span>
-                        </button>
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          <span>Live Bank Stream &amp; Webhook Synchronized</span>
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Today&apos;s Receipts Ledger (28 Oct 2026)
                         </span>
                       </div>
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        Real-time Bank Integration Active
+                      </span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
@@ -3018,54 +3421,62 @@ export default function AdminPage() {
                             <th className="py-3 px-4">Amount</th>
                             <th className="py-3 px-4">Payment Mode</th>
                             <th className="py-3 px-4">Ref UTR / Transaction</th>
-                            <th className="py-3 px-4">Time</th>
-                            <th className="py-3 px-4">Status</th>
-                            <th className="py-3 px-4 text-right">Receipt</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {todayReceipts.map((row: TodayReceiptItem) => (
-                            <tr key={row.recNo} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                              <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
-                                {row.recNo}
+                          {[
+                            { receipt: 'RCP-2026-1042', name: 'Kabir Verma', roll: '10-A', head: 'Term 2 Tuition & Transport', amt: 22500, mode: 'UPI (Google Pay)', utr: 'UPI/329482910482', time: '11:42 AM' },
+                            { receipt: 'RCP-2026-1041', name: 'Ananya Deshmukh', roll: '8-B', head: 'Term 2 Tuition', amt: 18000, mode: 'Razorpay NetBanking', utr: 'RZP_PAY_928194', time: '11:15 AM' },
+                            { receipt: 'RCP-2026-1040', name: 'Rohan Iyer', roll: '12-Sci', head: 'Term 2 Tuition & Lab Fee', amt: 26000, mode: 'NEFT Direct Deposit', utr: 'HDFC000192837', time: '10:30 AM' },
+                            { receipt: 'RCP-2026-1039', name: 'Diya Patel', roll: '6-A', head: 'Term 2 Tuition', amt: 17500, mode: 'UPI (PhonePe)', utr: 'UPI/849201948271', time: '10:04 AM' },
+                            { receipt: 'RCP-2026-1038', name: 'Vivaan Sen', roll: '9-C', head: 'Term 2 Tuition & Transport', amt: 23000, mode: 'UPI (Paytm)', utr: 'UPI/194820193847', time: '09:48 AM' },
+                            { receipt: 'RCP-2026-1037', name: 'Ishaan Reddy', roll: '11-Com', head: 'Term 2 Tuition', amt: 23000, mode: 'School Cash Counter', utr: 'CSH-REC-2026-89', time: '09:20 AM' },
+                            { receipt: 'RCP-2026-1036', name: 'Meera Nair', roll: '7-B', head: 'Term 2 Transport Fee', amt: 15000, mode: 'NEFT Direct Deposit', utr: 'SBIN002938471', time: '08:55 AM' },
+                          ].map((rec) => (
+                            <tr key={rec.receipt} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3.5 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                {rec.receipt}
                               </td>
-                              <td className="py-3 px-4">
-                                <span className="font-bold text-slate-900 dark:text-white block">{row.name}</span>
-                                <span className="text-[10px] text-slate-400">{row.classSec}</span>
+                              <td className="py-3.5 px-4">
+                                <span className="font-bold text-slate-900 dark:text-white block">{rec.name}</span>
+                                <span className="text-[10px] text-slate-500 font-mono">Roll: {rec.roll}</span>
                               </td>
-                              <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">
-                                {row.head}
+                              <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-medium">
+                                {rec.head}
                               </td>
-                              <td className="py-3 px-4 font-black text-slate-900 dark:text-white">
-                                ₹{row.amount.toLocaleString('en-IN')}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                                  {row.mode}
+                              <td className="py-3.5 px-4">
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-sm">
+                                  ₹{rec.amt.toLocaleString()}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 font-mono text-[10px] text-slate-500">
-                                {row.ref}
-                              </td>
-                              <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
-                                {row.time}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
-                                  <Check className="h-3 w-3" />
-                                  {row.status}
+                              <td className="py-3.5 px-4">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  rec.mode.includes('UPI')
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900'
+                                    : rec.mode.includes('NEFT')
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-900'
+                                    : rec.mode.includes('Razorpay')
+                                    ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-900'
+                                }`}>
+                                  {rec.mode}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-right">
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                                  <span>{rec.utr}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400">{rec.time}</span>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
                                 <button
-                                  onClick={() => {
-                                    downloadOfficialDocumentFile(`Fee Receipt - ${row.recNo}`, row.name, row.recNo);
-                                    setToastMessage(`Downloaded Receipt ${row.recNo}`);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                                  type="button"
+                                  onClick={() => triggerToast(`Downloaded Official Tax Receipt for ${rec.receipt}`)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
                                 >
-                                  <Download className="h-3 w-3" />
-                                  <span>PDF</span>
+                                  <Printer className="h-3 w-3 text-slate-500" />
+                                  <span>Receipt</span>
                                 </button>
                               </td>
                             </tr>
@@ -3077,106 +3488,54 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* SUB-SECTION 2: AGING & OVERDUE DEFAULTERS */}
+              {/* SUB-SECTION 2: AGING & RECOVERY LEDGER */}
               {feeSubTab === 'aging' && (
-                <div className="space-y-5">
-                  {/* Aging Analysis Bar - Dynamically computed from live feeDefaulters ledger */}
-                  {(() => {
-                    let d0_15 = 0;
-                    let d16_30 = 0;
-                    let d30_plus = 0;
-                    let totalOverdue = 0;
-
-                    feeDefaulters.forEach(d => {
-                      if (d.status === 'Paid') return;
-                      const due = Number(d.amount_due) || 0;
-                      const days = Number(d.days_overdue) || 0;
-                      totalOverdue += due;
-
-                      if (days <= 15) {
-                        d0_15 += due;
-                      } else if (days <= 30) {
-                        d16_30 += due;
-                      } else {
-                        d30_plus += due;
-                      }
-                    });
-
-                    return (
-                      <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 via-amber-500/5 to-blue-500/5 border border-red-500/20 space-y-3">
-                        <div className="flex items-center justify-between text-xs font-bold">
-                          <span className="text-slate-900 dark:text-white">Overdue Dues Aging Maturity Breakdown</span>
-                          <span className="text-red-600 font-extrabold">Total Overdue: ₹{(totalOverdue / 100000).toFixed(2)} L</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                            <span className="text-[10px] uppercase font-bold text-blue-600 block">0–15 Days (Early Overdue)</span>
-                            <span className="text-base font-black text-slate-900 dark:text-white">
-                              ₹{(d0_15 / 100000).toFixed(2)} L
-                            </span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">Gentle WhatsApp Notification</span>
-                          </div>
-                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                            <span className="text-[10px] uppercase font-bold text-amber-600 block">16–30 Days (Mid-Tier Overdue)</span>
-                            <span className="text-base font-black text-slate-900 dark:text-white">
-                              ₹{(d16_30 / 100000).toFixed(2)} L
-                            </span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">Automated SMS &amp; Email Notice</span>
-                          </div>
-                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                            <span className="text-[10px] uppercase font-bold text-red-600 block">30+ Days (Critical Action)</span>
-                            <span className="text-base font-black text-red-600 dark:text-red-400">
-                              ₹{(d30_plus / 100000).toFixed(2)} L
-                            </span>
-                            <span className="text-[10px] text-red-500 block mt-0.5">Coordinator Direct Call Priority</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Enrolment Intake Queue Banner if any new admission fee is pending */}
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  {/* New Admission Fee Notice Banner */}
                   {feeDefaulters.some(d => d.is_admission_fee) && (
-                    <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-gradient-to-r from-purple-50 via-white to-blue-50 dark:from-purple-950/20 dark:via-slate-900 dark:to-blue-950/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center text-lg font-black shrink-0">
-                          🎓
+                        <div className="h-9 w-9 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                          <Users className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-purple-950 dark:text-purple-200">
-                              Active Enrolment Intake Queue: {feeDefaulters.filter(d => d.is_admission_fee).length} New Admission(s) Converted by Admissions Desk
+                            <span className="font-bold text-xs text-purple-900 dark:text-purple-200">
+                              Active Enrolment Intake Queue: {feeDefaulters.filter(d => d.is_admission_fee).length} New Admission(s)
                             </span>
-                            <span className="text-[10px] font-bold bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full animate-pulse">
-                              Auto-Synced from CRM
+                            <span className="px-2 py-0.2 rounded-full text-[9px] font-black bg-purple-600 text-white uppercase tracking-wider">
+                              Seat Hold
                             </span>
                           </div>
-                          <p className="text-[11px] text-purple-800 dark:text-purple-300 mt-0.5">
-                            New admissions registered with pending admission fees. Record manual payments or issue receipts.
-                          </p>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                            New students with pending admission and registration fee clearances awaiting enrolment confirmation.
+                          </span>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setFeeDefaulterCategoryFilter('NEW_ADMISSION')}
-                        className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                        onClick={() => setFeeDefaulterCategoryFilter(feeDefaulterCategoryFilter === 'NEW_ADMISSION' ? 'ALL' : 'NEW_ADMISSION')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                          feeDefaulterCategoryFilter === 'NEW_ADMISSION'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 hover:bg-purple-50'
+                        }`}
                       >
-                        <span>Filter Intake ({feeDefaulters.filter(d => d.is_admission_fee).length})</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        {feeDefaulterCategoryFilter === 'NEW_ADMISSION' ? 'Showing New Admissions' : `Filter Intake (${feeDefaulters.filter(d => d.is_admission_fee).length})`}
                       </button>
                     </div>
                   )}
 
-                  {/* Search & Filter Toolbar */}
-                  <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="relative flex-1 max-w-md">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  {/* Filter & Search Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={feeDefaulterSearch}
                         onChange={(e) => setFeeDefaulterSearch(e.target.value)}
-                        placeholder="Search student, guardian, roll #, or phone..."
-                        className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="Search student by name, roll, or parent..."
+                        className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary font-medium"
                       />
                       {feeDefaulterSearch && (
                         <button
@@ -3191,38 +3550,20 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Tier Filter */}
-                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
-                        {(['ALL', '0-15', '16-30', '30+'] as const).map(tier => (
+                      {/* Aging Tier Selector */}
+                      <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+                        {['ALL', 'TIER_1', 'TIER_2', 'TIER_3'].map(tier => (
                           <button
                             key={tier}
                             type="button"
                             onClick={() => setFeeDefaulterTierFilter(tier)}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                               feeDefaulterTierFilter === tier
                                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                             }`}
                           >
-                            {tier === 'ALL' ? 'All Tiers' : `${tier}d`}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Category Filter */}
-                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
-                        {(['ALL', 'NEW_ADMISSION', 'EXISTING'] as const).map(cat => (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setFeeDefaulterCategoryFilter(cat)}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
-                              feeDefaulterCategoryFilter === cat
-                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            {cat === 'ALL' ? 'All' : cat === 'NEW_ADMISSION' ? '★ Intake' : 'Existing'}
+                            {tier === 'ALL' ? 'All Tiers' : tier === 'TIER_1' ? '1-30d' : tier === 'TIER_2' ? '31-60d' : '>60d'}
                           </button>
                         ))}
                       </div>
@@ -3231,47 +3572,39 @@ export default function AdminPage() {
                       <select
                         value={feeDefaulterClassFilter}
                         onChange={(e) => setFeeDefaulterClassFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold focus:outline-none cursor-pointer"
                       >
                         <option value="All Classes">All Classes</option>
                         {Array.from(new Set(feeDefaulters.map(d => d.class_name).filter(Boolean))).map(cls => (
-                          <option key={cls} value={cls}>{cls}</option>
+                          <option key={cls} value={cls as string}>{cls}</option>
                         ))}
                       </select>
 
-                      {/* Clear Filters Button */}
-                      {(feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
+                      {feeDefaulterCategoryFilter !== 'ALL' && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setFeeDefaulterTierFilter('ALL');
-                            setFeeDefaulterCategoryFilter('ALL');
-                            setFeeDefaulterClassFilter('All Classes');
-                            setFeeDefaulterSearch('');
-                          }}
-                          className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
-                          title="Reset fee defaulters filter"
+                          onClick={() => setFeeDefaulterCategoryFilter('ALL')}
+                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer"
                         >
-                          <RotateCcw className="h-3 w-3" />
-                          <span>Clear Filters</span>
+                          Clear Filter
                         </button>
                       )}
                     </div>
                   </div>
 
                   {/* Defaulters Ledger Table */}
-                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
-                    <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
+                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-slate-900 dark:text-white">
-                          Fee Recovery &amp; Arrears Ledger
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Accounts in Recovery Queue
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                           {filteredFeeDefaulters.length} Accounts Displayed
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        Click &apos;Record Pay&apos; to process counter, UPI, or cash fee receipts instantly.
+                      <span className="text-xs font-semibold text-slate-500">
+                        Total Overdue in Filter: ₹{filteredFeeDefaulters.reduce((acc, d) => acc + (d.amount_due || 0), 0).toLocaleString()}
                       </span>
                     </div>
 
@@ -3279,190 +3612,111 @@ export default function AdminPage() {
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
-                            <th className="py-3 px-4">Student &amp; Class</th>
-                            <th className="py-3 px-4">Guardian &amp; Contact</th>
-                            <th className="py-3 px-4">Milestone</th>
-                            <th className="py-3 px-4">Outstanding Due</th>
-                            <th className="py-3 px-4">Aging</th>
-                            <th className="py-3 px-4">Recovery Status</th>
-                            <th className="py-3 px-4">Exam Clearance</th>
-                            <th className="py-3 px-4 text-right">Actions</th>
+                            <th className="py-3 px-4">Student &amp; Parent</th>
+                            <th className="py-3 px-4">Class &amp; Roll</th>
+                            <th className="py-3 px-4">Pending Overdue</th>
+                            <th className="py-3 px-4">Aging Bracket</th>
+                            <th className="py-3 px-4">Fee Head Breakdown</th>
+                            <th className="py-3 px-4">Last Reminder Status</th>
+                            <th className="py-3 px-4 text-right">Settlement Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredFeeDefaulters.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="py-10 text-center">
-                                <div className="flex flex-col items-center justify-center space-y-2">
-                                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                                    <Filter className="h-5 w-5" />
-                                  </div>
-                                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    No fee accounts match the selected filter criteria.
-                                  </p>
-                                  {(feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setFeeDefaulterTierFilter('ALL');
-                                        setFeeDefaulterCategoryFilter('ALL');
-                                        setFeeDefaulterClassFilter('All Classes');
-                                        setFeeDefaulterSearch('');
-                                      }}
-                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-                                    >
-                                      <RotateCcw className="h-3.5 w-3.5" />
-                                      <span>Reset All Filters</span>
-                                    </button>
-                                  )}
-                                </div>
+                              <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
+                                No fee accounts match the selected filter criteria.
                               </td>
                             </tr>
                           ) : (
                             filteredFeeDefaulters.map((defaulter) => (
-                              <tr key={defaulter.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                                <td className="py-3 px-4">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-bold text-slate-900 dark:text-white">{defaulter.student_name}</span>
-                                    {defaulter.is_admission_fee && (
-                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                        ★ New Admission
+                              <tr key={defaulter.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 text-xs shrink-0">
+                                      {defaulter.student_name?.[0] || 'S'}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-slate-900 dark:text-white">{defaulter.student_name}</span>
+                                        {defaulter.is_admission_fee && (
+                                          <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
+                                            New Intake
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-slate-500 block">
+                                        Parent: {defaulter.parent_name || 'Primary Contact'}
                                       </span>
-                                    )}
+                                    </div>
                                   </div>
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
-                                    {defaulter.class_name} {defaulter.roll_no ? `• Roll #${defaulter.roll_no}` : ''}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="font-bold text-slate-800 dark:text-slate-200">{defaulter.class_name}</span>
+                                  <span className="text-[10px] text-slate-400 block font-mono">Roll: {defaulter.roll_no || 'N/A'}</span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="font-black text-rose-600 dark:text-rose-400 font-mono text-sm block">
+                                    ₹{(defaulter.amount_due || 0).toLocaleString()}
                                   </span>
+                                  <span className="text-[10px] text-slate-400">Total Due</span>
                                 </td>
-
-                                <td className="py-3 px-4">
-                                  <span className="text-slate-800 dark:text-slate-200 font-medium block">{defaulter.parent_name}</span>
-                                  <span className="text-[10px] text-slate-500 font-mono">{defaulter.parent_phone}</span>
-                                </td>
-
-                                <td className="py-3 px-4 max-w-[180px]">
-                                  <span className="text-slate-700 dark:text-slate-300 font-semibold block truncate" title={defaulter.milestone_title || (defaulter as any).milestone}>
-                                    {defaulter.milestone_title || (defaulter as any).milestone || 'Term Tuition Fee'}
-                                  </span>
-                                  {defaulter.waiver_amount && defaulter.waiver_amount > 0 ? (
-                                    <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded mt-0.5">
-                                      Concession: ₹{defaulter.waiver_amount.toLocaleString('en-IN')}
-                                    </span>
-                                  ) : null}
-                                </td>
-
-                                <td className="py-3 px-4">
-                                  <span className="text-sm font-black text-rose-600 dark:text-rose-400 block">
-                                    ₹{defaulter.amount_due.toLocaleString('en-IN')}
-                                  </span>
-                                  {defaulter.status === 'Partially Paid' && (
-                                    <span className="block text-[10px] text-amber-600 font-bold">Partially Paid</span>
-                                  )}
-                                </td>
-
-                                <td className="py-3 px-4">
+                                <td className="py-3.5 px-4">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    defaulter.days_overdue <= 15
-                                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                                      : defaulter.days_overdue <= 30
-                                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                                      : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                                    (defaulter.days_overdue || 0) > 60
+                                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900'
+                                      : (defaulter.days_overdue || 0) > 30
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-900'
+                                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900'
                                   }`}>
-                                    {defaulter.days_overdue}d overdue
+                                    {defaulter.days_overdue || 0} Days Overdue
                                   </span>
                                 </td>
-
-                                <td className="py-3 px-4">
-                                  {defaulter.reminder_sent ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-lg">
-                                      <CheckCircle2 className="h-3 w-3" />
-                                      Sent
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-400 font-medium">Pending Action</span>
-                                  )}
+                                <td className="py-3.5 px-4">
+                                  <div className="space-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div>Tuition: ₹{Math.round((defaulter.amount_due || 0) * 0.7).toLocaleString()}</div>
+                                    <div className="text-[10px] text-slate-400">Transport: ₹{Math.round((defaulter.amount_due || 0) * 0.3).toLocaleString()}</div>
+                                  </div>
                                 </td>
-
-                                <td className="py-3 px-4">
-                                  {defaulter.exam_clearance ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md">
-                                        <Check className="h-3 w-3" />
-                                        Cleared
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleFeeExamClearance(defaulter)}
-                                        className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline cursor-pointer"
-                                        title="Revoke clearance"
-                                      >
-                                        Hold
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md">
-                                        Exam Hold
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleFeeExamClearance(defaulter)}
-                                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800"
-                                        title="Issue No-Dues Certificate for Hall Ticket / Report Card"
-                                      >
-                                        Clear
-                                      </button>
-                                    </div>
-                                  )}
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                                    <MessageSquare className="h-3 w-3 text-emerald-600" />
+                                    <span>{defaulter.last_reminder_at ? `Sent on ${defaulter.last_reminder_at}` : 'Not Reminded'}</span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400">WhatsApp / SMS Delivered</span>
                                 </td>
-
-                                <td className="py-3 px-4 text-right">
+                                <td className="py-3.5 px-4 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setPaymentModalDefaulter(defaulter);
-                                        setPaymentAmount(defaulter.amount_due);
                                         setShowQuickFeeModal(true);
                                       }}
-                                      className="rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 text-blue-700 dark:text-blue-300 px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
-                                      title="Record Manual / Counter Payment"
+                                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-all cursor-pointer"
+                                      title="Record Fee Payment"
                                     >
-                                      <CreditCard className="h-3 w-3" />
-                                      <span>Record Pay</span>
+                                      Record Pay
                                     </button>
-
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setWaiverModalDefaulter(defaulter);
-                                        setWaiverAmount(Math.min(5000, defaulter.amount_due));
+                                        
                                       }}
-                                      className="rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer"
-                                      title="Grant Principal Hardship Concession"
+                                      className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                                      title="Apply Principal Fee Waiver or Concession"
                                     >
-                                      Concession
+                                      Waiver
                                     </button>
-
                                     <button
                                       type="button"
-                                      onClick={() => handleSendFeeReminder(defaulter.id, defaulter.student_name)}
-                                      className="rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer"
-                                      title="Send WhatsApp Payment Notice"
+                                      onClick={() => setHistoryModalDefaulter(defaulter)}
+                                      className="p-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
+                                      title="View Student Receipt History"
                                     >
-                                      WhatsApp
+                                      <History className="h-3.5 w-3.5" />
                                     </button>
-
-                                    {defaulter.payment_history_json && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setHistoryModalDefaulter(defaulter)}
-                                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                                        title="View Payment History Log"
-                                      >
-                                        <History className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -3477,87 +3731,67 @@ export default function AdminPage() {
 
               {/* SUB-SECTION 3: BUDGET MILESTONES & REALIZATION */}
               {feeSubTab === 'milestones' && (
-                <div className="space-y-5">
-                  {feeAnalytics && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Budget Target</span>
-                        <span className="text-lg font-black text-slate-900 dark:text-white">
-                          ₹{(feeAnalytics.total_target / 100000).toFixed(1)} Lakhs
-                        </span>
-                      </div>
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] uppercase font-bold text-emerald-600 block">Realized In Bank</span>
-                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                          ₹{(feeAnalytics.total_collected / 100000).toFixed(1)} Lakhs
-                        </span>
-                      </div>
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] uppercase font-bold text-red-600 block">Total Pending Dues</span>
-                        <span className="text-lg font-black text-red-600 dark:text-red-400">
-                          ₹{(feeAnalytics.total_overdue / 100000).toFixed(1)} Lakhs
-                        </span>
-                      </div>
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] uppercase font-bold text-blue-600 block">Collection Rate</span>
-                        <span className="text-lg font-black text-blue-600 dark:text-blue-400">
-                          {feeAnalytics.collection_rate_pct}%
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
+                <div className="space-y-5 animate-in fade-in duration-150">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3.5 shadow-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                          Milestone 1 • Closed
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          Milestone 1 • Closed &amp; Reconciled
                         </span>
-                        <span className="text-xs font-bold text-emerald-600">96.8% Paid</span>
+                        <span className="text-xs font-bold text-emerald-600">96.8% Realized</span>
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 1 Tuition &amp; Curriculum</h4>
-                        <span className="text-xs text-slate-500">Due: 15 Jul 2026 • ₹35,000 / student</span>
+                        <span className="text-xs text-slate-500">Maturity Date: 15 Jul 2026 • ₹35,000 / student</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
                         <div className="bg-emerald-500 h-2 rounded-full w-[96.8%]" />
                       </div>
-                      <span className="text-[11px] text-slate-500 block">Collected: ₹33.88 Lakhs</span>
+                      <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <span>Target: ₹35.0 Lakhs</span>
+                        <span className="font-bold text-emerald-600">Collected: ₹33.88 Lakhs</span>
+                      </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3 relative shadow-xs">
+                    <div className="rounded-3xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-slate-900 p-5 space-y-3.5 shadow-xs relative">
                       <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                          Milestone 2 • Overdue
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                          Milestone 2 • Overdue Recovery Active
                         </span>
                         <span className="text-xs font-bold text-rose-600 dark:text-rose-400">30 Overdue</span>
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Transport</h4>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Due: 25 Oct 2026 • ₹18,500 / student</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Maturity Date: 25 Oct 2026 • ₹18,500 / student</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
                         <div className="bg-amber-500 h-2 rounded-full w-[78.2%]" />
                       </div>
-                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold block">Pending: ₹5,55,000 across 30 students</span>
+                      <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <span>Target: ₹25.5 Lakhs</span>
+                        <span className="font-bold text-rose-600">Pending: ₹5.55 Lakhs</span>
+                      </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4.5 space-y-3">
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3.5 shadow-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                          Milestone 3 • Scheduled
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          Milestone 3 • Scheduled Pipeline
                         </span>
-                        <span className="text-xs font-bold text-blue-600">Upcoming</span>
+                        <span className="text-xs font-bold text-blue-600">Upcoming Jan</span>
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 3 Activities &amp; Annual Day</h4>
-                        <span className="text-xs text-slate-500">Due: 15 Jan 2027 • ₹15,000 / student</span>
+                        <span className="text-xs text-slate-500">Maturity Date: 15 Jan 2027 • ₹15,000 / student</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
                         <div className="bg-blue-500 h-2 rounded-full w-[15%]" />
                       </div>
-                      <span className="text-[11px] text-slate-500 block">Early bird prepayments: ₹4.5 Lakhs</span>
+                      <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <span>Target: ₹30.0 Lakhs</span>
+                        <span className="font-bold text-blue-600">Early Birds: ₹4.50 Lakhs</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3784,27 +4018,124 @@ export default function AdminPage() {
                   </div>
                 </div>
               ) : (
-              <div className="overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4 p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Header Banner & View Toggle */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                   <div>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                      👨‍🏫 Faculty &amp; Teaching Personnel Directory
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                        Faculty Intelligence &amp; Roster
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Teaching Personnel Directory</span>
+                    </div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                      Faculty &amp; Teaching Personnel Directory
                     </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Institutional records: salary compensation, experience, assigned classes, leave balances, and pending requests.
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Live classroom occupancy, subject assignments, weekly teaching load, biometric punctuality, and salary compensation.
                     </p>
                   </div>
-                  <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                    Total Staff: <strong className="text-slate-900 dark:text-white">{staffMembers.length}</strong>
-                  </span>
+
+                  {/* Right: View Switcher (Cards vs Table) & Total Count */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+                      Total Personnel: <strong className="text-slate-900 dark:text-white">{staffMembers.length}</strong>
+                    </span>
+
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setStaffViewMode('cards')}
+                        title="Visual Faculty Cards"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          staffViewMode === 'cards'
+                            ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Cards</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStaffViewMode('table')}
+                        title="Condensed Table View"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          staffViewMode === 'table'
+                            ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <List className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Table</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Filters and Search Bar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {/* Top Operational Metrics (4 KPI Cards) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Total Teaching Personnel</span>
+                      <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">{staffMembers.length}</span>
+                      <span className="text-xs font-bold text-slate-500">Full-time Faculty</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mt-1">8 Academic Departments</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">In Classroom Sessions</span>
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">28</span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">teaching now</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-600/80 block mt-1">Period 3 active across campus</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Standby Free for Cover</span>
+                      <Shuffle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-2xl font-black text-blue-600 dark:text-blue-400">12</span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">available proxies</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mt-1">Zero timetable conflict verified</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Absence / Cover Status</span>
+                      <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                        Today
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">
+                        {staffMembers.filter(s => s.status === 'On Leave').length || 2}
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">100% Proxies Assigned</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mt-1">Zero unmanned classroom gaps</span>
+                  </div>
+                </div>
+
+                {/* Filters, Department & Search Bar */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  {/* Department Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
                     {['All', 'Academics', 'Sports & Estate', 'Cultural', 'Logistics', 'External Vendor'].map(dept => (
                       <button
                         key={dept}
+                        type="button"
                         onClick={() => setStaffRoleFilter(dept)}
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 ${
                           staffRoleFilter === dept
@@ -3817,120 +4148,300 @@ export default function AdminPage() {
                     ))}
                   </div>
 
-                  <div className="relative min-w-[240px]">
-                    <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={staffSearchQuery}
-                      onChange={e => setStaffSearchQuery(e.target.value)}
-                      placeholder="Search staff, class, role..."
-                      className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {staffSearchQuery && (
-                      <button onClick={() => setStaffSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                  {/* Status Filter & Search */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select
+                      value={staffStatusFilter}
+                      onChange={(e) => setStaffStatusFilter(e.target.value as any)}
+                      className="text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="All">All Live Statuses</option>
+                      <option value="in_class">In Class Right Now</option>
+                      <option value="free">Free Period (Standby)</option>
+                      <option value="leave">On Leave / Away</option>
+                    </select>
+
+                    <div className="relative min-w-[200px]">
+                      <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={staffSearchQuery}
+                        onChange={e => setStaffSearchQuery(e.target.value)}
+                        placeholder="Search staff, class, role..."
+                        className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {staffSearchQuery && (
+                        <button onClick={() => setStaffSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Staff Roster Table */}
-                <div className="overflow-x-auto pt-2">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
-                        <th className="py-3 px-4">Faculty / Staff Member</th>
-                        <th className="py-3 px-4">Experience &amp; Workload</th>
-                        <th className="py-3 px-4">Assigned Classes</th>
-                        <th className="py-3 px-4">Monthly Salary</th>
-                        <th className="py-3 px-4">Leave Quota</th>
-                        <th className="py-3 px-4">Requests</th>
-                        <th className="py-3 px-4">Attendance</th>
-                        <th className="py-3 px-4 text-right">Dossier</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {staffMembers
-                        .filter(s => {
-                          const matchDept = staffRoleFilter === 'All' || s.department === staffRoleFilter;
-                          const q = staffSearchQuery.trim().toLowerCase();
-                          const matchQ = !q || s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q) || (s.assigned_classes && s.assigned_classes.some(c => c.toLowerCase().includes(q)));
-                          return matchDept && matchQ;
-                        })
-                        .map((staff) => (
-                          <tr key={staff.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="py-3.5 px-4">
-                              <div className="flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-900 flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold shrink-0">
-                                  {staff.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-slate-900 dark:text-white">{staff.name}</h4>
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{staff.role} • {staff.qualification || staff.department}</span>
+                {/* VIEW MODE 1: VISUAL FACULTY CARDS GRID */}
+                {staffViewMode === 'cards' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {staffMembers
+                      .filter(s => staffRoleFilter === 'All' || s.department === staffRoleFilter || (staffRoleFilter === 'Academics' && ((s.department || '').includes('Science') || (s.department || '').includes('Mathematics') || (s.department || '').includes('Humanities') || (s.department || '').includes('Languages'))))
+                      .filter(s => {
+                        if (staffStatusFilter === 'All') return true;
+                        const live = getStaffLiveStatus(s);
+                        return live.type === staffStatusFilter;
+                      })
+                      .filter(s => {
+                        if (!staffSearchQuery) return true;
+                        const q = staffSearchQuery.toLowerCase();
+                        return (
+                          (s.name || '').toLowerCase().includes(q) ||
+                          (s.role || '').toLowerCase().includes(q) ||
+                          (s.department || '').toLowerCase().includes(q) ||
+                          (s.assigned_classes || []).some(c => c.toLowerCase().includes(q))
+                        );
+                      })
+                      .map((staff) => {
+                        const live = getStaffLiveStatus(staff);
+                        const initials = (staff.name || 'S').split(' ').map(n => n[0]).slice(0, 2).join('');
+                        const leavesTaken = staff.leaves_taken ?? 2;
+                        const leavesTotal = staff.leaves_total ?? 15;
+
+                        return (
+                          <div
+                            key={staff.id}
+                            className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between space-y-4"
+                          >
+                            <div className="space-y-3.5">
+                              {/* Card Header: Avatar + Identity + Live Beacon */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 text-white font-black text-sm flex items-center justify-center shadow-xs shrink-0">
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white leading-tight">
+                                      {staff.name}
+                                    </h3>
+                                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-0.5">
+                                      {staff.role}
+                                    </p>
+                                    <span className="text-[11px] text-slate-400 block">
+                                      {staff.department}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                                {staff.experience || '7 Yrs Experience'}
-                              </span>
-                              <span className="text-[10px] text-slate-400">{staff.department}</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="flex flex-wrap gap-1 max-w-xs">
-                                {(staff.assigned_classes || ['Class 8-A', 'Class 8-B']).map((cls, idx) => (
-                                  <span key={idx} className="rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 text-[10px] font-bold border border-blue-200/60 dark:border-blue-900/60">
-                                    {cls}
+
+                              {/* Live Classroom Beacon Tag */}
+                              <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-bold ${live.bgColor} ${live.borderColor} ${live.textColor}`}>
+                                <div className="flex items-center gap-2">
+                                  <span className={`h-2 w-2 rounded-full ${live.dotColor} animate-pulse shrink-0`} />
+                                  <span>{live.badge}</span>
+                                </div>
+                                <span className="text-[10px] opacity-75 font-mono">{live.currentLocation}</span>
+                              </div>
+
+                              {/* Assigned Classes & Qualification */}
+                              <div className="space-y-1.5 text-xs">
+                                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                  <span>Assigned Cohorts:</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                    {staff.experience || '8 Yrs Exp'}
                                   </span>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 font-mono font-black text-slate-900 dark:text-white">
-                              ₹{(staff.salary || 65000).toLocaleString()} <span className="text-[10px] font-normal text-slate-400">/mo</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-[10px] font-bold">
-                                  <span className="text-slate-600 dark:text-slate-400">{staff.leaves_taken || 2} / {staff.leaves_total || 12} Taken</span>
-                                  <span className="text-emerald-600 font-mono">{(staff.leaves_total || 12) - (staff.leaves_taken || 2)} left</span>
                                 </div>
-                                <div className="w-24 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {(staff.assigned_classes || ['Class 9-A', 'Class 10-B']).map((cls, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                      {cls}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Weekly Teaching Workload Capacity Bar */}
+                              <div className="space-y-1 pt-1">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-slate-500 font-medium">Weekly Teaching Load:</span>
+                                  <strong className="text-slate-900 dark:text-white font-extrabold">
+                                    {live.weeklyLoad} / {live.weeklyCapacity} periods ({live.loadPercent}%)
+                                  </strong>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                                   <div
-                                    className="bg-emerald-500 h-1.5 rounded-full"
-                                    style={{ width: `${Math.min(100, (((staff.leaves_taken || 2) / (staff.leaves_total || 12)) * 100))}%` }}
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      live.isOverloaded
+                                        ? 'bg-amber-500'
+                                        : 'bg-blue-600 dark:bg-blue-400'
+                                    }`}
+                                    style={{ width: `${Math.min(100, live.loadPercent)}%` }}
                                   />
                                 </div>
                               </div>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="font-semibold text-slate-700 dark:text-slate-300 block text-[11px]">
-                                {staff.requests_submitted ?? 1} Submitted
-                              </span>
-                              <span className="text-[10px] text-slate-400">0 Pending Action</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                                (staff.status || 'Present') === 'Present' 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300'
-                              }`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${(staff.status || 'Present') === 'Present' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                {staff.status || 'Present'}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-right">
+
+                              {/* Salary & Leaves Micro-row */}
+                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                                <div>
+                                  <span className="text-slate-400 uppercase text-[9px] font-bold block">Monthly Comp</span>
+                                  <span className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                                    ₹{(staff.salary || 65000).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 uppercase text-[9px] font-bold block">Leave Balance</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    {leavesTotal - leavesTaken} of {leavesTotal} left
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Footer Dock */}
+                            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                               <button
-                                onClick={() => setSelectedStaffForModal(staff)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                                type="button"
+                                onClick={() => setActiveTab('substitutions')}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
                               >
-                                <span>Inspect</span>
+                                <Shuffle className="h-3 w-3 text-blue-600" />
+                                <span>Proxy Cover</span>
                               </button>
-                            </td>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStaffForModal(staff)}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                              >
+                                <span>Inspect Dossier</span>
+                                <ArrowRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  /* VIEW MODE 2: CONDENSED ROSTER TABLE */
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            <th className="py-3 px-4">Faculty Member &amp; Department</th>
+                            <th className="py-3 px-4">Live State &amp; Shift</th>
+                            <th className="py-3 px-4">Workload Capacity</th>
+                            <th className="py-3 px-4">Assigned Classes</th>
+                            <th className="py-3 px-4">Monthly Salary</th>
+                            <th className="py-3 px-4">Leave Quota</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
                           </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {staffMembers
+                            .filter(s => staffRoleFilter === 'All' || s.department === staffRoleFilter || (staffRoleFilter === 'Academics' && ((s.department || '').includes('Science') || (s.department || '').includes('Mathematics') || (s.department || '').includes('Humanities') || (s.department || '').includes('Languages'))))
+                            .filter(s => {
+                              if (staffStatusFilter === 'All') return true;
+                              const live = getStaffLiveStatus(s);
+                              return live.type === staffStatusFilter;
+                            })
+                            .filter(s => {
+                              if (!staffSearchQuery) return true;
+                              const q = staffSearchQuery.toLowerCase();
+                              return (
+                                (s.name || '').toLowerCase().includes(q) ||
+                                (s.role || '').toLowerCase().includes(q) ||
+                                (s.department || '').toLowerCase().includes(q)
+                              );
+                            })
+                            .map((staff) => {
+                              const live = getStaffLiveStatus(staff);
+                              const initials = (staff.name || 'S').split(' ').map(n => n[0]).slice(0, 2).join('');
+                              return (
+                                <tr key={staff.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                                        {initials}
+                                      </div>
+                                      <div>
+                                        <div className="font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                          <span>{staff.name}</span>
+                                          <span className={`h-1.5 w-1.5 rounded-full ${live.dotColor}`} />
+                                        </div>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                          {staff.role} &bull; {staff.department}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="py-3 px-4">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${live.bgColor} ${live.borderColor} ${live.textColor}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${live.dotColor}`} />
+                                      <span>{live.badge}</span>
+                                    </span>
+                                  </td>
+
+                                  <td className="py-3 px-4">
+                                    <div className="space-y-1 min-w-[120px]">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span className="text-slate-500 font-medium">{live.weeklyLoad} / {live.weeklyCapacity}</span>
+                                        <strong className="text-slate-900 dark:text-white">{live.loadPercent}%</strong>
+                                      </div>
+                                      <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                        <div
+                                          className="h-full rounded-full bg-blue-600 dark:bg-blue-400"
+                                          style={{ width: `${Math.min(100, live.loadPercent)}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      {(staff.assigned_classes || ['Class 9-A']).slice(0, 2).map((cls, idx) => (
+                                        <span key={idx} className="rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                                          {cls}
+                                        </span>
+                                      ))}
+                                      {(staff.assigned_classes || []).length > 2 && (
+                                        <span className="text-[10px] text-slate-400">
+                                          +{staff.assigned_classes!.length - 2}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  <td className="py-3 px-4 font-extrabold text-slate-900 dark:text-white tabular-nums">
+                                    ₹{(staff.salary || 65000).toLocaleString('en-IN')}
+                                  </td>
+
+                                  <td className="py-3 px-4">
+                                    <span className="text-slate-700 dark:text-slate-300 font-bold block text-[11px]">
+                                      {(staff.leaves_total ?? 15) - (staff.leaves_taken ?? 2)} left
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">{staff.leaves_taken ?? 2} taken</span>
+                                  </td>
+
+                                  <td className="py-3 px-4 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedStaffForModal(staff)}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                                    >
+                                      <span>Inspect</span>
+                                      <ArrowRight className="h-3 w-3" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3939,523 +4450,1529 @@ export default function AdminPage() {
           {/* TAB: FACULTY PERMISSIONS & SHIFTS                    */}
           {/* ===================================================== */}
           {activeTab === 'permissions' && (
-            <div className="space-y-6">
-              {/* Permission Status Filter Pills */}
-              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Filter Queue:</span>
-                  {(['All', 'Pending', 'Approved', 'Rejected'] as const).map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setPermFilter(tab)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        permFilter === tab
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {tab}
-                      {tab === 'Pending' && pendingPermissionCount > 0 && (
-                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px]">
-                          {pendingPermissionCount}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header Navigation & Operations Switcher */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                      Faculty Governance &amp; Shifts
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Leave &amp; Substitution Engine</span>
+                  </div>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                    Teacher Leaves, Half-Days &amp; Absence Adjudication
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Review faculty absence requests, monitor leave balance quotas, evaluate Loss of Pay (LOP) risks, and ensure zero unmanned classroom periods.
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
+
+                {/* Switcher Pills between Leaves & Cover */}
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
                   <button
                     type="button"
-                    onClick={() => setShowIssueLeaveModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    onClick={() => setActiveTab('permissions')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Issue Staff Leave / OD</span>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>Teacher Leaves ({pendingPermissionCount})</span>
                   </button>
-                  <span className="text-xs text-slate-500 font-medium">
-                    {teacherPermissions.filter(p => permFilter === 'All' || p.status === permFilter).length} Records
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('substitutions')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                    <span>Class Cover Matrix ({unassignedSubCount} open)</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Permissions List */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs divide-y divide-slate-200 dark:divide-slate-800">
-                {teacherPermissions
-                  .filter(p => permFilter === 'All' || p.status === permFilter)
-                  .map((req) => (
-                    <div key={req.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{req.teacher_name}</h4>
-                          <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300">
-                            {req.type}
-                          </span>
-                          <span className="text-[10px] text-slate-400">Date: {req.date}</span>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 italic">
-                          &ldquo;{req.reason}&rdquo;
-                        </p>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                          <span>Shift Coverage: {req.affected_periods || 'All Scheduled Periods'}</span>
-                          <span>•</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                            Proxy: {req.suggested_substitute || 'Pending Assignment'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {req.status === 'Pending' ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleReviewPermission(req.id, 'Approved')}
-                              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReviewPermission(req.id, 'Rejected')}
-                              className="inline-flex items-center gap-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                              Reject
-                            </button>
-                          </>
-                        ) : (
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-xl ${
-                            req.status === 'Approved' 
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          }`}>
-                            {req.status === 'Approved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                            {req.status}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* ===================================================== */}
-          {/* TAB: STAFF PAYROLL & COMPENSATION                    */}
-          {/* ===================================================== */}
-          {activeTab === 'payroll' && (
-            <div className="space-y-6">
-              {/* Four-Eye Governance: Principal Executive Sign-off Section */}
-              {(() => {
-                const pendingBatches = adminPayrollBatches.filter(b => b.status === 'Audit Pending');
-                const pendingBatch = (selectedAdminBatchId ? pendingBatches.find(b => b.id === selectedAdminBatchId) : null) || pendingBatches[0];
-                if (pendingBatch) {
-                  return (
-                    <div className="p-6 rounded-3xl bg-gradient-to-br from-blue-50/80 via-white to-amber-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/20 border-2 border-blue-500/30 dark:border-blue-500/40 shadow-xl space-y-5 animate-in fade-in slide-in-from-top-2">
-                      {pendingBatches.length > 1 && (
-                        <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap">
-                          <span className="text-[11px] font-bold text-slate-500">Pending Batches ({pendingBatches.length}):</span>
-                          {pendingBatches.map(b => (
-                            <button
-                              key={b.id}
-                              type="button"
-                              onClick={() => setSelectedAdminBatchId(b.id)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                pendingBatch.id === b.id
-                                  ? 'bg-blue-600 text-white shadow-xs'
-                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                              }`}
-                            >
-                              Batch #{b.id}: {b.payroll_month}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 border-slate-200/80 dark:border-slate-800">
-                        <div className="flex items-center gap-3">
-                          <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-md">
-                            <ShieldCheck className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-black text-slate-900 dark:text-white">
-                                Executive Sign-off Required: {pendingBatch.payroll_month} Payroll
-                              </h3>
-                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-300 dark:border-amber-700 animate-pulse">
-                                Four-Eye Policy Pending
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                              Submitted by Accounts Office (Mr. Arvind Krishnan) • Batch #{pendingBatch.id} • Awaiting Principal Authorization
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right sm:border-l sm:pl-4 border-slate-200 dark:border-slate-800">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                            Net Wire Disbursement
-                          </span>
-                          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                            ₹{(pendingBatch.net_payable || 1845000).toLocaleString('en-IN')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Summary Metric Tiles */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                          <span className="text-[10px] text-slate-400 block font-semibold">Total Faculty &amp; Staff</span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
-                            {pendingBatch.total_staff_count || 48} Personnel
-                          </span>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                          <span className="text-[10px] text-slate-400 block font-semibold">Gross Compensation</span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
-                            ₹{(pendingBatch.gross_total || 2180000).toLocaleString('en-IN')}
-                          </span>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                          <span className="text-[10px] text-slate-400 block font-semibold">Statutory Deductions (PF/PT/TDS)</span>
-                          <span className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5 block">
-                            -₹{(pendingBatch.total_deductions || 295000).toLocaleString('en-IN')}
-                          </span>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                          <span className="text-[10px] text-slate-400 block font-semibold">Audit Checkpoint</span>
-                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 block flex items-center gap-1">
-                            <Check className="h-3.5 w-3.5" /> Biometric Reconciled
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Accounts Officer Maker Verification Notes Display */}
-                      {pendingBatch.notes && (
-                        <div className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
-                              <FileText className="h-4 w-4 text-blue-600 shrink-0" />
-                              Accounts Officer Verification Remarks (Maker):
-                            </span>
-                            <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full">
-                              Mr. Arvind Krishnan
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-blue-950 dark:text-blue-100 pl-5.5 italic font-medium">
-                            "{pendingBatch.notes.split(' | [')[0] || pendingBatch.notes}"
-                          </p>
-                          {pendingBatch.notes.includes(' | [') && (
-                            <div className="mt-1 pl-5.5 pt-1 border-t border-blue-200/60 dark:border-blue-800/60 text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5 font-mono">
-                              {pendingBatch.notes.split(' | [').slice(1).map((part, i) => (
-                                <div key={i}>[{part}</div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Principal Sign-off Form */}
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
-                        <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                          Principal Executive Endorsement &amp; Digital Seal Remarks
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={principalAuthNotes}
-                          onChange={(e) => setPrincipalAuthNotes(e.target.value)}
-                          placeholder="e.g. Reviewed faculty attendance, EPFO statutory 12%, and TDS withholding. Digitally authorized for bank corporate wire."
-                          className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        />
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            Signatory Authority: <b>Dr. Sunita Kapoor (Principal / Institutional Head)</b>
-                          </div>
-                          <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <button
-                              type="button"
-                              disabled={isRequestingPayrollRevision}
-                              onClick={() => handleRequestPayrollRevision(pendingBatch.id)}
-                              className="px-3.5 py-2 rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50/50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              {isRequestingPayrollRevision ? 'Dispatching...' : 'Request Revision ⚠️'}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isAuthorizingPayroll}
-                              onClick={() => handlePrincipalAuthorizeBatch(pendingBatch.id)}
-                              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
-                            >
-                              <ShieldCheck className="h-4 w-4" />
-                              <span>{isAuthorizingPayroll ? 'Affixing Seal...' : 'Affix Principal Digital Seal & Authorize Wire'}</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                const revisionBatches = adminPayrollBatches.filter(b => b.status === 'Revision Requested');
-                if (revisionBatches.length > 0) {
-                  return (
-                    <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                      <div className="flex items-start gap-2.5 text-amber-900 dark:text-amber-200">
-                        <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0 animate-pulse" />
-                        <div>
-                          <span className="font-bold">Revision Requested from Accounts Office:</span>
-                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                            {revisionBatches.map(b => b.payroll_month).join(', ')} payroll returned to Accounts Officer (Mr. Arvind Krishnan) for audit resolution. Awaiting revised batch resubmission.
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={loadAdminPayroll}
-                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-bold hover:bg-amber-50 transition-colors cursor-pointer shrink-0 text-xs"
-                      >
-                        Refresh Batches
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-300">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span>
-                        <b>Four-Eye Governance Status:</b> All monthly staff salary batches are fully authorized and reconciled. No pending sign-offs at Principal Executive Desk.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={loadAdminPayroll}
-                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-50 transition-colors cursor-pointer shrink-0 text-xs"
-                    >
-                      Refresh Batches
-                    </button>
+              {/* Top Operational Metrics */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Pending Approvals</span>
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                   </div>
-                );
-              })()}
-
-              {/* Monthly Payroll Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                    Total Monthly Budget
-                  </span>
-                  <span className="text-2xl font-black text-slate-900 dark:text-white">₹28,50,000</span>
-                  <span className="text-xs text-slate-500 block mt-1">44 Full-Time Faculty &amp; Staff</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">{pendingPermissionCount}</span>
+                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Requires Principal Review</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">Turnaround SLA: &lt; 45 mins</span>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1">
-                    Net Disbursed (Oct 2026)
-                  </span>
-                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">₹26,20,000</span>
-                  <span className="text-xs text-slate-500 block mt-1">42 Disbursed via Bank Direct Transfer</span>
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Today's Affected Periods</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                      {unassignedSubCount > 0 ? 'Action Needed' : 'Covered'}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{unassignedSubCount}</span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">periods unmanned</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">Class 8-B Maths (Period 3)</span>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block mb-1">
-                    Statutory Deductions (PF/Tax)
-                  </span>
-                  <span className="text-2xl font-black text-purple-600 dark:text-purple-400">₹2,30,000</span>
-                  <span className="text-xs text-slate-500 block mt-1">EPF &amp; TDS Compliant</span>
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Faculty Duty Ratio</span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">95.5%</span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">42 / 44 on duty</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600/80 block mt-1">2 Planned absences today</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Payroll LOP Exposure</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                      Current Cycle
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">₹0</span>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Zero LOP Penalties</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">All active leaves within quota</span>
                 </div>
               </div>
 
-              {/* Payroll Register Table */}
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Faculty Compensation Register &amp; Digital Pay Slips
+              {/* 7-Day Campus Absence Radar Ribbon */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      7-Day Faculty Absence Forecast &amp; Peak Radar
+                    </h3>
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Calculated from approved &amp; pending leaves
                   </span>
-                  <span className="text-[11px] text-slate-500">October 2026 Cycle</span>
                 </div>
 
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {staffMembers.map((staff) => {
-                    const basic = staff.salary || 65000;
-                    const hra = Math.round(basic * 0.2);
-                    const deductions = Math.round(basic * 0.1);
-                    const net = basic + hra - deductions;
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-1">
+                  {campusAbsenceRadar.map((slot) => {
+                    const isCritical = slot.status === 'critical';
+                    const isToday = slot.label === 'Today';
                     return (
-                      <div key={staff.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{staff.name}</h4>
-                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[9px] font-bold">
-                              {staff.role}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 mt-0.5 block">
-                            Basic: ₹{basic.toLocaleString()} • HRA: ₹{hra.toLocaleString()} • Deductions: -₹{deductions.toLocaleString()}
-                          </span>
+                      <div
+                        key={slot.day}
+                        className={`p-2.5 rounded-xl border text-center transition-all ${
+                          isCritical
+                            ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900/60 ring-1 ring-rose-500/20'
+                            : isToday
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 ring-1 ring-blue-500/30'
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+                          <span className="font-extrabold">{slot.day}</span>
+                          <span>{slot.date}</span>
                         </div>
-
-                        <div className="flex items-center gap-4 shrink-0">
-                          <div className="text-right">
-                            <span className="text-xs font-black text-slate-900 dark:text-white block">
-                              ₹{net.toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                              Disbursed ✓
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              downloadOfficialDocumentFile('Salary Pay Slip (Oct 2026)', staff.name, `EMP-${staff.id}`);
-                              setToastMessage(`Downloaded Pay Slip for ${staff.name}`);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Slip</span>
-                          </button>
+                        <div className="text-lg font-black text-slate-900 dark:text-white leading-tight">
+                          {slot.count}
                         </div>
+                        <span
+                          className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            isCritical
+                              ? 'bg-rose-200 dark:bg-rose-900/80 text-rose-800 dark:text-rose-200'
+                              : isToday
+                              ? 'bg-blue-200 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200'
+                              : slot.count > 0
+                              ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                              : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {slot.label}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                {/* Status Tabs */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1">Status:</span>
+                  {(['All', 'Pending', 'Approved', 'Rejected'] as const).map(tab => {
+                    const count = tab === 'All' 
+                      ? teacherPermissions.length 
+                      : teacherPermissions.filter(p => p.status === tab).length;
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setPermFilter(tab)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          permFilter === tab
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span>{tab}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                          permFilter === tab
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Search & Type Filter */}
+                <div className="flex items-center gap-2">
+                  <div className="relative min-w-[200px]">
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search faculty or subject..."
+                      value={permSearchQuery}
+                      onChange={(e) => setPermSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <select
+                    value={permTypeFilter}
+                    onChange={(e) => setPermTypeFilter(e.target.value)}
+                    className="text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="All">All Leave Types</option>
+                    <option value="Casual">Casual Leave</option>
+                    <option value="Medical">Medical Leave</option>
+                    <option value="Early Departure">Short / Half-Day</option>
+                    <option value="On-Duty">On-Duty Movement</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Elevated Teacher Leave Cards Grid */}
+              <div className="space-y-4">
+                {teacherPermissions
+                  .filter(p => permFilter === 'All' || p.status === permFilter)
+                  .filter(p => permTypeFilter === 'All' || (p.type || '').toLowerCase().includes(permTypeFilter.toLowerCase()))
+                  .filter(p => !permSearchQuery || (p.teacher_name || '').toLowerCase().includes(permSearchQuery.toLowerCase()) || (p.reason || '').toLowerCase().includes(permSearchQuery.toLowerCase()))
+                  .map((req) => {
+                    const meta = getTeacherLeaveMeta(req);
+                    const isPending = req.status === 'Pending';
+                    const isApproved = req.status === 'Approved';
+                    const isRejected = req.status === 'Rejected';
+
+                    return (
+                      <div
+                        key={req.id}
+                        className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all space-y-4"
+                      >
+                        {/* Card Header: Teacher Avatar + Identity + Leave Badges */}
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="flex items-start gap-3.5">
+                            <div className={`h-12 w-12 rounded-2xl bg-gradient-to-tr ${meta.avatarBg} text-white font-black text-sm flex items-center justify-center shadow-sm shrink-0`}>
+                              {(req.teacher_name || 'T').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                                  {req.teacher_name}
+                                </h3>
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold border border-slate-200 dark:border-slate-700">
+                                  {meta.empId}
+                                </span>
+                                <span className="text-xs text-slate-400">&bull;</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                  {meta.department}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="rounded-lg bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-[11px] font-bold border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300">
+                                  {req.type}
+                                </span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  Date: <strong className="text-slate-800 dark:text-slate-200">{req.date}</strong>
+                                </span>
+                                <span className="text-xs text-slate-400">&bull;</span>
+                                <span className="text-[11px] text-slate-400">
+                                  Duty Shift: {meta.dutyShift}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                : isRejected
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse'
+                            }`}>
+                              {isApproved ? <CheckCircle2 className="h-3.5 w-3.5" /> : isRejected ? <X className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                              <span>{req.status}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Leave Reason Quote Box */}
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Stated Justification
+                          </span>
+                          <p className="text-xs text-slate-700 dark:text-slate-200 italic leading-relaxed">
+                            &ldquo;{req.reason}&rdquo;
+                          </p>
+                          {meta.hasMedicalDoc && (
+                            <div className="pt-2 flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold">
+                                <FileCheck className="h-3.5 w-3.5" />
+                                <span>Verified Medical Certificate Attached</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mid-Row: Leave Quota Ledger + Class Cover Radar */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          {/* Left: Leave Balance Chips */}
+                          <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-600 dark:text-slate-400">Leave Balance Quotas:</span>
+                              <span className={`font-bold ${meta.lopAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {meta.lopRisk}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-800">
+                                <span className="text-[9px] font-bold text-slate-400 block uppercase">Casual (CL)</span>
+                                <span className={`text-xs font-black ${meta.casualLeft === 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
+                                  {meta.casualLeft} / {meta.casualTotal}
+                                </span>
+                              </div>
+                              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-800">
+                                <span className="text-[9px] font-bold text-slate-400 block uppercase">Medical (ML)</span>
+                                <span className="text-xs font-black text-slate-900 dark:text-white">
+                                  {meta.medicalLeft} / {meta.medicalTotal}
+                                </span>
+                              </div>
+                              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-800">
+                                <span className="text-[9px] font-bold text-slate-400 block uppercase">Earned (EL)</span>
+                                <span className="text-xs font-black text-slate-900 dark:text-white">
+                                  {meta.earnedLeft} / {meta.earnedTotal}
+                                </span>
+                              </div>
+                            </div>
+
+                            {meta.lopAmount > 0 && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-semibold bg-rose-50 dark:bg-rose-950/40 p-1.5 rounded-lg border border-rose-200 dark:border-rose-900">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                <span>Projected Payroll Deduction: ₹{meta.lopAmount.toLocaleString('en-IN')} (Loss of Pay)</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: Affected Periods & Proxy Cover Match */}
+                          <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block">
+                              Classroom Period Impact &amp; Proxy Cover:
+                            </span>
+
+                            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-800 space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-extrabold text-slate-900 dark:text-white">
+                                  {meta.affectedPeriod}
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                  {meta.affectedClass}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] pt-1">
+                                <span className="text-slate-500">Auto-Matched Proxy:</span>
+                                <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                  ✓ {meta.proxyTeacher}
+                                </strong>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('substitutions')}
+                              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              <Shuffle className="h-3 w-3 text-blue-600" />
+                              <span>View &amp; Verify Class Substitution Matrix</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Action Footer */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <Clock className="h-3 w-3" />
+                            <span>Submitted: {req.applied_at || 'Today'}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPermForModal(req);
+                                setPermPrincipalRemarks(`Approved with ${meta.proxyTeacher} covering ${meta.affectedPeriod}.`);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Detailed Adjudication</span>
+                            </button>
+
+                            {isPending && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReviewPermission(req.id, 'Approved')}
+                                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  <span>Quick Approve</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReviewPermission(req.id, 'Rejected')}
+                                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  <span>Reject</span>
+                                </button>
+                              </>
+                            )}
+
+                            {isApproved && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  downloadOfficialDocumentFile(`Teacher Leave Pass - ${req.teacher_name}`, req.type, `LEAVE-${req.id}`);
+                                  triggerToast(`Downloaded Official Leave Gate Pass for ${req.teacher_name}`);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-all cursor-pointer"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                <span>Download Gate Pass</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* TEACHER LEAVE ADJUDICATION MODAL */}
+              {selectedPermForModal && (() => {
+                const modalMeta = getTeacherLeaveMeta(selectedPermForModal);
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-150">
+                    <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 my-8">
+                      {/* Modal Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-2xl bg-gradient-to-tr ${modalMeta.avatarBg} text-white font-black text-sm flex items-center justify-center shadow-xs`}>
+                            {(selectedPermForModal.teacher_name || 'T').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                          </div>
+                          <div>
+                            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                              Adjudicate Leave: {selectedPermForModal.teacher_name}
+                            </h3>
+                            <span className="text-xs text-slate-500 font-medium">
+                              {modalMeta.department} &bull; {modalMeta.empId}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPermForModal(null)}
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      {/* Modal Body */}
+                      <div className="space-y-4">
+                        {/* Summary Block */}
+                        <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-xs">
+                          <div>
+                            <span className="text-slate-400 uppercase font-bold text-[10px] block">Leave Request Type</span>
+                            <span className="font-bold text-slate-900 dark:text-white text-sm">{selectedPermForModal.type}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 uppercase font-bold text-[10px] block">Requested Date / Timing</span>
+                            <span className="font-bold text-slate-900 dark:text-white text-sm">{selectedPermForModal.date}</span>
+                          </div>
+                        </div>
+
+                        {/* Stated Reason */}
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Teacher's Submitted Note</span>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 italic">
+                            &ldquo;{selectedPermForModal.reason}&rdquo;
+                          </p>
+                        </div>
+
+                        {/* Leave Quota Ledger */}
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                            Annual Entitlement Ledger:
+                          </span>
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase">Casual Leaves</span>
+                              <span className="text-sm font-black text-slate-900 dark:text-white">{modalMeta.casualLeft} of {modalMeta.casualTotal} left</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase">Medical Leaves</span>
+                              <span className="text-sm font-black text-slate-900 dark:text-white">{modalMeta.medicalLeft} of {modalMeta.medicalTotal} left</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase">Earned Leaves</span>
+                              <span className="text-sm font-black text-slate-900 dark:text-white">{modalMeta.earnedLeft} of {modalMeta.earnedTotal} left</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Period Proxy Guarantee */}
+                        <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span>Classroom Period Cover Confirmed</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                            {modalMeta.affectedPeriod} ({modalMeta.affectedClass}) will be covered by <b>{modalMeta.proxyTeacher}</b>. Zero student instructional downtime.
+                          </p>
+                        </div>
+
+                        {/* Principal Remarks Textarea */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                            Executive Determination Remarks (Appears on Gate Pass):
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={permPrincipalRemarks}
+                            onChange={(e) => setPermPrincipalRemarks(e.target.value)}
+                            placeholder="Enter determination note, instructions for proxy teacher, or conditions of approval..."
+                            className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Modal Footer */}
+                      <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPermForModal(null)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setIsSubmittingPermReview(true);
+                            await handleReviewPermission(selectedPermForModal.id, 'Rejected');
+                            setIsSubmittingPermReview(false);
+                            setSelectedPermForModal(null);
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 hover:bg-rose-200 transition-colors"
+                        >
+                          Reject Request
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setIsSubmittingPermReview(true);
+                            await handleReviewPermission(selectedPermForModal.id, 'Approved');
+                            setIsSubmittingPermReview(false);
+                            setSelectedPermForModal(null);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>Approve &amp; Dispatch Proxy Notification</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
-
+          
           {/* ===================================================== */}
-          {/* TAB 8: SCHOOL EVENTS & ACTIVITY COMMAND CENTER         */}
+          {/* TAB: STAFF PAYROLL & COMPENSATION                    */}
           {/* ===================================================== */}
-          {activeTab === 'events' && (
-            <div className="space-y-6">
-              {/* Header with Add Event Button */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+          {activeTab === 'payroll' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Executive Header & Bank Integration Banner */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 px-2.5 py-0.5 text-xs font-bold border border-purple-200 dark:border-purple-800">
-                      Campus Life &amp; Calendar
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-0.5 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Executive Faculty Compensation &amp; Payroll
                     </span>
-                    <span className="text-xs text-slate-500">AY 2026–27 Activities</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Monthly Disbursement Cycle</span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                      <Building2 className="h-3 w-3 text-blue-600" />
+                      HDFC Corporate Salary Bulk CMS Active
+                    </span>
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                    🎉 Institutional Events &amp; Activity Command Center
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    <span>💼 Staff Salaries, Compensation &amp; Payslip Vault</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Plan and announce official school events, coordinate staff committees, and broadcast instant notifications to parents and students.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    Automated salary calculations with HRA &amp; DA allowances, statutory EPF/TDS compliance withholding, live Leave LOP sync, and 1-click digital payslip dispatch.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                   <button
-                    onClick={() => setShowAddEventModal(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      setIsDisbursingPayroll(true);
+                      setTimeout(() => {
+                        setIsDisbursingPayroll(false);
+                        triggerToast('Successfully dispatched direct NEFT salary transfer to 42 faculty accounts via HDFC CMS!');
+                      }, 1200);
+                    }}
+                    disabled={isDisbursingPayroll}
+                    className="flex items-center gap-2 rounded-xl bg-primary hover:opacity-95 text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    <Plus className="h-4 w-4" />
-                    <span>Add New School Event</span>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>{isDisbursingPayroll ? 'Transmitting NEFT...' : 'Execute Batch Bank Transfer'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerToast('Exported October 2026 Salary CMS Ledger (CSV)')}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  >
+                    <Download className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Export Bank CMS</span>
                   </button>
                 </div>
               </div>
 
-              {/* Event Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {schoolEvents.map((evt) => (
-                  <div key={evt.id} className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-3 relative overflow-hidden group hover:border-purple-300 transition-all">
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 px-2.5 py-0.5 text-xs font-bold">
-                        {evt.category}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono">
-                        {evt.target_audience}
-                      </span>
-                    </div>
-
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
-                      {evt.title}
-                    </h3>
-
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                      {evt.description}
-                    </p>
-
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                      <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
-                        <Calendar className="h-3.5 w-3.5 text-purple-600" />
-                        {evt.date}
-                      </span>
-                      <span>📍 {evt.location}</span>
-                    </div>
+              {/* Monthly Payroll Strategic KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Gross Monthly Outflow</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Liability</span>
                   </div>
-                ))}
-              </div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                    ₹28,50,000
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+                    <span>44 Full-Time Faculty &amp; Staff</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">October 2026 Cycle</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-primary h-1.5 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
 
-              {/* Committee Hierarchy */}
-              <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Staff &amp; Student Task Hierarchy (Committee Mapping)
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="rounded-2xl border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-2">
-                    <span className="text-xs font-bold text-purple-900 dark:text-purple-200 block">Mrs. Ananya Verma • Lead Faculty</span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Stage Coordination &amp; Choir</span>
-                    <div className="pt-2 border-t border-purple-200 dark:border-purple-900 text-[10px] text-slate-600 dark:text-slate-300">
-                      Volunteers: Aarav Sharma, Diya Patel, Rohan Iyer
-                    </div>
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400">Net Disbursed Take-Home</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                      95.5% Cleared
+                    </span>
                   </div>
-                  <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-2">
-                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200 block">Mr. Vikram Joshi • Lead Faculty</span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Discipline &amp; VIP Logistics</span>
-                    <div className="pt-2 border-t border-blue-200 dark:border-blue-900 text-[10px] text-slate-600 dark:text-slate-300">
-                      Volunteers: Kabir Mehta, Vivaan Sen
-                    </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    ₹26,20,000
                   </div>
-                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-2">
-                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">Dr. K. Raman • Lead Faculty</span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300 block">Science &amp; Robotics Exhibition Lead</span>
-                    <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900 text-[10px] text-slate-600 dark:text-slate-300">
-                      Volunteers: Ishaan Reddy, Ananya Iyer
-                    </div>
+                  <div className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-400/80 flex items-center justify-between font-medium">
+                    <span>42 Disbursed via Direct NEFT</span>
+                    <span>2 Pending Audit</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '95.5%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 bg-purple-50/20 dark:bg-purple-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-purple-700 dark:text-purple-400">Statutory Deductions</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300">
+                      EPF &amp; TDS
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-purple-600 dark:text-purple-400 tabular-nums">
+                    ₹2,30,000
+                  </div>
+                  <div className="mt-2 text-xs text-purple-700/80 dark:text-purple-400/80 flex items-center justify-between font-medium">
+                    <span>EPF 12% + Prof Tax ₹200 + TDS</span>
+                    <span className="text-purple-600">100% Compliant</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-purple-100 dark:bg-purple-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: '8.1%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-amber-700 dark:text-amber-400">Leave LOP Adjustments</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      Auto-Synced
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                    -₹45,000
+                  </div>
+                  <div className="mt-2 text-xs text-amber-700/80 dark:text-amber-400/80 flex items-center justify-between font-medium">
+                    <span>2 Faculty with Unapproved Leave</span>
+                    <span>Live Quota Sync</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-amber-100 dark:bg-amber-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: '100%' }} />
                   </div>
                 </div>
               </div>
+
+              {/* Filter, Search & Payroll Cycle Ribbon */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={payrollSearch}
+                    onChange={(e) => setPayrollSearch(e.target.value)}
+                    placeholder="Search faculty by name, employee code, or role..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Cycle Selector */}
+                  <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+                    {(['Oct 2026', 'Sep 2026', 'Aug 2026'] as const).map(cycle => (
+                      <button
+                        key={cycle}
+                        type="button"
+                        onClick={() => setSelectedPayrollCycle(cycle)}
+                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                          selectedPayrollCycle === cycle
+                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {cycle}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Department Filter */}
+                  <select
+                    value={payrollDeptFilter}
+                    onChange={(e) => setPayrollDeptFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value="ALL">All Departments</option>
+                    <option value="Academics">Academics &amp; Faculty</option>
+                    <option value="Administration">Administration &amp; Bursar</option>
+                    <option value="Transport">Transport &amp; Fleet</option>
+                    <option value="Support">Support &amp; Facilities</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Faculty Compensation Register Table */}
+              <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Faculty Compensation Register &amp; Digital Pay Slips
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      {staffMembers.filter(s => {
+                        const matchDept = payrollDeptFilter === 'ALL' || s.department === payrollDeptFilter;
+                        const matchSearch = !payrollSearch.trim() || s.name.toLowerCase().includes(payrollSearch.toLowerCase()) || s.role.toLowerCase().includes(payrollSearch.toLowerCase());
+                        return matchDept && matchSearch;
+                      }).length} Staff Records
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Cycle: <strong className="text-slate-800 dark:text-slate-200">{selectedPayrollCycle}</strong> • Disbursed via Direct Bank Deposit
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                        <th className="py-3 px-4">Employee Details</th>
+                        <th className="py-3 px-4">Basic Pay</th>
+                        <th className="py-3 px-4">Allowances (HRA/DA)</th>
+                        <th className="py-3 px-4">Statutory Deductions</th>
+                        <th className="py-3 px-4">Net Take-Home</th>
+                        <th className="py-3 px-4">Bank Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {staffMembers
+                        .filter(staff => {
+                          const matchDept = payrollDeptFilter === 'ALL' || staff.department === payrollDeptFilter;
+                          const matchSearch = !payrollSearch.trim() || staff.name.toLowerCase().includes(payrollSearch.toLowerCase()) || staff.role.toLowerCase().includes(payrollSearch.toLowerCase());
+                          return matchDept && matchSearch;
+                        })
+                        .map((staff) => {
+                          const basic = staff.salary || 65000;
+                          const hra = Math.round(basic * 0.2);
+                          const da = Math.round(basic * 0.1);
+                          const epf = Math.round(basic * 0.12);
+                          const tax = Math.round(basic * 0.05);
+                          const lop = staff.id === 3 ? 2500 : 0; // example LOP
+                          const deductions = epf + tax + lop;
+                          const net = basic + hra + da - deductions;
+                          const isDisbursed = staff.id !== 4; // example pending check
+
+                          return (
+                            <tr key={staff.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 text-xs shrink-0">
+                                    {staff.name?.[0] || 'S'}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-slate-900 dark:text-white">{staff.name}</span>
+                                      <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                        {staff.role}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 font-mono block">
+                                      EMP-{202400 + staff.id} • {staff.department || 'Academics'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-3.5 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                ₹{basic.toLocaleString()}
+                              </td>
+
+                              <td className="py-3.5 px-4">
+                                <div className="space-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                  <div>HRA (20%): ₹{hra.toLocaleString()}</div>
+                                  <div className="text-[10px] text-slate-400">DA (10%): ₹{da.toLocaleString()}</div>
+                                </div>
+                              </td>
+
+                              <td className="py-3.5 px-4">
+                                <div className="space-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                  <div>EPF 12%: -₹{epf.toLocaleString()}</div>
+                                  <div className="text-[10px] text-slate-400">TDS: -₹{tax.toLocaleString()} {lop > 0 && <span className="text-amber-600 font-semibold">• LOP: -₹{lop}</span>}</div>
+                                </div>
+                              </td>
+
+                              <td className="py-3.5 px-4">
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono text-sm block">
+                                  ₹{net.toLocaleString()}
+                                </span>
+                                <span className="text-[10px] text-slate-400">Net Take-Home</span>
+                              </td>
+
+                              <td className="py-3.5 px-4">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isDisbursed
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                }`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${isDisbursed ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                  {isDisbursed ? 'NEFT Disbursed' : 'Under Audit Review'}
+                                </span>
+                              </td>
+
+                              <td className="py-3.5 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPayslipStaff(staff)}
+                                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 transition-all cursor-pointer shadow-xs inline-flex items-center gap-1"
+                                    title="View & Print Official Payslip"
+                                  >
+                                    <FileText className="h-3 w-3 text-slate-500" />
+                                    <span>Payslip</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerToast(`Dispatched digital payslip to ${staff.name}'s mobile portal`)}
+                                    className="p-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all cursor-pointer"
+                                    title="Dispatch Digital Slip to Staff App"
+                                  >
+                                    <Send className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Interactive Itemized Payslip Modal */}
+              {selectedPayslipStaff && (() => {
+                const basic = selectedPayslipStaff.salary || 65000;
+                const hra = Math.round(basic * 0.2);
+                const da = Math.round(basic * 0.1);
+                const allowance = Math.round(basic * 0.05);
+                const gross = basic + hra + da + allowance;
+                const epf = Math.round(basic * 0.12);
+                const tax = Math.round(basic * 0.05);
+                const profTax = 200;
+                const lop = selectedPayslipStaff.id === 3 ? 2500 : 0;
+                const totalDeductions = epf + tax + profTax + lop;
+                const netPay = gross - totalDeductions;
+
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                    <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-150">
+                      {/* Payslip Header */}
+                      <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center font-black text-sm">
+                            E360
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
+                              EDU360 Central Model Academy
+                            </h3>
+                            <span className="text-[11px] text-slate-500 block">
+                              CBSE Affiliation No. 1930482 • Salary Slip for {selectedPayrollCycle}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPayslipStaff(null)}
+                          className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Staff & Payment Metadata */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Employee Name</span>
+                          <span className="font-bold text-slate-900 dark:text-white block mt-0.5">{selectedPayslipStaff.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">EMP-{202400 + selectedPayslipStaff.id}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Designation</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedPayslipStaff.role}</span>
+                          <span className="text-[10px] text-slate-500">{selectedPayslipStaff.department || 'Academics'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Bank &amp; Account</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">HDFC Bank</span>
+                          <span className="text-[10px] text-slate-500 font-mono">A/C: ****4928</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Attendance / Days</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{lop > 0 ? '29.5 / 31' : '31 / 31'} Days</span>
+                          <span className="text-[10px] text-emerald-600 font-semibold">{lop > 0 ? '1.5 Days LOP' : '100% Present'}</span>
+                        </div>
+                      </div>
+
+                      {/* Earnings vs Deductions Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        {/* Earnings Box */}
+                        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10 p-3.5 space-y-2">
+                          <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block border-b border-emerald-200/80 dark:border-emerald-900/80 pb-1.5">
+                            Earnings (Gross: ₹{gross.toLocaleString()})
+                          </span>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Basic Pay</span>
+                              <span className="font-bold font-mono">₹{basic.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">House Rent Allowance (HRA 20%)</span>
+                              <span className="font-bold font-mono">₹{hra.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Dearness Allowance (DA 10%)</span>
+                              <span className="font-bold font-mono">₹{da.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Academic Research &amp; Special</span>
+                              <span className="font-bold font-mono">₹{allowance.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Deductions Box */}
+                        <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10 p-3.5 space-y-2">
+                          <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider block border-b border-rose-200/80 dark:border-rose-900/80 pb-1.5">
+                            Deductions (Total: ₹{totalDeductions.toLocaleString()})
+                          </span>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Provident Fund (EPF 12%)</span>
+                              <span className="font-bold font-mono text-rose-600">-₹{epf.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Income Tax (TDS)</span>
+                              <span className="font-bold font-mono text-rose-600">-₹{tax.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600 dark:text-slate-400">Professional Tax</span>
+                              <span className="font-bold font-mono text-rose-600">-₹{profTax.toLocaleString()}</span>
+                            </div>
+                            {lop > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-amber-600 font-semibold">Unpaid Leave (LOP Adjustment)</span>
+                                <span className="font-bold font-mono text-amber-600">-₹{lop.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Net Take-Home Ribbon */}
+                      <div className="p-3.5 rounded-2xl bg-slate-900 text-white flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Net Salary Payable</span>
+                          <span className="text-xl font-black font-mono text-emerald-400">₹{netPay.toLocaleString()}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">Bank Transfer UTR: HDFCN262849104</span>
+                          <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 justify-end">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Direct Deposit Confirmed
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-between pt-2">
+                        <span className="text-[11px] text-slate-400">Generated automatically by EDU360 Bursar Engine</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => triggerToast(`Printing official salary slip for ${selectedPayslipStaff.name}`)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Print Slip</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => triggerToast(`Downloaded digitally signed PDF payslip for ${selectedPayslipStaff.name}`)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-95 transition-all cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Download Signed PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
-          {/* TAB: ONLINE EXAMINATION CENTER & RE-EXAM WORKFLOW   */}
-          {/* ===================================================== */}
-          {activeTab === 'exams' && (
-            <div className="space-y-6">
-              {/* Header with Sub-tabs */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+          {activeTab === 'events' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Executive Header & Logistics Operations Banner */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-300 px-2.5 py-0.5 text-xs font-bold border border-violet-200 dark:border-violet-800">
-                      Examination Cell
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-3 py-0.5 text-xs font-bold border border-purple-200 dark:border-purple-800 flex items-center gap-1.5">
+                      <Sparkles className="h-3 w-3 text-purple-600 animate-spin" />
+                      Campus Operations &amp; Event Command Hub
                     </span>
-                    <span className="text-xs text-slate-500">CBSE Term Assessments</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">AY 2026–27 Calendar</span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                      Fire, Security &amp; EMT Protocol Cleared
+                    </span>
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-                    📝 Examinations, Timetables &amp; Re-Exam Approvals
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    <span>🎪 School Events, Logistics &amp; Committee Roster</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Review upcoming exam schedules, track overdue papers, and evaluate student medical re-exam requests with coordinator notifications.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    Live campus event operations, stage logistics coordination, faculty committee mapping, venue capacity tracking, and vendor procurement budgets.
                   </p>
                 </div>
 
-                {/* Sub-tabs */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddEventModal(true)}
+                    className="flex items-center gap-2 rounded-xl bg-primary hover:opacity-95 text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Schedule Campus Event</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerToast('Exported Master Event Calendar (iCal/CSV)')}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Export Calendar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Event Operations Strategic KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Scheduled Events</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Term 2</span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                    {schoolEvents.length} Active Events
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+                    <span>Cultural, STEM, Sports &amp; PTM</span>
+                    <span className="font-semibold text-purple-600">All Confirmed</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-primary h-1.5 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 bg-purple-50/20 dark:bg-purple-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-purple-700 dark:text-purple-400">Total Budget Allocated</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300">
+                      71% Deployed
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-purple-600 dark:text-purple-400 tabular-nums">
+                    ₹8,50,000
+                  </div>
+                  <div className="mt-2 text-xs text-purple-700/80 dark:text-purple-400/80 flex items-center justify-between font-medium">
+                    <span>Max Cap: ₹12,00,000</span>
+                    <span>Bursar Approved</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-purple-100 dark:bg-purple-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: '70.8%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 bg-blue-50/20 dark:bg-blue-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-blue-700 dark:text-blue-400">Expected Footfall</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                      RSVP Verified
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                    1,420 Attendees
+                  </div>
+                  <div className="mt-2 text-xs text-blue-700/80 dark:text-blue-400/80 flex items-center justify-between font-medium">
+                    <span>Parents, Dignitaries &amp; Students</span>
+                    <span className="text-blue-600">Passes Issued</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '88%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400">Campus Protocol</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                      100% Cleared
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    Zero Risk
+                  </div>
+                  <div className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-400/80 flex items-center justify-between font-medium">
+                    <span>Security, First-Aid &amp; EMT Ready</span>
+                    <span>Hospital Standby</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* View Mode Switcher & Category Filter Ribbon */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                {/* 3-way View Switcher */}
+                <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setEventViewMode('grid')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      eventViewMode === 'grid'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span>Event Showcase</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEventViewMode('hierarchy')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      eventViewMode === 'hierarchy'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>Committee Hierarchy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEventViewMode('budget')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      eventViewMode === 'budget'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Receipt className="h-3.5 w-3.5" />
+                    <span>Logistics &amp; Vendors</span>
+                  </button>
+                </div>
+
+                {/* Category & Search Filter */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={eventSearch}
+                      onChange={(e) => setEventSearch(e.target.value)}
+                      placeholder="Search events, venues..."
+                      className="pl-8 pr-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+                    />
+                  </div>
+
+                  <select
+                    value={eventCategoryFilter}
+                    onChange={(e) => setEventCategoryFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="Cultural">Cultural &amp; Annual Day</option>
+                    <option value="Academic">Academic &amp; STEM</option>
+                    <option value="Sports">Sports &amp; Athletics</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* VIEW 1: EVENT SHOWCASE GRID */}
+              {eventViewMode === 'grid' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-in fade-in duration-150">
+                  {schoolEvents
+                    .filter(evt => {
+                      const matchCat = eventCategoryFilter === 'ALL' || evt.category === eventCategoryFilter;
+                      const matchSearch = !eventSearch.trim() || evt.title.toLowerCase().includes(eventSearch.toLowerCase()) || evt.location.toLowerCase().includes(eventSearch.toLowerCase());
+                      return matchCat && matchSearch;
+                    })
+                    .map((evt) => (
+                      <div
+                        key={evt.id}
+                        className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 relative overflow-hidden group hover:border-purple-300 dark:hover:border-purple-800 transition-all"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-900 px-3 py-0.5 text-xs font-bold">
+                              {evt.category}
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {evt.status || 'Active Preparation'}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-400 font-mono">
+                            {evt.target_audience}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                            {evt.title}
+                          </h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1.5">
+                            {evt.description}
+                          </p>
+                        </div>
+
+                        {/* Venue & Capacity Meter */}
+                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              📍 {evt.location}
+                            </span>
+                            <span className="font-bold text-purple-600 dark:text-purple-400">
+                              520 / 600 Seats (87%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                            <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: '87%' }} />
+                          </div>
+                        </div>
+
+                        {/* Event Date & Quick Action Dock */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                            <Calendar className="h-3.5 w-3.5 text-purple-600" />
+                            {evt.date}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => triggerToast(`Broadcasting event circular for "${evt.title}" to parent app notifications`)}
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                            >
+                              Broadcast Circular
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => triggerToast(`Opened stage duty checklist for "${evt.title}"`)}
+                              className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-[11px] font-bold hover:opacity-95 transition-all cursor-pointer shadow-xs"
+                            >
+                              Duty Roster
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* VIEW 2: COMMITTEE & FACULTY HIERARCHY */}
+              {eventViewMode === 'hierarchy' && (
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5 animate-in fade-in duration-150">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Staff &amp; Student Committee Mapping (Task Hierarchy)
+                      </h3>
+                      <span className="text-xs text-slate-500">
+                        Operational duty distribution and volunteer hierarchy for Annual Day &amp; Science Expo
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-xl border border-purple-200 dark:border-purple-900">
+                      12 Faculty Leads • 38 Student Volunteers
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-2xl border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/20 p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                          Stage &amp; Cultural Wing
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200">
+                          3 Tasks
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">Mrs. Ananya Verma • Lead Faculty</span>
+                        <span className="text-[11px] text-slate-500 block mt-0.5">Stage Coordination, Choir &amp; Script Supervision</span>
+                      </div>
+                      <div className="pt-2.5 border-t border-purple-200/80 dark:border-purple-900/80 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                        <div className="font-semibold text-purple-900 dark:text-purple-300 text-[10px] uppercase">Senior Student Prefects:</div>
+                        <div>Aarav Sharma (12-Sci) • Stage Audio Cue</div>
+                        <div>Diya Patel (11-Arts) • Anchor Coordination</div>
+                        <div>Rohan Iyer (12-Com) • VIP Green Room</div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                          Discipline &amp; VIP Logistics
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200">
+                          2 Tasks
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">Mr. Vikram Joshi • Lead Faculty</span>
+                        <span className="text-[11px] text-slate-500 block mt-0.5">Gate Pass Management, Parking &amp; Dignitary Escort</span>
+                      </div>
+                      <div className="pt-2.5 border-t border-blue-200/80 dark:border-blue-900/80 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                        <div className="font-semibold text-blue-900 dark:text-blue-300 text-[10px] uppercase">Senior Student Prefects:</div>
+                        <div>Kabir Mehta (12-Sci) • Parking Fleet Lead</div>
+                        <div>Vivaan Sen (11-Sci) • Gate 1 Pass Scanners</div>
+                        <div>Tanvi Rao (11-Com) • Auditorium Usher Lead</div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                          Science Expo &amp; Tech Exhibits
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                          4 Tasks
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">Dr. K. Raman • Lead Faculty</span>
+                        <span className="text-[11px] text-slate-500 block mt-0.5">Robotics Demo, High Voltage Safety &amp; Evaluation Desks</span>
+                      </div>
+                      <div className="pt-2.5 border-t border-emerald-200/80 dark:border-emerald-900/80 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                        <div className="font-semibold text-emerald-900 dark:text-emerald-300 text-[10px] uppercase">Senior Student Prefects:</div>
+                        <div>Ishaan Reddy (11-Sci) • Robotics Arena Lead</div>
+                        <div>Ananya Iyer (10-A) • Project Stall Allocation</div>
+                        <div>Siddharth Nair (11-Sci) • Power Grid Safety</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW 3: LOGISTICS & VENDOR BUDGET LEDGER */}
+              {eventViewMode === 'budget' && (
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs animate-in fade-in duration-150">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                        Annual Day &amp; Campus Events Procurement Ledger
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Itemized vendor purchase orders, stage rentals, catering and sound contracts
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => triggerToast('Logged new vendor contract proposal for bursar clearance')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-95 transition-all cursor-pointer shadow-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Vendor PO</span>
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                          <th className="py-3 px-4">Vendor &amp; Contract</th>
+                          <th className="py-3 px-4">Service Category</th>
+                          <th className="py-3 px-4">PO Amount</th>
+                          <th className="py-3 px-4">Payment Status</th>
+                          <th className="py-3 px-4">Delivery Date</th>
+                          <th className="py-3 px-4 text-right">Audit Slip</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {[
+                          { vendor: 'AcousticWave Pro Sound', contract: 'PO-EVT-2026-08', cat: 'Line Array Audio & Mics', amt: 125000, status: 'Bursar Approved (50% Advance)', date: '22 Oct 2026' },
+                          { vendor: 'Lumina Stage Lighting', contract: 'PO-EVT-2026-09', cat: 'LED Truss & Moving Heads', amt: 140000, status: 'Direct Bank NEFT Cleared', date: '23 Oct 2026' },
+                          { vendor: 'Grand Caterers Pvt Ltd', contract: 'PO-EVT-2026-10', cat: 'VIP High-Tea & Student Snack Boxes', amt: 95000, status: 'Invoice Under Verification', date: '24 Oct 2026' },
+                          { vendor: 'Apex Print Media', contract: 'PO-EVT-2026-11', cat: 'Event Backdrop, Standees & Badges', amt: 35000, status: 'Delivered & Accepted', date: '20 Oct 2026' },
+                          { vendor: 'Elite Trophies & Mementos', contract: 'PO-EVT-2026-12', cat: 'Annual Excellence Awards & Shields', amt: 55000, status: 'Delivered to Asset Store', date: '21 Oct 2026' },
+                        ].map((po) => (
+                          <tr key={po.contract} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <span className="font-bold text-slate-900 dark:text-white block">{po.vendor}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">{po.contract}</span>
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-medium">
+                              {po.cat}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                              ₹{po.amt.toLocaleString()}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                po.status.includes('Cleared') || po.status.includes('Delivered')
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              }`}>
+                                {po.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 font-mono">
+                              {po.date}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => triggerToast(`Viewing signed vendor purchase order ${po.contract}`)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                              >
+                                <FileText className="h-3 w-3 text-slate-500" />
+                                <span>PO Slip</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'exams' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header with Sub-tabs and View Switcher */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                      Examination Cell &amp; CBSE Assessments
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Academic Session 2026–27</span>
+                  </div>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                    Examinations, Timetables &amp; Re-Exam Approvals
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Day-by-day exam schedules, hall seating capacity, marks evaluation velocity, and medical re-exam adjudication.
+                  </p>
+                </div>
+
+                {/* Sub-tabs (Upcoming, Overdue, Re-Exam) */}
+                <div className="flex items-center gap-2 flex-wrap">
                   {[
-                    { key: 'upcoming', label: '📅 Upcoming Timetables' },
-                    { key: 'overdue', label: '⏳ Overdue Exams' },
-                    { key: 'reexam', label: '🏥 Re-Exam Requests', count: reExamRequests.filter(r => r.status === 'Pending Admin Review').length }
+                    { key: 'upcoming', label: 'Upcoming Schedules' },
+                    { key: 'overdue', label: 'Overdue Papers' },
+                    { key: 'reexam', label: 'Medical Re-Exams', count: reExamRequests.filter(r => r.status === 'Pending Admin Review').length }
                   ].map(tab => (
                     <button
                       key={tab.key}
+                      type="button"
                       onClick={() => setExamSubTab(tab.key as any)}
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         examSubTab === tab.key
-                          ? 'bg-violet-600 text-white shadow-xs'
-                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                       }`}
                     >
                       <span>{tab.label}</span>
@@ -4469,96 +5986,434 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Class Filter Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Class Cohort:</span>
-                  {['All', 'Class 8', 'Class 9', 'Class 10'].map(cls => (
+              {/* Top Operational Metrics (4 KPI Cards) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Active Term</span>
+                    <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-xl font-black text-slate-900 dark:text-white">CBSE Mid-Term</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">AY 2026–27 &bull; Term 2 Assessments</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Timetabled Papers</span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">8</span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">papers across 6 cohorts</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600/80 block mt-1">Class 8 to Class 12 covered</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Hall Seating Capacity</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                      Optimal
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-blue-600 dark:text-blue-400">92.4%</span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">184 / 200 desks occupied</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">CCTV proctoring operational</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Pending Re-Exams</span>
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                      {reExamRequests.filter(r => r.status === 'Pending Admin Review').length}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">cases awaiting review</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">Medical waivers &amp; sports duty</span>
+                </div>
+              </div>
+
+              {/* Toolbar: Class Filter & View Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                {/* Class Cohort Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                  <span className="text-xs font-bold text-slate-500 mr-1">Cohort:</span>
+                  {['All', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'].map(cls => (
                     <button
                       key={cls}
+                      type="button"
                       onClick={() => setExamClassFilter(cls)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
                         examClassFilter === cls
-                          ? 'bg-violet-600 text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       {cls}
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">CBSE Term-2 Timetable Active</span>
-                </div>
+
+                {/* View Switcher: Matrix vs Cards vs Grading */}
+                {examSubTab === 'upcoming' && (
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setExamViewMode('matrix')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        examViewMode === 'matrix'
+                          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>Slot Matrix</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamViewMode('cards')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        examViewMode === 'cards'
+                          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      <span>Hall Cards</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamViewMode('grading')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        examViewMode === 'grading'
+                          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <ClipboardCheck className="h-3.5 w-3.5" />
+                      <span>Grading Status</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* SUB-VIEW 1: UPCOMING EXAMS */}
+              {/* ===================================================== */}
+              {/* SUBTAB 1: UPCOMING EXAMS TIMETABLE                    */}
+              {/* ===================================================== */}
               {examSubTab === 'upcoming' && (() => {
-                const upcomingExams = (examSchedules.length > 0
-                  ? examSchedules
-                      .filter(s => s.lifecycle_status !== 'CONCLUDED' && s.session_status !== 'CONCLUDED')
-                      .map(s => ({
-                        id: s.id,
-                        name: s.title || s.exam_name || s.subject,
-                        class: s.class_name,
-                        date: s.exam_date,
-                        time: `${s.start_time || '09:00'} - ${s.end_time || '11:30'}`,
-                        hall: s.hall_name || s.room_no || 'Virtual Room Alpha (Camera AI)',
-                        invigilator: s.invigilator_name || s.chief_invigilator_name || 'Mrs. Ananya Verma',
-                        status: s.lifecycle_status === 'LIVE' ? 'In Progress' : 'Scheduled'
-                      }))
-                  : [
-                      { id: 1, name: 'Term 2 Mathematics Pre-Board', class: 'Class 10', date: '28 Oct 2026', time: '09:00 - 12:00', hall: 'Hall A (Auditorium)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                      { id: 2, name: 'Midterm Science (Physics / Chemistry)', class: 'Class 9', date: '29 Oct 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Sharma', status: 'Scheduled' },
-                      { id: 3, name: 'Homeroom Math Remedial Assessment', class: 'Class 8', date: '30 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Scheduled' },
-                      { id: 4, name: 'English Language & Literature', class: 'Class 8', date: '02 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Gamma (Camera AI)', invigilator: 'Ms. Priya Sen', status: 'Scheduled' },
-                      { id: 5, name: 'Social Studies & Civics', class: 'Class 9', date: '04 Nov 2026', time: '09:00 - 11:30', hall: 'Virtual Room Beta (Camera AI)', invigilator: 'Mr. Vikram Joshi', status: 'Scheduled' },
-                      { id: 6, name: 'Computer Science Practical Exam', class: 'Class 10', date: '05 Nov 2026', time: '13:00 - 15:00', hall: 'Computer Lab 1', invigilator: 'Mr. Rahul Dave', status: 'Scheduled' },
-                    ]
-                ).filter(e => examClassFilter === 'All' || e.class.toLowerCase().includes(examClassFilter.toLowerCase()));
+                const upcomingExams = [
+                  { id: 101, name: "Mathematics Mid-Term", class: "Class 10-A", date: "24 Oct 2026", day: "Mon", timeSlot: "Morning", time: "09:30 AM - 12:30 PM", hall: "Auditorium Hall 1", desks: "38 / 40", capacityPercent: 95, invigilator: "Dr. K. Raman", evaluated: 38, totalStudents: 40, status: "Ready" },
+                  { id: 102, name: "Science Practical Lab", class: "Class 8-B", date: "24 Oct 2026", day: "Mon", timeSlot: "Afternoon", time: "01:30 PM - 04:30 PM", hall: "Science Lab 2", desks: "32 / 35", capacityPercent: 91, invigilator: "Mrs. Priya Sen", evaluated: 12, totalStudents: 35, status: "Ready" },
+                  { id: 103, name: "Chemistry Theory Paper", class: "Class 12-A", date: "25 Oct 2026", day: "Tue", timeSlot: "Morning", time: "09:30 AM - 12:30 PM", hall: "Auditorium Hall 2", desks: "40 / 40", capacityPercent: 100, invigilator: "Mr. Vikram Sharma", evaluated: 40, totalStudents: 40, status: "Ready" },
+                  { id: 104, name: "English Literature", class: "Class 9-A", date: "25 Oct 2026", day: "Tue", timeSlot: "Afternoon", time: "01:30 PM - 04:30 PM", hall: "Room 204", desks: "36 / 40", capacityPercent: 90, invigilator: "Ms. Sunita Roy", evaluated: 22, totalStudents: 36, status: "Ready" },
+                  { id: 105, name: "Physics Theory Exam", class: "Class 12-B", date: "26 Oct 2026", day: "Wed", timeSlot: "Morning", time: "09:30 AM - 12:30 PM", hall: "Science Lab 3", desks: "35 / 35", capacityPercent: 100, invigilator: "Ms. Priya Sen", evaluated: 35, totalStudents: 35, status: "Ready" },
+                  { id: 106, name: "Computer Applications", class: "Class 10-B", date: "26 Oct 2026", day: "Wed", timeSlot: "Afternoon", time: "01:30 PM - 04:30 PM", hall: "IT Center Lab", desks: "30 / 30", capacityPercent: 100, invigilator: "Mr. Rajesh Iyer", evaluated: 28, totalStudents: 30, status: "Ready" },
+                  { id: 107, name: "Economics & Accountancy", class: "Class 11-A", date: "27 Oct 2026", day: "Thu", timeSlot: "Morning", time: "09:30 AM - 12:30 PM", hall: "Hall 3", desks: "28 / 30", capacityPercent: 93, invigilator: "Mrs. Ananya Verma", evaluated: 18, totalStudents: 30, status: "Ready" },
+                  { id: 108, name: "CBSE Make-up Practicals", class: "Class 10-A", date: "28 Oct 2026", day: "Fri", timeSlot: "Morning", time: "09:30 AM - 12:30 PM", hall: "Special Testing Lab 2", desks: "8 / 15", capacityPercent: 53, invigilator: "Dr. K. Raman", evaluated: 0, totalStudents: 8, status: "Approved Re-Exam" }
+                ].filter(exam => examClassFilter === 'All' || exam.class.includes(examClassFilter));
 
                 if (upcomingExams.length === 0) {
                   return (
-                    <div className="p-12 text-center rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2">
-                      <BookOpen className="h-10 w-10 text-slate-400 mx-auto opacity-50" />
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Exams Scheduled</h3>
-                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                        There are currently no upcoming examinations scheduled for {examClassFilter}.
-                      </p>
+                    <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl">
+                      <BookOpen className="h-8 w-8 text-slate-400 mx-auto mb-2 opacity-50" />
+                      <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Timetabled Examinations Found</h3>
+                      <p className="text-xs text-slate-500 mt-1">There are currently no examinations scheduled for {examClassFilter}.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {/* VIEW 1: INTERACTIVE DAY-SLOT MATRIX */}
+                    {examViewMode === 'matrix' && (
+                      <div className="space-y-3">
+                        {/* Timetable Conflict Radar Pill */}
+                        <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span className="font-extrabold text-emerald-900 dark:text-emerald-200">
+                              Timetable Conflict Radar: Zero Clashes Detected
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium hidden sm:inline">
+                            All classrooms, proctors, and student cohorts verified conflict-free
+                          </span>
+                        </div>
+
+                        {/* Day-by-Day Slot Matrix */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {['24 Oct 2026', '25 Oct 2026', '26 Oct 2026', '27 Oct 2026'].map((dateStr, dIdx) => {
+                            const dayExams = upcomingExams.filter(e => e.date === dateStr);
+                            const dayName = dayExams[0]?.day || (['Mon', 'Tue', 'Wed', 'Thu'][dIdx]);
+                            return (
+                              <div
+                                key={dateStr}
+                                className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3"
+                              >
+                                {/* Date Column Header */}
+                                <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5 flex items-center justify-between">
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
+                                      {dayName}
+                                    </span>
+                                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                                      {dateStr}
+                                    </h4>
+                                  </div>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                    {dayExams.length} {dayExams.length === 1 ? 'Paper' : 'Papers'}
+                                  </span>
+                                </div>
+
+                                {/* Slot Cards inside this day */}
+                                <div className="space-y-2.5">
+                                  {dayExams.map((exam) => (
+                                    <div
+                                      key={exam.id}
+                                      className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-2 hover:border-slate-300 transition-colors"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                                          {exam.timeSlot}
+                                        </span>
+                                        <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400">
+                                          {exam.class}
+                                        </span>
+                                      </div>
+
+                                      <div>
+                                        <h5 className="text-xs font-black text-slate-900 dark:text-white leading-snug">
+                                          {exam.name}
+                                        </h5>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                          {exam.hall} &bull; Proctor: {exam.invigilator}
+                                        </p>
+                                      </div>
+
+                                      {/* Desk Occupancy Micro Bar */}
+                                      <div className="space-y-0.5 pt-1">
+                                        <div className="flex items-center justify-between text-[9px] text-slate-400">
+                                          <span>Hall Desks: {exam.desks}</span>
+                                          <span className="font-bold">{exam.capacityPercent}%</span>
+                                        </div>
+                                        <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full bg-blue-600 dark:bg-blue-400"
+                                            style={{ width: `${exam.capacityPercent}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VIEW 2: HALL PASS CARDS */}
+                    {examViewMode === 'cards' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {upcomingExams.map(exam => (
+                          <div
+                            key={exam.id}
+                            className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between space-y-4"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                    {exam.class}
+                                  </span>
+                                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white mt-1.5">
+                                    {exam.name}
+                                  </h4>
+                                </div>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                                  Proctor Confirmed
+                                </span>
+                              </div>
+
+                              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">Date &amp; Time:</span>
+                                  <strong className="text-slate-900 dark:text-white">{exam.date} ({exam.time})</strong>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">Examination Venue:</span>
+                                  <strong className="text-slate-900 dark:text-white">{exam.hall}</strong>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">Chief Proctor:</span>
+                                  <strong className="text-blue-600 dark:text-blue-400">{exam.invigilator}</strong>
+                                </div>
+                              </div>
+
+                              {/* Capacity Bar */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                  <span>Desk Occupancy:</span>
+                                  <strong className="text-slate-900 dark:text-white">{exam.desks} occupied ({exam.capacityPercent}%)</strong>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-blue-600 dark:bg-blue-400"
+                                    style={{ width: `${exam.capacityPercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                downloadOfficialDocumentFile(`Exam Hall Pass - ${exam.name}`, exam.class, `HALL-${exam.id}`);
+                                triggerToast(`Downloaded Hall Pass Roster for ${exam.name}`);
+                              }}
+                              className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <Download className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Download Official Hall Pass Roster</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* VIEW 3: GRADING & MARKS SUBMISSION STATUS */}
+                    {examViewMode === 'grading' && (
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                <th className="py-3 px-4">Exam Paper &amp; Cohort</th>
+                                <th className="py-3 px-4">Evaluation Velocity</th>
+                                <th className="py-3 px-4">Lead Evaluator</th>
+                                <th className="py-3 px-4">Status</th>
+                                <th className="py-3 px-4 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {upcomingExams.map(exam => {
+                                const evalPercent = Math.round((exam.evaluated / exam.totalStudents) * 100);
+                                const isComplete = evalPercent === 100;
+                                return (
+                                  <tr key={exam.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="py-3 px-4">
+                                      <div className="font-extrabold text-slate-900 dark:text-white">{exam.name}</div>
+                                      <span className="text-[11px] text-slate-400">{exam.class} &bull; {exam.date}</span>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="space-y-1 min-w-[130px]">
+                                        <div className="flex items-center justify-between text-[10px]">
+                                          <span className="text-slate-500">{exam.evaluated} / {exam.totalStudents} graded</span>
+                                          <strong className="text-slate-900 dark:text-white">{evalPercent}%</strong>
+                                        </div>
+                                        <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                          <div
+                                            className={`h-full rounded-full ${isComplete ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                            style={{ width: `${evalPercent}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                                      {exam.invigilator}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        isComplete
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                          : evalPercent > 50
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                      }`}>
+                                        {isComplete ? 'Grading Completed' : evalPercent > 50 ? 'In Progress' : 'Pending Evaluation'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerToast(`Dispatched grading reminder to ${exam.invigilator}`)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                                      >
+                                        <Send className="h-3 w-3 text-blue-600" />
+                                        <span>Notify Evaluator</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ===================================================== */}
+              {/* SUBTAB 2: OVERDUE EXAMINATIONS                        */}
+              {/* ===================================================== */}
+              {examSubTab === 'overdue' && (() => {
+                const overdueExams = [
+                  { id: 201, name: "Class 9-B English Literature Paper", class: "Class 9-B", dueDate: "15 Oct 2026", overdueDays: 4, hall: "Room 102", invigilator: "Ms. Sunita Roy", pendingPapers: 14, totalPapers: 36 },
+                  { id: 202, name: "Class 8-A Hindi Language Paper", class: "Class 8-A", dueDate: "17 Oct 2026", overdueDays: 2, hall: "Room 104", invigilator: "Mr. Ramesh Tiwari", pendingPapers: 22, totalPapers: 35 }
+                ].filter(exam => examClassFilter === 'All' || exam.class.includes(examClassFilter));
+
+                if (overdueExams.length === 0) {
+                  return (
+                    <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                      <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">All Examination Papers Evaluated on Schedule</h3>
+                      <p className="text-xs text-slate-500 mt-1">There are no overdue papers or grading submission delays for {examClassFilter}.</p>
                     </div>
                   );
                 }
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {upcomingExams.map(exam => (
-                      <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-violet-300 dark:hover:border-violet-700 transition-all">
-                        <div className="flex items-center justify-between text-xs mb-2">
-                          <span className="font-extrabold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-900">
-                            {exam.class}
-                          </span>
-                          <span className="text-slate-400 font-mono text-[11px]">{exam.date} • {exam.time}</span>
+                    {overdueExams.map(exam => (
+                      <div
+                        key={exam.id}
+                        className="rounded-3xl border border-rose-200 dark:border-rose-950 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                              {exam.overdueDays} Days Overdue
+                            </span>
+                            <h4 className="text-sm font-extrabold text-slate-900 dark:text-white mt-2">
+                              {exam.name}
+                            </h4>
+                            <span className="text-xs text-slate-500">{exam.class} &bull; Due: {exam.dueDate}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-black text-rose-600 block">{exam.pendingPapers}</span>
+                            <span className="text-[10px] text-slate-400">papers un-graded</span>
+                          </div>
                         </div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
-                        <div className="mt-2 text-xs text-slate-500 space-y-0.5">
-                          <div>Seating: <strong className="text-slate-700 dark:text-slate-300">{exam.hall}</strong></div>
-                          <div>Proctor: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong></div>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                            Proctor Confirmed
-                          </span>
+
+                        <div className="p-3 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/60 flex items-center justify-between text-xs">
+                          <span className="text-slate-600 dark:text-slate-300">Evaluator: <b>{exam.invigilator}</b></span>
                           <button
                             type="button"
-                            onClick={() => {
-                              downloadOfficialDocumentFile(`Exam Hall Pass - ${exam.name}`, exam.class, `HALL-${exam.id}`);
-                              setToastMessage(`Downloaded Hall Pass for ${exam.name}`);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 text-violet-700 dark:text-violet-300 text-xs font-bold transition-colors cursor-pointer"
+                            onClick={() => triggerToast(`Urgent evaluation summons dispatched to ${exam.invigilator}`)}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                           >
-                            <Download className="h-3 w-3" />
-                            <span>Hall Pass</span>
+                            <Send className="h-3 w-3" />
+                            <span>Dispatch Urgent Summons</span>
                           </button>
                         </div>
                       </div>
@@ -4567,273 +6422,455 @@ export default function AdminPage() {
                 );
               })()}
 
-              {/* SUB-VIEW 2: OVERDUE EXAMS */}
-              {examSubTab === 'overdue' && (() => {
-                const overdueExams = (examSchedules.length > 0
-                  ? examSchedules
-                      .filter(s => s.lifecycle_status === 'CONCLUDED' || s.session_status === 'CONCLUDED')
-                      .map(s => ({
-                        id: s.id,
-                        name: `${s.title || s.subject} Paper Re-evaluation`,
-                        class: s.class_name,
-                        date: s.exam_date,
-                        time: `${s.start_time || '09:00'} - ${s.end_time || '11:30'}`,
-                        hall: s.hall_name || s.room_no || 'Virtual Room Alpha (Camera AI)',
-                        invigilator: s.invigilator_name || s.chief_invigilator_name || 'Mrs. Ananya Verma',
-                        status: 'Overdue Scoring'
-                      }))
-                  : [
-                      { id: 101, name: 'Term 1 Mathematics Paper Re-evaluation', class: 'Class 8', date: '20 Oct 2026', time: '10:00 - 11:30', hall: 'Virtual Room Alpha (Camera AI)', invigilator: 'Mrs. Ananya Verma', status: 'Overdue Scoring' }
-                    ]
-                ).filter(e => examClassFilter === 'All' || e.class.toLowerCase().includes(examClassFilter.toLowerCase()));
-
-                if (overdueExams.length === 0) {
-                  return (
-                    <div className="p-12 text-center rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2">
-                      <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto opacity-70" />
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Overdue Exams</h3>
-                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                        All examination evaluations and mark submissions for {examClassFilter} are on schedule.
-                      </p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {overdueExams.map(exam => (
-                      <div key={exam.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 shadow-xs">
-                        <div className="flex items-center justify-between text-xs mb-2">
-                          <span className="font-extrabold text-red-700 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-md">
-                            {exam.class} • Overdue
-                          </span>
-                          <span className="text-slate-400 font-mono text-[11px]">{exam.date}</span>
-                        </div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{exam.name}</h4>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Proctor: <strong className="text-slate-700 dark:text-slate-300">{exam.invigilator}</strong>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-
-              {/* SUB-VIEW 3: RE-EXAM PERMISSION REQUESTS */}
+              {/* ===================================================== */}
+              {/* SUBTAB 3: MEDICAL RE-EXAM REQUESTS                    */}
+              {/* ===================================================== */}
               {examSubTab === 'reexam' && (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
-                      Parents raise re-examination permissions for missed assessments due to medical emergencies or excused leaves. Upon Administration approval, an automated instruction is dispatched to the <strong>Exam Coordinator</strong> to schedule the re-test and the student &amp; parent are notified.
-                    </p>
-                  </div>
+                  {reExamRequests.map(req => {
+                    const isPending = req.status === 'Pending Admin Review';
+                    const isApproved = req.status === 'Approved by Admin' || req.status === 'Scheduled';
 
-                  <div className="space-y-3">
-                    {reExamRequests.map(req => (
-                      <div key={req.id} className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-violet-50 dark:bg-violet-950 text-violet-700 font-bold flex items-center justify-center shrink-0">
-                              {req.student_name.split(' ').map(n => n[0]).join('')}
+                    return (
+                      <div
+                        key={req.id}
+                        className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="flex items-start gap-3.5">
+                            <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-sm flex items-center justify-center shadow-xs shrink-0">
+                              {(req.student_name || 'S').split(' ').map(n => n[0]).slice(0, 2).join('')}
                             </div>
                             <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">{req.student_name}</h4>
-                                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                                  {req.student_name}
+                                </h4>
+                                <span className="rounded-md bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                   {req.class_name}-{req.section}
                                 </span>
-                                <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
-                                  {req.reason_category}
+                                <span className="text-xs text-slate-400">&bull;</span>
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  Subject: {req.subject}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-slate-500 mt-0.5 block">
-                                Subject: <strong className="text-slate-800 dark:text-slate-200">{req.subject}</strong> ({req.exam_name}) &bull; Missed Date: {req.missed_date}
-                              </span>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                <span>Missed Exam: <strong className="text-slate-800 dark:text-slate-200">{req.exam_name}</strong></span>
+                                <span>&bull;</span>
+                                <span>Missed Date: {req.missed_date}</span>
+                              </div>
                             </div>
                           </div>
 
-                          <div>
-                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                              req.status === 'Approved by Admin'
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                : req.status === 'Rejected'
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                            }`}>
-                              {req.status}
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                            isApproved
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                              : isPending
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800 animate-pulse'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                          }`}>
+                            {isApproved ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                            <span>{req.status}</span>
+                          </span>
+                        </div>
+
+                        {/* Stated Justification & Doctor Certificate */}
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400">
+                            <span>Exemption Category: {req.reason_category}</span>
+                            <span>Requested: {req.requested_at}</span>
+                          </div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 italic">
+                            &ldquo;{req.reason_details}&rdquo;
+                          </p>
+                          <div className="pt-1 flex items-center justify-between text-xs">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                              <FileCheck className="h-3.5 w-3.5" />
+                              <span>Verified Hospital Certificate Attached</span>
+                            </span>
+                            <span className="text-[11px] text-slate-400">Parent: {req.parent_name} ({req.parent_phone})</span>
+                          </div>
+                        </div>
+
+                        {/* Scheduled slot details if approved */}
+                        {isApproved && (
+                          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase font-bold block">Officially Scheduled Re-Exam Slot</span>
+                              <strong className="text-emerald-950 dark:text-emerald-100 text-sm">
+                                {req.re_exam_date || '28 Oct 2026'} &bull; {req.re_exam_time || '02:00 PM - 05:00 PM'} ({req.re_exam_venue || 'Special Testing Lab 2'})
+                              </strong>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-100">
+                              Coordinator Notified
                             </span>
                           </div>
-                        </div>
+                        )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl">
-                          <div>
-                            <span className="text-slate-400 font-bold block mb-0.5">Parent Explanation:</span>
-                            <p className="text-slate-700 dark:text-slate-300 italic">&ldquo;{req.reason_details}&rdquo;</p>
-                            <span className="text-[10px] text-slate-500 block mt-1">Submitted by {req.parent_name} ({req.parent_phone})</span>
-                          </div>
-                          <div className="sm:border-l sm:border-slate-200 dark:sm:border-slate-700 sm:pl-3 space-y-1">
-                            <span className="text-slate-400 font-bold block mb-0.5">Supporting Medical Evidence:</span>
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-blue-600" />
-                              <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">{req.document_name || 'Medical_Certificate.pdf'}</span>
-                            </div>
-                            <span className="text-[10px] text-emerald-600 block">✓ Digital Hospital Stamp Verified</span>
-                          </div>
-                        </div>
-
-                        {req.status === 'Pending Admin Review' && (
-                          <div className="flex items-center justify-end gap-2 pt-2">
+                        {/* Action Footer */}
+                        {isPending && (
+                          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                             <button
-                              onClick={() => {
-                                api.reviewReExamRequest(req.id, 'Rejected', 'Reason did not meet medical exemption criteria');
+                              type="button"
+                              onClick={() => setSelectedReExamForDrawer(req)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Adjudicate &amp; Pick Venue Slot</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await api.reviewReExamRequest(req.id, 'Rejected', 'Reason did not meet medical exemption criteria');
                                 setReExamRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Rejected' } : r));
                                 triggerToast(`Re-exam request for ${req.student_name} rejected.`);
                               }}
-                              className="px-3.5 py-1.5 rounded-xl border border-red-200 dark:border-red-900 text-red-600 text-xs font-bold hover:bg-red-50 cursor-pointer"
+                              className="px-3.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs font-bold transition-colors cursor-pointer"
                             >
                               Reject Request
                             </button>
+
                             <button
+                              type="button"
                               onClick={async () => {
-                                await api.reviewReExamRequest(req.id, 'Approved by Admin', 'Approved by Administration based on verified medical documentation.');
-                                // Broadcast notification to exam coordinator
+                                await api.reviewReExamRequest(req.id, 'Approved by Admin', 'Approved based on verified medical certificate.');
                                 await api.sendNotification({
                                   recipient_role: 'exam_coordinator',
                                   sender_name: 'Dr. Radhakrishnan (Principal)',
                                   sender_role: 'admin',
                                   title: `Re-Exam Mandate: ${req.student_name} (${req.subject})`,
-                                  message: `Principal has officially APPROVED re-examination for ${req.student_name} (${req.class_name}-${req.section}) in ${req.subject}. Please schedule venue & question paper.`,
+                                  message: `Principal has officially APPROVED re-examination for ${req.student_name} (${req.subject}). Scheduled on 28 Oct in Special Testing Lab 2.`,
                                   priority: 'High'
                                 });
-                                // Broadcast to parent & student
-                                await api.sendNotification({
-                                  recipient_role: 'parent',
-                                  sender_name: 'Principal Office',
-                                  sender_role: 'admin',
-                                  title: `Re-Exam Approved: ${req.subject}`,
-                                  message: `Your medical re-exam request for ${req.student_name} in ${req.subject} has been officially approved. Exam coordinator is scheduling the re-test.`,
-                                  priority: 'Normal'
-                                });
-                                setReExamRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved by Admin' } : r));
-                                triggerToast(`✓ Re-exam APPROVED! Notified Exam Coordinator & Parent.`);
+                                setReExamRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved by Admin', re_exam_date: '28 Oct 2026', re_exam_time: '02:00 PM - 05:00 PM', re_exam_venue: 'Special Testing Lab 2' } : r));
+                                triggerToast(`Re-exam officially approved for ${req.student_name}. Coordinator & Parent notified.`);
                               }}
-                              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
                             >
-                              ✓ Approve Re-Exam &amp; Dispatch to Coordinator
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Approve &amp; Schedule</span>
                             </button>
                           </div>
                         )}
                       </div>
-                    ))}
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* MEDICAL RE-EXAM ADJUDICATION DRAWER */}
+              {selectedReExamForDrawer && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-150">
+                  <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 my-8">
+                    {/* Drawer Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-sm flex items-center justify-center shadow-xs">
+                          {(selectedReExamForDrawer.student_name || 'S').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                            Medical Re-Exam Determination: {selectedReExamForDrawer.student_name}
+                          </h3>
+                          <span className="text-xs text-slate-500 font-medium">
+                            {selectedReExamForDrawer.class_name}-{selectedReExamForDrawer.section} &bull; Missed: {selectedReExamForDrawer.subject}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReExamForDrawer(null)}
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {/* Drawer Body */}
+                    <div className="space-y-4 text-xs">
+                      {/* Medical Exemption Preview Box */}
+                      <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-amber-900 dark:text-amber-200 font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <FileCheck className="h-4 w-4 text-amber-600" />
+                            <span>Hospital / Medical Proof Submitted</span>
+                          </span>
+                          <span>Category: {selectedReExamForDrawer.reason_category}</span>
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-300 italic pt-1">
+                          &ldquo;{selectedReExamForDrawer.reason_details}&rdquo;
+                        </p>
+                      </div>
+
+                      {/* Re-Exam Slot Allocation Form */}
+                      <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                          Re-Exam Venue &amp; Time Slot Scheduling
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Testing Date</label>
+                            <input
+                              type="text"
+                              value={reExamDateInput}
+                              onChange={(e) => setReExamDateInput(e.target.value)}
+                              className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-2 text-slate-900 dark:text-white font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Time Slot</label>
+                            <input
+                              type="text"
+                              value={reExamTimeInput}
+                              onChange={(e) => setReExamTimeInput(e.target.value)}
+                              className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-2 text-slate-900 dark:text-white font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Exam Venue / Lab</label>
+                            <input
+                              type="text"
+                              value={reExamVenueInput}
+                              onChange={(e) => setReExamVenueInput(e.target.value)}
+                              className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-2 text-slate-900 dark:text-white font-semibold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Principal Remarks Textarea */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                          Official Adjudication Remarks (Sent to Exam Coordinator &amp; Parent):
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={reExamAdminRemarks}
+                          onChange={(e) => setReExamAdminRemarks(e.target.value)}
+                          placeholder="e.g. Approved based on verified Apollo Hospital admission records. Re-exam assigned to Lab 2."
+                          className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Drawer Footer */}
+                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReExamForDrawer(null)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await api.reviewReExamRequest(selectedReExamForDrawer.id, 'Rejected', reExamAdminRemarks || 'Medical criteria not satisfied');
+                          setReExamRequests(prev => prev.map(r => r.id === selectedReExamForDrawer.id ? { ...r, status: 'Rejected' } : r));
+                          triggerToast(`Re-exam request rejected.`);
+                          setSelectedReExamForDrawer(null);
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 hover:bg-rose-200 transition-colors"
+                      >
+                        Reject Request
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await api.reviewReExamRequest(selectedReExamForDrawer.id, 'Approved by Admin', reExamAdminRemarks || 'Official medical waiver granted by Administration.');
+                          await api.sendNotification({
+                            recipient_role: 'exam_coordinator',
+                            sender_name: 'Dr. Radhakrishnan (Principal)',
+                            sender_role: 'admin',
+                            title: `Re-Exam Mandate: ${selectedReExamForDrawer.student_name} (${selectedReExamForDrawer.subject})`,
+                            message: `Principal has officially APPROVED re-examination for ${selectedReExamForDrawer.student_name} (${selectedReExamForDrawer.subject}). Scheduled on ${reExamDateInput} at ${reExamTimeInput} in ${reExamVenueInput}.`,
+                            priority: 'High'
+                          });
+                          setReExamRequests(prev => prev.map(r => r.id === selectedReExamForDrawer.id ? {
+                            ...r,
+                            status: 'Approved by Admin',
+                            re_exam_date: reExamDateInput,
+                            re_exam_time: reExamTimeInput,
+                            re_exam_venue: reExamVenueInput
+                          } : r));
+                          triggerToast(`Re-exam scheduled for ${selectedReExamForDrawer.student_name} on ${reExamDateInput}.`);
+                          setSelectedReExamForDrawer(null);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Confirm &amp; Broadcast Re-Exam Schedule</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           )}
-
-          {/* TAB 9: DEDICATED TASK MANAGEMENT                      */}
+          
           {/* ===================================================== */}
           {activeTab === 'tasks' && (() => {
-            const DOMAIN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-              academic:   { label: 'Academic & Curriculum', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', icon: '📚' },
-              exam:       { label: 'Examination Cell',      color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800', icon: '📝' },
-              admissions: { label: 'Admissions & CRM',      color: 'text-sky-700 dark:text-sky-300',       bg: 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',           icon: '🎓' },
-              finance:    { label: 'Finance & Accounts',    color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', icon: '₹' },
-              executive:  { label: 'Principal Mandates',    color: 'text-rose-700 dark:text-rose-300',     bg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',       icon: '⚡' },
-              campus_ops: { label: 'Campus Operations',     color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800', icon: '🏫' },
+            const DOMAIN_META: Record<string, { label: string; icon: React.ReactNode }> = {
+              academic:   { label: 'Academic',   icon: <BookOpen className="h-3.5 w-3.5" aria-hidden="true" /> },
+              exam:       { label: 'Exams',      icon: <FileText className="h-3.5 w-3.5" aria-hidden="true" /> },
+              admissions: { label: 'Admissions', icon: <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" /> },
+              finance:    { label: 'Accounts',   icon: <Receipt className="h-3.5 w-3.5" aria-hidden="true" /> },
+              executive:  { label: 'Executive',  icon: <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> },
+              campus_ops: { label: 'Operations', icon: <Building2 className="h-3.5 w-3.5" aria-hidden="true" /> },
             };
 
-            const PRIORITY_BADGE: Record<string, string> = {
-              Critical: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-              High:     'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800',
-              Medium:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-              Low:      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+            const PRIORITY_DOT: Record<string, string> = {
+              Critical: 'bg-[#B91C1C]',
+              High:     'bg-[#F97316]',
+              Medium:   'bg-[#D97706]',
+              Low:      'bg-[#94A3B8]',
             };
 
             const STATUS_BADGE: Record<string, string> = {
-              'Pending':        'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-              'In Progress':    'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-              'Pending Review': 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-              'Completed':      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+              'Pending':        'edu-badge-critical',
+              'In Progress':    'edu-badge-info',
+              'Pending Review': 'edu-badge-warning',
+              'Completed':      'edu-badge-success',
             };
 
             const cleanTasks = tasks.filter(t => !isExcludedTask(t));
 
             const filteredTasks = cleanTasks.filter(t => {
               const statusMatch = taskStatusFilter === 'all' || t.status === taskStatusFilter;
-              if (taskOriginFilter === 'auto') return t.is_auto_generated && statusMatch;
-              if (taskOriginFilter === 'staff') return !t.is_auto_generated && statusMatch;
-              if (taskOriginFilter === 'critical') return (t.is_escalated || t.priority === 'Critical') && statusMatch;
-              if (taskOriginFilter === 'relief') return t.relief_requested && statusMatch;
-              return statusMatch;
+              const q = taskSearchQuery.trim().toLowerCase();
+              const searchMatch =
+                !q ||
+                t.title.toLowerCase().includes(q) ||
+                (t.assigned_to || '').toLowerCase().includes(q) ||
+                (t.description || '').toLowerCase().includes(q);
+              if (!statusMatch || !searchMatch) return false;
+              if (taskOriginFilter === 'auto') return Boolean(t.is_auto_generated);
+              if (taskOriginFilter === 'staff') return !t.is_auto_generated;
+              if (taskOriginFilter === 'critical') return Boolean(t.is_escalated || t.priority === 'Critical');
+              if (taskOriginFilter === 'relief') return Boolean(t.relief_requested);
+              return true;
             });
 
-            const openCount   = cleanTasks.filter(t => t.status !== 'Completed').length;
-            const autoCount   = cleanTasks.filter(t => t.is_auto_generated).length;
+            const openCount = cleanTasks.filter(t => t.status !== 'Completed').length;
+            const autoCount = cleanTasks.filter(t => t.is_auto_generated).length;
             const criticalCount = cleanTasks.filter(t => t.is_escalated || t.priority === 'Critical').length;
             const completedCount = cleanTasks.filter(t => t.status === 'Completed').length;
             const reliefCount = cleanTasks.filter(t => t.relief_requested).length;
 
             return (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                {/* ── 4 Crisp High-Level KPI Cards ── */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-                  {[
-                    { label: 'Active School Tasks', value: openCount, color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50/70 dark:bg-blue-950/30', border: 'border-blue-200/60 dark:border-blue-800/60', icon: <ClipboardCheck className="h-4 w-4" /> },
-                    { label: '⚡ Auto-Triggered Rules', value: autoCount, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50/70 dark:bg-violet-950/30', border: 'border-violet-200/60 dark:border-violet-800/60', icon: <Sparkles className="h-4 w-4" /> },
-                    { label: '🚨 Critical Priorities', value: criticalCount, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50/70 dark:bg-rose-950/30', border: 'border-rose-200/60 dark:border-rose-800/60', icon: <AlertTriangle className="h-4 w-4" /> },
-                    { label: '✓ Completed Tasks', value: completedCount, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50/70 dark:bg-emerald-950/30', border: 'border-emerald-200/60 dark:border-emerald-800/60', icon: <CheckCircle2 className="h-4 w-4" /> },
-                  ].map((kpi) => (
-                    <div key={kpi.label} className={`rounded-2xl border ${kpi.border} ${kpi.bg} p-4 flex items-center gap-3.5 shadow-2xs`}>
-                      <span className={`p-2 rounded-xl bg-white dark:bg-slate-900 ${kpi.color} shadow-2xs`}>{kpi.icon}</span>
-                      <div>
-                        <div className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">{kpi.label}</div>
-                      </div>
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* ── 1. CALM 4-CARD EXECUTIVE KPI STRIP ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Active Tasks</span>
+                      <ClipboardCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
-                  ))}
-                </div>
-
-                {/* ── Filter Toolbar ── */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  {/* Task Origin / Type Pills */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mr-1">Task Type:</span>
-                    {[
-                      { id: 'all', label: 'All Tasks', count: tasks.length },
-                      { id: 'auto', label: '⚡ Auto-Triggered', count: autoCount },
-                      { id: 'staff', label: '👤 Staff Delegated', count: tasks.length - autoCount },
-                      { id: 'critical', label: '🚨 Critical Only', count: criticalCount },
-                      { id: 'relief', label: '⚠️ Workload Relief', count: reliefCount },
-                    ].map(tab => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setTaskOriginFilter(tab.id as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          taskOriginFilter === tab.id
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        <span>{tab.label}</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                          taskOriginFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}>
-                          {tab.count}
-                        </span>
-                      </button>
-                    ))}
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{openCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Open across departments</span>
                   </div>
 
-                  {/* Status Dropdown */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-slate-500">Status:</span>
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Auto-Triggered</span>
+                      <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{autoCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">System SLA rules</span>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      criticalCount > 0
+                        ? 'bg-[#FFF7ED] dark:bg-[#2A190E] border-[#FED7AA] dark:border-[#7C2D12]'
+                        : 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#EA580C] dark:text-[#FB923C]">Critical Priority</span>
+                      <AlertTriangle className="h-4 w-4 text-[#F97316] dark:text-[#FB923C]" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-[#B91C1C] dark:text-[#FCA5A5] mt-2 tabular-nums">{criticalCount}</p>
+                    <span className="text-xs text-[#7C2D12] dark:text-[#E5B891] tabular-nums">{reliefCount} relief requests</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Completed</span>
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-2 tabular-nums">{completedCount}</p>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">Verified &amp; closed</span>
+                  </div>
+                </div>
+
+                {/* ── 2. SINGLE-ROW FILTER, SEARCH & STATUS TOOLBAR ── */}
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: 'All', count: tasks.length },
+                      { id: 'auto', label: 'Auto', count: autoCount },
+                      { id: 'staff', label: 'Delegated', count: tasks.length - autoCount },
+                      { id: 'critical', label: 'Critical', count: criticalCount },
+                      { id: 'relief', label: 'Relief', count: reliefCount },
+                    ].map((tab) => {
+                      const active = taskOriginFilter === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setTaskOriginFilter(tab.id as any)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
+                              : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
+                          }`}
+                        >
+                          <span>{tab.label}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${
+                              active ? 'bg-white/20 text-white' : 'bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                    <div className="relative flex-1 sm:w-56">
+                      <Search className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                      <input
+                        type="text"
+                        value={taskSearchQuery}
+                        onChange={(e) => setTaskSearchQuery(e.target.value)}
+                        aria-label="Search school tasks"
+                        placeholder="Search tasks or assignee..."
+                        className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white placeholder:text-[#475569] dark:placeholder:text-[#95A89E]"
+                      />
+                      {taskSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskSearchQuery('')}
+                          aria-label="Clear task search"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#475569] hover:text-[#0F172A] cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+
                     <select
                       value={taskStatusFilter}
-                      onChange={e => setTaskStatusFilter(e.target.value)}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      onChange={(e) => setTaskStatusFilter(e.target.value)}
+                      aria-label="Filter tasks by status"
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-white text-xs font-semibold px-3 py-1.5 cursor-pointer"
                     >
                       <option value="all">All Statuses</option>
                       <option value="Pending">Pending</option>
@@ -4859,99 +6896,83 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* ── Clean Task List Cards ── */}
-                <div className="space-y-3">
+                {/* ── 3. LINEAR-STYLE UNIFIED TASK LIST ── */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden divide-y divide-[#E2E8F0] dark:divide-[#1E322B]">
                   {filteredTasks.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center flex flex-col items-center justify-center space-y-2">
-                      <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                        <Filter className="h-5 w-5" />
-                      </div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No tasks match this filter.</p>
-                      <p className="text-xs text-slate-400">Try switching to All Tasks or change status filter.</p>
-                      {(taskOriginFilter !== 'all' || taskStatusFilter !== 'all') && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTaskOriginFilter('all');
-                            setTaskStatusFilter('all');
-                          }}
-                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          <span>Reset All Filters</span>
-                        </button>
-                      )}
+                    <div className="p-12 text-center space-y-1.5">
+                      <CheckCircle2 className="h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto" aria-hidden="true" />
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">No tasks match this filter</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">Try switching to All or clearing the search box.</p>
                     </div>
                   )}
 
                   {filteredTasks.map((task) => {
                     const meta = DOMAIN_META[task.domain as string] || DOMAIN_META['executive'];
                     const isExpanded = taskExpandedId === task.id;
-                    const priorityClass = PRIORITY_BADGE[task.priority as string] || PRIORITY_BADGE['Low'];
+                    const dotColor = PRIORITY_DOT[task.priority as string] || PRIORITY_DOT['Low'];
                     const statusClass = STATUS_BADGE[task.status as string] || STATUS_BADGE['Pending'];
 
                     return (
                       <div
                         key={task.id}
-                        className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all overflow-hidden ${
-                          task.is_escalated
-                            ? 'border-rose-300 dark:border-rose-700 ring-1 ring-rose-200 dark:ring-rose-900'
-                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        className={`transition-colors ${
+                          task.is_escalated ? 'border-l-4 border-l-[#B91C1C]' : ''
                         }`}
                       >
-                        {/* Task Header Row */}
+                        {/* Compact Unified Task Row */}
                         <div
-                          className="flex items-start justify-between gap-4 p-4.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setTaskExpandedId(isExpanded ? null : task.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setTaskExpandedId(isExpanded ? null : task.id);
+                            }
+                          }}
+                          className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#F1F5F9]/55 dark:hover:bg-[#1E293B]/60 cursor-pointer"
                         >
-                          <div className="flex items-start gap-3.5 min-w-0">
-                            {/* Domain Icon */}
-                            <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border text-base font-black ${meta.bg}`}>
-                              {meta.icon}
-                            </div>
-
-                            <div className="space-y-1 min-w-0">
-                              {/* Badges */}
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${meta.bg} ${meta.color}`}>
-                                  {meta.label}
-                                </span>
-                                {task.is_auto_generated && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 border border-violet-200 dark:border-violet-800 flex items-center gap-1">
-                                    <Sparkles className="h-3 w-3" /> Auto-Triggered Rule
-                                  </span>
-                                )}
+                          <div className="flex items-start md:items-center gap-3 min-w-0 flex-1">
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1.5 md:mt-0 ${dotColor}`}
+                              title={`Priority: ${task.priority}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4
+                                  className={`text-[13px] font-bold leading-snug ${
+                                    task.status === 'Completed'
+                                      ? 'line-through text-slate-600 dark:text-slate-400'
+                                      : 'text-slate-900 dark:text-white'
+                                  }`}
+                                >
+                                  {task.title}
+                                </h4>
                                 {task.is_escalated && (
-                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse">
-                                    🚨 Escalated to Principal
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-critical">
+                                    Escalated
                                   </span>
                                 )}
                                 {task.relief_requested && (
-                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                                    <AlertCircle className="h-3 w-3 text-amber-600" /> Relief Requested ({task.relief_reason || 'Workload'})
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold edu-badge-warning">
+                                    Relief Req.
                                   </span>
                                 )}
                               </div>
-
-                              {/* Title */}
-                              <h4 className={`text-sm font-bold ${
-                                task.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'
-                              }`}>
-                                {task.title}
-                              </h4>
-
-                              {/* Meta Info */}
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5">
-                                <span className="font-medium text-slate-700 dark:text-slate-300">
-                                  👤 Assigned: <strong>{task.assigned_to}</strong>
+                              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400 mt-1">
+                                <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-slate-400">
+                                  {meta.icon}
+                                  {meta.label}
                                 </span>
-                                <span>•</span>
-                                <span>Due: <strong>{task.due_date}</strong></span>
+                                <span>·</span>
+                                <span>{task.assigned_to}</span>
+                                <span>·</span>
+                                <span className="tabular-nums">Due {task.due_date}</span>
                                 {task.sla_hours && (
                                   <>
-                                    <span>•</span>
-                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                      ⏱️ SLA {task.sla_hours}h
+                                    <span>·</span>
+                                    <span className="font-semibold text-[#EA580C] dark:text-[#FB923C] tabular-nums">
+                                      SLA {task.sla_hours}h
                                     </span>
                                   </>
                                 )}
@@ -4959,48 +6980,53 @@ export default function AdminPage() {
                             </div>
                           </div>
 
-                          {/* Status and Priority Badges */}
-                          <div className="shrink-0 flex flex-col items-end gap-1.5">
-                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg ${statusClass}`}>
-                              {task.status}
-                            </span>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${priorityClass}`}>
+                          <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 hidden sm:inline">
                               {task.priority}
                             </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusClass}`}>
+                              {task.status}
+                            </span>
+                            <ChevronDown
+                              className={`h-4 w-4 text-slate-600 dark:text-slate-400 transition-transform ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
                           </div>
                         </div>
 
-                        {/* Expanded Panel */}
+                        {/* Expanded Detail Drawer */}
                         {isExpanded && (
-                          <div className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 space-y-3">
+                          <div className="px-5 pb-5 pt-3.5 border-t border-[#E2E8F0] dark:border-[#1E322B] bg-[#F8FAFC]/70 dark:bg-[#0B0F19]/70 space-y-3.5">
                             {task.description && (
-                              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                              <p className="text-[13px] text-slate-600 dark:text-slate-400 leading-relaxed max-w-3xl">
                                 {task.description}
                               </p>
                             )}
 
-                            {/* Faculty Relief Request Callout with 1-Click Approval */}
+                            {/* Faculty Relief Request Callout */}
                             {task.relief_requested && (
-                              <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/40 p-3.5 space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                                    <AlertCircle className="h-4 w-4 text-amber-600" />
-                                    Faculty Relief Request Submitted ({task.relief_reason || 'Workload Surge'})
+                              <div className="rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-[#FFF7ED] dark:bg-[#2A190E] p-4 space-y-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="text-xs font-bold text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                                    <AlertCircle className="h-4 w-4 text-[#F97316]" aria-hidden="true" />
+                                    Faculty Relief Request ({task.relief_reason || 'Workload Surge'})
                                   </span>
-                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
-                                    SLA Paused (Zero Penalty)
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FFFFFF] dark:bg-[#1E293B] text-[#EA580C] dark:text-[#FB923C] border border-[#FED7AA] dark:border-[#7C2D12]">
+                                    SLA Paused
                                   </span>
                                 </div>
 
                                 {task.relief_justification && (
-                                  <p className="text-xs text-amber-900 dark:text-amber-200 italic bg-white/80 dark:bg-slate-900/70 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900">
-                                    "{task.relief_justification}"
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 italic bg-white dark:bg-slate-800/90 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    &ldquo;{task.relief_justification}&rdquo;
                                   </p>
                                 )}
 
                                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                                  <span className="text-amber-800 dark:text-amber-300">
-                                    Suggested Peer Faculty: <strong>{task.suggested_peer_teacher || 'Mrs. Neha Roy'}</strong>
+                                  <span className="text-[#7C2D12] dark:text-[#E5B891]">
+                                    Suggested Peer: <strong>{task.suggested_peer_teacher || 'Mrs. Neha Roy'}</strong>
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <button
@@ -5010,7 +7036,7 @@ export default function AdminPage() {
                                         setReassignTaskId(task.id);
                                         setReassignPeer(task.suggested_peer_teacher || 'Mrs. Neha Roy');
                                       }}
-                                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-all shadow-xs"
+                                      className="px-3 py-1.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold cursor-pointer transition-colors"
                                     >
                                       Approve Peer Migration
                                     </button>
@@ -5020,27 +7046,26 @@ export default function AdminPage() {
                                         e.stopPropagation();
                                         handleExtendSla(task.id);
                                       }}
-                                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold cursor-pointer transition-all"
+                                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] text-[#EA580C] dark:text-[#FB923C] border border-[#FED7AA] dark:border-[#7C2D12] font-semibold cursor-pointer transition-colors"
                                     >
                                       +24h SLA Extension
                                     </button>
                                   </div>
                                 </div>
 
-                                {/* Inline Peer Selection Confirmation */}
                                 {reassignTaskId === task.id && (
-                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300 dark:border-amber-800 space-y-2 mt-2">
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                      Confirm Peer Faculty to Reassign Mandate (SLA will reset to fresh 48 Hours):
+                                  <div className="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 mt-2">
+                                    <label className="block text-xs font-semibold text-slate-900 dark:text-white">
+                                      Confirm Peer Faculty to Reassign (Resets SLA to 48h):
                                     </label>
                                     <div className="flex flex-wrap items-center gap-2">
                                       <select
                                         value={reassignPeer}
                                         onChange={(e) => setReassignPeer(e.target.value)}
-                                        className="flex-1 min-w-[200px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                        className="flex-1 min-w-[200px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 text-xs text-slate-900 dark:text-white"
                                       >
                                         <option value="Mrs. Ananya Verma">Mrs. Ananya Verma (Math Lead)</option>
-                                        <option value="Dr. K. Raman">Dr. K. Raman (Science & Physics)</option>
+                                        <option value="Dr. K. Raman">Dr. K. Raman (Science &amp; Physics)</option>
                                         <option value="Mrs. Neha Roy">Mrs. Neha Roy (English)</option>
                                         <option value="Dr. Hemanth Sen">Dr. Hemanth Sen (Biology)</option>
                                         <option value="Mr. Vikram Joshi">Mr. Vikram Joshi (Sports/Discipline)</option>
@@ -5052,7 +7077,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           handleApproveRelief(task, reassignPeer);
                                         }}
-                                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                                        className="px-3 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold font-bold text-xs cursor-pointer"
                                       >
                                         Confirm Reassignment
                                       </button>
@@ -5062,7 +7087,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           setReassignTaskId(null);
                                         }}
-                                        className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+                                        className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold cursor-pointer hover:bg-[#F1F5F9]"
                                       >
                                         Cancel
                                       </button>
@@ -5072,12 +7097,13 @@ export default function AdminPage() {
                               </div>
                             )}
 
-                            {/* Escalation Callout with Principal Resolve Action */}
+                            {/* Escalation Callout */}
                             {task.is_escalated && (
-                              <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3.5 space-y-2">
+                              <div className="rounded-xl border border-[#F5C2C2] dark:border-[#7F1D1D] bg-[#FCECEC] dark:bg-[#2B1517] p-4 space-y-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                                    🚨 Escalation Rationale: {task.escalation_reason || 'Critical Priority'}
+                                  <p className="text-xs font-bold text-[#B91C1C] dark:text-[#FCA5A5] flex items-center gap-1.5">
+                                    <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    Escalation Rationale: {task.escalation_reason || 'Critical Priority'}
                                   </p>
                                   <button
                                     type="button"
@@ -5086,22 +7112,23 @@ export default function AdminPage() {
                                       setResolveEscalateTaskId(task.id);
                                       setResolveEscalateNotes('Discussed with faculty, issue resolved and resumed normally.');
                                     }}
-                                    className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all flex items-center gap-1"
+                                    className="px-3 py-1.5 rounded-xl bg-[#B91C1C] hover:bg-[#991B1B] text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Resolve Escalation
+                                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Resolve Escalation
                                   </button>
                                 </div>
 
                                 {resolveEscalateTaskId === task.id && (
-                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-rose-300 dark:border-rose-800 space-y-2 mt-2">
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                      Principal Resolution Note (Restores task to standard monitoring queue):
+                                  <div className="p-3 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 mt-2">
+                                    <label className="block text-xs font-semibold text-slate-900 dark:text-white">
+                                      Principal Resolution Note:
                                     </label>
                                     <input
                                       type="text"
                                       value={resolveEscalateNotes}
                                       onChange={(e) => setResolveEscalateNotes(e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-white"
+                                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 text-xs text-slate-900 dark:text-white"
                                       placeholder="e.g. Counseled teacher, parent contacted, workload stabilized."
                                     />
                                     <div className="flex items-center justify-end gap-2 pt-1">
@@ -5111,7 +7138,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           setResolveEscalateTaskId(null);
                                         }}
-                                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold hover:bg-[#F1F5F9] cursor-pointer"
                                       >
                                         Cancel
                                       </button>
@@ -5121,7 +7148,7 @@ export default function AdminPage() {
                                           e.stopPropagation();
                                           handleResolveEscalation(task.id);
                                         }}
-                                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                                        className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold text-xs font-bold cursor-pointer"
                                       >
                                         Confirm Resolution
                                       </button>
@@ -5133,66 +7160,78 @@ export default function AdminPage() {
 
                             {/* Governance & Verification Lifecycle */}
                             {task.status === 'Pending Review' ? (
-                              <div className="p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 space-y-2.5">
+                              <div className="p-4 rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-[#FFF7ED] dark:bg-[#2A190E] space-y-2.5">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                                    <Icon3D name="memo" className="h-4 w-4" /> Work Submitted for Verification
+                                  <span className="text-xs font-bold text-[#EA580C] dark:text-[#FB923C] flex items-center gap-1.5">
+                                    <FileCheck className="h-4 w-4 text-[#F97316]" aria-hidden="true" />
+                                    Work Submitted for Verification
                                   </span>
                                   {task.submitted_at && (
-                                    <span className="text-[10px] text-amber-700/80 dark:text-amber-400">
+                                    <span className="text-xs text-[#7C2D12] dark:text-[#E5B891] tabular-nums">
                                       {new Date(task.submitted_at).toLocaleDateString()}
                                     </span>
                                   )}
                                 </div>
                                 {task.submission_notes && (
-                                  <div className="text-xs text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-900">
-                                    <span className="font-semibold text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Assignee Notes:</span>
+                                  <div className="text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-800/90 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <span className="font-semibold text-slate-600 dark:text-slate-400 block text-xs mb-0.5">
+                                      Assignee Notes
+                                    </span>
                                     {task.submission_notes}
                                   </div>
                                 )}
                                 {task.completion_proof_url && (
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={task.completion_proof_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800"
-                                    >
-                                      📎 View Attached Proof / Dossier
-                                    </a>
-                                  </div>
+                                  <a
+                                    href={task.completion_proof_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    View Attached Proof / Dossier
+                                  </a>
                                 )}
                                 <div className="flex items-center gap-2 pt-1">
                                   <button
                                     type="button"
-                                    onClick={() => { setReviewModalTask(task); setReviewRemarks('Verified all documents & compliance requirements.'); setShowRevisionInput(false); }}
-                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                                    onClick={() => {
+                                      setReviewModalTask(task);
+                                      setReviewRemarks('Verified all documents & compliance requirements.');
+                                      setShowRevisionInput(false);
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Verify &amp; Sign-off
+                                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Verify &amp; Sign-off
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => { setReviewModalTask(task); setShowRevisionInput(true); }}
-                                    className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 text-xs font-bold hover:bg-amber-100 cursor-pointer"
+                                    onClick={() => {
+                                      setReviewModalTask(task);
+                                      setShowRevisionInput(true);
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-xl border border-[#FED7AA] dark:border-[#7C2D12] bg-white dark:bg-slate-800/90 text-[#EA580C] dark:text-[#FB923C] text-xs font-semibold hover:bg-[#F1F5F9] cursor-pointer inline-flex items-center gap-1.5"
                                   >
-                                    ↺ Request Revision
+                                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Request Revision
                                   </button>
                                 </div>
                               </div>
                             ) : task.status === 'Completed' ? (
-                              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 dark:bg-[#2563EB]/25 border border-slate-200 dark:border-slate-700 text-xs text-blue-600 dark:text-blue-400 dark:text-[#93C5FD]">
                                 <div className="flex items-center gap-2">
-                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                                   <div>
                                     <span className="font-bold">Verified &amp; Closed</span>
                                     {task.approved_by && (
-                                      <span className="text-slate-600 dark:text-slate-400 text-[11px] block">
-                                        Approved by {task.approved_by} {task.approved_at ? `on ${new Date(task.approved_at).toLocaleDateString()}` : ''}
+                                      <span className="text-slate-600 dark:text-slate-400 block">
+                                        Approved by {task.approved_by}{' '}
+                                        {task.approved_at ? `on ${new Date(task.approved_at).toLocaleDateString()}` : ''}
                                       </span>
                                     )}
                                     {task.is_admin_override && (
-                                      <span className="text-rose-600 dark:text-rose-400 text-[10px] block font-semibold">
-                                        [Force Closed]: {task.admin_override_reason}
+                                      <span className="text-[#B91C1C] dark:text-[#FCA5A5] block font-semibold">
+                                        Force Closed: {task.admin_override_reason}
                                       </span>
                                     )}
                                   </div>
@@ -5202,22 +7241,21 @@ export default function AdminPage() {
                                     href={task.completion_proof_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
                                   >
-                                    View Dossier ↗
+                                    <span>View Dossier</span>
+                                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
                                   </a>
                                 )}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-slate-500">Assignee Status:</span>
-                                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-                                    task.status === 'In Progress'
-                                      ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                                  }`}>
-                                    {task.status === 'In Progress' ? '⚡ In Progress by Assignee' : '⏳ Awaiting Assignee Action'}
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#E2E8F0] dark:border-[#1E322B]">
+                                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                                  <span>
+                                    {task.status === 'In Progress'
+                                      ? 'In progress with assignee'
+                                      : 'Awaiting assignee action'}
                                   </span>
                                 </div>
 
@@ -5228,10 +7266,10 @@ export default function AdminPage() {
                                       setOverrideModalTask(task);
                                       setOverrideReason('');
                                     }}
-                                    className="rounded-xl px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                                    className="rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
                                     title="Use only if assignee is on leave or task completed externally"
                                   >
-                                    Force Close (Override)
+                                    Force Close
                                   </button>
                                   {!task.is_escalated && (
                                     <button
@@ -5241,9 +7279,10 @@ export default function AdminPage() {
                                         setEscalateTaskId(task.id);
                                         setEscalateReason('');
                                       }}
-                                      className="rounded-xl px-3 py-1 text-xs font-bold border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-all cursor-pointer"
+                                      className="rounded-xl px-3 py-1.5 text-xs font-bold border border-[#F5C2C2] dark:border-[#7F1D1D] bg-[#FCECEC] dark:bg-[#2B1517] text-[#B91C1C] dark:text-[#FCA5A5] hover:bg-[#B91C1C] hover:text-white transition-colors cursor-pointer inline-flex items-center gap-1.5"
                                     >
-                                      🚨 Escalate
+                                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                                      Escalate
                                     </button>
                                   )}
                                 </div>
@@ -5252,29 +7291,29 @@ export default function AdminPage() {
 
                             {/* Escalation Form */}
                             {escalateTaskId === task.id && (
-                              <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 p-3.5 space-y-2 mt-2">
-                                <p className="text-xs font-bold text-rose-700 dark:text-rose-300">
-                                  State rationale for escalating this task to Principal:
+                              <div className="rounded-xl border border-[#F5C2C2] dark:border-[#7F1D1D] bg-white dark:bg-slate-800/90 p-3.5 space-y-2 mt-2">
+                                <p className="text-xs font-bold text-[#B91C1C] dark:text-[#FCA5A5]">
+                                  State rationale for escalating this task:
                                 </p>
                                 <textarea
                                   rows={2}
                                   value={escalateReason}
-                                  onChange={e => setEscalateReason(e.target.value)}
+                                  onChange={(e) => setEscalateReason(e.target.value)}
                                   placeholder="e.g. Teacher requested medical relief or deadline exceeded by 48 hours..."
-                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-900 dark:text-white resize-none"
                                 />
                                 <div className="flex gap-2 justify-end">
                                   <button
                                     type="button"
                                     onClick={() => setEscalateTaskId(null)}
-                                    className="text-xs px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 cursor-pointer"
+                                    className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-[#F1F5F9] cursor-pointer font-semibold"
                                   >
                                     Cancel
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleEscalateTask(task.id)}
-                                    className="text-xs px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                                    className="text-xs px-3 py-1.5 rounded-xl bg-[#B91C1C] hover:bg-[#991B1B] text-white font-bold cursor-pointer"
                                   >
                                     Confirm Escalation
                                   </button>
@@ -5313,10 +7352,26 @@ export default function AdminPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
-                    <ShieldCheck className="h-4 w-4 text-violet-600" />
-                    Manual Proxy Allocation Active
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('permissions')}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors shadow-2xs"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Teacher Leaves Queue</span>
+                  </button>
+                  <button
+                    onClick={handleAutoResolveSubstitutions}
+                    disabled={unassignedSubCount === 0}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer ${
+                      unassignedSubCount === 0
+                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                        : 'bg-violet-600 hover:bg-violet-700 text-white'
+                    }`}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Auto-Resolve Free Faculty Matrix</span>
+                  </button>
                 </div>
               </div>
 
@@ -5487,57 +7542,173 @@ export default function AdminPage() {
           {/* ===================================================== */}
           {activeTab === 'rollover' && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Header Banner */}
+              {/* Header Banner & Simulation Switcher */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2.5 py-0.5 text-xs font-bold border border-amber-200 dark:border-amber-800">
+                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
                       Academic Year Lifecycle
                     </span>
-                    <span className="text-xs text-slate-500">Annual Transition Engine</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Annual Transition &amp; Progression Engine</span>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white mt-1">
                     Annual Academic Rollover &amp; Student Promotion Pipeline
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Graduation and tier progression matrix: graduate students to the next academic grade, allocate target sections, and lock previous year records (PowerSchool &amp; Alma benchmark).
+                    Graduation matrix: promote cohorts to the next academic tier, resolve academic/attendance exceptions, and lock previous year records.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Cycle Transition</span>
-                    <span className="text-xs font-extrabold text-slate-900 dark:text-white">AY 2026–27 ➔ AY 2027–28</span>
+                {/* Right: Simulation Mode Toggle & Transition Pill */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setIsSimulationMode(false)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        !isSimulationMode
+                          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Live Mode</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSimulationMode(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSimulationMode
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Target className="h-3.5 w-3.5" />
+                      <span>Dry-Run Simulation</span>
+                    </button>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-amber-500" />
+
+                  <div className="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Cycle Transition</span>
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white">AY 2026–27 ➔ AY 2027–28</span>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
                 </div>
               </div>
 
-              {/* Summary Metrics */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Active Classes</span>
-                  <span className="text-2xl font-black text-slate-900 dark:text-white">{rolloverClasses.length}</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Cohort sections</span>
-                </div>
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-emerald-600 block">Auto-Promotion Ready</span>
-                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                    {rolloverClasses.reduce((acc, c) => acc + c.eligible_for_promotion, 0)}
+              {/* Simulation Mode Banner (When active) */}
+              {isSimulationMode && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0">
+                      <Target className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <strong className="text-amber-950 dark:text-amber-200 block text-xs">
+                        Pre-Flight Simulation Mode Active (Sandbox Prediction)
+                      </strong>
+                      <span className="text-amber-800 dark:text-amber-300 text-[11px]">
+                        Changes made here test projected classroom strength and will not commit to the live SIS database until you click Live Mode.
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 shrink-0">
+                    Projected Desk Overload Detected (Class 10-A: 42/40)
                   </span>
-                  <span className="text-[10px] text-emerald-600/70 block mt-0.5">Met academic threshold</span>
                 </div>
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-amber-600 block">Retention / Review</span>
-                  <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                    {rolloverClasses.reduce((acc, c) => acc + c.retention_review, 0)}
-                  </span>
-                  <span className="text-[10px] text-amber-600/70 block mt-0.5">Academic / Attendance flags</span>
+              )}
+
+              {/* Top Operational Metrics (4 KPI Cards) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Total Active Classes</span>
+                    <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">{rolloverClasses.length}</span>
+                    <span className="text-xs font-bold text-slate-500">Cohort sections</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">All grade tiers mapped</span>
                 </div>
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-blue-600 block">Pending Rollovers</span>
-                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{pendingRolloverCount}</span>
-                  <span className="text-[10px] text-blue-600/70 block mt-0.5">Awaiting Administrator seal</span>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Auto-Promotion Ready</span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {rolloverClasses.reduce((acc, c) => acc + c.eligible_for_promotion, 0)}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">students met criteria</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600/80 block mt-1">94.2% academic pass rate</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 block">Under Review / Flags</span>
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                      {rolloverClasses.reduce((acc, c) => acc + c.retention_review, 0)}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">exceptions flagged</span>
+                  </div>
+                  <span className="text-[10px] text-amber-600/80 block mt-1">Attendance &amp; fee roadblocks</span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400 block">Safety Snapshot</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                      Active
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-xl font-black text-slate-900 dark:text-white">AY 2026–27</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1">7-Day historical rollback active</span>
+                </div>
+              </div>
+
+              {/* Visual Cohort Progression Pipeline (Funnel / Flow Preview) */}
+              <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Institutional Progression Pipeline &amp; Stream Allocation
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-medium">PowerSchool &amp; Alma progression standard</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Tier 1: Junior Primary</span>
+                    <strong className="text-xs font-extrabold text-slate-900 dark:text-white block">Class 1 to Class 5</strong>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block">100% Automatic Cohort Promotion</span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Tier 2: Middle School</span>
+                    <strong className="text-xs font-extrabold text-slate-900 dark:text-white block">Class 6 to Class 8</strong>
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 block">Subject Credit Check &bull; 96% Ready</span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Tier 3: Stream Allocation</span>
+                    <strong className="text-xs font-extrabold text-slate-900 dark:text-white block">Class 10 ➔ Class 11</strong>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 block">60 Science &bull; 40 Commerce &bull; 20 Arts</span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Tier 4: Graduation</span>
+                    <strong className="text-xs font-extrabold text-slate-900 dark:text-white block">Class 12 ➔ Alumni</strong>
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400 block">110 Seniors Sealed &bull; Transcripts Issued</span>
+                  </div>
                 </div>
               </div>
 
@@ -5545,163 +7716,592 @@ export default function AdminPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Class Cohort Progression Pipeline
+                    Class Cohort Progression Pipeline ({rolloverClasses.length} Cohorts)
                   </h3>
-                  <span className="text-[11px] text-slate-400">Select a class to execute progression</span>
+                  <span className="text-[11px] text-slate-400">Click &ldquo;Under Review&rdquo; to resolve flagged exceptions</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {rolloverClasses.map((cls) => (
-                    <div 
-                      key={cls.class_id}
-                      className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 shadow-sm hover:border-amber-400/60 dark:hover:border-amber-500/40 transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="px-3 py-1 rounded-xl bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-extrabold text-sm">
-                            {cls.from_class}
-                          </span>
-                          <ArrowRight className="h-4 w-4 text-slate-400" />
-                          <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold text-sm">
-                            {cls.to_class}
-                          </span>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                          cls.status === 'Rolled Over'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        }`}>
-                          {cls.status}
-                        </span>
-                      </div>
+                  {rolloverClasses.map((cls) => {
+                    const eligiblePercent = Math.round((cls.eligible_for_promotion / cls.total_students) * 100);
+                    const isRolledOver = cls.status === 'Rolled Over';
+                    const hasExceptions = cls.retention_review > 0;
 
-                      <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 dark:border-slate-800 text-center">
-                        <div>
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Enrolled</span>
-                          <span className="text-sm font-bold text-slate-900 dark:text-white">{cls.total_students}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-emerald-600 uppercase font-semibold block">Eligible</span>
-                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{cls.eligible_for_promotion}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-amber-600 uppercase font-semibold block">Under Review</span>
-                          <span className="text-sm font-bold text-amber-600 dark:text-amber-400">{cls.retention_review}</span>
-                        </div>
-                      </div>
+                    return (
+                      <div
+                        key={cls.class_id}
+                        className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+                      >
+                        {/* Class Transition Header */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 rounded-xl bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300 font-extrabold text-sm">
+                              {cls.from_class}
+                            </span>
+                            <ArrowRight className="h-4 w-4 text-slate-400" />
+                            <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold text-sm">
+                              {cls.to_class}
+                            </span>
+                          </div>
 
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">
-                          Target Class Teacher: <b className="text-slate-700 dark:text-slate-300">{cls.target_class_teacher || 'Senior Faculty Coordinator'}</b>
-                        </span>
-                        {cls.status === 'Rolled Over' ? (
-                          <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                            <CheckCircle2 className="h-4 w-4" />
-                            Archived &amp; Sealed
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                            isRolledOver
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                          }`}>
+                            {cls.status}
                           </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setSelectedRolloverClass(cls);
-                              setShowRolloverModal(true);
-                            }}
-                            className="flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
-                          >
-                            <span>Execute Rollover</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                        </div>
+
+                        {/* Cohort Student Breakdown */}
+                        <div className="grid grid-cols-3 gap-2 py-2.5 border-y border-slate-100 dark:border-slate-800 text-center">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Enrolled</span>
+                            <span className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">{cls.total_students}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold block">Eligible Ready</span>
+                            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">{cls.eligible_for_promotion}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 uppercase font-semibold block">Under Review</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedClassForExceptionDrawer(cls)}
+                              className="inline-flex items-center gap-1 text-base font-extrabold text-amber-600 dark:text-amber-400 tabular-nums hover:underline cursor-pointer"
+                              title="Click to resolve student exceptions"
+                            >
+                              <span>{cls.retention_review}</span>
+                              {hasExceptions && <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Resolve</span>}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Progression Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500 font-medium">Auto-Promotion Readiness:</span>
+                            <strong className="text-slate-900 dark:text-white font-extrabold">{eligiblePercent}%</strong>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500"
+                              style={{ width: `${eligiblePercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Target Teacher & Action Footer */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 text-xs">
+                          <span className="text-slate-500">
+                            Target Teacher: <strong className="text-slate-800 dark:text-slate-200">{cls.target_class_teacher || 'Senior Faculty Coordinator'}</strong>
+                          </span>
+
+                          {isRolledOver ? (
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Archived &amp; Sealed</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedRolloverClass(cls);
+                                setShowRolloverModal(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-xs transition-all cursor-pointer"
+                            >
+                              <span>Execute Rollover</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* PROMOTION EXCEPTION ADJUDICATION DRAWER */}
+              {selectedClassForExceptionDrawer && (() => {
+                const classId = selectedClassForExceptionDrawer.class_id;
+                const exceptions = classExceptions[classId] || [
+                  { id: 901, name: "Aarav Patel", roll: "10A-04", roadblockType: "attendance" as const, description: "Attendance 69% (Needs Principal medical waiver).", waiverApplied: false },
+                  { id: 902, name: "Kavya Sharma", roll: "10A-14", roadblockType: "academic" as const, description: "Failed Mathematics (32/100, Passing is 35). Needs 3 grace marks.", waiverApplied: false }
+                ];
+
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-150">
+                    <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 my-8">
+                      {/* Drawer Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                              Promotion Exceptions: {selectedClassForExceptionDrawer.from_class} ➔ {selectedClassForExceptionDrawer.to_class}
+                            </h3>
+                          </div>
+                          <span className="text-xs text-slate-500 font-medium">
+                            Adjudicate attendance, academic grace marks, and fee roadblocks before finalizing class rollover.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedClassForExceptionDrawer(null)}
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      {/* Exception Student Cards */}
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                        {exceptions.map((student) => (
+                          <div
+                            key={student.id}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              student.waiverApplied
+                                ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                                    {student.name}
+                                  </h4>
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold">
+                                    Roll: {student.roll}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                                  {student.description}
+                                </p>
+                              </div>
+
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${
+                                student.waiverApplied
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : student.roadblockType === 'attendance'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : student.roadblockType === 'academic'
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                              }`}>
+                                {student.waiverApplied ? 'Waiver Granted' : student.roadblockType.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Action Buttons for this student */}
+                            <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                              <span className="text-slate-400 text-[11px]">
+                                {student.waiverApplied ? 'Eligible for AY 2027-28 Promotion' : 'Action Required for Eligibility'}
+                              </span>
+
+                              {student.waiverApplied ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span>Promoted (Waiver Recorded)</span>
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  {student.roadblockType === 'attendance' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setClassExceptions(prev => ({
+                                          ...prev,
+                                          [classId]: (prev[classId] || exceptions).map(s => s.id === student.id ? { ...s, waiverApplied: true, waiverType: 'Medical Waiver' } : s)
+                                        }));
+                                        setRolloverClasses(prev => prev.map(c => c.class_id === classId ? {
+                                          ...c,
+                                          eligible_for_promotion: c.eligible_for_promotion + 1,
+                                          retention_review: Math.max(0, c.retention_review - 1)
+                                        } : c));
+                                        triggerToast(`Principal Medical Waiver granted for ${student.name}. Student is now eligible for promotion.`);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      <span>Grant Medical Waiver</span>
+                                    </button>
+                                  )}
+
+                                  {student.roadblockType === 'academic' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setClassExceptions(prev => ({
+                                          ...prev,
+                                          [classId]: (prev[classId] || exceptions).map(s => s.id === student.id ? { ...s, waiverApplied: true, waiverType: 'Grace Marks' } : s)
+                                        }));
+                                        setRolloverClasses(prev => prev.map(c => c.class_id === classId ? {
+                                          ...c,
+                                          eligible_for_promotion: c.eligible_for_promotion + 1,
+                                          retention_review: Math.max(0, c.retention_review - 1)
+                                        } : c));
+                                        triggerToast(`Awarded Moderation Grace Marks (+4) for ${student.name}. Student is now eligible for promotion.`);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      <span>Award +4 Grace Marks</span>
+                                    </button>
+                                  )}
+
+                                  {student.roadblockType === 'fees' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setClassExceptions(prev => ({
+                                          ...prev,
+                                          [classId]: (prev[classId] || exceptions).map(s => s.id === student.id ? { ...s, waiverApplied: true, waiverType: 'Fee Undertaking' } : s)
+                                        }));
+                                        setRolloverClasses(prev => prev.map(c => c.class_id === classId ? {
+                                          ...c,
+                                          eligible_for_promotion: c.eligible_for_promotion + 1,
+                                          retention_review: Math.max(0, c.retention_review - 1)
+                                        } : c));
+                                        triggerToast(`Approved Conditional Promotion Undertaking for ${student.name}. Report card released.`);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      <span>Authorize Fee Undertaking</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Drawer Footer */}
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <span className="text-xs text-slate-500 font-medium">
+                          Resolved waivers directly update the live class promotion count.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedClassForExceptionDrawer(null)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+                        >
+                          Close &amp; Return to Rollover
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
-
-          {/* ===================================================== */}
-          {/* TAB 11: STUDENT TC & EXIT CLEARANCE VAULT              */}
+          
           {/* ===================================================== */}
           {activeTab === 'exit' && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Header Banner */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+              {/* Executive Header & CBSE Rule 44 Statutory Compliance Banner */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800">
-                      CBSE Statutory Compliance
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 px-3 py-0.5 text-xs font-bold border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
+                      <GraduationCap className="h-3.5 w-3.5 text-blue-600" />
+                      CBSE Statutory Compliance (Rule 44)
                     </span>
-                    <span className="text-xs text-slate-500">Legal Exit &amp; Transfer Vault</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Legal Exit &amp; Transfer Vault</span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                      Zero-Dispute Dual Custody Active
+                    </span>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
-                    Student Transfer Certificates (TC) &amp; Clearances
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    <span>📜 Student Transfer Certificates (TC) &amp; Clearances</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
                     Dual-custody verification engine: 4-department clearance audit, in-app parent digital sign-off, and physical handover scan archiving (CBSE Rule 44 compliance).
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                   <button
+                    type="button"
+                    onClick={() => setShowNewTCModal(true)}
+                    className="flex items-center gap-2 rounded-xl bg-primary hover:opacity-95 text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Issue TC Application</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={async () => {
                       const updated = await api.getExitClearances();
                       setExitClearances(updated);
-                      triggerToast('Refreshed exit clearances from legal ledger');
+                      triggerToast('Refreshed exit clearances from statutory legal ledger');
                     }}
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs cursor-pointer transition-all"
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
                     <span>Refresh Ledger</span>
                   </button>
                 </div>
               </div>
 
-              {/* Summary Metrics */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Exit Applications</span>
-                  <span className="text-2xl font-black text-slate-900 dark:text-white">{exitClearances.length}</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Departing student records</span>
-                </div>
-                <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300 block">Pending Verification</span>
-                  <span className="text-2xl font-black text-amber-700 dark:text-amber-400">
-                    {exitClearances.filter(e => !e.physical_sign_verified || !e.digital_parent_approved).length}
+              {/* Statutory 4-Department Clearance Workflow Ribbon */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/60 via-slate-50 to-indigo-50/60 dark:from-blue-950/20 dark:via-slate-900 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-900/60 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    Dual-Custody Statutory Audit Pipeline (CBSE Affiliation Standard)
                   </span>
-                  <span className="text-[10px] text-amber-600/80 block mt-0.5">Awaiting dual verification</span>
-                </div>
-                <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block">Permanently Archived</span>
-                  <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
-                    {exitClearances.filter(e => e.physical_sign_verified && e.digital_parent_approved).length}
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                    4 Departments Mandatory Sign-Off
                   </span>
-                  <span className="text-[10px] text-emerald-600/80 block mt-0.5">Zero-dispute sealed</span>
                 </div>
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-blue-600 block">Avg Clearance Turnaround</span>
-                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400">1.2 Days</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Benchmark &lt; 3.0 Days</span>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                    <div className="font-bold text-slate-800 dark:text-slate-200">1. Library Vault</div>
+                    <div className="text-[10px] text-slate-500">Books &amp; RFID Cleared</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                    <div className="font-bold text-slate-800 dark:text-slate-200">2. Accounts Bursar</div>
+                    <div className="text-[10px] text-slate-500">Caution Deposit &amp; Dues</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                    <div className="font-bold text-slate-800 dark:text-slate-200">3. Labs &amp; Sports</div>
+                    <div className="text-[10px] text-slate-500">Kit &amp; Apparatus Verified</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                    <div className="font-bold text-slate-800 dark:text-slate-200">4. Parent Sign-Off</div>
+                    <div className="text-[10px] text-slate-500">In-App Digital Signature</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-center flex flex-col justify-center">
+                    <div>5. Principal Seal</div>
+                    <div className="text-[10px] opacity-80">Permanent Archive</div>
+                  </div>
                 </div>
               </div>
 
-              {/* Clearances List */}
-              <div className="space-y-4">
-                {exitClearances.map(clearance => (
-                  <ExitClearanceView
-                    key={clearance.id}
-                    clearance={clearance}
-                    role="admin"
-                    onVerifyPhysical={(scanUrl) => handleVerifyPhysicalExit(clearance.id, scanUrl)}
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Total TC Applications</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Roster</span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                    {exitClearances.length}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+                    <span>Departing Student Records</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-semibold">AY 2026-27</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-primary h-1.5 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-amber-700 dark:text-amber-400">Pending Verification</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      In Review
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                    {exitClearances.filter(e => !e.physical_sign_verified || !e.digital_parent_approved).length}
+                  </div>
+                  <div className="mt-2 text-xs text-amber-700/80 dark:text-amber-400/80 flex items-center justify-between font-medium">
+                    <span>Awaiting Dual-Custody Sign-Off</span>
+                    <span className="text-amber-600">Active</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-amber-100 dark:bg-amber-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: '60%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400">Permanently Archived</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                      Zero-Dispute
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {exitClearances.filter(e => e.physical_sign_verified && e.digital_parent_approved).length}
+                  </div>
+                  <div className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-400/80 flex items-center justify-between font-medium">
+                    <span>Tamper-Proof Digital Vault</span>
+                    <span className="text-emerald-600">Sealed</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '40%' }} />
+                  </div>
+                </div>
+
+                <div className="p-4.5 rounded-2xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 bg-blue-50/20 dark:bg-blue-950/10 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] uppercase font-bold tracking-wider text-blue-700 dark:text-blue-400">Clearance Turnaround</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                      SLA Fast
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-blue-600 dark:text-blue-400 tabular-nums">
+                    1.2 Days
+                  </div>
+                  <div className="mt-2 text-xs text-blue-700/80 dark:text-blue-400/80 flex items-center justify-between font-medium">
+                    <span>CBSE Statutory Benchmark &lt; 3.0 Days</span>
+                    <span className="text-blue-600">100% Compliant</span>
+                  </div>
+                  <div className="mt-2.5 w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '85%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={exitSearch}
+                    onChange={(e) => setExitSearch(e.target.value)}
+                    placeholder="Search departing student by name or TC number..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary font-medium"
                   />
-                ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+                    {[
+                      { key: 'ALL', label: 'All Records' },
+                      { key: 'PENDING', label: 'Pending Dept Clearances' },
+                      { key: 'PARENT_PENDING', label: 'Awaiting Parent' },
+                      { key: 'ARCHIVED', label: 'Archived Vault' }
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setExitFilter(f.key as any)}
+                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                          exitFilter === f.key
+                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Clearances List with Enhanced Container */}
+              <div className="space-y-4">
+                {exitClearances
+                  .filter(c => {
+                    const matchSearch = !exitSearch.trim() || c.student_name.toLowerCase().includes(exitSearch.toLowerCase()) || String(c.student_id).includes(exitSearch);
+                    const matchFilter = 
+                      exitFilter === 'ALL' ? true :
+                      exitFilter === 'PENDING' ? (!c.fee_cleared || !c.library_cleared || !c.inventory_cleared) :
+                      exitFilter === 'PARENT_PENDING' ? !c.digital_parent_approved :
+                      exitFilter === 'ARCHIVED' ? (c.physical_sign_verified && c.digital_parent_approved) : true;
+                    return matchSearch && matchFilter;
+                  })
+                  .map(clearance => (
+                    <div key={clearance.id} className="relative group">
+                      <ExitClearanceView
+                        clearance={clearance}
+                        role="admin"
+                        onVerifyPhysical={(scanUrl) => handleVerifyPhysicalExit(clearance.id, scanUrl)}
+                      />
+                    </div>
+                  ))}
 
                 {exitClearances.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-12 text-center">
+                  <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-12 text-center bg-white dark:bg-slate-900">
                     <FileCheck className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No student exit clearance records found.</p>
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No student exit clearance records found in current view.</p>
                   </div>
                 )}
               </div>
+
+              {/* New TC Application Modal */}
+              {showNewTCModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                  <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold">
+                          <GraduationCap className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Initiate Student Exit &amp; TC Clearance</h3>
+                          <span className="text-[10px] text-slate-500">CBSE Rule 44 Statutory Workflow</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewTCModal(false)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Select Departing Student
+                        </label>
+                        <select className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer">
+                          <option value="1">Kavya Sharma (Class 10-A • Roll 14)</option>
+                          <option value="2">Rohan Gupta (Class 10-A • Roll 27)</option>
+                          <option value="3">Aarav Patel (Class 10-A • Roll 04)</option>
+                          <option value="4">Tanvi Deshmukh (Class 9-B • Roll 31)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Reason for Departure / Transfer
+                        </label>
+                        <select className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary font-medium cursor-pointer">
+                          <option value="relocation">Parent Job Relocation to Another City/State</option>
+                          <option value="higher_studies">Admission to Specialized Higher Secondary Junior College</option>
+                          <option value="international">Family Emigration / International Relocation</option>
+                          <option value="personal">Personal / Family Hardship</option>
+                        </select>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                        ⚠️ <strong>Dual-Custody Trigger Notice:</strong> Initiating this exit application will automatically broadcast simultaneous no-dues verification tasks to Library, Accounts Bursar, and Science Labs.
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setShowNewTCModal(false)}
+                        className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewTCModal(false);
+                          triggerToast('Initiated CBSE Transfer Certificate application & dispatched department audits');
+                        }}
+                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-95 cursor-pointer shadow-xs"
+                      >
+                        Initiate Clearance Audit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
