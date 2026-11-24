@@ -13,7 +13,9 @@ import {
   LayoutList,
   Columns3,
   ChevronRight,
-  X,
+  FileText,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { AdmissionEnquiry } from '@/lib/types';
 
@@ -169,24 +171,12 @@ export function CRMBoard({
                     isSelected ? 'text-[#DBEAFE]' : 'text-[#475569]'
                   }`}
                 >
-                  {idx + 1}. {stage.label}
-                </span>
-                {idx < PIPELINE_STAGES.length - 1 && (
-                  <ChevronRight
-                    className={`h-3.5 w-3.5 shrink-0 ${
-                      isSelected ? 'text-[#93C5FD]' : 'text-[#94A3B8] dark:text-[#64748B]'
-                    }`}
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
-              <div className="mt-2 flex items-baseline justify-between gap-2">
-                <span
-                  className={`text-2xl font-extrabold tabular-nums ${
-                    isSelected ? 'text-white' : 'text-[#0F172A]'
-                  }`}
-                >
-                  {count}
+                  <span>{stage.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {count}
+                  </span>
                 </span>
                 <span
                   className={`text-xs font-semibold tabular-nums ${

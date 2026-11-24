@@ -262,6 +262,27 @@ export function ParentPtmView({
       }
     }
     loadParentPtmData();
+
+    let ptmChannel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        ptmChannel = new BroadcastChannel('edu360_ptm_channel');
+        ptmChannel.onmessage = async (e) => {
+          if (e.data?.type === 'PTM_SLOT_UPDATE') {
+            try {
+              const freshSlots = await api.getParentPTMSlots();
+              setSlots(freshSlots);
+            } catch {}
+          }
+        };
+      } catch {}
+    }
+
+    return () => {
+      if (ptmChannel) {
+        try { ptmChannel.close(); } catch {}
+      }
+    };
   }, [studentId]);
 
   // Slide Timeline left/right
@@ -307,6 +328,29 @@ export function ParentPtmView({
 
       setSlots(prev => prev.map(s => s.id === selectedSlotForBooking.id ? booked : s));
       setPtmBookingSuccess(true);
+
+      // Real-time notification dispatch to Teacher across open tabs / sessions
+      if (typeof window !== 'undefined') {
+        const notifPayload = {
+          type: 'PTM_SLOT_BOOKED',
+          notification_type: 'PTM_SLOT_BOOKED',
+          recipient_role: 'teacher',
+          title: `PTM Slot Booked: ${studentName}`,
+          priority: 'URGENT'
+        };
+        try {
+          const globalChannel = new BroadcastChannel('edu360_global_notifications');
+          globalChannel.postMessage({ notification: notifPayload });
+          globalChannel.close();
+        } catch {}
+        try {
+          const ptmCh = new BroadcastChannel('edu360_ptm_channel');
+          ptmCh.postMessage({ type: 'PTM_SLOT_UPDATE', slotId: selectedSlotForBooking.id, action: 'BOOKED', slot: booked });
+          ptmCh.close();
+        } catch {}
+        window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: notifPayload }));
+      }
+
       setTimeout(() => {
         setPtmBookingSuccess(false);
         setPtmModalOpen(false);
@@ -369,6 +413,29 @@ export function ParentPtmView({
         booked_parent_name: undefined,
         meeting_url: undefined
       } : s));
+
+      // Real-time cancellation dispatch to Teacher across open tabs / sessions
+      if (typeof window !== 'undefined') {
+        const notifPayload = {
+          type: 'PTM_SLOT_CANCELLED',
+          notification_type: 'PTM_SLOT_CANCELLED',
+          recipient_role: 'teacher',
+          title: `PTM Slot Cancelled: Slot ${slotId}`,
+          priority: 'HIGH'
+        };
+        try {
+          const globalChannel = new BroadcastChannel('edu360_global_notifications');
+          globalChannel.postMessage({ notification: notifPayload });
+          globalChannel.close();
+        } catch {}
+        try {
+          const ptmCh = new BroadcastChannel('edu360_ptm_channel');
+          ptmCh.postMessage({ type: 'PTM_SLOT_UPDATE', slotId, action: 'CANCELLED' });
+          ptmCh.close();
+        } catch {}
+        window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: notifPayload }));
+      }
+
       triggerToast("Your PTM reservation has been cancelled. Slot is now available to re-book.");
     } catch (err) {
       console.error(err);

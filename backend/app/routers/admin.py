@@ -1,20 +1,24 @@
 import datetime
 import json
+import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
 from app.core.database import get_db
 from app.models.models import (
     User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
     StaffMember, InventoryItem, PTMEvent, PaymentTransaction, FeeDefaulter,
     LeaveRequest, SecurityAuditLog, SubstitutionSlot, AttendanceRecord,
-    SubjectAttendanceEntry, AcademicSubject
+    SubjectAttendanceEntry, AcademicSubject, CurriculumPacing, StaffPermission,
+    FeeStructure, FeeMilestone, HallTicket
 )
 from app.routers.notifications import create_system_notification
 from app.core.rbac import require_admin, require_staff, require_role
+
+logger = logging.getLogger("edu360.admin")
 from app.schemas.schemas import (
     TriageAlertResponse, TriageActionRequest,
     AdminTaskResponse, AdminTaskCreate, AdminTaskUpdate,
@@ -23,7 +27,7 @@ from app.schemas.schemas import (
     AdmissionEnquiryResponse, AdmissionEnquiryCreate, AdmissionEnquiryUpdate, CallLogPayload,
     StudentResponse, OfficialDocumentResponse, OfficialDocumentCreate,
     ExitClearanceResponse, ExitClearancePhysicalUpload, ExitClearanceInitiateRequest,
-    EventResponse, EventAssignmentResponse,
+    EventCreate, EventResponse, EventAssignmentResponse,
     VendorEquipmentResponse, VendorEquipmentUpdate,
     SubstitutionSlotResponse, AssignSubstitutionRequest, AvailableFacultyItem,
     SecurityAuditLogResponse, FeeFinancialAnalyticsResponse,
@@ -175,7 +179,18 @@ async def get_executive_pulse(db: AsyncSession = Depends(get_db)):
 # --- 1. Priority Triage Command Center ---
 @router.get("/triage", response_model=list[TriageAlertResponse])
 async def get_triage_alerts(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TriageAlert).order_by(TriageAlert.resolved.asc(), TriageAlert.id.asc()))
+    query = (
+        select(TriageAlert)
+        .where(
+            ~TriageAlert.category.in_(["transport", "inventory"]),
+            ~TriageAlert.title.ilike("%bus%"),
+            ~TriageAlert.title.ilike("%telemetry delay%"),
+            ~TriageAlert.title.ilike("%board exam%"),
+            ~TriageAlert.title.ilike("%loc verification%")
+        )
+        .order_by(TriageAlert.resolved.asc(), TriageAlert.id.asc())
+    )
+    result = await db.execute(query)
     return result.scalars().all()
 
 @router.post("/triage/{alert_id}/act")
@@ -204,7 +219,7 @@ async def list_admin_tasks(
     is_escalated: Optional[bool] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(AdminTask)
+    query = select(AdminTask).where(~AdminTask.domain.in_(["transport", "inventory"]))
     if domain and domain.lower() != "all":
         query = query.where(AdminTask.domain == domain.lower())
     if status and status.lower() != "all":
@@ -219,7 +234,7 @@ async def list_admin_tasks(
 
 @router.get("/tasks/executive-cockpit", response_model=TaskExecutiveCockpitResponse)
 async def get_task_executive_cockpit(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AdminTask).order_by(AdminTask.id.desc()))
+    result = await db.execute(select(AdminTask).where(~AdminTask.domain.in_(["transport", "inventory"])).order_by(AdminTask.id.desc()))
     tasks = result.scalars().all()
 
     total_open = sum(1 for t in tasks if (t.status or "").lower() not in ["completed", "done"])
@@ -274,16 +289,28 @@ async def create_admin_task(task_in: AdminTaskCreate, db: AsyncSession = Depends
     # 🔔 Persistent Notification to Assigned Faculty / Role
     try:
         assignee = new_task.assigned_to or ""
-        is_teacher = (new_task.assigned_to_role == "teacher") or any(term in assignee.lower() for term in ["verma", "teacher", "ananya", "faculty", "math", "raman", "joshi", "sen", "roy", "sharma"])
+        target_user_id = None
+        if assignee:
+            name_parts = assignee.strip().split()
+            last_word = name_parts[-1] if name_parts else assignee
+            st_res = await db.execute(select(StaffMember).where(StaffMember.name.ilike(f"%{last_word}%")))
+            staff_match = st_res.scalars().first()
+            if staff_match:
+                target_user_id = staff_match.id
+
+        is_teacher = (new_task.assigned_to_role == "teacher") or (target_user_id is not None)
         role = "teacher" if is_teacher else (new_task.assigned_to_role or "admin")
-        user_id = 2 if is_teacher else None
+        user_id = target_user_id or (2 if is_teacher else None)
+
+        sender_n = new_task.created_by_name or ("Dr. Hemanth Sen" if new_task.domain == "exam" else "Prof. Rajeshwari Nair")
+        sender_r = new_task.created_by_role or ("exam_coordinator" if new_task.domain == "exam" else "academic_coordinator")
 
         await create_system_notification(
             db=db,
             recipient_user_id=user_id,
             recipient_role=role,
-            sender_name="Prof. Rajeshwari Nair",
-            sender_role="academic_coordinator",
+            sender_name=sender_n,
+            sender_role=sender_r,
             title=f"New Task Delegated: {new_task.title}",
             message=f"You have been assigned: '{new_task.title}'. SLA Target: {new_task.sla_hours} hours. Priority: {new_task.priority}.",
             notification_type="TASK_ASSIGNED",
@@ -1268,6 +1295,124 @@ async def convert_enquiry_to_student(
         db.add(parent_user)
         await db.flush()
 
+    new_student.parent_user_id = parent_user.id
+
+    # Instantiate Annual Fee Structure & Milestones for the student
+    base_class = (new_student.class_name or "Class 8").split("-")[0].strip()
+    fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == base_class))
+    fee_struct = fs_res.scalars().first()
+    if not fee_struct:
+        fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == "Default"))
+        fee_struct = fs_res.scalars().first()
+
+    t1_amt = fee_struct.term1_amount if fee_struct else 35000.0
+    t2_amt = fee_struct.term2_amount if fee_struct else 35000.0
+    lms_amt = fee_struct.lms_digital_fee if fee_struct else 14500.0
+    lab_amt = fee_struct.lab_library_fee if fee_struct else 12000.0
+    act_amt = fee_struct.activity_fee if fee_struct else 5000.0
+
+    student_milestones = [
+        FeeMilestone(
+            student_id=new_student.id,
+            title="Milestone 1: Term 1 Tuition & Curriculum Fee",
+            amount=t1_amt,
+            due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026",
+            status="Upcoming"
+        ),
+        FeeMilestone(
+            student_id=new_student.id,
+            title="Milestone 2: Digital Learning Platform & Cloud LMS Fee",
+            amount=lms_amt,
+            due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026",
+            status="Upcoming"
+        ),
+        FeeMilestone(
+            student_id=new_student.id,
+            title="Milestone 3: STEM Robotics, Composite Lab & Library Fee",
+            amount=lab_amt,
+            due_date="18 Aug 2026",
+            status="Upcoming"
+        ),
+        FeeMilestone(
+            student_id=new_student.id,
+            title="Milestone 4: Term 2 Tuition & Infrastructure Fee",
+            amount=t2_amt,
+            due_date=fee_struct.term2_due_date if fee_struct else "25 Oct 2026",
+            status="Upcoming"
+        ),
+        FeeMilestone(
+            student_id=new_student.id,
+            title="Milestone 5: Interactive Virtual Labs & Activity Fee",
+            amount=act_amt,
+            due_date="10 Nov 2026",
+            status="Upcoming"
+        )
+    ]
+    db.add_all(student_milestones)
+
+    # Initialize Day 1 Attendance Record so student attendance is present from Day 1
+    today_str = datetime.date.today().isoformat()
+    db.add(AttendanceRecord(
+        class_id=1,
+        student_id=new_student.id,
+        student_name=new_student.name,
+        join_timestamp="10:00 AM (Enrolment Baseline)",
+        minutes_late=0.0,
+        status="Present",
+        teacher_override=False,
+        date=today_str
+    ))
+
+    # Auto-generate digital Hall Ticket so new student immediately accesses exams with peers
+    clean_class = new_student.class_name.replace(" ", "")
+    roll_str = str(new_student.roll_no or new_student.id).zfill(2)
+    db.add(HallTicket(
+        student_id=new_student.id,
+        ticket_number=f"HT-2026-{clean_class}-{roll_str}",
+        series_name="Term 1 Final Examination 2026",
+        is_released=True,
+        released_at=datetime.datetime.utcnow()
+    ))
+
+    # In-App Welcome Notification for Student
+    await create_system_notification(
+        db=db,
+        sender_name="Admissions & Academic Office",
+        sender_role="admissions_coordinator",
+        recipient_role="student",
+        title=f"Welcome to EDU360, {new_student.name}!",
+        message=f"Your enrolment in {new_student.class_name}-{new_student.section} is confirmed. Your exam schedule, digital learning resources, and timetable are active.",
+        notification_type="WELCOME_STUDENT",
+        priority="HIGH",
+        action_url="/student"
+    )
+
+    # In-App Welcome Notification for Parent
+    await create_system_notification(
+        db=db,
+        sender_name="Admissions & Accounts Desk",
+        sender_role="admissions_coordinator",
+        recipient_role="parent",
+        title="Welcome to EDU360 Parent Portal",
+        message=f"Enrolment for {new_student.name} ({new_student.class_name}-{new_student.section}) is active. You can now view fee installments, attendance records, and school notices.",
+        notification_type="WELCOME_PARENT",
+        priority="HIGH",
+        action_url="/parent"
+    )
+
+    # In-App Notification for Class Teacher
+    await create_system_notification(
+        db=db,
+        sender_name="Admissions Desk",
+        sender_role="admissions_coordinator",
+        recipient_role="teacher",
+        title=f"New Student Enrolled: {new_student.name} ({new_student.class_name}-{new_student.section})",
+        message=f"{new_student.name} (Roll #{new_student.roll_no}) has been enrolled into your class roster. Student baseline profile is active.",
+        notification_type="NEW_ENROLMENT",
+        priority="NORMAL",
+        action_url="/teacher?tab=roster"
+    )
+
     # In-App notification to Accounts Coordinator
     await create_system_notification(
         db=db,
@@ -1275,7 +1420,7 @@ async def convert_enquiry_to_student(
         sender_role="admissions_coordinator",
         recipient_role="accounts_coordinator",
         title=f"🎓 New Enrolment: {new_student.name} ({new_student.class_name}-{new_student.section})",
-        message=f"Student converted from CRM. Admission fee ₹{fee_amt:,.0f} status: {fee_status}. Profile added to Accounts Queue.",
+        message=f"Student converted from CRM. Admission fee ₹{fee_amt:,.0f} status: {fee_status}. Profile and Class {base_class} fee milestones added to Accounts Queue.",
         notification_type="NEW_ENROLMENT",
         priority="HIGH" if fee_status == "Pending" else "NORMAL",
         action_url="/accounts_coordinator"
@@ -1560,8 +1705,209 @@ async def get_student_profile(student_id: int, db: AsyncSession = Depends(get_db
 
 @router.get("/students/{student_id}/documents", response_model=list[OfficialDocumentResponse])
 async def get_student_documents(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(OfficialDocument).where(OfficialDocument.student_id == student_id))
-    return result.scalars().all()
+    result = await db.execute(
+        select(OfficialDocument)
+        .where(OfficialDocument.student_id == student_id)
+        .order_by(OfficialDocument.id.asc())
+    )
+    docs = result.scalars().all()
+    if docs:
+        return docs
+
+    # Auto-seed standard & intake documents if student has no records in vault yet
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        return []
+
+    # Check for linked admission enquiry to sync document flags
+    enq_res = await db.execute(
+        select(AdmissionEnquiry).where(
+            (AdmissionEnquiry.student_name.ilike(student.name)) |
+            (AdmissionEnquiry.phone == student.guardian_phone)
+        )
+    )
+    enquiry = enq_res.scalars().first()
+    doc_slug = student.name.lower().replace(" ", "_")
+
+    has_tc = enquiry.doc_transfer_cert if enquiry else True
+    has_birth = enquiry.doc_birth_cert if enquiry else True
+    has_report = enquiry.doc_report_card if enquiry else True
+
+    new_docs = [
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Municipal Birth Certificate & Identity Proof - {student.name}",
+            doc_type="Birth Certificate",
+            file_url=f"/documents/birth_cert_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_birth else "Pending Verification",
+            verified_stamp="EDU360 Official Seal - Municipal Birth Record Verified" if has_birth else "Awaiting Registrar Verification"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Previous Grade Academic Record & Marks Memo - {student.name}",
+            doc_type="Marks Card",
+            file_url=f"/documents/report_card_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_report else "Pending Verification",
+            verified_stamp="EDU360 Academic Registry Seal" if has_report else "Awaiting Academic Verification"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=(
+                f"Transfer Certificate (Incoming TC Deposited) - {student.name}"
+                if has_tc
+                else f"30-Day Provisional Undertaking (Transfer Certificate) - {student.name}"
+            ),
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf" if has_tc else f"/documents/tc_undertaking_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admissions_coordinator",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified" if has_tc else "Pending Submission (30-Day Window)",
+            verified_stamp="Clearance Approved & Archived" if has_tc else "Provisional Undertaking (30 Days Validity)"
+        ),
+        OfficialDocument(
+            student_id=student.id,
+            title=f"Bonafide Student & Study Certificate - {student.name}",
+            doc_type="Bonafide",
+            file_url=f"/documents/bonafide_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Institutional Study Seal"
+        )
+    ]
+    db.add_all(new_docs)
+    await db.commit()
+    for d in new_docs:
+        await db.refresh(d)
+    return new_docs
+
+@router.get("/students/{student_id}/tc-status")
+async def get_student_tc_status(student_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Returns 30-day provisional tenure countdown and submission status for a student's TC.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Find TC doc in official_documents
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    tc_doc = doc_res.scalars().first()
+
+    # Find linked enquiry
+    enq_res = await db.execute(
+        select(AdmissionEnquiry).where(
+            (AdmissionEnquiry.student_name.ilike(student.name)) |
+            (AdmissionEnquiry.phone == student.guardian_phone)
+        )
+    )
+    enquiry = enq_res.scalars().first()
+
+    # Determine intake base date
+    base_date = datetime.datetime.utcnow()
+    if student.admission_date:
+        try:
+            base_date = datetime.datetime.fromisoformat(student.admission_date)
+        except Exception:
+            pass
+    elif enquiry and enquiry.created_at:
+        base_date = enquiry.created_at
+    elif tc_doc and tc_doc.upload_date:
+        base_date = tc_doc.upload_date
+
+    total_tenure_days = 30
+    elapsed_days = (datetime.datetime.utcnow() - base_date).days
+    days_remaining = max(0, total_tenure_days - elapsed_days)
+    is_overdue = elapsed_days > total_tenure_days
+
+    is_undertaking = False
+    if tc_doc and ("Undertaking" in tc_doc.title or "30-Day" in tc_doc.title or tc_doc.status != "Verified"):
+        is_undertaking = True
+    elif enquiry and not enquiry.doc_transfer_cert:
+        is_undertaking = True
+
+    tc_submitted = not is_undertaking or (tc_doc is not None and tc_doc.status == "Verified" and "Undertaking" not in tc_doc.title)
+    deadline_date = (base_date + datetime.timedelta(days=total_tenure_days)).strftime("%d %b %Y")
+
+    return {
+        "student_id": student_id,
+        "student_name": student.name,
+        "is_undertaking": is_undertaking,
+        "tc_submitted": tc_submitted,
+        "tenure_days_total": total_tenure_days,
+        "days_elapsed": elapsed_days,
+        "days_remaining": days_remaining,
+        "is_overdue": is_overdue,
+        "deadline_date": deadline_date,
+        "tc_doc_id": tc_doc.id if tc_doc else None,
+        "tc_doc_status": tc_doc.status if tc_doc else ("Pending Submission" if is_undertaking else "Verified")
+    }
+
+@router.post("/students/{student_id}/tc/upload", response_model=OfficialDocumentResponse)
+async def upload_student_deposited_tc(student_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Fulfills 30-Day Provisional Undertaking when parent deposits physical TC.
+    Converts status to Verified and applies Official Administrator Seal.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    existing_tc = doc_res.scalars().first()
+    doc_slug = student.name.lower().replace(" ", "_")
+
+    if existing_tc:
+        existing_tc.title = f"Transfer Certificate (Original TC Deposited & Verified) - {student.name}"
+        existing_tc.status = "Verified"
+        existing_tc.is_official = True
+        existing_tc.verified_stamp = "EDU360 Official Seal - TC Deposited & Certified"
+        existing_tc.file_url = f"/documents/tc_{doc_slug}.pdf"
+        target_doc = existing_tc
+    else:
+        target_doc = OfficialDocument(
+            student_id=student.id,
+            title=f"Transfer Certificate (Original TC Deposited & Verified) - {student.name}",
+            doc_type="Transfer Certificate",
+            file_url=f"/documents/tc_{doc_slug}.pdf",
+            is_official=True,
+            uploaded_by_role="admin",
+            upload_date=datetime.datetime.utcnow(),
+            status="Verified",
+            verified_stamp="EDU360 Official Seal - TC Deposited & Certified"
+        )
+        db.add(target_doc)
+
+    # Sync linked enquiry if present
+    enq_res = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.student_name.ilike(student.name)))
+    enq = enq_res.scalars().first()
+    if enq:
+        enq.doc_transfer_cert = True
+
+    await db.commit()
+    await db.refresh(target_doc)
+    return target_doc
 
 @router.get("/documents", response_model=list[OfficialDocumentResponse])
 async def list_all_official_documents(db: AsyncSession = Depends(get_db)):
@@ -1574,9 +1920,54 @@ async def approve_and_seal_document(doc_id: int, db: AsyncSession = Depends(get_
     doc = result.scalars().first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    
+    st_res = await db.execute(select(Student).where(Student.id == doc.student_id))
+    student = st_res.scalars().first()
+    st_name = student.name if student else "Student"
+
     doc.status = "Verified"
     doc.is_official = True
-    doc.verified_stamp = "EDU360 Official Seal - Approved by Administrator"
+
+    if doc.doc_type == "Transfer Certificate":
+        doc.title = f"Transfer Certificate (Original TC Deposited & Verified) - {st_name}"
+        doc.verified_stamp = "EDU360 Official Seal - Physical Original Verified & Certified"
+        # Fulfill linked enquiry TC flag
+        if student:
+            enq_res = await db.execute(select(AdmissionEnquiry).where(AdmissionEnquiry.student_name.ilike(student.name)))
+            enq = enq_res.scalars().first()
+            if enq:
+                enq.doc_transfer_cert = True
+        # Notify Parent that TC is verified & sealed
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name="Principal Dr. Rajesh Sharma",
+                sender_role="ADMIN",
+                title=f"Transfer Certificate Verified & Sealed: {st_name}",
+                message=f"The Transfer Certificate for {st_name} has been verified against physical originals and sealed with the official institutional seal. 30-Day Undertaking is cleared.",
+                notification_type="TC_VERIFIED_NOTICE",
+                priority="NORMAL",
+                recipient_role="PARENT",
+                action_url="/parent?nav=child_sis",
+                metadata_dict={"student_id": doc.student_id, "doc_id": doc.id}
+            )
+        except Exception as e:
+            print(f"Warning: could not dispatch parent TC verification notification: {e}")
+    else:
+        doc.verified_stamp = "EDU360 Official Seal - Approved & Verified by Administrator"
+
+    # Audit log
+    audit_rec = SecurityAuditLog(
+        actor_name="Principal Dr. Rajesh Sharma",
+        actor_role="ADMIN",
+        action_type="DOCUMENT_VERIFICATION_SEAL",
+        target_entity=f"Document #{doc.id} ({doc.title}) - Student #{doc.student_id}",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Administrator verified and applied official seal to {doc.title} ({doc.doc_type}). Status marked Verified."
+    )
+    db.add(audit_rec)
+
     await db.commit()
     await db.refresh(doc)
     return doc
@@ -1811,6 +2202,58 @@ async def list_events(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Event).order_by(Event.id.asc()))
     return result.scalars().all()
 
+@router.post("/events", response_model=EventResponse)
+async def create_school_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Creates an official school event, registers in calendar, and dispatches
+    broadcast system notifications to students, parents, and teachers.
+    """
+    new_event = Event(
+        title=req.title,
+        date=req.date,
+        location=req.location,
+        description=req.description,
+        banner_url=req.banner_url or "/samples/event_banner.png",
+        status=req.status or "Upcoming"
+    )
+    db.add(new_event)
+    await db.commit()
+    await db.refresh(new_event)
+
+    # Dispatch notifications to student and school community
+    try:
+        from app.routers.notifications import create_system_notification
+        # 1. Notify Students
+        await create_system_notification(
+            db=db,
+            recipient_role="student",
+            sender_name="School Administration",
+            sender_role="admin",
+            title=f"📅 School Event Announced: {new_event.title}",
+            message=f"New school event scheduled on {new_event.date} at {new_event.location}. {new_event.description}",
+            notification_type="SCHOOL_EVENT",
+            priority="NORMAL",
+            action_url="/student?tab=calendar",
+            metadata_dict={"event_id": new_event.id, "title": new_event.title, "date": new_event.date}
+        )
+        # 2. Notify Parents
+        await create_system_notification(
+            db=db,
+            recipient_role="parent",
+            sender_name="School Administration",
+            sender_role="admin",
+            title=f"📅 Upcoming School Event: {new_event.title}",
+            message=f"{new_event.title} is scheduled for {new_event.date} at {new_event.location}.",
+            notification_type="SCHOOL_EVENT",
+            priority="NORMAL",
+            action_url="/parent?tab=calendar",
+            metadata_dict={"event_id": new_event.id, "title": new_event.title}
+        )
+    except Exception as e:
+        print(f"Warning: Failed to dispatch event notifications: {e}")
+
+    return new_event
+
 @router.get("/events/{event_id}/assignments", response_model=list[EventAssignmentResponse])
 async def get_event_assignments(event_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(EventStaffAssignment).where(EventStaffAssignment.event_id == event_id))
@@ -1916,218 +2359,512 @@ _teacher_permissions = [
     }
 ]
 
+_in_memory_tasks: list = []
+
 @router.get("/teacher-permissions")
-async def list_teacher_permissions():
+async def list_teacher_permissions(db: AsyncSession = Depends(get_db)):
+    try:
+        from app.models.models import StaffPermission
+        res = await db.execute(select(StaffPermission).order_by(StaffPermission.id.desc()))
+        perms = res.scalars().all()
+        if perms:
+            return [
+                {
+                    "id": p.id,
+                    "teacher_name": p.staff_name,
+                    "type": p.leave_category or p.permission_type,
+                    "leave_category": p.leave_category or p.permission_type,
+                    "total_days": p.total_days or 1,
+                    "reason": p.reason,
+                    "status": p.status,
+                    "date": p.from_date or "Today",
+                    "shift": "Full Day" if (p.total_days or 1) >= 1 else "Short Permission",
+                    "affected_periods": p.affected_periods or "All Scheduled Periods",
+                    "suggested_substitute": "Mrs. Neha Roy (TGT Science)",
+                    "approved_by": p.approved_by,
+                    "applied_at": p.created_at.strftime("%d %b %Y, %I:%M %p") if p.created_at else "Recently"
+                }
+                for p in perms
+            ]
+    except Exception as ex:
+        print("StaffPermission DB read warning in admin:", ex)
     return _teacher_permissions
 
 @router.post("/teacher-permissions/{perm_id}/review")
 async def review_teacher_permission(perm_id: int, req: dict, db: AsyncSession = Depends(get_db)):
     status = req.get("status", "Approved")
     
-    # DB persistence update
-    try:
-        from app.models.models import StaffPermission
-        await db.execute(
-            update(StaffPermission)
-            .where(StaffPermission.id == perm_id)
-            .values(status=status, approved_by="Dr. Sunita Kapoor (Principal)", reviewed_at=datetime.datetime.utcnow())
-        )
-        await db.commit()
-    except Exception:
-        pass
+    # 1. Query StaffPermission from PostgreSQL
+    perm_res = await db.execute(select(StaffPermission).where(StaffPermission.id == perm_id).with_for_update())
+    db_perm = perm_res.scalars().first()
+    
+    legacy_perm = next((p for p in _teacher_permissions if p["id"] == perm_id), None)
+    if not db_perm and not legacy_perm:
+        raise HTTPException(status_code=404, detail="Permission request not found")
 
-    for p in _teacher_permissions:
-        if p["id"] == perm_id:
-            p["status"] = status
-            
-            # --- CROSS-ROLE INTERLOCK ---
-            # If Admin approves teacher leave, automatically generate:
-            # 1. Unassigned SubstitutionSlot for the Academic Coordinator to assign
-            # 2. High-priority SLA task in Academic Coordinator's task queue
-            # 3. Security Audit Log
-            if status == "Approved":
-                new_slot_id = max([s["id"] for s in _substitutions_slots], default=0) + 1
-                try:
-                    db_sub = SubstitutionSlot(
-                        absent_teacher_id=perm_id,
-                        absent_teacher_name=p["teacher_name"],
-                        absent_reason=f"{p['type']} - {p['reason']}",
-                        date="Today, 19 Oct 2026",
-                        period_number=3,
-                        time_slot="10:30 AM - 11:15 AM",
-                        class_name="Class 8-B",
-                        subject="Mathematics" if "Verma" in p["teacher_name"] else "Physics",
-                        substitute_teacher_id=None,
-                        substitute_teacher_name=None,
-                        status="Unassigned",
-                        priority="High"
-                    )
-                    db.add(db_sub)
-                    await db.commit()
-                    await db.refresh(db_sub)
-                    new_slot_id = db_sub.id
-                except Exception as e:
-                    print(f"Error persisting SubstitutionSlot to DB: {e}")
+    if db_perm:
+        db_perm.status = status
+        db_perm.approved_by = "Dr. Sunita Kapoor (Principal)"
+        db_perm.reviewed_at = datetime.datetime.utcnow()
+    if legacy_perm:
+        legacy_perm["status"] = status
 
-                new_slot = {
-                    "id": new_slot_id,
-                    "absent_teacher_id": perm_id,
-                    "absent_teacher_name": p["teacher_name"],
-                    "absent_reason": f"{p['type']} - {p['reason']}",
-                    "date": "Today, 19 Oct 2026",
-                    "period_number": 3,
-                    "time_slot": "10:30 AM - 11:15 AM",
-                    "class_name": "Class 8-B",
-                    "subject": "Mathematics" if "Verma" in p["teacher_name"] else "Physics",
-                    "substitute_teacher_id": None,
-                    "substitute_teacher_name": None,
-                    "status": "Unassigned",
-                    "priority": "High"
-                }
-                _substitutions_slots.insert(0, new_slot)
-                
-                new_task_id = max([t["id"] for t in _in_memory_tasks], default=0) + 1
-                auto_task = {
-                    "id": new_task_id,
-                    "title": f"Assign Proxy Cover: {p['teacher_name']} ({p['type']})",
-                    "description": f"Admin approved {p['type']}. Class 8-B requires immediate proxy teacher coverage for Period 3.",
-                    "category": "urgent",
-                    "domain": "academic",
-                    "due_date": "Today, 10:15 AM",
-                    "assigned_to": "Prof. Rajeshwari Nair",
-                    "assigned_to_role": "academic_coordinator",
-                    "created_by_name": "Dr. Sunita Kapoor",
-                    "created_by_role": "admin",
-                    "status": "Pending",
-                    "priority": "Critical",
-                    "sla_hours": 2,
-                    "is_auto_generated": True,
-                    "trigger_event": "teacher_leave_approved",
-                    "is_escalated": False,
-                    "escalation_reason": None,
-                    "completion_proof_url": None,
-                    "created_at": datetime.datetime.utcnow().isoformat(),
-                    "updated_at": datetime.datetime.utcnow().isoformat()
-                }
-                _in_memory_tasks.insert(0, auto_task)
-                
-                _add_audit_log(
-                    actor_name="Principal & Administrator",
-                    actor_role="admin",
-                    action_type="LEAVE_APPROVED_SUB_MANDATE",
-                    target_entity=f"{p['teacher_name']} ({p['type']})",
-                    status="VERIFIED",
-                    details=f"Leave approved by Principal. Auto-dispatched proxy coverage task to Academic Coordinator."
+    teacher_name = db_perm.staff_name if db_perm else legacy_perm["teacher_name"]
+    leave_type = (db_perm.leave_category or db_perm.permission_type) if db_perm else legacy_perm.get("type", "Leave")
+    leave_reason = db_perm.reason if db_perm else legacy_perm.get("reason", "")
+    leave_date = (db_perm.from_date or "Today, 19 Oct 2026") if db_perm else legacy_perm.get("date", "Today, 19 Oct 2026")
+    aff = (db_perm.affected_periods or "") if db_perm else legacy_perm.get("affected_periods", "")
+
+    # --- CROSS-ROLE INTERLOCK ---
+    if status == "Approved":
+        # Dynamic timetable lookup for teacher's periods on leave date
+        periods_to_cover = []
+        if aff and "period" in aff.lower():
+            import re
+            matches = re.findall(r'period\s*(\d+)', aff, re.I)
+            for m_p in matches:
+                p_n = int(m_p)
+                periods_to_cover.append((p_n, f"Period {p_n} (Scheduled)", "Class 8-B", "Assigned Subject"))
+
+        if not periods_to_cover:
+            if "Verma" in teacher_name:
+                periods_to_cover = [
+                    (2, "09:45 AM - 10:30 AM", "Class 8-B", "Mathematics")
+                ]
+            elif "Raman" in teacher_name:
+                periods_to_cover = [
+                    (4, "11:30 AM - 12:15 PM", "Class 9-A", "Physics"),
+                    (6, "01:45 PM - 02:30 PM", "Class 10-A", "Chemistry Lab")
+                ]
+            elif "Sen" in teacher_name:
+                periods_to_cover = [
+                    (5, "01:00 PM - 01:45 PM", "Class 7-A", "English Literature")
+                ]
+            else:
+                periods_to_cover = [
+                    (3, "10:30 AM - 11:15 AM", "Class 8-B", "General Academics")
+                ]
+
+        for p_num, p_time, p_cls, p_subj in periods_to_cover:
+            new_slot_id = max([s["id"] for s in _substitutions_slots], default=0) + 1
+            try:
+                db_sub = SubstitutionSlot(
+                    absent_teacher_id=perm_id,
+                    absent_teacher_name=teacher_name,
+                    absent_reason=f"{leave_type} - {leave_reason}",
+                    date=leave_date,
+                    period_number=p_num,
+                    time_slot=p_time,
+                    class_name=p_cls,
+                    subject=p_subj,
+                    substitute_teacher_id=None,
+                    substitute_teacher_name=None,
+                    status="Unassigned",
+                    priority="High"
                 )
+                db.add(db_sub)
+                await db.flush()
+                new_slot_id = db_sub.id
+            except Exception as e:
+                print(f"Error persisting SubstitutionSlot to DB: {e}")
 
-            return {"success": True, "permission": p}
-    raise HTTPException(status_code=404, detail="Permission request not found")
+            new_slot = {
+                "id": new_slot_id,
+                "absent_teacher_id": perm_id,
+                "absent_teacher_name": teacher_name,
+                "absent_reason": f"{leave_type} - {leave_reason}",
+                "date": leave_date,
+                "period_number": p_num,
+                "time_slot": p_time,
+                "class_name": p_cls,
+                "subject": p_subj,
+                "substitute_teacher_id": None,
+                "substitute_teacher_name": None,
+                "status": "Unassigned",
+                "priority": "High"
+            }
+            if not any(s["absent_teacher_name"] == teacher_name and s["period_number"] == p_num for s in _substitutions_slots):
+                _substitutions_slots.insert(0, new_slot)
+        
+        new_task_id = max([t["id"] for t in _in_memory_tasks], default=0) + 1
+        auto_task = {
+            "id": new_task_id,
+            "title": f"Assign Proxy Cover: {teacher_name} ({leave_type})",
+            "description": f"Admin approved {leave_type}. Requires immediate proxy teacher coverage for affected timetable periods.",
+            "category": "urgent",
+            "domain": "academic",
+            "due_date": "Today, 10:15 AM",
+            "assigned_to": "Prof. Rajeshwari Nair",
+            "assigned_to_role": "academic_coordinator",
+            "created_by_name": "Dr. Sunita Kapoor",
+            "created_by_role": "admin",
+            "status": "Pending",
+            "priority": "Critical",
+            "sla_hours": 2,
+            "is_auto_generated": True,
+            "trigger_event": "teacher_leave_approved",
+            "is_escalated": False,
+            "escalation_reason": None,
+            "completion_proof_url": None,
+            "created_at": datetime.datetime.utcnow().isoformat(),
+            "updated_at": datetime.datetime.utcnow().isoformat()
+        }
+        _in_memory_tasks.insert(0, auto_task)
+        
+        await persist_audit_log(
+            db=db,
+            actor_name="Principal & Administrator",
+            actor_role="admin",
+            action_type="LEAVE_APPROVED_SUB_MANDATE",
+            target_entity=f"{teacher_name} ({leave_type})",
+            status="VERIFIED",
+            details=f"Leave approved by Principal. Auto-dispatched proxy coverage task to Academic Coordinator for {len(periods_to_cover)} class period(s)."
+        )
 
-_fee_defaulters = [
-    {
-        "id": 1,
-        "student_name": "Aarav Sharma",
-        "class_name": "Class 8-A",
-        "parent_name": "Mr. Rajesh Sharma",
-        "parent_phone": "+91 98450 12345",
-        "milestone": "Milestone 2 (Term 2 Tuition)",
-        "amount_due": 18500,
-        "due_date": "25 Oct 2026",
-        "days_overdue": 12,
-        "reminder_sent": False
-    },
-    {
-        "id": 2,
-        "student_name": "Rohan Deshmukh",
-        "class_name": "Class 9-B",
-        "parent_name": "Dr. Sunil Deshmukh",
-        "parent_phone": "+91 98450 99881",
-        "milestone": "Milestone 2 (Term 2 Tuition + Transport)",
-        "amount_due": 24000,
-        "due_date": "20 Oct 2026",
-        "days_overdue": 17,
-        "reminder_sent": True
-    },
-    {
-        "id": 3,
-        "student_name": "Meera Nambiar",
-        "class_name": "Class 7-C",
-        "parent_name": "Mrs. Anita Nambiar",
-        "parent_phone": "+91 98450 55442",
-        "milestone": "Milestone 2 (Term 2 Tuition)",
-        "amount_due": 18500,
-        "due_date": "25 Oct 2026",
-        "days_overdue": 12,
-        "reminder_sent": False
+        # 🔔 Dispatch In-App Notification to Academic Coordinator for Manual Proxy Assignment
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=6,  # Prof. Rajeshwari Nair
+                recipient_role="academic_coordinator",
+                sender_name="Dr. Sunita Kapoor (Principal)",
+                sender_role="admin",
+                title=f"Teacher Leave Approved: {teacher_name}",
+                message=f"{teacher_name} has been granted leave ({leave_type}). {len(periods_to_cover)} class period(s) require manual substitute faculty assignment.",
+                notification_type="PROXY_REQUIRED",
+                priority="CRITICAL",
+                action_url="/academic_coordinator?tab=substitutions",
+                metadata_dict={"teacher_name": teacher_name, "periods_count": len(periods_to_cover)}
+            )
+        except Exception as e:
+            print(f"Failed to dispatch leave approval notification to Academic Coordinator: {e}")
+
+        # 🔔 Dispatch In-App Confirmation to Principal / Admin
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=None,
+                recipient_role="admin",
+                sender_name="Dr. Sunita Kapoor (Principal)",
+                sender_role="admin",
+                title=f"Teacher Leave Approved: {teacher_name}",
+                message=f"Leave granted for {teacher_name} ({leave_type}). Timetable proxy coverage gap opened.",
+                notification_type="TEACHER_LEAVE_APPROVED",
+                priority="NORMAL",
+                action_url="/admin?tab=substitutions"
+            )
+        except Exception as e:
+            print(f"Failed to dispatch leave approval notification to Admin: {e}")
+
+    await db.commit()
+
+    res_perm = {
+        "id": perm_id,
+        "teacher_name": teacher_name,
+        "type": leave_type,
+        "leave_category": leave_type,
+        "total_days": (db_perm.total_days or 1) if db_perm else legacy_perm.get("total_days", 1),
+        "reason": leave_reason,
+        "status": status,
+        "date": leave_date,
+        "shift": "Full Day" if ((db_perm.total_days or 1) if db_perm else 1) >= 1 else "Short Permission",
+        "affected_periods": aff or "All Scheduled Periods",
+        "suggested_substitute": "Pending Assignment",
+        "approved_by": "Dr. Sunita Kapoor (Principal)",
+        "applied_at": "Recently"
     }
-]
+    return {"success": True, "permission": res_perm}
 
+class IssueStaffLeaveRequest(BaseModel):
+    staff_name: str
+    leave_category: str = "On-Duty OD"  # "Casual Leave (CL)", "Medical Leave", "On-Duty OD", "Half Day"
+    from_date: str = "Today"
+    to_date: Optional[str] = None
+    reason: str
+    affected_periods: Optional[str] = "All Scheduled Periods"
+    total_days: float = 1.0
+    suggested_substitute: Optional[str] = None
+
+@router.post("/teacher-permissions/issue")
+async def issue_teacher_permission(req: IssueStaffLeaveRequest, db: AsyncSession = Depends(get_db)):
+    # Find staff member or use fallback ID
+    sm_res = await db.execute(select(StaffMember).where(StaffMember.name.ilike(f"%{req.staff_name}%")))
+    sm = sm_res.scalars().first()
+    staff_id = sm.id if sm else 1
+    staff_name = sm.name if sm else req.staff_name
+    
+    perm = StaffPermission(
+        staff_id=staff_id,
+        staff_name=staff_name,
+        role="Teacher",
+        permission_type=req.leave_category,
+        from_date=req.from_date,
+        to_date=req.to_date or req.from_date,
+        affected_periods=req.affected_periods or "All Scheduled Periods",
+        reason=req.reason,
+        leave_category=req.leave_category,
+        total_days=int(req.total_days or 1),
+        status="Approved",
+        approved_by="Dr. Sunita Kapoor (Principal)",
+        reviewed_at=datetime.datetime.utcnow()
+    )
+    db.add(perm)
+    await db.flush()
+    await db.refresh(perm)
+    
+    # Dynamic period resolution
+    periods_to_cover = []
+    aff = req.affected_periods or ""
+    if aff and "period" in aff.lower():
+        import re
+        matches = re.findall(r'period\s*(\d+)', aff, re.I)
+        for m_p in matches:
+            p_n = int(m_p)
+            periods_to_cover.append((p_n, f"Period {p_n} (Scheduled)", "Class 8-B", "Assigned Subject"))
+            
+    if not periods_to_cover:
+        if "Verma" in staff_name:
+            periods_to_cover = [(2, "09:45 AM - 10:30 AM", "Class 8-B", "Mathematics")]
+        elif "Raman" in staff_name:
+            periods_to_cover = [
+                (4, "11:30 AM - 12:15 PM", "Class 9-A", "Physics"),
+                (6, "01:45 PM - 02:30 PM", "Class 10-A", "Chemistry Lab")
+            ]
+        elif "Sen" in staff_name:
+            periods_to_cover = [(5, "01:00 PM - 01:45 PM", "Class 7-A", "English Literature")]
+        else:
+            dept = sm.department if sm and sm.department else "General Academics"
+            periods_to_cover = [(3, "10:30 AM - 11:15 AM", "Class 8-B", dept)]
+            
+    for p_num, p_time, p_cls, p_subj in periods_to_cover:
+        db_sub = SubstitutionSlot(
+            absent_teacher_id=perm.id,
+            absent_teacher_name=staff_name,
+            absent_reason=f"{req.leave_category} - {req.reason}",
+            date=req.from_date,
+            period_number=p_num,
+            time_slot=p_time,
+            class_name=p_cls,
+            subject=p_subj,
+            substitute_teacher_id=None,
+            substitute_teacher_name=req.suggested_substitute,
+            status="Unassigned",
+            priority="High"
+        )
+        db.add(db_sub)
+        
+    await persist_audit_log(
+        db,
+        actor_name="Dr. Sunita Kapoor (Principal)",
+        actor_role="admin",
+        action_type="ADMIN_STAFF_LEAVE_ISSUED",
+        target_entity=f"{staff_name} ({req.leave_category})",
+        status="VERIFIED",
+        details=f"Principal directly granted administrative leave/OD to {staff_name}. Auto-queued proxy coverage for Academic Coordinator."
+    )
+    
+    # Notify Academic Coordinator
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=6,
+            recipient_role="academic_coordinator",
+            sender_name="Dr. Sunita Kapoor (Principal)",
+            sender_role="admin",
+            title=f"Administrative Staff Leave Granted: {staff_name}",
+            message=f"{staff_name} has been granted {req.leave_category} by the Principal. Proxy assignment required.",
+            notification_type="PROXY_REQUIRED",
+            priority="CRITICAL",
+            action_url="/academic_coordinator?tab=substitutions",
+            metadata_dict={"teacher_name": staff_name, "periods_count": len(periods_to_cover)}
+        )
+    except Exception as e:
+        print(f"Warning: notification to Academic Coordinator failed: {e}")
+        
+    await db.commit()
+    
+    return {
+        "success": True,
+        "message": f"Administrative leave issued to {staff_name}.",
+        "permission": {
+            "id": perm.id,
+            "teacher_name": perm.staff_name,
+            "type": perm.leave_category or perm.permission_type,
+            "leave_category": perm.leave_category or perm.permission_type,
+            "total_days": perm.total_days or 1,
+            "reason": perm.reason,
+            "status": perm.status,
+            "date": perm.from_date,
+            "shift": "Full Day" if (perm.total_days or 1) >= 1 else "Short Permission",
+            "affected_periods": perm.affected_periods or "All Scheduled Periods",
+            "suggested_substitute": req.suggested_substitute or "Pending Assignment",
+            "approved_by": perm.approved_by,
+            "applied_at": "Just now"
+        }
+    }
+
+# --- 7. Fee Management & Ledger Sync (PostgreSQL Backed) ---
 @router.get("/fees/defaulters")
-async def list_fee_defaulters():
-    return _fee_defaulters
+async def list_fee_defaulters(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(
+        select(FeeDefaulter).order_by(FeeDefaulter.days_overdue.desc(), FeeDefaulter.id.asc())
+    )
+    defaulters = res.scalars().all()
+    return [
+        {
+            "id": d.id,
+            "student_id": d.student_id,
+            "student_name": d.student_name,
+            "class_name": d.class_name,
+            "roll_no": d.roll_no or "",
+            "parent_name": d.parent_name,
+            "parent_phone": d.parent_phone,
+            "milestone": d.milestone_title,
+            "milestone_title": d.milestone_title,
+            "amount_due": d.amount_due,
+            "days_overdue": d.days_overdue,
+            "reminder_sent": d.reminder_sent,
+            "reminder_count": d.reminder_count or 0,
+            "last_reminder_at": d.last_reminder_at.isoformat() if d.last_reminder_at else None,
+            "is_admission_fee": d.is_admission_fee,
+            "exam_clearance": d.exam_clearance,
+            "waiver_amount": d.waiver_amount or 0.0,
+            "waiver_reason": d.waiver_reason,
+            "status": d.status,
+            "payment_history_json": d.payment_history_json,
+            "due_date": (datetime.datetime.utcnow() - datetime.timedelta(days=d.days_overdue)).strftime("%d %b %Y") if d.days_overdue else "Due Today"
+        }
+        for d in defaulters
+    ]
 
 @router.post("/fees/defaulters/{defaulter_id}/remind")
-async def remind_fee_defaulter(defaulter_id: int):
-    for d in _fee_defaulters:
-        if d["id"] == defaulter_id:
-            d["reminder_sent"] = True
-            # Log to audit trail
-            _add_audit_log(
-                actor_name="Accounts Officer",
-                actor_role="admin",
-                action_type="FEE_REMINDER_DISPATCH",
-                target_entity=f"Student #{d['id']} ({d['student_name']})",
-                status="VERIFIED",
-                details=f"Dispatched WhatsApp payment reminder to {d['parent_phone']} for {d['milestone']} (₹{d['amount_due']:,})"
-            )
-            return {"success": True, "message": f"WhatsApp fee reminder dispatched to {d['parent_phone']}"}
-    raise HTTPException(status_code=404, detail="Defaulter record not found")
+async def remind_fee_defaulter(defaulter_id: int, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == defaulter_id))
+    d = res.scalars().first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Defaulter record not found")
+        
+    d.reminder_sent = True
+    d.reminder_count = (d.reminder_count or 0) + 1
+    d.last_reminder_at = datetime.datetime.utcnow()
+    
+    await persist_audit_log(
+        db,
+        actor_name="Accounts Officer",
+        actor_role="admin",
+        action_type="FEE_REMINDER_DISPATCH",
+        target_entity=f"Student #{d.id} ({d.student_name})",
+        status="VERIFIED",
+        details=f"Dispatched WhatsApp payment reminder to {d.parent_phone} for {d.milestone_title} (₹{d.amount_due:,.2f})"
+    )
+    await db.commit()
+    return {"success": True, "message": f"WhatsApp fee reminder dispatched to {d.parent_phone}"}
 
 @router.post("/fees/defaulters/{defaulter_id}/pay")
-async def pay_fee_defaulter(defaulter_id: int, req: RecordFeePaymentRequest):
-    for d in _fee_defaulters:
-        if d["id"] == defaulter_id:
-            paid = float(req.amount_paid)
-            d["amount_due"] = max(0.0, float(d["amount_due"]) - paid)
-            d["reminder_sent"] = False
-            _add_audit_log(
-                actor_name=req.received_by or "Admin Officer",
-                actor_role="admin",
-                action_type="FEE_PAYMENT_RECORDED",
-                target_entity=f"Student #{d['id']} ({d['student_name']})",
-                status="VERIFIED",
-                details=f"Recorded payment of ₹{paid:,.2f} via {req.payment_method}. Ref: {req.utr_or_cheque_no or 'N/A'}"
-            )
-            return {"success": True, "message": f"Payment recorded for {d['student_name']}", "remaining_due": d["amount_due"]}
-    raise HTTPException(status_code=404, detail="Defaulter record not found")
+async def pay_fee_defaulter(defaulter_id: int, req: RecordFeePaymentRequest, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == defaulter_id).with_for_update())
+    d = res.scalars().first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Defaulter record not found")
+        
+    paid = float(req.amount_paid)
+    d.amount_due = max(0.0, float(d.amount_due) - paid)
+    d.reminder_sent = False
+    d.status = "Paid" if d.amount_due <= 0 else "Partially Paid"
+    
+    history = []
+    if d.payment_history_json:
+        try:
+            history = json.loads(d.payment_history_json)
+        except Exception:
+            history = []
+            
+    receipt_no = req.utr_or_cheque_no or f"REC-FEE-{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{d.id}"
+    history.append({
+        "date": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p"),
+        "amount": paid,
+        "method": req.payment_method,
+        "utr": receipt_no,
+        "received_by": req.received_by or "Admin Officer"
+    })
+    d.payment_history_json = json.dumps(history)
+    
+    tx = PaymentTransaction(
+        utr_number=receipt_no,
+        student_name=d.student_name,
+        class_name=d.class_name,
+        parent_name=d.parent_name,
+        amount=paid,
+        payment_method=req.payment_method,
+        milestone_title=d.milestone_title,
+        status="Success",
+        reconciled=True,
+        reconciled_at=datetime.datetime.utcnow(),
+        reconciled_by=req.received_by or "Principal / Admin Desk",
+        notes=req.notes or f"Fee counter payment recorded by {req.received_by}"
+    )
+    db.add(tx)
+    
+    await persist_audit_log(
+        db,
+        actor_name=req.received_by or "Admin Officer",
+        actor_role="admin",
+        action_type="FEE_PAYMENT_RECORDED",
+        target_entity=f"Student #{d.id} ({d.student_name})",
+        status="VERIFIED",
+        details=f"Recorded payment of ₹{paid:,.2f} via {req.payment_method}. Ref: {receipt_no}"
+    )
+    await db.commit()
+    return {"success": True, "message": f"Payment recorded for {d.student_name}", "remaining_due": d.amount_due}
 
 @router.get("/fees/analytics", response_model=FeeFinancialAnalyticsResponse)
-async def get_fee_financial_analytics():
-    total_due = sum(d["amount_due"] for d in _fee_defaulters)
-    reminders_count = sum(1 for d in _fee_defaulters if d["reminder_sent"])
+async def get_fee_financial_analytics(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.amount_due > 0))
+    defaulters = res.scalars().all()
+    
+    d0_15 = sum(float(d.amount_due) for d in defaulters if (d.days_overdue or 0) <= 15)
+    d16_30 = sum(float(d.amount_due) for d in defaulters if 15 < (d.days_overdue or 0) <= 30)
+    d_over_30 = sum(float(d.amount_due) for d in defaulters if (d.days_overdue or 0) > 30)
+    total_due = d0_15 + d16_30 + d_over_30
+    reminders_count = sum(1 for d in defaulters if d.reminder_sent)
+    
+    coll_res = await db.execute(
+        select(func.coalesce(func.sum(PaymentTransaction.amount), 0.0)).where(PaymentTransaction.status == "Success")
+    )
+    total_collected = float(coll_res.scalar() or 0.0)
+    
+    total_target = total_collected + total_due
+    collection_rate = round((total_collected / total_target * 100), 2) if total_target > 0 else 100.0
+    
     return {
-        "total_target": 5450000.0,
-        "total_collected": 4310000.0,
+        "total_target": float(total_target),
+        "total_collected": float(total_collected),
         "total_overdue": float(total_due),
-        "collection_rate_pct": 79.08,
+        "collection_rate_pct": float(collection_rate),
         "aging_summary": {
-            "days_0_to_15": 37000.0,
-            "days_16_to_30": 24000.0,
-            "days_over_30": 0.0
+            "days_0_to_15": float(d0_15),
+            "days_16_to_30": float(d16_30),
+            "days_over_30": float(d_over_30)
         },
-        "defaulters_count": len(_fee_defaulters),
+        "defaulters_count": len(defaulters),
         "reminders_dispatched_today": reminders_count,
         "active_milestone_title": "Milestone 2 (Term 2 Tuition & Activities)",
         "milestone_deadline": "25 Oct 2026"
     }
 
 @router.post("/fees/remind-all")
-async def remind_all_fee_defaulters():
-    dispatched = 0
-    for d in _fee_defaulters:
-        d["reminder_sent"] = True
-        dispatched += 1
-    _add_audit_log(
+async def remind_all_fee_defaulters(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.amount_due > 0))
+    defaulters = res.scalars().all()
+    dispatched = len(defaulters)
+    
+    for d in defaulters:
+        d.reminder_sent = True
+        d.reminder_count = (d.reminder_count or 0) + 1
+        d.last_reminder_at = datetime.datetime.utcnow()
+        
+    await persist_audit_log(
+        db,
         actor_name="Super Administrator",
         actor_role="admin",
         action_type="FEE_REMINDER_DISPATCH",
@@ -2135,6 +2872,7 @@ async def remind_all_fee_defaulters():
         status="VERIFIED",
         details=f"Dispatched high-priority payment reminders to {dispatched} pending student accounts."
     )
+    await db.commit()
     return {
         "success": True,
         "message": f"Dispatched targeted WhatsApp reminders to {dispatched} parents with pending dues."
@@ -2295,7 +3033,34 @@ async def list_substitution_slots(db: AsyncSession = Depends(get_db)):
     return _substitutions_slots
 
 @router.get("/substitutions/available-faculty", response_model=list[AvailableFacultyItem])
-async def list_available_faculty():
+async def list_available_faculty(db: AsyncSession = Depends(get_db)):
+    try:
+        res = await db.execute(
+            select(StaffMember)
+            .where(
+                StaffMember.department.in_([
+                    "Academics", "Sciences & Physics", "Sciences & Chemistry",
+                    "Mathematics", "Humanities & English", "Computer Science", "Languages"
+                ]),
+                StaffMember.attendance_status == "Present"
+            )
+            .order_by(StaffMember.name.asc())
+        )
+        staff_rows = res.scalars().all()
+        if staff_rows:
+            return [
+                AvailableFacultyItem(
+                    id=s.id,
+                    name=s.name,
+                    department=s.department,
+                    free_periods_today=3 if s.id % 2 == 0 else 2,
+                    is_subject_match=True,
+                    current_status=f"Free (Period {s.id % 4 + 1} & {s.id % 4 + 3})"
+                )
+                for s in staff_rows
+            ]
+    except Exception as e:
+        logger.warning(f"Error querying available faculty from DB: {e}")
     return _available_faculty
 
 @router.post("/substitutions/assign")
@@ -2726,21 +3491,62 @@ async def get_rollover_preview():
     return _rollover_classes
 
 @router.post("/rollover/promote", dependencies=[Depends(require_admin)])
-async def execute_academic_rollover(req: ExecuteRolloverRequest):
+async def execute_academic_rollover(req: ExecuteRolloverRequest, db: AsyncSession = Depends(get_db)):
     for c in _rollover_classes:
         if c["class_id"] == req.class_id:
             c["status"] = "Rolled Over"
-            _add_audit_log(
+            
+            # Real PostgreSQL student batch promotion
+            from_raw = c["from_class"]
+            to_raw = c["to_class"]
+            
+            from_clean = from_raw.split("(")[0].strip()
+            to_clean = to_raw.split("(")[0].strip()
+            
+            target_class = to_clean
+            target_sec = "A"
+            if "-" in to_clean:
+                parts = to_clean.split("-", 1)
+                target_class = parts[0].strip()
+                target_sec = parts[1].strip()
+            
+            source_class = from_clean
+            source_sec = ""
+            if "-" in from_clean:
+                sparts = from_clean.split("-", 1)
+                source_class = sparts[0].strip()
+                source_sec = sparts[1].strip()
+                
+            q = select(Student).where(
+                (Student.class_name == from_clean) |
+                ((Student.class_name == source_class) & (Student.section.ilike(f"%{source_sec}%")))
+            )
+            res = await db.execute(q)
+            students = res.scalars().all()
+            
+            promoted_count = 0
+            for s in students:
+                if (s.attendance_pct is None) or (s.attendance_pct >= 75.0):
+                    s.class_name = target_class
+                    s.section = target_sec
+                    promoted_count += 1
+            
+            if promoted_count > 0:
+                c["eligible_for_promotion"] = promoted_count
+                
+            await persist_audit_log(
+                db,
                 actor_name="Academic Dean & Super Admin",
                 actor_role="admin",
                 action_type="ACADEMIC_ROLLOVER",
                 target_entity=f"{c['from_class']} -> {c['to_class']}",
                 status="VERIFIED",
-                details=f"Batch promoted {c['eligible_for_promotion']} students to {c['to_class']} for Academic Year {req.academic_year}."
+                details=f"Batch promoted {promoted_count} students to {to_clean} in PostgreSQL for Academic Year {req.academic_year}."
             )
+            await db.commit()
             return {
                 "success": True,
-                "message": f"Successfully completed academic rollover for {c['from_class']} -> {c['to_class']} ({c['eligible_for_promotion']} students promoted).",
+                "message": f"Successfully completed academic rollover for {c['from_class']} -> {c['to_class']} ({promoted_count} students promoted in database).",
                 "class": c
             }
     raise HTTPException(status_code=404, detail="Class rollover target not found")
@@ -2855,13 +3661,91 @@ async def get_curriculum_pacing(db: AsyncSession = Depends(get_db)):
 
 @router.post("/academic/curriculum-pacing/{item_id}/log-lesson")
 async def log_curriculum_lesson(item_id: int, req: LogLessonRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        p_res = await db.execute(select(CurriculumPacing).where(CurriculumPacing.id == item_id))
+        row = p_res.scalars().first()
+        if row:
+            new_completed = min(row.total_units, row.completed_units + req.units_to_add)
+            row.completed_units = new_completed
+            pct = round((new_completed / row.total_units) * 100, 1) if row.total_units else 0.0
+            diff = new_completed - row.calendar_target_units
+            row.lag_units = max(0, -diff)
+
+            if diff >= 1:
+                row.status = f"Ahead (+{diff} Unit{'s' if diff > 1 else ''})"
+            elif diff < 0:
+                row.status = f"Lagging ({abs(diff)} Unit{'s' if abs(diff) > 1 else ''} Behind)"
+                if diff <= -2:
+                    try:
+                        await create_system_notification(
+                            db=db,
+                            recipient_user_id=row.teacher_id or 2,
+                            recipient_role="teacher",
+                            sender_name="Academic Coordinator",
+                            sender_role="academic_coordinator",
+                            title=f"Critical Pacing Lag: {row.subject} ({row.class_name})",
+                            message=f"{row.subject} for {row.class_name} is {abs(diff)} units behind the institutional academic calendar. Zero-period catchup plan required.",
+                            notification_type="PACING_LAG_CRITICAL",
+                            priority="URGENT",
+                            action_url="/teacher?tab=curriculum",
+                            metadata_dict={"item_id": item_id, "subject": row.subject, "lag_units": abs(diff)}
+                        )
+                    except Exception as pe:
+                        logger.warning(f"Could not dispatch pacing lag alert: {pe}")
+            else:
+                row.status = "On Track"
+
+            if req.lesson_title:
+                row.last_lesson_title = req.lesson_title
+            row.updated_at = datetime.datetime.utcnow()
+            await db.commit()
+            await db.refresh(row)
+
+            # Sync in-memory copy if present
+            for item in _curriculum_pacing_items:
+                if item["id"] == item_id:
+                    item["completed_units"] = new_completed
+                    item["completion_pct"] = pct
+                    item["status"] = row.status
+                    if req.lesson_title:
+                        item["last_lesson_title"] = req.lesson_title
+
+            _add_audit_log(
+                actor_name="Academic Coordinator",
+                actor_role="academic_coordinator",
+                action_type="CURRICULUM_PACING_UPDATE",
+                target_entity=f"{row.class_name} {row.subject}",
+                status="VERIFIED",
+                details=f"Logged unit completion: {row.completed_units}/{row.total_units} ({pct}%, status: {row.status})"
+            )
+            return {
+                "success": True,
+                "item": {
+                    "id": row.id,
+                    "class_name": row.class_name,
+                    "subject": row.subject,
+                    "teacher_name": row.teacher_name,
+                    "completed_units": row.completed_units,
+                    "total_units": row.total_units,
+                    "calendar_target_units": row.calendar_target_units,
+                    "completion_pct": pct,
+                    "status": row.status,
+                    "last_lesson_title": row.last_lesson_title,
+                    "next_milestone_date": "31 Oct 2026 (Unit Checkpoint)"
+                }
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Error persisting curriculum pacing to DB: {e}")
+
+    # Fallback to in-memory items
     for item in _curriculum_pacing_items:
         if item["id"] == item_id:
             new_completed = min(item["total_units"], item["completed_units"] + req.units_to_add)
             item["completed_units"] = new_completed
             pct = round((new_completed / item["total_units"]) * 100, 1)
             item["completion_pct"] = pct
-            
             diff = new_completed - item["calendar_target_units"]
             if diff >= 1:
                 item["status"] = f"Ahead (+{diff} Unit{'s' if diff > 1 else ''})"
@@ -2869,32 +3753,8 @@ async def log_curriculum_lesson(item_id: int, req: LogLessonRequest, db: AsyncSe
                 item["status"] = f"Lagging ({abs(diff)} Unit{'s' if abs(diff) > 1 else ''} Behind)"
             else:
                 item["status"] = "On Track"
-                
             if req.lesson_title:
                 item["last_lesson_title"] = req.lesson_title
-                
-            # Persist update directly into SQLite curriculum_pacing table
-            try:
-                p_res = await db.execute(select(CurriculumPacing).where(CurriculumPacing.id == item_id))
-                p_row = p_res.scalars().first()
-                if p_row:
-                    p_row.completed_units = new_completed
-                    p_row.status = item["status"]
-                    if req.lesson_title:
-                        p_row.last_lesson_title = req.lesson_title
-                    p_row.updated_at = datetime.datetime.utcnow()
-                    await db.commit()
-            except Exception as e:
-                logger.warning(f"Could not persist curriculum pacing update to DB: {e}")
-
-            _add_audit_log(
-                actor_name="Academic Coordinator",
-                actor_role="academic_coordinator",
-                action_type="CURRICULUM_PACING_UPDATE",
-                target_entity=f"{item['class_name']} {item['subject']}",
-                status="VERIFIED",
-                details=f"Logged unit completion: {item['completed_units']}/{item['total_units']} ({item['completion_pct']}%, status: {item['status']})"
-            )
             return {"success": True, "item": item}
     raise HTTPException(status_code=404, detail="Curriculum pacing item not found")
 
@@ -3238,15 +4098,26 @@ async def admin_override_student_leave(
 
     # 3. Dual Notification Cascade: Notify Class Teacher
     try:
+        # Resolve homeroom teacher dynamically from student's enrolled class in PostgreSQL
+        st_res = await db.execute(select(Student).where(Student.id == lr.student_id))
+        st = st_res.scalars().first()
+        homeroom_uid = 2  # Default to Mrs. Ananya Verma (Class 8-B Homeroom)
+        if st and st.class_name:
+            if "8-A" in st.class_name or (st.class_name == "Class 8" and st.section in ["A", "Section A"]):
+                homeroom_uid = 14  # Mrs. Sunitha Rao (Class 8-A Homeroom)
+            elif "9" in st.class_name:
+                homeroom_uid = 2   # Secondary Grade Lead Teacher
+
         await create_system_notification(
             db=db,
             sender_name=req.admin_name or "Principal Dr. Rajesh Sharma",
-            sender_role="ADMIN",
+            sender_role="admin",
             title=f"Admin Leave Override: {lr.student_name}",
             message=f"Principal Dr. Rajesh Sharma has overridden the leave decision for student {lr.student_name} ({lr.from_date} to {lr.to_date}) to '{req.status}'. Admin Remarks: {req.admin_notes}",
             notification_type="ADMIN_OVERRIDE_ALERT",
             priority="HIGH",
-            recipient_role="TEACHER",
+            recipient_user_id=homeroom_uid,
+            recipient_role="teacher",
             action_url="/teacher?tab=leave_approvals",
             metadata_dict={"student_id": lr.student_id, "status": req.status, "leave_id": lr.id, "overridden_by": req.admin_name}
         )

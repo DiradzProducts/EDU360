@@ -65,6 +65,16 @@ class AdminNotifyTeacherRequest(BaseModel):
     teacher_name: Optional[str] = "Mrs. Ananya Verma"
     message: Optional[str] = "Student has unsubmitted rough work for 2+ consecutive days. PTM briefing requested."
 
+def _resolve_remedial_teacher_uid(subject: str) -> int:
+    s = (subject or "").lower()
+    if "raman" in s or "physic" in s or "science" in s:
+        return 12
+    elif "sen" in s or "chem" in s:
+        return 13
+    elif "sunitha" in s or "english" in s:
+        return 14
+    return 2  # Default Mrs. Ananya Verma
+
 @router.get("/roster")
 async def get_remedial_roster(
     section: Optional[str] = None,
@@ -84,10 +94,16 @@ async def get_remedial_roster(
 async def get_student_remedial_detail(student_id: int):
     """
     Returns full 1-week remedial plan, diagnostic lag breakdown, and rubric checkpoints for a student.
+    Returns clean empty response if student has no active remedial requirement.
     """
     student = RemedialService.get_student(student_id)
     if not student:
-        raise HTTPException(status_code=404, detail="Student focus record not found")
+        return {
+            "success": True,
+            "student": None,
+            "has_remedial": False,
+            "message": "No active remedial sprint required for this student."
+        }
     return student
 
 @router.post("/generate-sprint")
@@ -107,7 +123,28 @@ async def generate_remedial_sprint(req: GenerateSprintRequest, db: AsyncSession 
             if ft:
                 ft.teacher_action = f"[AI Sprint Generated]: {st.get('ai_exam_scan', {}).get('recommended_focus', '')}"
                 await db.commit()
-                
+
+    if result.get("success"):
+        try:
+            st = result.get("student", {})
+            st_name = st.get("name", f"Student #{req.student_id}")
+            focus_rec = st.get("ai_exam_scan", {}).get("recommended_focus", "Targeted Concept Mastery")
+            await create_system_notification(
+                db=db,
+                recipient_user_id=2,
+                recipient_role="teacher",
+                sender_name="AI Diagnostic Engine",
+                sender_role="system",
+                title=f"Remedial Sprint Generated: {st_name}",
+                message=f"7-day remedial pacing sprint active for {st_name}. Recommended Focus: {focus_rec}. Zero-period material synced to Focus Table.",
+                notification_type="REMEDIAL_ALERT",
+                priority="HIGH",
+                action_url="/teacher?tab=focus_table",
+                metadata_dict={"student_id": req.student_id, "focus": focus_rec}
+            )
+        except Exception as e:
+            print(f"Failed to dispatch sprint enrollment notification: {e}")
+
     return result
     
 @router.post("/scan-student-papers")
@@ -231,9 +268,10 @@ async def upload_student_rough_work(req: UploadRoughWorkRequest, db: AsyncSessio
 
         # 🔔 Dispatch In-App Notification to Subject Teacher
         try:
+            target_teacher_uid = _resolve_remedial_teacher_uid(sprint.subject)
             await create_system_notification(
                 db=db,
-                recipient_user_id=2,  # Mrs. Ananya Verma
+                recipient_user_id=target_teacher_uid,
                 recipient_role="teacher",
                 sender_name="Remedial Focus Engine",
                 sender_role="system",
@@ -241,7 +279,7 @@ async def upload_student_rough_work(req: UploadRoughWorkRequest, db: AsyncSessio
                 message=f"Rough solution sheet uploaded for Day {req.day_num} ({sprint.subject}). Ready for SpeedGrader verification.",
                 notification_type="REMEDIAL_SUBMISSION",
                 priority="URGENT",
-                action_url=f"/teacher/focus/{req.student_id}?tab=remedial&day={req.day_num}",
+                action_url=f"/teacher?tab=focus_table&studentId={req.student_id}",
                 metadata_dict={"student_id": req.student_id, "day": req.day_num, "subject": sprint.subject}
             )
         except Exception as e:
@@ -390,15 +428,44 @@ async def get_admin_remedial_overview():
     return RemedialService.get_admin_overview()
 
 @router.post("/admin-notify-teacher")
-async def admin_notify_teacher(req: AdminNotifyTeacherRequest):
+async def admin_notify_teacher(req: AdminNotifyTeacherRequest, db: AsyncSession = Depends(get_db)):
     """
     1-Click Executive Action: Notify Class Teacher & Request PTM Briefing.
     """
-    return RemedialService.admin_notify_teacher(
+    res = RemedialService.admin_notify_teacher(
         student_id=req.student_id,
         teacher_name=req.teacher_name or "Mrs. Ananya Verma",
         message=req.message or ""
     )
+    try:
+        t_uid = 2
+        t_name = (req.teacher_name or "").lower()
+        if "raman" in t_name:
+            t_uid = 12
+        elif "sen" in t_name:
+            t_uid = 13
+        elif "sunitha" in t_name:
+            t_uid = 14
+
+        student = RemedialService.get_student(req.student_id)
+        st_name = student["name"] if student else f"Student #{req.student_id}"
+
+        await create_system_notification(
+            db=db,
+            recipient_user_id=t_uid,
+            recipient_role="teacher",
+            sender_name="Academic Director",
+            sender_role="admin",
+            title=f"Executive Briefing Mandate: {st_name}",
+            message=req.message or f"Review remedial pacing diagnostic for {st_name} and prepare focus agenda for upcoming PTM.",
+            notification_type="REMEDIAL_ALERT",
+            priority="URGENT",
+            action_url="/teacher?tab=focus_table",
+            metadata_dict={"student_id": req.student_id}
+        )
+    except Exception as e:
+        print(f"Failed to create system notification in admin_notify_teacher: {e}")
+    return res
 
 class DispatchWhatsAppRequest(BaseModel):
     student_id: int

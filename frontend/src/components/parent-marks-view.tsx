@@ -1224,7 +1224,7 @@ export function ParentMarksView({
                   </span>
                   <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
                     <li>Please ensure your ward arrives before 08:30 AM with their physical school identity card and stationery pouch.</li>
-                    <li>School bus routes will run on morning examination shifts; check the Live Bus Tracker tab for adjusted stop timings.</li>
+                    <li>Examination morning shifts commence promptly at 08:30 AM; students must report directly to designated exam halls.</li>
                     <li>If a student is unwell on exam day, immediately submit an official medical leave request via the Leave tab.</li>
                   </ul>
                 </div>

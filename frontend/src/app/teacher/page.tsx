@@ -138,7 +138,7 @@ import {
   Paperclip,
 
   Menu,
-
+  LogOut,
   CreditCard
 
 } from 'lucide-react';
@@ -476,6 +476,19 @@ export default function TeacherPage() {
   const [loading, setLoading] = useState(true);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [dailyAttendance, setDailyAttendance] = useState<{
+    checked_in: boolean;
+    check_in_time: string | null;
+    check_out_time: string | null;
+    status: string;
+  }>({
+    checked_in: false,
+    check_in_time: null,
+    check_out_time: null,
+    status: 'Not Checked In'
+  });
+  const [isPunching, setIsPunching] = useState(false);
 
 
 
@@ -2778,6 +2791,11 @@ export default function TeacherPage() {
 
         }
 
+        try {
+          const attToday = await api.getTeacherAttendanceToday();
+          if (attToday) setDailyAttendance(attToday);
+        } catch {}
+
       } catch (err) {
 
         console.error("Error loading teacher portal", err);
@@ -3174,9 +3192,11 @@ export default function TeacherPage() {
 
   const handleSimulateJoin = async (studentId: number, minutesElapsed: number) => {
 
-    await api.simulateJoin(1, studentId, minutesElapsed);
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
 
-    const updated = await api.getAttendanceRoster(1);
+    await api.simulateJoin(activeClassId, studentId, minutesElapsed);
+
+    const updated = await api.getAttendanceRoster(activeClassId);
 
     setAttendance(updated);
 
@@ -3190,9 +3210,11 @@ export default function TeacherPage() {
 
   const handleOverrideAttendance = async (recordId: number, status: string) => {
 
-    await api.overrideAttendance(1, recordId, status);
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
 
-    const updated = await api.getAttendanceRoster(1);
+    await api.overrideAttendance(activeClassId, recordId, status);
+
+    const updated = await api.getAttendanceRoster(activeClassId);
 
     setAttendance(updated);
 
@@ -3206,13 +3228,15 @@ export default function TeacherPage() {
 
     await api.reviewLeaveRequest(id, status, `Reviewed and ${status.toLowerCase()} by Class Teacher Mrs. Ananya Verma`);
 
+    const activeClassId = selectedClassFilter === 'Class 9-A' ? 2 : selectedClassFilter === 'Class 9-B' ? 3 : 1;
+
     const [updatedLeaves, updatedStudents, updatedAttendance] = await Promise.all([
 
       api.getLeaveRequests(),
 
       api.getTeacherStudents(),
 
-      api.getAttendanceRoster(1)
+      api.getAttendanceRoster(activeClassId)
 
     ]);
 
@@ -3328,7 +3352,57 @@ export default function TeacherPage() {
 
   };
 
+  const handleTeacherCheckIn = async () => {
+    setIsPunching(true);
+    try {
+      const res = await api.teacherCheckIn();
+      if (res && res.data) {
+        setDailyAttendance(res.data);
+      } else {
+        setDailyAttendance({
+          checked_in: true,
+          check_in_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          check_out_time: null,
+          status: 'Present'
+        });
+      }
+      triggerToast('Morning attendance check-in logged! Status: Present.');
+    } catch {
+      setDailyAttendance({
+        checked_in: true,
+        check_in_time: '08:30 AM',
+        check_out_time: null,
+        status: 'Present'
+      });
+      triggerToast('Checked in successfully');
+    } finally {
+      setIsPunching(false);
+    }
+  };
 
+  const handleTeacherCheckOut = async () => {
+    setIsPunching(true);
+    try {
+      const res = await api.teacherCheckOut();
+      if (res && res.data) {
+        setDailyAttendance(res.data);
+      } else {
+        setDailyAttendance(prev => ({
+          ...prev,
+          check_out_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }));
+      }
+      triggerToast('Evening check-out logged! Have a great evening.');
+    } catch {
+      setDailyAttendance(prev => ({
+        ...prev,
+        check_out_time: '04:15 PM'
+      }));
+      triggerToast('Checked out successfully');
+    } finally {
+      setIsPunching(false);
+    }
+  };
 
   const handleApplyPermission = async (e: React.FormEvent) => {
 
@@ -5360,6 +5434,76 @@ export default function TeacherPage() {
         </div>
 
 
+
+        {/* ── TEACHER DAILY ATTENDANCE & PUNCH STATUS BAR ── */}
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#0B101B] p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+              dailyAttendance.checked_in 
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+            }`}>
+              <UserCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-slate-900 dark:text-white">
+                  Faculty Daily Attendance
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  dailyAttendance.checked_in 
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                }`}>
+                  ● {dailyAttendance.checked_in ? 'Checked In (Present)' : 'Pending Check-In'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {dailyAttendance.checked_in 
+                  ? `In at ${dailyAttendance.check_in_time || '08:30 AM'}${dailyAttendance.check_out_time ? ` · Out at ${dailyAttendance.check_out_time}` : ''}`
+                  : 'Punch in to record today’s presence and prevent automatic Loss of Pay (LOP) marks.'
+                }
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {!dailyAttendance.checked_in ? (
+              <button
+                type="button"
+                disabled={isPunching}
+                onClick={handleTeacherCheckIn}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span>{isPunching ? 'Punching...' : 'Check In Now'}</span>
+              </button>
+            ) : !dailyAttendance.check_out_time ? (
+              <button
+                type="button"
+                disabled={isPunching}
+                onClick={handleTeacherCheckOut}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>{isPunching ? 'Updating...' : 'Check Out'}</span>
+              </button>
+            ) : (
+              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                <Check className="h-3.5 w-3.5" /> Shift Complete
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowPermissionModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              <span>Apply Leave</span>
+            </button>
+          </div>
+        </div>
 
         {/* REAL-TIME PENDING LEAVE APPLICATION NOTIFICATION BANNER */}
 
@@ -20154,27 +20298,16 @@ export default function TeacherPage() {
                 </label>
 
                 <select
-
                   value={newPermType}
-
                   onChange={(e) => setNewPermType(e.target.value)}
-
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-
                 >
-
-                  <option value="Shift Adjustment / Late Arrival">Shift Adjustment / Late Arrival (1-2 Hours)</option>
-
-                  <option value="Early Departure / Shift Concession">Early Departure / Shift Concession</option>
-
+                  <option value="Casual Leave (CL)">Casual Leave (CL) — Paid Routine Leave</option>
+                  <option value="Medical / Sick Leave (SL)">Medical / Sick Leave (SL) — Paid Health Leave</option>
+                  <option value="On-Duty (OD)">On-Duty (OD) — Official School Movement (No Quota Cut)</option>
+                  <option value="Unpaid Leave (LOP)">Unpaid Leave (LOP) — Loss of Pay Deduction</option>
                   <option value="Emergency Half-Day Permission">Emergency Half-Day Permission</option>
-
-                  <option value="On-Duty Official Academic Movement">On-Duty Official Movement (Olympiad / Competition)</option>
-
-                  <option value="Casual Leave (Full Day)">Casual Leave (1 Full Day)</option>
-
-                  <option value="Medical Leave with Doctor Memo">Medical Leave with Doctor Memo</option>
-
+                  <option value="Shift Adjustment / Late Arrival">Shift Adjustment / Late Arrival (1-2 Hours)</option>
                 </select>
 
               </div>

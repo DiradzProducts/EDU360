@@ -40,6 +40,8 @@ class Student(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
+    parent_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     name = Column(String(100), nullable=False)
 
     roll_no = Column(String(20), nullable=False)
@@ -77,6 +79,8 @@ class Student(Base):
     total_assigned = Column(Integer, default=0)
 
     on_time_count = Column(Integer, default=0)
+
+    secondary_details = Column(Text, nullable=True)  # JSON object storing secondary emergency contact, hobbies, career, language, diet
 
 
 
@@ -676,6 +680,23 @@ class FeeMilestone(Base):
     payment_method = Column(String(30), nullable=True)
 
 
+class FeeStructure(Base):
+    __tablename__ = "fee_structures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    class_name = Column(String(50), nullable=False, unique=True, index=True)
+    academic_year = Column(String(20), default="2026-2027")
+    tuition_fee = Column(Float, default=70000.0)
+    term1_amount = Column(Float, default=35000.0)
+    term1_due_date = Column(String(30), default="15 Jul 2026")
+    term2_amount = Column(Float, default=35000.0)
+    term2_due_date = Column(String(30), default="25 Oct 2026")
+    lms_digital_fee = Column(Float, default=14500.0)
+    lab_library_fee = Column(Float, default=12000.0)
+    activity_fee = Column(Float, default=5000.0)
+    total_annual_fee = Column(Float, default=136500.0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 class BusRoute(Base):
 
@@ -927,7 +948,45 @@ class PTMSlot(Base):
 
     cancelled_at = Column(String(50), nullable=True)
 
+    # Faculty Attendance & Completion Governance
+    teacher_attended = Column(Boolean, default=False, index=True)
+
+    parent_attended = Column(Boolean, default=False, index=True)
+
+    attendance_status = Column(String(30), default="SCHEDULED", index=True)  # SCHEDULED, COMPLETED, TEACHER_ABSENT, PARENT_NO_SHOW
+
+    meeting_notes = Column(Text, nullable=True)
+
+    completed_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+
+class ExamSyncRequest(Base):
+    """
+    Inter-Coordinator consultation & alignment request between
+    Academic Coordinator (Prof. Rajeshwari Nair) and Exam Coordinator (Dr. Hemanth Sen).
+    Used to align syllabus completion deadlines with scheduled exam dates.
+    """
+    __tablename__ = "exam_sync_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(150), nullable=False)
+    class_name = Column(String(32), nullable=False, index=True)  # e.g. "Class 9-A"
+    subject = Column(String(64), nullable=False, index=True)     # e.g. "Physics"
+    curriculum_lag_units = Column(Integer, default=2)
+    current_completion_pct = Column(Float, default=40.0)
+    proposed_resolution = Column(String(50), default="POSTPONE_EXAM")  # POSTPONE_EXAM, TRIM_SYLLABUS_CUTOFF, EXTRA_REMEDIAL
+    notes = Column(Text, nullable=True)
+    status = Column(String(30), default="PENDING_MEETING", index=True)  # PENDING_MEETING, SYNC_SCHEDULED, RESOLVED, REJECTED
+    requested_by_name = Column(String(100), default="Prof. Rajeshwari Nair")
+    requested_by_role = Column(String(50), default="academic_coordinator")
+    meeting_date = Column(String(50), nullable=True)  # e.g. "Tomorrow, 03:00 PM"
+    meeting_venue = Column(String(100), default="Exam Cell Conference / Virtual Room A")
+    resolution_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
 
 
 
@@ -1297,6 +1356,12 @@ class ExamSchedule(Base):
 
     title = Column(String(150), nullable=False)
 
+    series_name = Column(String(150), nullable=True, index=True)
+
+    batch_id = Column(String(100), nullable=True, index=True)
+
+    schedule_type = Column(String(30), default="BATCH", index=True)
+
     subject = Column(String(50), nullable=False)
 
     class_name = Column(String(50), nullable=False)
@@ -1322,6 +1387,14 @@ class ExamSchedule(Base):
     question_paper_title = Column(String(150), nullable=True)
 
     status = Column(String(50), default="Scheduled")
+
+    session_status = Column(String(30), default="SCHEDULED", index=True)  # SCHEDULED, LOBBY_OPEN, COMMENCED, CONCLUDED
+
+    commenced_at = Column(DateTime, nullable=True)
+
+    commenced_by = Column(String(100), nullable=True)
+
+    concluded_at = Column(DateTime, nullable=True)
 
     academic_clearance = Column(Boolean, default=False, index=True)
 
@@ -1402,26 +1475,47 @@ class HallTicket(Base):
 
 
 class AbsenteeRecord(Base):
-
     __tablename__ = "absentee_records"
 
     id = Column(Integer, primary_key=True, index=True)
-
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
-
     schedule_id = Column(Integer, ForeignKey("exam_schedules.id"), nullable=True)
-
     subject = Column(String(50), nullable=False)
-
     reason = Column(String(150), default="Medical Leave")
-
     is_medically_excused = Column(Boolean, default=True)
-
     retest_scheduled = Column(Boolean, default=False)
-
     retest_date = Column(String(30), nullable=True)
-
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class ReExamRequest(Base):
+    __tablename__ = "re_exam_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True)
+    student_name = Column(String(100), default="Aarav Sharma")
+    class_name = Column(String(32), default="Class 8")
+    section = Column(String(16), default="B")
+    subject = Column(String(64), nullable=False)
+    exam_name = Column(String(150), nullable=False)
+    missed_date = Column(String(32), nullable=False)
+    reason_category = Column(String(64), default="Medical Emergency")
+    reason_details = Column(Text, nullable=False)
+    document_name = Column(String(150), default="Medical_Certificate.pdf")
+    document_url = Column(String(255), default="/samples/medical_certificate.pdf")
+    parent_name = Column(String(100), default="Dr. Rajeev Sharma")
+    parent_phone = Column(String(32), default="+91 98490 22114")
+    status = Column(String(50), default="Pending Admin Review", index=True)  # Pending Admin Review, Approved by Admin, Rejected, Scheduled
+    admin_remarks = Column(Text, nullable=True)
+    requested_at = Column(String(50), nullable=True)
+    resolved_at = Column(String(50), nullable=True)
+    re_exam_date = Column(String(32), nullable=True)
+    re_exam_time = Column(String(64), nullable=True)
+    re_exam_venue = Column(String(100), nullable=True)
+    coordinator_assigned = Column(String(100), nullable=True)
+    schedule_id = Column(Integer, ForeignKey("exam_schedules.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 
 
@@ -1485,6 +1579,8 @@ class ExamCandidateAttempt(Base):
     script_pages_uploaded = Column(Integer, default=0)
 
     seal_verified = Column(Boolean, default=False)
+
+    verification_seal_hash = Column(String(128), nullable=True)
 
     last_anomaly_time = Column(String(50), nullable=True)
 
@@ -2141,13 +2237,26 @@ class StaffPermission(Base):
     affected_periods = Column(String(128), nullable=True)  # "Period 2 (8-A), Period 3 (8-B)"
 
     reason = Column(Text, nullable=False)
-
+    leave_category = Column(String(64), nullable=True, default="Casual Leave (CL)")
+    total_days = Column(Integer, default=1)
     status = Column(String(32), default="Pending", index=True)  # "Pending", "Approved", "Rejected"
-
     approved_by = Column(String(128), nullable=True)
-
     reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+
+class StaffAttendanceDaily(Base):
+    """Daily check-in / check-out log for teachers and staff members."""
+    __tablename__ = "staff_attendance_daily"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("staff_members.id"), nullable=False, index=True)
+    staff_name = Column(String(128), nullable=False)
+    attendance_date = Column(String(32), nullable=False, index=True)  # YYYY-MM-DD
+    check_in_time = Column(String(32), nullable=True)  # e.g. "08:45 AM"
+    check_out_time = Column(String(32), nullable=True) # e.g. "04:15 PM"
+    status = Column(String(32), default="Present")      # "Present", "Absent", "On Leave", "On Duty"
+    notes = Column(String(256), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

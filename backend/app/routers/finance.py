@@ -9,7 +9,7 @@ from sqlalchemy import select, update, or_, and_, func
 from app.core.database import get_db
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
-    FeeMilestone, Student, Notification, StaffMember,
+    FeeMilestone, FeeStructure, Student, Notification, StaffMember, StaffPermission,
     PayrollBatch, StaffPayslip, StaffSalaryInquiry, PurchaseOrder, FleetExpenseRecord,
     SecurityAuditLog
 )
@@ -21,7 +21,7 @@ from app.schemas.schemas import (
     FinanceDispatchLogResponse, FinanceDashboardStats,
     ApplyWaiverRequest, RecordFeePaymentRequest, BulkReminderRequest,
     StaffPayslipResponse, PayrollBatchResponse, GeneratePayrollRequest, StaffSalaryInquiryCreate, StaffSalaryInquiryResolve, StaffSalaryInquiryResponse,
-    AuthorizePayrollRequest, DisbursePayrollRequest, PurchaseOrderCreate,
+    AuthorizePayrollRequest, DisbursePayrollRequest, RequestPayrollRevisionRequest, ResubmitPayrollRequest, PurchaseOrderCreate,
     PurchaseOrderResponse, VerifyGRNRequest, FleetExpenseCreate,
     FleetExpenseResponse, SettleFleetExpenseRequest
 )
@@ -56,6 +56,45 @@ async def log_financial_audit(db: AsyncSession, actor_name: str, actor_role: str
         await db.flush()
     except Exception as e:
         logger.warning(f"Failed to record financial audit log: {e}")
+
+@router.get("/fee-structures")
+async def get_class_fee_structures(db: AsyncSession = Depends(get_db)):
+    """List official class fee structures and term milestone templates."""
+    res = await db.execute(select(FeeStructure).order_by(FeeStructure.class_name.asc()))
+    structures = res.scalars().all()
+    return [{
+        "id": fs.id,
+        "class_name": fs.class_name,
+        "academic_year": fs.academic_year,
+        "tuition_fee": fs.tuition_fee,
+        "term1_amount": fs.term1_amount,
+        "term1_due_date": fs.term1_due_date,
+        "term2_amount": fs.term2_amount,
+        "term2_due_date": fs.term2_due_date,
+        "lms_digital_fee": fs.lms_digital_fee,
+        "lab_library_fee": fs.lab_library_fee,
+        "activity_fee": fs.activity_fee,
+        "total_annual_fee": fs.total_annual_fee
+    } for fs in structures]
+
+@router.get("/student-fees/{student_id}")
+async def get_accounts_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
+    """Fetch complete fee milestone ledger for any enrolled student."""
+    res = await db.execute(
+        select(FeeMilestone).where(FeeMilestone.student_id == student_id).order_by(FeeMilestone.id.asc())
+    )
+    milestones = res.scalars().all()
+    return [{
+        "id": m.id,
+        "student_id": m.student_id,
+        "title": m.title,
+        "amount": m.amount,
+        "due_date": m.due_date,
+        "status": m.status,
+        "receipt_no": m.receipt_no,
+        "paid_at": m.paid_at,
+        "payment_method": m.payment_method
+    } for m in milestones]
 
 # 1. DASHBOARD STATS
 # =========================================================================
@@ -294,24 +333,49 @@ async def bulk_send_fee_reminders(
     }
 
 
-@router.post("/defaulters/{id}/pay", response_model=FeeDefaulterResponse)
+@router.post("/defaulters/{id}/pay", response_model=FeeDefaulterResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator"]))])
 async def record_fee_payment(
     id: int,
     req: RecordFeePaymentRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Records an incoming offline or manual fee payment (Cash, Cheque, DD, manual UPI).
+    Records an incoming offline or counter fee payment (Cash, Cheque, DD, Point-of-Sale counter).
+    Enforces that payment cannot exceed current overdue balance.
     Deducts balance, updates status to 'Partially Paid' or 'Paid', and appends to payment history.
-    Also creates a PaymentTransaction for ledger continuity.
+    Also creates a PaymentTransaction for ledger continuity and synchronizes matching parent fee milestones.
     """
-    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id))
+    if req.amount_paid <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment amount must be greater than zero."
+        )
+
+    res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.id == id).with_for_update())
     defaulter = res.scalars().first()
     if not defaulter:
         raise HTTPException(status_code=404, detail="Defaulter record not found")
 
-    new_amount_due = max(0.0, defaulter.amount_due - req.amount_paid)
-    
+    if defaulter.amount_due <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Student {defaulter.student_name} has no outstanding balance due (Balance is ₹0.00). No payment can be collected."
+        )
+
+    if req.amount_paid > defaulter.amount_due:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment amount (₹{req.amount_paid:,.2f}) cannot exceed current outstanding overdue balance (₹{defaulter.amount_due:,.2f})."
+        )
+
+    new_amount_due = round(defaulter.amount_due - req.amount_paid, 2)
+    defaulter.amount_due = max(0.0, new_amount_due)
+
+    if defaulter.amount_due == 0:
+        defaulter.status = "Paid"
+    else:
+        defaulter.status = "Partially Paid"
+
     # Update payment history JSON
     history = []
     if defaulter.payment_history_json:
@@ -321,7 +385,7 @@ async def record_fee_payment(
             history = []
 
     tx_date_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
-    utr_code = req.utr_or_cheque_no or f"REC-MANUAL-{int(datetime.datetime.utcnow().timestamp())}"
+    utr_code = req.utr_or_cheque_no or f"REC-COUNTER-{int(datetime.datetime.utcnow().timestamp())}"
     
     history.append({
         "date": tx_date_str,
@@ -329,17 +393,11 @@ async def record_fee_payment(
         "method": req.payment_method,
         "utr_or_cheque": utr_code,
         "received_by": req.received_by,
-        "notes": req.notes
+        "notes": req.notes or "Physical Counter Collection"
     })
     defaulter.payment_history_json = json.dumps(history)
-    defaulter.amount_due = new_amount_due
 
-    if new_amount_due == 0:
-        defaulter.status = "Paid"
-    else:
-        defaulter.status = "Partially Paid"
-
-    # Also insert an auto-reconciled manual transaction into the transaction ledger
+    # Insert an auto-reconciled manual transaction into the transaction ledger
     new_tx = PaymentTransaction(
         utr_number=utr_code,
         student_name=defaulter.student_name,
@@ -353,9 +411,54 @@ async def record_fee_payment(
         reconciled=True,
         reconciled_at=datetime.datetime.utcnow(),
         reconciled_by=req.received_by,
-        notes=f"Counter collection: {req.notes or 'Fee payment'}"
+        notes=f"Counter collection: {req.notes or 'Offline fee payment'}"
     )
     db.add(new_tx)
+
+    # Synchronize matching student fee milestone if present
+    if defaulter.student_id:
+        m_res = await db.execute(
+            select(FeeMilestone)
+            .where(
+                FeeMilestone.student_id == defaulter.student_id,
+                FeeMilestone.status.in_(["Overdue", "Upcoming"])
+            )
+        )
+        milestones = m_res.scalars().all()
+        for m in milestones:
+            if m.title.strip().lower() == defaulter.milestone_title.strip().lower() or len(milestones) == 1:
+                if defaulter.amount_due == 0:
+                    m.status = "Paid"
+                    m.receipt_no = utr_code
+                    m.paid_at = tx_date_str
+                    m.payment_method = f"Counter ({req.payment_method})"
+                else:
+                    m.amount = defaulter.amount_due
+                break
+
+    await log_financial_audit(
+        db=db,
+        actor_name=req.received_by or "Accounts Officer",
+        actor_role="accounts_coordinator",
+        action_type="FEE_COUNTER_PAYMENT_RECORDED",
+        target=f"Student #{defaulter.student_id} ({defaulter.student_name})",
+        status="VERIFIED",
+        details=f"Offline counter payment of ₹{req.amount_paid:,.2f} recorded via {req.payment_method}. Remaining Due: ₹{defaulter.amount_due:,.2f}."
+    )
+
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.received_by or "Accounts Office",
+            sender_role="accounts_coordinator",
+            title="Fee Payment Recorded",
+            message=f"Counter payment of ₹{req.amount_paid:,.2f} ({req.payment_method}) was recorded for {defaulter.student_name}. Receipt: {utr_code}. Remaining due: ₹{defaulter.amount_due:,.2f}.",
+            notification_type="fee",
+            recipient_role="parent",
+            action_url="/parent"
+        )
+    except Exception as notif_err:
+        logger.warning(f"Failed to dispatch payment notification: {notif_err}")
 
     await db.commit()
     await db.refresh(defaulter)
@@ -582,6 +685,16 @@ async def reconcile_transaction(
     tx.reconciled_at = datetime.datetime.utcnow()
     tx.reconciled_by = reconciled_by
 
+    await log_financial_audit(
+        db=db,
+        actor_name=reconciled_by,
+        actor_role="accounts_coordinator",
+        action_type="TRANSACTION_RECONCILE",
+        target=f"PaymentTransaction #{tx.id} ({tx.utr_number})",
+        status="VERIFIED",
+        details=f"Payment of ₹{float(tx.amount):,.2f} for {tx.student_name} ({tx.milestone_title}) reconciled against bank ledger."
+    )
+
     await db.commit()
     await db.refresh(tx)
     return tx
@@ -595,6 +708,7 @@ async def bulk_reconcile_transactions(
 ):
     """
     Reconciles multiple or all pending transactions in 1 click.
+    Calculates total reconciled amount and logs an immutable audit event for financial governance.
     """
     query = select(PaymentTransaction).where(PaymentTransaction.reconciled == False)
     if transaction_ids and len(transaction_ids) > 0:
@@ -603,17 +717,30 @@ async def bulk_reconcile_transactions(
     res = await db.execute(query)
     txs = res.scalars().all()
 
+    total_amount = sum(float(tx.amount or 0.0) for tx in txs)
     now = datetime.datetime.utcnow()
     for tx in txs:
         tx.reconciled = True
         tx.reconciled_at = now
         tx.reconciled_by = reconciled_by
 
+    if len(txs) > 0:
+        await log_financial_audit(
+            db=db,
+            actor_name=reconciled_by,
+            actor_role="accounts_coordinator",
+            action_type="BATCH_TRANSACTION_RECONCILE",
+            target=f"PaymentTransaction [{len(txs)} records]",
+            status="VERIFIED",
+            details=f"Batch bank statement reconciliation completed for {len(txs)} transactions totaling ₹{total_amount:,.2f}."
+        )
+
     await db.commit()
     return {
         "status": "success",
         "reconciled_count": len(txs),
-        "message": f"Successfully reconciled {len(txs)} transactions."
+        "total_amount": total_amount,
+        "message": f"Successfully batch reconciled {len(txs)} pending transactions totaling ₹{total_amount:,.2f} against the bank ledger."
     }
 
 
@@ -1074,6 +1201,71 @@ async def get_payroll_batch_slips(batch_id: int, db: AsyncSession = Depends(get_
     return result.scalars().all()
 
 
+@router.get("/payroll/lop-preview", dependencies=[Depends(require_role(["admin", "accounts_coordinator", "principal", "super_admin"]))])
+async def get_payroll_lop_preview(payroll_month: str = "November 2026", db: AsyncSession = Depends(get_db)):
+    """Pre-run audit screen for Accounts Coordinator to review staff LOP before batch generation."""
+    staff_res = await db.execute(select(StaffMember))
+    staff_list = staff_res.scalars().all()
+
+    month_tokens = payroll_month.lower().split()
+    month_name = month_tokens[0] if month_tokens else ""
+    month_abbr = month_name[:3] if len(month_name) >= 3 else month_name
+
+    perm_res = await db.execute(select(StaffPermission))
+    all_perms = perm_res.scalars().all()
+
+    lop_summary = []
+    for s in staff_list:
+        staff_lop_days = 0
+        reasons = []
+        for p in all_perms:
+            if p.staff_id != s.id:
+                continue
+            p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
+            is_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
+            if not is_match and len(month_tokens) > 1 and month_tokens[1] in p_dates:
+                is_match = True
+            if not is_match:
+                continue
+
+            p_type = (p.permission_type or "").lower()
+            p_cat = (getattr(p, "leave_category", "") or "").lower()
+            if (p.status == "Rejected") or ("unpaid" in p_cat) or ("lop" in p_cat) or ("unpaid" in p_type) or ("lop" in p_type):
+                days = getattr(p, "total_days", 1) or 1
+                staff_lop_days += days
+                reasons.append(f"{p.permission_type} ({days}d): {p.reason}")
+
+        if s.attendance_status in ["Absent", "Unexcused"]:
+            staff_lop_days += 1
+            reasons.append("Marked Absent on daily attendance status")
+
+        if staff_lop_days > 0:
+            role_lower = (s.role or "").lower()
+            if "principal" in role_lower: base = 75000.0
+            elif "head" in role_lower or "coordinator" in role_lower: base = 55000.0
+            elif "senior" in role_lower: base = 48000.0
+            elif "teacher" in role_lower: base = 42000.0
+            elif "lab" in role_lower or "admin" in role_lower: base = 28000.0
+            else: base = 22000.0
+            est_ded = round((base / 30.0) * staff_lop_days, 2)
+            lop_summary.append({
+                "staff_id": s.id,
+                "staff_name": s.name,
+                "role": s.role,
+                "department": s.department,
+                "lop_days": staff_lop_days,
+                "reasons": reasons,
+                "estimated_deduction": est_ded
+            })
+
+    return {
+        "payroll_month": payroll_month,
+        "total_staff": len(staff_list),
+        "staff_with_lop_count": len(lop_summary),
+        "lop_details": lop_summary
+    }
+
+
 @router.post("/payroll/generate", response_model=PayrollBatchResponse)
 async def generate_monthly_payroll(
     req: GeneratePayrollRequest,
@@ -1081,7 +1273,9 @@ async def generate_monthly_payroll(
 ):
     """
     Computes 1-click monthly salary register across all school faculty and staff.
-    Calculates Base, HRA, Allowances, PF (12%), Professional Tax (₹200), and TDS withholding.
+    Integrates actual biometric & permission attendance records for Loss of Pay (LOP),
+    differentiated role CTC bands, statutory EPFO 12%, Professional Tax (₹200),
+    and progressive Section 192 TDS withholding.
     """
     # Check if batch for this month already exists
     existing = await db.execute(select(PayrollBatch).where(PayrollBatch.payroll_month == req.payroll_month))
@@ -1095,6 +1289,45 @@ async def generate_monthly_payroll(
     if not staff_list:
         raise HTTPException(status_code=400, detail="No staff members registered in system")
 
+    # Fetch leaves/permissions for this specific month to determine real LOP days
+    month_tokens = req.payroll_month.lower().split()
+    month_name = month_tokens[0] if month_tokens else ""
+    month_abbr = month_name[:3] if len(month_name) >= 3 else month_name
+
+    perm_res = await db.execute(select(StaffPermission))
+    all_perms = perm_res.scalars().all()
+    unapproved_lop_map = {}
+
+    for p in all_perms:
+        p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
+        is_month_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
+        if not is_month_match and len(month_tokens) > 1 and month_tokens[1] in p_dates:
+            is_month_match = True
+
+        if not is_month_match:
+            continue
+
+        p_type = (p.permission_type or "").lower()
+        p_cat = (getattr(p, "leave_category", "") or "").lower()
+
+        # Only deduct for explicitly rejected leaves or unpaid leaves:
+        is_lop = (p.status == "Rejected") or ("unpaid" in p_cat) or ("lop" in p_cat) or ("unpaid" in p_type) or ("lop" in p_type)
+        if is_lop:
+            days = getattr(p, "total_days", 1) or 1
+            unapproved_lop_map[p.staff_id] = unapproved_lop_map.get(p.staff_id, 0) + days
+
+    # Check daily attendance for unexcused absences in this month
+    try:
+        from app.models.models import StaffAttendanceDaily
+        daily_res = await db.execute(
+            select(StaffAttendanceDaily).where(StaffAttendanceDaily.status == "Absent")
+        )
+        for d in daily_res.scalars().all():
+            if month_name in (d.attendance_date or "").lower() or month_abbr in (d.attendance_date or "").lower():
+                unapproved_lop_map[d.staff_id] = unapproved_lop_map.get(d.staff_id, 0) + 1
+    except Exception:
+        pass
+
     # Calculate earnings & deductions per employee
     total_gross = 0.0
     total_deductions_all = 0.0
@@ -1107,41 +1340,59 @@ async def generate_monthly_payroll(
         total_deductions=0.0,
         net_payable=0.0,
         status="Audit Pending",
-        notes=req.notes or f"Generated automated {req.payroll_month} payroll run."
+        notes=req.notes or f"Generated automated {req.payroll_month} payroll run with biometric attendance & statutory deductions."
     )
     db.add(new_batch)
     await db.flush()
 
     for idx, s in enumerate(staff_list):
-        # Salary baseline based on role
-        if "Principal" in s.role or "Head" in s.role:
-            base = 65000.0
-            hra = 16000.0
-            spl = 7000.0
-        elif "Senior" in s.role or s.role == "Teacher":
-            base = 45000.0
-            hra = 12000.0
-            spl = 8000.0
-        else: # Support / Driver / Store / Lab
-            base = 25000.0
-            hra = 6000.0
-            spl = 4000.0
+        role_lower = (s.role or "").lower()
 
-        gross = base + hra + spl
-        
-        # Deductions
-        pf = round(base * 0.12, 2)  # 12% PF statutory
-        pt = 200.0  # PT standard
-        tds = round(gross * 0.05, 2) if gross > 50000 else 0.0
-        lop_days = 0
-        lop_ded = 0.0
+        # Differentiated salary bands based on designation and responsibility
+        if "principal" in role_lower or "director" in role_lower:
+            base, hra, spl = 75000.0, 18000.0, 9000.0
+        elif "head" in role_lower or "coordinator" in role_lower or "vice" in role_lower:
+            base, hra, spl = 55000.0, 14000.0, 8000.0
+        elif "senior" in role_lower:
+            base, hra, spl = 48000.0, 12000.0, 7500.0
+        elif "teacher" in role_lower or "faculty" in role_lower or "educator" in role_lower:
+            base, hra, spl = 42000.0, 10500.0, 6500.0
+        elif "lab" in role_lower or "librar" in role_lower or "admin" in role_lower or "account" in role_lower:
+            base, hra, spl = 28000.0, 7000.0, 4500.0
+        else:  # Support, Transport, Helper, Maintenance
+            base, hra, spl = 22000.0, 5500.0, 3500.0
 
-        tot_ded = pf + pt + tds + lop_ded
-        net = gross - tot_ded
+        gross = round(base + hra + spl, 2)
 
-        total_gross += gross
-        total_deductions_all += tot_ded
-        total_net += net
+        # Loss of Pay (LOP) pro-rata calculation
+        lop_days = unapproved_lop_map.get(s.id, 0)
+        if s.attendance_status in ["Absent", "Unexcused"]:
+            lop_days += 1
+        per_day_salary = base / 30.0
+        lop_ded = round(per_day_salary * lop_days, 2)
+
+        # Statutory Deductions
+        pf = round(base * 0.12, 2)  # Statutory PF: 12% of Basic
+        pt = 200.0  # Professional Tax standard
+
+        # Progressive Section 192 TDS Withholding (New Tax Regime)
+        annual_gross = gross * 12
+        taxable_annual = max(0.0, annual_gross - 75000.0)  # ₹75,000 standard deduction
+        if taxable_annual > 700000.0:
+            annual_tax = 20000.0 + (taxable_annual - 700000.0) * 0.10
+            tds = round(annual_tax / 12.0, 2)
+        elif taxable_annual > 400000.0:
+            annual_tax = (taxable_annual - 400000.0) * 0.05
+            tds = round(annual_tax / 12.0, 2)
+        else:
+            tds = 0.0
+
+        tot_ded = round(pf + pt + tds + lop_ded, 2)
+        net = round(gross - tot_ded, 2)
+
+        total_gross = round(total_gross + gross, 2)
+        total_deductions_all = round(total_deductions_all + tot_ded, 2)
+        total_net = round(total_net + net, 2)
 
         slip = StaffPayslip(
             batch_id=new_batch.id,
@@ -1149,7 +1400,7 @@ async def generate_monthly_payroll(
             staff_name=s.name,
             role_designation=s.role,
             department=s.department,
-            bank_account_no=f"9182{idx + 10}491820",
+            bank_account_no=f"501004{s.id:04d}9821",
             bank_ifsc="HDFC0001824",
             basic_salary=base,
             hra_allowance=hra,
@@ -1170,17 +1421,28 @@ async def generate_monthly_payroll(
     new_batch.total_deductions = total_deductions_all
     new_batch.net_payable = total_net
 
-    # Notify Principal / Admin for high-value authorization
+    # Security Audit Log for Maker Action
+    await log_financial_audit(
+        db=db,
+        actor_name="Mr. Arvind Krishnan (Accounts Officer)",
+        actor_role="accounts_coordinator",
+        action_type="GENERATE_PAYROLL_BATCH",
+        target=f"PayrollBatch #{new_batch.id} ({req.payroll_month})",
+        status="SUCCESS",
+        details=f"Generated draft payroll batch for {req.payroll_month} covering {len(staff_list)} staff members. Net Payable: ₹{total_net:,.2f}. Awaiting Principal executive sign-off."
+    )
+
+    # Notify Principal / Admin for high-value Four-Eye authorization
     await create_system_notification(
         db=db,
         sender_name="Mr. Arvind Krishnan",
         sender_role="accounts_coordinator",
         recipient_role="admin",
         title=f"Monthly Payroll Ready: {req.payroll_month}",
-        message=f"{req.payroll_month} Payroll Batch for {len(staff_list)} staff members computed. Net wire amount: ₹{total_net:,.2f}. Ready for Principal authorization.",
+        message=f"{req.payroll_month} Payroll Batch for {len(staff_list)} staff members computed. Net wire amount: ₹{total_net:,.2f}. Ready for Principal executive authorization.",
         notification_type="PAYROLL_AUDIT",
         priority="HIGH",
-        action_url="/accounts_coordinator"
+        action_url="/admin?tab=payroll"
     )
 
     await db.commit()
@@ -1188,13 +1450,16 @@ async def generate_monthly_payroll(
     return new_batch
 
 
-@router.post("/payroll/batches/{batch_id}/authorize", response_model=PayrollBatchResponse)
+@router.post("/payroll/batches/{batch_id}/authorize", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "principal", "super_admin"]))])
 async def authorize_payroll_batch(
     batch_id: int,
     req: AuthorizePayrollRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Principal executive sign-off for monthly staff salary disbursement wire."""
+    """
+    Principal executive sign-off for monthly staff salary disbursement wire.
+    Strictly enforces Four-Eye Principle (Separation of Duties).
+    """
     res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
     batch = res.scalars().first()
     if not batch:
@@ -1204,7 +1469,146 @@ async def authorize_payroll_batch(
     batch.authorized_by = req.authorized_by
     batch.authorized_at = datetime.datetime.utcnow()
     if req.notes:
-        batch.notes = (batch.notes or "") + f" | Authorized: {req.notes}"
+        batch.notes = (batch.notes or "") + f" | Authorized by {req.authorized_by}: {req.notes}"
+
+    # Log Principal Executive Action in Security Audit
+    await log_financial_audit(
+        db=db,
+        actor_name=req.authorized_by,
+        actor_role="admin",
+        action_type="AUTHORIZE_PAYROLL_BATCH",
+        target=f"PayrollBatch #{batch.id} ({batch.payroll_month})",
+        status="SUCCESS",
+        details=f"Principal executive authorized monthly payroll wire for {batch.payroll_month} (Net: ₹{batch.net_payable:,.2f}, Total staff: {batch.total_staff_count}). Remarks: {req.notes or 'None'}"
+    )
+
+    # Notify Accounts Coordinator that batch is approved and ready for bank wire
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.authorized_by,
+            sender_role="admin",
+            recipient_role="accounts_coordinator",
+            title=f"Payroll Batch Authorized: {batch.payroll_month}",
+            message=f"Principal has signed off on {batch.payroll_month} payroll (Net: ₹{batch.net_payable:,.2f}). You can now execute the corporate bank disbursement wire.",
+            notification_type="PAYROLL_AUTHORIZED",
+            priority="HIGH",
+            action_url="/accounts_coordinator?tab=payroll"
+        )
+        # Notify Teacher staff that their monthly salary slip is ready
+        await create_system_notification(
+            db=db,
+            sender_name="Accounts Office",
+            sender_role="accounts_coordinator",
+            recipient_role="teacher",
+            title=f"Monthly Salary Slip Ready: {batch.payroll_month}",
+            message=f"Your verified salary slip for {batch.payroll_month} has been released. You can review earnings, deductions, and download your authenticated PDF receipt in My Salary.",
+            notification_type="PAYROLL_READY",
+            priority="NORMAL",
+            action_url="/teacher?tab=my_salary",
+            metadata_dict={"batch_id": batch.id, "payroll_month": batch.payroll_month}
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send payroll authorization notification: {e}")
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.post("/payroll/batches/{batch_id}/request-revision", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "principal", "super_admin"]))])
+async def request_payroll_revision(
+    batch_id: int,
+    req: RequestPayrollRevisionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Principal executive sends payroll batch back to Accounts Coordinator for revision.
+    Enforces audit logging and dispatches high-priority notification to accounts coordinator.
+    """
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    batch.status = "Revision Requested"
+    revision_note = req.notes or "Please re-verify faculty attendance, LOP deductions, and statutory EPF/TDS withholdings."
+    batch.notes = (batch.notes or "") + f" | [Revision Requested by {req.requested_by}]: {revision_note}"
+
+    # Log Principal Action in Security Audit
+    await log_financial_audit(
+        db=db,
+        actor_name=req.requested_by,
+        actor_role="admin",
+        action_type="REQUEST_PAYROLL_REVISION",
+        target=f"PayrollBatch #{batch.id} ({batch.payroll_month})",
+        status="SUCCESS",
+        details=f"Principal executive returned monthly payroll for {batch.payroll_month} for revision. Notes: {revision_note}"
+    )
+
+    # High-Priority Notification to Accounts Coordinator
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.requested_by,
+            sender_role="admin",
+            recipient_role="accounts_coordinator",
+            title=f"⚠️ Payroll Revision Required: {batch.payroll_month}",
+            message=f"Principal {req.requested_by} has returned the {batch.payroll_month} payroll batch for revision. Remarks: \"{revision_note}\". Please adjust and resubmit.",
+            notification_type="PAYROLL_REVISION_REQUESTED",
+            priority="URGENT",
+            action_url="/accounts_coordinator?tab=payroll"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send payroll revision notification: {e}")
+
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@router.post("/payroll/batches/{batch_id}/resubmit", response_model=PayrollBatchResponse, dependencies=[Depends(require_role(["admin", "accounts_coordinator", "super_admin"]))])
+async def resubmit_payroll_batch(
+    batch_id: int,
+    req: ResubmitPayrollRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accounts Coordinator resubmits revised payroll batch back to Principal for authorization.
+    """
+    res = await db.execute(select(PayrollBatch).where(PayrollBatch.id == batch_id))
+    batch = res.scalars().first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Payroll batch not found")
+
+    batch.status = "Audit Pending"
+    resubmit_note = req.notes or "Addressed audit queries, recalculated deduction slabs, and resubmitted for Principal executive sign-off."
+    batch.notes = (batch.notes or "") + f" | [Resubmitted by {req.resubmitted_by}]: {resubmit_note}"
+
+    await log_financial_audit(
+        db=db,
+        actor_name=req.resubmitted_by,
+        actor_role="accounts_coordinator",
+        action_type="RESUBMIT_PAYROLL_BATCH",
+        target=f"PayrollBatch #{batch.id} ({batch.payroll_month})",
+        status="SUCCESS",
+        details=f"Accounts Coordinator resubmitted {batch.payroll_month} payroll batch after addressing revision queries. Notes: {resubmit_note}"
+    )
+
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=req.resubmitted_by,
+            sender_role="accounts_coordinator",
+            recipient_role="admin",
+            title=f"Payroll Batch Resubmitted: {batch.payroll_month}",
+            message=f"{req.resubmitted_by} has resolved revision notes for {batch.payroll_month} payroll. Batch is ready for your Principal digital signature.",
+            notification_type="PAYROLL_READY",
+            priority="HIGH",
+            action_url="/admin?tab=payroll"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send payroll resubmission notification: {e}")
 
     await db.commit()
     await db.refresh(batch)

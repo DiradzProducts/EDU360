@@ -113,35 +113,43 @@ export function printDossierReport(
 }
 
 /**
- * Download Certified Student Document (Bonafide, Conduct, Transfer Certificate)
+ * Generate Certified Student Document HTML (Bonafide, Conduct, Transfer Certificate)
  */
-export function downloadOfficialDocumentFile(docTitle: string, studentName = 'Aarav Sharma', admissionNo = 'OIS-2026-8814') {
+export function generateOfficialDocumentHtml(docTitle: string, studentName = 'Aarav Sharma', admissionNo = 'OIS-2026-8814') {
   const certId = `CERT-EDU-${Math.floor(100000 + Math.random() * 900000)}`;
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>${docTitle} - ${studentName}</title>
   <style>
-    @media print { @page { size: A4 portrait; margin: 20mm; } }
-    body { font-family: "Georgia", serif; padding: 40px; color: #0f172a; max-width: 800px; margin: 0 auto; background: #fff; }
-    .border-frame { border: 4px double #1e40af; padding: 32px; border-radius: 8px; position: relative; }
-    .header { text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; margin-bottom: 28px; }
-    .school-name { font-size: 26px; font-weight: bold; color: #1e3a8a; letter-spacing: 1px; }
+    @media print { @page { size: A4 portrait; margin: 15mm; } body { padding: 0 !important; } }
+    body { font-family: "Georgia", serif; padding: 30px; color: #0f172a; max-width: 820px; margin: 0 auto; background: #f8fafc; }
+    .border-frame { border: 4px double #1e40af; padding: 36px; border-radius: 12px; position: relative; background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; color: rgba(30,64,175,0.04); text-transform: uppercase; letter-spacing: 6px; pointer-events: none; z-index: 0; }
+    .header { text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 18px; margin-bottom: 24px; position: relative; z-index: 1; }
+    .school-name { font-size: 26px; font-weight: bold; color: #1e3a8a; letter-spacing: 1.5px; }
     .affiliation { font-size: 12px; color: #64748b; font-family: sans-serif; margin-top: 4px; }
-    .cert-title { font-size: 22px; font-weight: bold; color: #0f172a; text-transform: uppercase; margin: 24px 0 16px 0; text-align: center; text-decoration: underline; letter-spacing: 1px; }
-    .cert-body { font-size: 15px; line-height: 2; text-align: justify; margin: 28px 0; }
+    .cert-title { font-size: 20px; font-weight: bold; color: #0f172a; text-transform: uppercase; margin: 24px 0 16px 0; text-align: center; text-decoration: underline; letter-spacing: 1px; position: relative; z-index: 1; }
+    .cert-body { font-size: 14.5px; line-height: 2; text-align: justify; margin: 24px 0; position: relative; z-index: 1; }
     .highlight { font-weight: bold; color: #1e3a8a; border-bottom: 1px dashed #93c5fd; }
-    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 60px; font-family: sans-serif; }
-    .seal-box { border: 2px solid #2563eb; padding: 8px 14px; border-radius: 9999px; font-size: 11px; font-weight: bold; color: #1d4ed8; text-transform: uppercase; display: inline-block; }
+    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 48px; font-family: sans-serif; position: relative; z-index: 1; }
+    .seal-box { border: 2px solid #2563eb; padding: 6px 14px; border-radius: 9999px; font-size: 11px; font-weight: bold; color: #1d4ed8; text-transform: uppercase; display: inline-block; background: #eff6ff; }
     .sig-line { width: 180px; border-top: 1px solid #0f172a; text-align: center; font-size: 12px; font-weight: bold; padding-top: 6px; }
-    .meta-footer { font-family: sans-serif; font-size: 10px; color: #94a3b8; text-align: center; margin-top: 36px; border-top: 1px solid #f1f5f9; padding-top: 8px; }
+    .meta-footer { font-family: sans-serif; font-size: 10px; color: #94a3b8; text-align: center; margin-top: 32px; border-top: 1px solid #f1f5f9; padding-top: 8px; position: relative; z-index: 1; }
+    .action-bar { margin-bottom: 16px; display: flex; justify-content: flex-end; gap: 8px; font-family: sans-serif; }
+    .btn-print { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    @media print { .action-bar { display: none !important; } body { background: #fff; } .border-frame { box-shadow: none; } }
   </style>
 </head>
 <body>
+  <div class="action-bar">
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
   <div class="border-frame">
+    <div class="watermark">OFFICIAL SEAL</div>
     <div class="header">
       <div class="school-name">OAKRIDGE INTERNATIONAL SCHOOL</div>
       <div class="affiliation">Affiliated to CBSE, New Delhi &amp; Cambridge International Assessment · School Code: 40219</div>
@@ -153,11 +161,11 @@ export function downloadOfficialDocumentFile(docTitle: string, studentName = 'Aa
     <div class="cert-body">
       This is to officially certify that <span class="highlight">${studentName}</span>, 
       Son/Daughter of <span class="highlight">Mr. Rajesh Sharma</span> &amp; <span class="highlight">Mrs. Priya Sharma</span>, 
-      bearing Admission Number <span class="highlight">${admissionNo}</span>, is a bonafide student of this institution, 
+      bearing Admission Number <span class="highlight">${admissionNo}</span>, is an enrolled student of this institution, 
       currently studying in <span class="highlight">Class 8, Section B</span> for the Academic Session <span class="highlight">2026–2027</span>.
       <br><br>
-      According to institutional records, his/her general conduct and academic progress have been 
-      <span class="highlight">Exemplary</span>. The institution holds no objection or pending liabilities against this student.
+      According to official institution registry records, all statutory documentation, academic criteria, and general conduct stand 
+      <span class="highlight">Verified &amp; Approved</span>. The institution holds no objection or pending statutory liabilities against this record.
     </div>
 
     <div class="footer">
@@ -180,8 +188,29 @@ export function downloadOfficialDocumentFile(docTitle: string, studentName = 'Aa
   </div>
 </body>
 </html>`;
+}
 
+/**
+ * Download Certified Student Document (Bonafide, Conduct, Transfer Certificate)
+ */
+export function downloadOfficialDocumentFile(docTitle: string, studentName = 'Aarav Sharma', admissionNo = 'OIS-2026-8814') {
+  const html = generateOfficialDocumentHtml(docTitle, studentName, admissionNo);
   triggerHtmlDownload(`${studentName.replace(/\s+/g, '_')}_${docTitle.replace(/\s+/g, '_')}.html`, html);
+}
+
+/**
+ * Open Certified Student Document in a new printable window
+ */
+export function openAndPrintOfficialDocument(docTitle: string, studentName = 'Aarav Sharma', admissionNo = 'OIS-2026-8814') {
+  const html = generateOfficialDocumentHtml(docTitle, studentName, admissionNo);
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  } else {
+    triggerHtmlDownload(`${studentName.replace(/\s+/g, '_')}_${docTitle.replace(/\s+/g, '_')}.html`, html);
+  }
 }
 
 /**

@@ -18,9 +18,8 @@ import {
   ShieldAlert, 
 
   CheckCircle2, 
-
   Clock, 
-
+  Download,
   AlertTriangle, 
 
   AlertCircle,
@@ -89,23 +88,16 @@ interface OnlineExamModalProps {
   studentName?: string;
 
   examMode?: 'MODE_CBT' | 'MODE_HYBRID_SCAN';
-
+  scheduleId?: number;
   onSubmitted?: (result: { wordsCount: number; timeSpentSeconds: number; content: string }) => void;
-
   onOpenPdfUpload?: (data: { sealCode: string; subject: string; examTitle: string }) => void;
-
 }
 
-
-
 export function OnlineExamModal({
-
   isOpen,
-
   onClose,
-
   candidateId = 1,
-
+  scheduleId = 1,
   examTitle = 'CBSE Term 1 Model Examination: Analytical Essay Writing',
 
   subject = 'English Literature',
@@ -170,6 +162,24 @@ export function OnlineExamModal({
   const [showDynamicSealModal, setShowDynamicSealModal] = useState<boolean>(false);
   const [showSealCodeExitDialog, setShowSealCodeExitDialog] = useState<boolean>(false);
   const [isExamEndedByTeacher, setIsExamEndedByTeacher] = useState<boolean>(false);
+  const [dynamicSealHash, setDynamicSealHash] = useState<string>('');
+
+  const getOrCreateSealHash = () => {
+    if (dynamicSealHash) return dynamicSealHash;
+    const seed = `${candidateId || 1}-${subject || 'EXAM'}-${Date.now()}-EDU360`;
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < seed.length; i++) {
+      const ch = seed.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    const part1 = (h1 >>> 0).toString(16).toUpperCase().padStart(4, '0').slice(-4);
+    const part2 = (h2 >>> 0).toString(16).toUpperCase().padStart(4, '0').slice(-4);
+    const hash = `SEAL-8B-${part1}-${part2}`;
+    setDynamicSealHash(hash);
+    return hash;
+  };
 
   const [proctorStrikes, setProctorStrikes] = useState<number>(0);
   const [rulesStage, setRulesStage] = useState<'rules' | 'hall_ticket_check' | 'active'>('active');
@@ -267,10 +277,49 @@ export function OnlineExamModal({
   const [invigilatorIntercomMessage, setInvigilatorIntercomMessage] = useState<string>('');
   const [isStudentMicUnmuted, setIsStudentMicUnmuted] = useState<boolean>(false);
 
+  // Question Paper Download
+  const [isDownloadingPaper, setIsDownloadingPaper] = useState<boolean>(false);
+  const [downloadPaperError, setDownloadPaperError] = useState<string | null>(null);
 
+  const handleDownloadPaper = async () => {
+    try {
+      setIsDownloadingPaper(true);
+      setDownloadPaperError(null);
+      const res = await api.downloadQuestionPaperDocket(1, scheduleId, 'student');
+      if (res && res.success) {
+        if (res.download_url) {
+          window.open(res.download_url, '_blank');
+        } else {
+          const blob = new Blob([JSON.stringify(questionPaperData || res, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `CBSE_Class8_Maths_Paper_${res.barcode_hash?.substring(0, 8) || 'Official'}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } else {
+        setDownloadPaperError(res?.message || 'Paper download unavailable until invigilator commences the session.');
+      }
+    } catch (err: any) {
+      setDownloadPaperError(err?.message || 'Failed to download question paper.');
+    } finally {
+      setIsDownloadingPaper(false);
+    }
+  };
+
+
+
+  useEffect(() => {
+    if (!isOpen || !isExamCommenced) return;
+    api.getQuestionPaperDetails(1, scheduleId, 'student').then(res => {
+      if (res && res.sections && res.sections.length > 0) {
+        setQuestionPaperData(res);
+      }
+    }).catch(console.error);
+  }, [isOpen, isExamCommenced, scheduleId]);
 
   // Start webcam proctoring & Web Audio Decibel Monitor
-
   useEffect(() => {
 
     if (!isOpen) return;
@@ -278,11 +327,12 @@ export function OnlineExamModal({
     setHasAgreedRules(false);
 
     // Fetch official CBSE Question Paper from Secrecy Vault
-    api.getQuestionPaperDetails(1).then(res => {
-      if (res && res.sections) {
+    api.getQuestionPaperDetails(1, scheduleId, 'student').then(res => {
+      if (res && res.sections && res.sections.length > 0) {
         setQuestionPaperData(res);
       }
-    }).catch(console.error);;
+    }).catch(console.error);
+
     setIsConfirmedSubmitted(false);
     setIsExamDisqualified(false);
     setIsHardSuspended(false);
@@ -1903,9 +1953,54 @@ export function OnlineExamModal({
     };
     window.addEventListener('storage', handleStorageChange);
 
+    // Authoritative PostgreSQL Session Status Poller
+    let serverPollCounter = 0;
+    const checkServerStatus = async () => {
+      try {
+        const sRes = await api.getExamSessionStatus(1);
+        if (sRes && sRes.session_status === 'COMMENCED') {
+          setIsExamCommenced(true);
+          if (rulesStageRef.current !== 'active') {
+            setRulesStage('active');
+          }
+        } else if (sRes && sRes.session_status === 'CONCLUDED') {
+          setIsExamCommenced(false);
+          setIsExamEndedByTeacher(true);
+          setShowSealCodeExitDialog(true);
+        } else if (sRes && sRes.session_status === 'SCHEDULED') {
+          setIsExamCommenced(false);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('edu360_exam_commenced');
+          }
+        }
+      } catch {}
+    };
+    checkServerStatus();
+
+    const handleCustomCommence = () => {
+      setIsExamCommenced(true);
+      if (rulesStageRef.current !== 'active') {
+        setRulesStage('active');
+      }
+      setHudAlertMessage('🚀 Chief Invigilator Mrs. Ananya Verma has commenced the examination! All questions unlocked.');
+      setTimeout(() => setHudAlertMessage(null), 5000);
+    };
+    const handleCustomConclude = () => {
+      setIsExamCommenced(false);
+      setIsExamEndedByTeacher(true);
+      setShowSealCodeExitDialog(true);
+    };
+    window.addEventListener('edu360_exam_commenced', handleCustomCommence);
+    window.addEventListener('edu360_exam_concluded', handleCustomConclude);
+
     // Active cross-window fallback poller (ensures 100% instant auto-start, auto-resume, auto-conclude)
     const activeSyncPoller = setInterval(() => {
       try {
+        serverPollCounter++;
+        if (serverPollCounter % 8 === 0) {
+          checkServerStatus();
+        }
+
         const isComm = localStorage.getItem('edu360_exam_commenced') === 'true';
         if (isComm) {
           setIsExamCommenced(prev => {
@@ -1939,6 +2034,8 @@ export function OnlineExamModal({
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('edu360_exam_commenced', handleCustomCommence);
+      window.removeEventListener('edu360_exam_concluded', handleCustomConclude);
       clearInterval(activeSyncPoller);
       if (channel) channel.close();
     };
@@ -2144,6 +2241,9 @@ export function OnlineExamModal({
     }
     setCameraActive(false);
 
+    // Generate authoritative dynamic cryptographic seal
+    const generatedSeal = getOrCreateSealHash();
+
     // Notify teacher cockpit in real-time
     try {
       const channel = examBroadcastChannelRef.current || new BroadcastChannel('edu360_exam_live_channel');
@@ -2152,9 +2252,19 @@ export function OnlineExamModal({
         candidateId: candidateId || 1,
         rollNo: '14',
         studentName: studentName || 'Aarav Sharma',
-        sealCode: 'SEAL-8B-9482',
+        sealCode: generatedSeal,
         timestamp: new Date().toISOString()
       });
+    } catch {}
+
+    // Submit candidate attempt to backend with seal code
+    try {
+      api.submitCandidateExam(candidateId || 1, {
+        submission_content: essayContent || 'Completed CBT and MediaPipe proctored session.',
+        words_count: wordCount,
+        time_spent_seconds: durationMinutes * 60 - timeRemainingSeconds,
+        seal_hash: generatedSeal
+      }).catch(err => console.warn('Submit candidate attempt warning:', err));
     } catch {}
 
     setTimeout(() => {
@@ -3065,11 +3175,27 @@ export function OnlineExamModal({
                     </p>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Assessment Weightage</span>
-                    <span className="text-base sm:text-lg font-black font-mono text-violet-700 dark:text-violet-300">
-                      100 Marks (180 Mins)
-                    </span>
+                  <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Assessment Weightage</span>
+                      <span className="text-base sm:text-lg font-black font-mono text-violet-700 dark:text-violet-300">
+                        100 Marks (180 Mins)
+                      </span>
+                    </div>
+                    {isExamCommenced && (
+                      <button
+                        onClick={handleDownloadPaper}
+                        disabled={isDownloadingPaper}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition disabled:opacity-50"
+                        title="Download official examination paper PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {isDownloadingPaper ? 'Downloading...' : 'Download Paper PDF'}
+                      </button>
+                    )}
+                    {downloadPaperError && (
+                      <p className="text-[11px] text-red-500 font-medium">{downloadPaperError}</p>
+                    )}
                   </div>
                 </div>
 
@@ -3788,7 +3914,7 @@ export function OnlineExamModal({
                   WRITE THIS CODE ON TOP-RIGHT CORNER OF ALL SHEETS:
                 </span>
                 <div className="text-3xl sm:text-4xl font-mono font-black text-amber-300 tracking-wider">
-                  SEAL-8B-9482
+                  {dynamicSealHash || getOrCreateSealHash()}
                 </div>
                 <span className="text-[10px] text-slate-400 block font-mono">
                   Session Token: EDU-8B-14 &bull; Timestamp: {new Date().toLocaleTimeString()}
@@ -3809,11 +3935,12 @@ export function OnlineExamModal({
                 <button
                   type="button"
                   onClick={() => {
+                    const finalSeal = dynamicSealHash || getOrCreateSealHash();
                     setShowSealCodeExitDialog(false);
                     setIsConfirmedSubmitted(true);
                     if (onOpenPdfUpload) {
                       onOpenPdfUpload({
-                        sealCode: 'SEAL-8B-9482',
+                        sealCode: finalSeal,
                         subject,
                         examTitle
                       });

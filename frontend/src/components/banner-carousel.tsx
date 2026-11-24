@@ -10,7 +10,8 @@ import {
   ChevronLeft, 
   ChevronRight,
   ArrowRight,
-  Clock
+  Clock,
+  Calendar
 } from 'lucide-react';
 
 interface BannerSlide {
@@ -51,7 +52,7 @@ const defaultSlides: BannerSlide[] = [
   {
     id: 3,
     title: "Fee Milestone 2 Due on 25th Oct",
-    subtitle: "Term 2 tuition & transport fee installment open for online payment.",
+    subtitle: "Term 2 tuition & academic curriculum fee installment open for online payment.",
     badge: "Payment Due",
     badge_color: "bg-amber-100 text-amber-700 border-amber-200",
     action_text: "Pay via UPI / Card",
@@ -61,14 +62,14 @@ const defaultSlides: BannerSlide[] = [
   },
   {
     id: 4,
-    title: "School Bus Route 4 — Live En Route",
-    subtitle: "Bus is 8 mins away from Sector 15 Crossroad Stop.",
-    badge: "Live GPS",
-    badge_color: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    action_text: "Open Live Bus Tracker",
-    action_target: "bus",
-    gradient: "from-emerald-700 via-teal-800 to-slate-900",
-    icon: Navigation
+    title: "Annual STEM & Robotics Exhibition 2026",
+    subtitle: "Inter-school science showcase registrations open for Middle & Senior wings.",
+    badge: "Campus Event",
+    badge_color: "bg-purple-100 text-purple-700 border-purple-200",
+    action_text: "View Campus Calendar",
+    action_target: "events",
+    gradient: "from-purple-700 via-indigo-800 to-slate-900",
+    icon: Calendar
   }
 ];
 

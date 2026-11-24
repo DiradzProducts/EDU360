@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 import datetime
 
 # --- User Schemas ---
@@ -78,8 +78,19 @@ class StudentBase(BaseModel):
 class StudentResponse(StudentBase):
     id: int
     user_id: Optional[int] = None
+    secondary_details: Optional[str] = None
     class Config:
         from_attributes = True
+
+class SecondaryProfileUpdateRequest(BaseModel):
+    secondary_guardian_name: Optional[str] = None
+    secondary_phone: Optional[str] = None
+    secondary_email: Optional[str] = None
+    preferred_language: Optional[str] = None
+    hobbies: Optional[str] = None
+    aspirational_career: Optional[str] = None
+    dietary_preference: Optional[str] = None
+    emergency_notes: Optional[str] = None
 
 # --- Official Document Schemas ---
 class OfficialDocumentBase(BaseModel):
@@ -300,6 +311,14 @@ class AdmissionEnquiryResponse(BaseModel):
         from_attributes = True
 
 # --- Event Schemas ---
+class EventCreate(BaseModel):
+    title: str
+    date: str
+    location: str
+    description: str
+    banner_url: Optional[str] = None
+    status: Optional[str] = "Upcoming"
+
 class EventResponse(BaseModel):
     id: int
     title: str
@@ -601,6 +620,12 @@ class ReportCardSignRequest(BaseModel):
 # --- Fee Schemas ---
 class FeePayRequest(BaseModel):
     payment_method: str = "UPI"  # UPI, Card, NetBanking
+    amount: Optional[float] = None
+    title: Optional[str] = None
+    student_id: Optional[int] = None
+    student_name: Optional[str] = None
+    class_name: Optional[str] = None
+    parent_name: Optional[str] = None
 
 class FeeMilestoneResponse(BaseModel):
     id: int
@@ -1007,7 +1032,7 @@ class PTMSlotResponse(BaseModel):
     cancelled_at: Optional[str] = None
 
 class PTMSlotCancelRequest(BaseModel):
-    slot_id: str
+    slot_id: Optional[str] = None
     cancelled_by: str = "TEACHER"
     cancellation_reason: str = "Official School Duty / Emergency"
     reopen_as_free: bool = True
@@ -1024,7 +1049,7 @@ class PTMSlotBookRequest(BaseModel):
     booked_class: str
     booked_parent_id: str
     booked_parent_name: str
-    interaction_scope: str
+    interaction_scope: Optional[str] = "HOMEROOM_CLASS"
     subject_name: Optional[str] = None
     is_sibling_combo: bool = False
     sibling_student_id: Optional[int] = None
@@ -1249,6 +1274,13 @@ class PaymentTransactionResponse(PaymentTransactionBase):
     reconciled_by: Optional[str] = None
     created_at: datetime.datetime
 
+    @field_serializer("transaction_date", "reconciled_at", "created_at", check_fields=False)
+    def serialize_dt(self, dt: Optional[datetime.datetime], _info):
+        if not dt:
+            return None
+        iso = dt.isoformat()
+        return iso if (iso.endswith("Z") or "+" in iso) else iso + "Z"
+
     class Config:
         from_attributes = True
 
@@ -1375,6 +1407,14 @@ class AuthorizePayrollRequest(BaseModel):
 class DisbursePayrollRequest(BaseModel):
     bank_batch_ref: str = "HDFC-CMS-SAL-OCT26-001"
     disbursed_by: str = "Mr. Arvind Krishnan (Accounts Officer)"
+
+class RequestPayrollRevisionRequest(BaseModel):
+    requested_by: str = "Dr. Sunita Kapoor (Principal)"
+    notes: Optional[str] = "Please verify attendance, loss of pay deductions, and statutory EPF/TDS withholdings."
+
+class ResubmitPayrollRequest(BaseModel):
+    resubmitted_by: str = "Mr. Arvind Krishnan (Accounts Officer)"
+    notes: Optional[str] = "Addressed audit queries, recalculated deduction slabs, and resubmitted for Principal authorization."
 
 class PurchaseOrderBase(BaseModel):
     po_number: str
@@ -1716,6 +1756,79 @@ class MarkPeriodAttendancePayload(BaseModel):
     time_slot: str
     topic_covered: Optional[str] = None
     records: list[PeriodAttendanceRecordInput]
+
+
+# =========================================================================
+# ACADEMIC COORDINATOR & EXAM COORDINATOR INTERACTION SCHEMAS
+# =========================================================================
+
+class ExamSyncCreateRequest(BaseModel):
+    title: str
+    class_name: str
+    subject: str
+    curriculum_lag_units: int = 2
+    current_completion_pct: float = 40.0
+    proposed_resolution: str = "POSTPONE_EXAM"  # POSTPONE_EXAM, TRIM_SYLLABUS_CUTOFF, EXTRA_REMEDIAL
+    notes: Optional[str] = None
+    meeting_date: Optional[str] = "Tomorrow, 03:00 PM"
+    meeting_venue: Optional[str] = "Exam Cell Conference / Virtual Room A"
+    requested_by_name: Optional[str] = None
+    requested_by_role: Optional[str] = None
+
+
+class ExamSyncResolveRequest(BaseModel):
+    status: str = "SYNC_SCHEDULED"  # SYNC_SCHEDULED, RESOLVED, REJECTED
+    meeting_date: Optional[str] = None
+    meeting_venue: Optional[str] = None
+    resolution_notes: Optional[str] = None
+
+
+class ExamSyncResponse(BaseModel):
+    id: int
+    title: str
+    class_name: str
+    subject: str
+    curriculum_lag_units: int
+    current_completion_pct: float
+    proposed_resolution: str
+    notes: Optional[str] = None
+    status: str
+    requested_by_name: str
+    requested_by_role: str
+    meeting_date: Optional[str] = None
+    meeting_venue: Optional[str] = None
+    resolution_notes: Optional[str] = None
+    created_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PTMFacultyAttendanceItem(BaseModel):
+    teacher_id: str
+    teacher_name: str
+    department: str
+    total_slots: int
+    booked_slots: int
+    completed_slots: int
+    scheduled_slots: int
+    teacher_absent_slots: int
+    parent_no_show_slots: int
+    attendance_rate_pct: float
+    is_fully_attended: bool
+
+
+class PTMFacultyAttendanceSummaryResponse(BaseModel):
+    event_id: str
+    event_title: str
+    total_faculty_count: int
+    total_slots_count: int
+    total_booked_count: int
+    total_completed_count: int
+    overall_attendance_rate_pct: float
+    faculty_attendance: list[PTMFacultyAttendanceItem]
+
 
 
 

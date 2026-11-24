@@ -99,6 +99,12 @@ async def create_system_notification(
         logger.error(f"Failed to dispatch system notification: {e}")
         raise
 
+def _to_utc_iso(dt: Optional[datetime.datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    iso = dt.isoformat()
+    return iso if (iso.endswith("Z") or "+" in iso) else iso + "Z"
+
 @router.get("")
 async def get_notifications(
     user_id: Optional[int] = None,
@@ -114,15 +120,22 @@ async def get_notifications(
     conditions = []
     
     if user_id is not None and role:
-        # Match user ID specifically or match role-wide notification
+        # Match user ID specifically or match role-wide notification (including "all")
         conditions.append(or_(
             Notification.recipient_user_id == user_id,
-            and_(Notification.recipient_role == role, Notification.recipient_user_id.is_(None))
+            Notification.recipient_role == role,
+            Notification.recipient_role == "all"
         ))
     elif user_id is not None:
-        conditions.append(Notification.recipient_user_id == user_id)
+        conditions.append(or_(
+            Notification.recipient_user_id == user_id,
+            Notification.recipient_role == "all"
+        ))
     elif role:
-        conditions.append(Notification.recipient_role == role)
+        conditions.append(or_(
+            Notification.recipient_role == role,
+            Notification.recipient_role == "all"
+        ))
 
     if unread_only:
         conditions.append(Notification.is_read == False)
@@ -166,8 +179,8 @@ async def get_notifications(
             "action_url": n.action_url,
             "metadata": meta,
             "is_read": n.is_read,
-            "created_at": n.created_at.isoformat() if n.created_at else None,
-            "read_at": n.read_at.isoformat() if n.read_at else None
+            "created_at": _to_utc_iso(n.created_at),
+            "read_at": _to_utc_iso(n.read_at)
         })
 
     return {

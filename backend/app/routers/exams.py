@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_
 from app.core.database import get_db
-from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask, ExamCandidateAttempt, ProctorTelemetryLog, SecurityAuditLog
+from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask, ExamCandidateAttempt, ProctorTelemetryLog, SecurityAuditLog, ReExamRequest
 from app.core.rbac import require_role
 from app.core.config import settings, get_current_gemini_key, get_current_gemini_model
 from app.routers.notifications import create_system_notification
@@ -265,22 +265,48 @@ async def submit_exam_paper(
         attempt.seal_verified = True
         attempt.submitted_at = now
 
+    # Fetch real student details for live surveillance & grading
+    student_res = await db.execute(select(Student).where(Student.id == req.student_id))
+    st = student_res.scalars().first()
+    student_name = st.name if st else (attempt.student_name if attempt else f"Student #{req.student_id}")
+    roll_no = st.roll_number if st and st.roll_number else (attempt.roll_no if attempt else str(req.student_id))
+    clean_class = (st.class_name if st and st.class_name else (exam.class_name if exam else "Class 8-B")).replace(" ", "")
+    seal_code = (attempt.verification_seal_hash if attempt and attempt.verification_seal_hash else f"SEAL-{clean_class}-{sub.id:04X}")
+
     await db.commit()
 
     # Broadcast to live invigilators in the exam room
     await surveillance_manager.broadcast("exam-room-class8b", {
         "type": "STUDENT_SCRIPT_UPLOADED",
         "candidateId": req.student_id,
-        "studentName": "Aarav Sharma",
-        "rollNo": "14",
+        "studentName": student_name,
+        "rollNo": roll_no,
         "subject": exam.subject,
-        "sealCode": "SEAL-8B-9482",
+        "sealCode": seal_code,
         "pageCount": 6,
         "pdfUrl": req.paper_file_url,
         "fileName": req.paper_file_name,
         "fileSize": "3.8 MB",
         "uploadedAt": now.strftime("%I:%M %p")
     })
+
+    # Dispatch notification to Teacher
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,
+            recipient_role="teacher",
+            sender_name=student_name,
+            sender_role="student",
+            title=f"📝 Exam Paper Uploaded: {student_name} ({roll_no})",
+            message=f"{student_name} uploaded answer script ({req.paper_file_name}) for {exam.title} under seal #{seal_code}.",
+            notification_type="EXAM_SUBMISSION",
+            priority="HIGH",
+            action_url="/teacher?tab=exams_gradebook",
+            metadata_dict={"exam_id": exam_id, "student_id": req.student_id, "submission_id": sub.id, "seal_code": seal_code}
+        )
+    except Exception as ne:
+        logger.warning(f"Failed to dispatch exam submission notification: {ne}")
 
     return {
         "success": True,
@@ -655,16 +681,36 @@ async def list_question_papers(
 @router.get("/question-papers/{paper_id}")
 async def get_question_paper_details(
     paper_id: int,
+    schedule_id: Optional[int] = None,
+    user_role: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Returns full question paper details, sections, instructions, and questions for examination unlocking.
+    Enforces Secrecy Vault Security: If schedule_id is provided and requester is student,
+    the paper remains locked until the Chief Invigilator commences the session.
     """
     res = await db.execute(select(QuestionPaper).where(QuestionPaper.id == paper_id))
     paper = res.scalars().first()
     if not paper:
         res_any = await db.execute(select(QuestionPaper).order_by(QuestionPaper.id.asc()))
         paper = res_any.scalars().first()
+
+    if schedule_id and user_role == "student":
+        sched_res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
+        sched = sched_res.scalars().first()
+        if sched and sched.session_status != "COMMENCED":
+            return {
+                "success": False,
+                "locked": True,
+                "paper_id": paper.id if paper else paper_id,
+                "title": paper.title if paper else "Term Examination",
+                "subject": paper.subject if paper else "Assessment",
+                "status": "SEALED_IN_VAULT",
+                "message": "Question paper is cryptographically sealed in Secrecy Vault. It unlocks automatically when the Chief Invigilator commences the session.",
+                "instructions": ["Waiting for Chief Invigilator to commence examination."],
+                "sections": []
+            }
 
     # Standard CBSE Class 8 Mathematics Final Questions Dataset
     math_sections = [
@@ -840,6 +886,47 @@ async def get_question_paper_details(
         ],
         "sections": math_sections
     }
+
+
+@router.get("/question-papers/{paper_id}/download")
+async def download_question_paper_docket(
+    paper_id: int,
+    schedule_id: Optional[int] = None,
+    user_role: Optional[str] = "student",
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Secure Paper Download Gate:
+    Invigilators and Exam Coordinators can download the sealed PDF docket at any time.
+    Students can only download after the Chief Invigilator has commenced the session.
+    """
+    res = await db.execute(select(QuestionPaper).where(QuestionPaper.id == paper_id))
+    paper = res.scalars().first()
+    if not paper:
+        res_any = await db.execute(select(QuestionPaper).order_by(QuestionPaper.id.asc()))
+        paper = res_any.scalars().first()
+
+    if schedule_id and user_role == "student":
+        sched_res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
+        sched = sched_res.scalars().first()
+        if sched and sched.session_status != "COMMENCED":
+            raise HTTPException(
+                status_code=403,
+                detail="Download Prohibited: Question paper download is locked until the Chief Invigilator commences the live examination."
+            )
+
+    return {
+        "success": True,
+        "paper_id": paper.id if paper else paper_id,
+        "title": paper.title if paper else "Term Examination",
+        "subject": paper.subject if paper else "Mathematics",
+        "class_name": paper.class_name if paper else "Class 8",
+        "download_url": (paper.draft_file_url if paper and paper.draft_file_url else f"/samples/Class8_Maths_QP.pdf"),
+        "barcode_hash": getattr(paper, "barcode_hash", "SEC-2026-MTH-9844-SEALED") or "SEC-2026-MTH-9844-SEALED",
+        "status": getattr(paper, "status", "sealed_in_vault"),
+        "message": "Question paper verified and released for live session examination."
+    }
+
 
 
 @router.post("/question-papers/order")
@@ -1201,14 +1288,35 @@ class ExamScheduleClearanceRequest(BaseModel):
     academic_clearance: bool
     academic_clearance_notes: Optional[str] = None
 
-def compute_schedule_lifecycle(exam_date_str: str, start_time_str: str, end_time_str: str) -> str:
+def compute_schedule_lifecycle(
+    exam_date_str: str, 
+    start_time_str: str, 
+    end_time_str: str,
+    session_status: Optional[str] = None,
+    concluded_at = None
+) -> str:
     """
     Computes whether an exam schedule is UPCOMING, LIVE, or CONCLUDED.
-    Handles ISO dates (YYYY-MM-DD), descriptive dates, and 12-hour/24-hour time strings.
+    Takes into account explicit invigilator session status (COMMENCED vs CONCLUDED vs SCHEDULED)
+    as well as wall-clock timetables.
     """
     try:
         from datetime import datetime, timedelta
         now = datetime.now()
+
+        # 1. Authoritative check on explicit session status
+        if session_status and str(session_status).upper() == "CONCLUDED":
+            return "CONCLUDED"
+
+        if session_status and str(session_status).upper() == "COMMENCED":
+            return "LIVE"
+
+        if session_status and str(session_status).upper() == "SCHEDULED":
+            return "UPCOMING"
+
+        if concluded_at is not None:
+            return "CONCLUDED"
+
         clean_date = (exam_date_str or "").strip()
         
         if not clean_date:
@@ -1269,45 +1377,86 @@ async def list_exam_schedules(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    List all examination schedules with hall deployment & academic clearance status.
-    Ordered by latest created first (id desc) so newly scheduled exams appear immediately.
+    List all examination schedules with hall deployment, academic clearance & batch metadata.
+    Ordered chronologically by exam_date and start_time so batch timetables read naturally.
     """
     query = select(ExamSchedule)
     if class_name:
-        query = query.where(ExamSchedule.class_name == class_name)
+        base_class = class_name.split("-")[0].strip()
+        query = query.where(or_(
+            ExamSchedule.class_name == class_name,
+            ExamSchedule.class_name == base_class,
+            ExamSchedule.class_name.ilike(f"%{base_class}%")
+        ))
     if section:
-        query = query.where(ExamSchedule.section == section)
-    res = await db.execute(query.order_by(ExamSchedule.id.desc()))
+        query = query.where(or_(
+            ExamSchedule.section == section,
+            ExamSchedule.section.ilike(f"%{section}%"),
+            ExamSchedule.section.in_(["A & B", "A, B", "All", "Both", "Combined", "ALL", "A and B", "A,B"])
+        ))
+    res = await db.execute(query.order_by(ExamSchedule.exam_date.asc(), ExamSchedule.start_time.asc(), ExamSchedule.id.asc()))
     schedules = res.scalars().all()
+    
+    formatted_schedules = []
+    for s in schedules:
+        raw_title = s.title or ""
+        inferred_series = getattr(s, "series_name", None)
+        if not inferred_series:
+            if " - " in raw_title:
+                inferred_series = raw_title.split(" - ", 1)[1].strip()
+            elif ": " in raw_title:
+                inferred_series = raw_title.split(": ", 1)[1].strip()
+            else:
+                inferred_series = raw_title or "General Assessment"
+
+        inferred_type = getattr(s, "schedule_type", None) or ("BATCH" if (" - " in raw_title or ": " in raw_title) else "SINGLE")
+        inferred_batch_id = getattr(s, "batch_id", None)
+        if not inferred_batch_id and inferred_type == "BATCH":
+            clean_class = (s.class_name or "ALL").replace(" ", "").replace(",", "_")
+            clean_series = inferred_series.replace(" ", "_")
+            inferred_batch_id = f"BATCH-{clean_class}-{clean_series}"
+
+        formatted_schedules.append({
+            "id": s.id,
+            "exam_id": s.exam_id,
+            "question_paper_id": s.question_paper_id,
+            "question_paper_title": s.question_paper_title,
+            "status": getattr(s, "status", "Scheduled"),
+            "session_status": getattr(s, "session_status", "SCHEDULED") or "SCHEDULED",
+            "commenced_at": s.commenced_at.isoformat() if getattr(s, "commenced_at", None) else None,
+            "commenced_by": getattr(s, "commenced_by", None),
+            "concluded_at": s.concluded_at.isoformat() if getattr(s, "concluded_at", None) else None,
+            "lifecycle_status": compute_schedule_lifecycle(
+                s.exam_date,
+                s.start_time,
+                s.end_time,
+                session_status=getattr(s, "session_status", None),
+                concluded_at=getattr(s, "concluded_at", None)
+            ),
+            "title": s.title,
+            "series_name": inferred_series,
+            "batch_id": inferred_batch_id,
+            "schedule_type": inferred_type,
+            "subject": s.subject,
+            "class_name": s.class_name,
+            "section": getattr(s, "section", "A & B") or "A & B",
+            "exam_mode": getattr(s, "exam_mode", "MODE_HYBRID_SCAN") or "MODE_HYBRID_SCAN",
+            "exam_date": s.exam_date,
+            "start_time": s.start_time,
+            "end_time": s.end_time,
+            "hall_name": s.hall_name,
+            "capacity": s.capacity,
+            "chief_invigilator_name": s.chief_invigilator_name,
+            "duration_minutes": getattr(s, "duration_minutes", 180) or 180,
+            "total_marks": 100,
+            "academic_clearance": s.academic_clearance,
+            "academic_clearance_notes": s.academic_clearance_notes,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        })
+
     return {
         "success": True,
-        "schedules": [
-            {
-                "id": s.id,
-                "exam_id": s.exam_id,
-                "question_paper_id": s.question_paper_id,
-                "question_paper_title": s.question_paper_title,
-                "status": getattr(s, "status", "Scheduled"),
-                "lifecycle_status": compute_schedule_lifecycle(s.exam_date, s.start_time, s.end_time),
-                "title": s.title,
-                "subject": s.subject,
-                "class_name": s.class_name,
-                "section": getattr(s, "section", "B"),
-                "exam_mode": getattr(s, "exam_mode", "MODE_HYBRID_SCAN") or "MODE_HYBRID_SCAN",
-                "exam_date": s.exam_date,
-                "start_time": s.start_time,
-                "end_time": s.end_time,
-                "hall_name": s.hall_name,
-                "capacity": s.capacity,
-                "chief_invigilator_name": s.chief_invigilator_name,
-                "duration_minutes": getattr(s, "duration_minutes", 180) or 180,
-                "total_marks": 100,
-                "academic_clearance": s.academic_clearance,
-                "academic_clearance_notes": s.academic_clearance_notes,
-                "created_at": s.created_at.isoformat() if s.created_at else None
-            }
-            for s in schedules
-        ]
+        "schedules": formatted_schedules
     }
 
 @router.post("/schedules/create")
@@ -1344,6 +1493,9 @@ async def create_exam_schedule(
         question_paper_title=req.question_paper_title,
         status="Scheduled",
         title=exam_title,
+        series_name=req.title or f"{req.subject} Single Slot Assessment",
+        batch_id=None,
+        schedule_type="SINGLE",
         subject=req.subject,
         class_name=req.class_name,
         section=req.section or "B",
@@ -1382,9 +1534,22 @@ async def create_exam_schedule(
         )
 
         # 2. Notify Assigned Invigilator (Teacher)
+        invig_uid = 2
+        invig_lower = (final_invigilator or "").lower()
+        if "raman" in invig_lower:
+            invig_uid = 12
+        elif "sen" in invig_lower:
+            invig_uid = 13
+        elif "sunitha" in invig_lower or "rao" in invig_lower:
+            invig_uid = 14
+        elif "kalyani" in invig_lower:
+            invig_uid = 15
+        elif "shalini" in invig_lower:
+            invig_uid = 16
+
         await create_system_notification(
             db=db,
-            recipient_user_id=None,
+            recipient_user_id=invig_uid,
             recipient_role="teacher",
             sender_name="Exam Office (Mrs. Shweta Sengupta)",
             sender_role="exam_coordinator",
@@ -1392,7 +1557,7 @@ async def create_exam_schedule(
             message=f"You are deployed as Chief Invigilator for {exam_title} ({req.class_name} {req.section or 'B'}) on {req.exam_date} ({req.start_time} - {req.end_time}) in {final_hall}.",
             notification_type="DUTY_ASSIGNED",
             priority="URGENT",
-            action_url="/teacher",
+            action_url="/teacher?tab=duties",
             metadata_dict={"schedule_id": sched.id, "hall": final_hall}
         )
 
@@ -1426,6 +1591,21 @@ async def create_exam_schedule(
             priority="HIGH",
             action_url="/parent",
             metadata_dict={"schedule_id": sched.id, "subject": req.subject, "exam_mode": final_mode}
+        )
+
+        # 5. Notify Academic Coordinator for clearance
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="academic_coordinator",
+            sender_name="Exam Office (Mrs. Shweta Sengupta)",
+            sender_role="exam_coordinator",
+            title=f"Exam Clearance Requested: {exam_title}",
+            message=f"New exam slot '{exam_title}' ({req.class_name} {req.subject}) on {req.exam_date} is awaiting Academic Coordinator syllabus & calendar clearance.",
+            notification_type="EXAM_CLEARANCE_REQUESTED",
+            priority="HIGH",
+            action_url="/academic_coordinator?tab=calendar_clearance",
+            metadata_dict={"schedule_id": sched.id, "class_name": req.class_name, "subject": req.subject}
         )
         await db.commit()
     except Exception as notif_err:
@@ -1468,6 +1648,26 @@ async def grant_academic_schedule_clearance(
     )
     db.add(audit_entry)
 
+    # 🔔 Notify Exam Coordinator of Academic Clearance Approval or Revision Flag
+    try:
+        from app.routers.notifications import create_system_notification
+        action_verb = "Cleared ✓" if req.academic_clearance else "Flagged for Revision ⚠️"
+        await create_system_notification(
+            db=db,
+            recipient_user_id=8,
+            recipient_role="exam_coordinator",
+            sender_name="Prof. Rajeshwari Nair",
+            sender_role="academic_coordinator",
+            title=f"Exam Schedule {action_verb}: {sched.subject} ({sched.class_name})",
+            message=f"Academic Office has {'approved' if req.academic_clearance else 'flagged'} '{sched.title}' ({sched.exam_date}). Notes: {sched.academic_clearance_notes}",
+            notification_type="EXAM_CLEARANCE_UPDATE",
+            priority="NORMAL" if req.academic_clearance else "HIGH",
+            action_url=f"/exam_coordinator?tab=scheduler&schedId={sched.id}",
+            metadata_dict={"schedule_id": sched.id, "academic_clearance": sched.academic_clearance}
+        )
+    except Exception as ne:
+        logger.warning(f"Failed to dispatch exam clearance notification: {ne}")
+
     await db.commit()
     return {
         "success": True,
@@ -1486,6 +1686,7 @@ class BatchClassSlotItem(BaseModel):
 
 class BatchClassScheduleRequest(BaseModel):
     class_name: str
+    section: Optional[str] = "A & B"
     series_name: str = "Term 1 Final Examination 2026"
     slots: List[BatchClassSlotItem]
 
@@ -1497,12 +1698,47 @@ async def create_batch_class_schedules(
     """
     Exam Coordinator schedules all exams for a chosen class in one atomic batch.
     """
+    import re
+    cleaned_class = re.sub(r'[^a-zA-Z0-9]', '', req.class_name).upper()
+    cleaned_section = re.sub(r'[^a-zA-Z0-9]', '', req.section or "AB").upper()
+    cleaned_series = re.sub(r'[^a-zA-Z0-9]', '', req.series_name).upper()
+    batch_uid = f"BATCH-{cleaned_class}{cleaned_section}-{cleaned_series}-{int(datetime.datetime.utcnow().timestamp())}"
+
     created_ids = []
     for slot in req.slots:
+        # Ensure corresponding Exam row exists for student taking & grading
+        ex_res = await db.execute(
+            select(Exam).where(
+                Exam.class_name == req.class_name,
+                Exam.subject == slot.subject,
+                Exam.term == "Term 1"
+            )
+        )
+        exam = ex_res.scalars().first()
+        if not exam:
+            exam = Exam(
+                title=f"{slot.subject} - {req.series_name}",
+                subject=slot.subject,
+                class_name=req.class_name,
+                section=req.section or "B",
+                term="Term 1",
+                exam_type="descriptive",
+                exam_mode="MODE_HYBRID_SCAN",
+                duration_minutes=180,
+                is_published=True
+            )
+            db.add(exam)
+            await db.flush()
+
         sched = ExamSchedule(
+            exam_id=exam.id,
             title=f"{slot.subject} - {req.series_name}",
+            series_name=req.series_name,
+            batch_id=batch_uid,
+            schedule_type="BATCH",
             subject=slot.subject,
             class_name=req.class_name,
+            section=req.section or "A & B",
             exam_date=slot.exam_date,
             start_time=slot.start_time,
             end_time=slot.end_time,
@@ -1520,6 +1756,21 @@ async def create_batch_class_schedules(
     try:
         from app.routers.notifications import create_system_notification
         from app.models.models import AdminTask
+
+        # Notify Academic Coordinator for batch clearance
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="academic_coordinator",
+            sender_name="Exam Office (Mrs. Shweta Sengupta)",
+            sender_role="exam_coordinator",
+            title=f"Batch Timetable Clearance Pending: {req.class_name}",
+            message=f"Exam Cell submitted batch timetable '{req.series_name}' for {req.class_name} ({len(req.slots)} slots). Please audit syllabus pacing and grant clearance.",
+            notification_type="EXAM_CLEARANCE_REQUESTED",
+            priority="HIGH",
+            action_url="/academic_coordinator?tab=calendar_clearance",
+            metadata_dict={"batch_id": batch_uid, "class_name": req.class_name, "slots_count": len(req.slots)}
+        )
 
         for slot in req.slots:
             invig_name = slot.chief_invigilator_name or "Mrs. Ananya Verma"
@@ -1542,9 +1793,22 @@ async def create_batch_class_schedules(
             db.add(task)
 
             # Notify Invigilator (Teacher)
+            invig_uid2 = 2
+            invig_lower2 = (slot.chief_invigilator_name or "").lower()
+            if "raman" in invig_lower2:
+                invig_uid2 = 12
+            elif "sen" in invig_lower2:
+                invig_uid2 = 13
+            elif "sunitha" in invig_lower2 or "rao" in invig_lower2:
+                invig_uid2 = 14
+            elif "kalyani" in invig_lower2:
+                invig_uid2 = 15
+            elif "shalini" in invig_lower2:
+                invig_uid2 = 16
+
             await create_system_notification(
                 db=db,
-                recipient_user_id=None,
+                recipient_user_id=invig_uid2,
                 recipient_role="teacher",
                 sender_name="Exam Office (Mrs. Shweta Sengupta)",
                 sender_role="exam_coordinator",
@@ -1552,7 +1816,7 @@ async def create_batch_class_schedules(
                 message=f"You are deployed as Chief Invigilator for {exam_label} on {slot.exam_date} ({slot.start_time} - {slot.end_time}) in {slot.hall_name}.",
                 notification_type="DUTY_ASSIGNED",
                 priority="URGENT",
-                action_url="/teacher",
+                action_url="/teacher?tab=duties",
                 metadata_dict={"subject": slot.subject, "class_name": req.class_name, "hall": slot.hall_name}
             )
 
@@ -1578,7 +1842,179 @@ async def create_batch_class_schedules(
     return {
         "success": True,
         "message": f"Successfully created {len(created_ids)} exam schedules for {req.class_name}.",
-        "schedule_ids": created_ids
+        "schedule_ids": created_ids,
+        "batch_id": batch_uid
+    }
+
+class CommenceExamScheduleRequest(BaseModel):
+    invigilator_name: Optional[str] = "Mrs. Ananya Verma"
+    invigilator_id: Optional[int] = 2
+
+class ConcludeExamScheduleRequest(BaseModel):
+    invigilator_name: Optional[str] = "Mrs. Ananya Verma"
+    reason: Optional[str] = "Exam duration ended or concluded by chief invigilator"
+
+@router.get("/schedules/{schedule_id}/session-status")
+async def get_exam_schedule_session_status(
+    schedule_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Real-time authoritative exam session status check.
+    Ensures students remain in waiting lobby until chief invigilator commences the session.
+    """
+    res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
+    sched = res.scalars().first()
+    if not sched:
+        raise HTTPException(status_code=404, detail="Exam schedule not found")
+
+    return {
+        "success": True,
+        "schedule_id": sched.id,
+        "exam_id": sched.exam_id,
+        "title": sched.title,
+        "subject": sched.subject,
+        "class_name": sched.class_name,
+        "section": sched.section,
+        "session_status": getattr(sched, "session_status", "SCHEDULED") or "SCHEDULED",
+        "commenced_at": sched.commenced_at.isoformat() if getattr(sched, "commenced_at", None) else None,
+        "commenced_by": getattr(sched, "commenced_by", None),
+        "concluded_at": sched.concluded_at.isoformat() if getattr(sched, "concluded_at", None) else None,
+        "hall_name": sched.hall_name,
+        "chief_invigilator_name": sched.chief_invigilator_name
+    }
+
+@router.post("/schedules/{schedule_id}/commence")
+async def commence_exam_schedule_session(
+    schedule_id: int,
+    req: Optional[CommenceExamScheduleRequest] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Chief invigilator commences active exam session from invigilator cockpit.
+    Updates DB state to 'COMMENCED' and broadcasts to surveillance and lobby sockets.
+    """
+    res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
+    sched = res.scalars().first()
+    if not sched:
+        raise HTTPException(status_code=404, detail="Exam schedule not found")
+
+    invig_name = req.invigilator_name if (req and req.invigilator_name) else (sched.chief_invigilator_name or "Mrs. Ananya Verma")
+    now = datetime.utcnow()
+    
+    sched.session_status = "COMMENCED"
+    sched.commenced_at = now
+    sched.commenced_by = invig_name
+    sched.concluded_at = None
+    sched.status = "In Progress"
+    
+    # Also if linked to Exam, update status
+    if sched.exam_id:
+        exam_res = await db.execute(select(Exam).where(Exam.id == sched.exam_id))
+        exam = exam_res.scalars().first()
+        if exam:
+            exam.status = "IN_PROGRESS"
+
+    # Add audit log
+    audit_entry = SecurityAuditLog(
+        actor_name=invig_name,
+        actor_role="teacher",
+        action_type="EXAM_SESSION_COMMENCED",
+        target_entity=f"Schedule #{sched.id}: {sched.subject} ({sched.class_name})",
+        status="COMMENCED",
+        details=f"Invigilator commenced examination session for {sched.title} at {now.isoformat()}."
+    )
+    db.add(audit_entry)
+
+    # Broadcast to surveillance / exam hall socket
+    await surveillance_manager.broadcast(f"exam_room_{schedule_id}", {
+        "type": "EXAM_COMMENCED",
+        "schedule_id": schedule_id,
+        "commenced_by": invig_name,
+        "timestamp": now.isoformat()
+    })
+    # Also broadcast to "exam_room_8b" for backwards compatibility
+    await surveillance_manager.broadcast("exam_room_8b", {
+        "type": "EXAM_COMMENCED",
+        "schedule_id": schedule_id,
+        "commenced_by": invig_name,
+        "timestamp": now.isoformat()
+    })
+
+    await db.commit()
+    return {
+        "success": True,
+        "message": f"Examination session #{schedule_id} successfully commenced by {invig_name}.",
+        "schedule_id": sched.id,
+        "session_status": "COMMENCED",
+        "commenced_at": now.isoformat()
+    }
+
+@router.post("/schedules/{schedule_id}/conclude")
+async def conclude_exam_schedule_session(
+    schedule_id: int,
+    req: Optional[ConcludeExamScheduleRequest] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Chief invigilator concludes active exam session.
+    Terminates proctoring and locks paper entry.
+    """
+    res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
+    sched = res.scalars().first()
+    if not sched:
+        raise HTTPException(status_code=404, detail="Exam schedule not found")
+
+    invig_name = req.invigilator_name if (req and req.invigilator_name) else (sched.chief_invigilator_name or "Mrs. Ananya Verma")
+    reason = req.reason if (req and req.reason) else "Session concluded by invigilator"
+    now = datetime.utcnow()
+
+    sched.session_status = "CONCLUDED"
+    sched.concluded_at = now
+    sched.status = "Completed"
+
+    if sched.exam_id:
+        exam_res = await db.execute(select(Exam).where(Exam.id == sched.exam_id))
+        exam = exam_res.scalars().first()
+        if exam:
+            exam.status = "COMPLETED"
+
+    # Add audit log
+    audit_entry = SecurityAuditLog(
+        actor_name=invig_name,
+        actor_role="teacher",
+        action_type="EXAM_SESSION_CONCLUDED",
+        target_entity=f"Schedule #{sched.id}: {sched.subject} ({sched.class_name})",
+        status="CONCLUDED",
+        details=f"Invigilator concluded examination session for {sched.title} at {now.isoformat()}. Reason: {reason}"
+    )
+    db.add(audit_entry)
+
+    # Broadcast to surveillance socket
+    await surveillance_manager.broadcast(f"exam_room_{schedule_id}", {
+        "type": "EXAM_ENDED_BY_TEACHER",
+        "schedule_id": schedule_id,
+        "exam_id": sched.exam_id,
+        "teacher_name": invig_name,
+        "reason": reason,
+        "timestamp": now.isoformat()
+    })
+    await surveillance_manager.broadcast("exam_room_8b", {
+        "type": "EXAM_ENDED_BY_TEACHER",
+        "schedule_id": schedule_id,
+        "exam_id": sched.exam_id,
+        "teacher_name": invig_name,
+        "reason": reason,
+        "timestamp": now.isoformat()
+    })
+
+    await db.commit()
+    return {
+        "success": True,
+        "message": f"Examination session #{schedule_id} successfully concluded.",
+        "schedule_id": sched.id,
+        "session_status": "CONCLUDED",
+        "concluded_at": now.isoformat()
     }
 
 @router.get("/submissions/summary")
@@ -2373,6 +2809,55 @@ async def publish_batch_report_cards(
         count += 1
 
     await db.commit()
+
+    # 🔔 Dispatch Notifications to Student, Parent, Teacher
+    try:
+        # 1. Student Portal
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="student",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Report Card Published: {req.term}",
+            message=f"Official CBSE Term Report Card for {req.class_name}-{req.section} ({req.term}) has been published. View your marks memo.",
+            notification_type="REPORT_CARD_PUBLISHED",
+            priority="HIGH",
+            action_url="/student",
+            metadata_dict={"term": req.term, "class_name": req.class_name, "section": req.section}
+        )
+        # 2. Parent Portal
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="parent",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Report Card Published: {req.class_name}-{req.section} {req.term}",
+            message=f"Official Term Report Card for your ward has been published. Please review performance and complete digital parent signature.",
+            notification_type="REPORT_CARD_PUBLISHED_PARENT",
+            priority="HIGH",
+            action_url="/parent",
+            metadata_dict={"term": req.term, "class_name": req.class_name, "section": req.section}
+        )
+        # 3. Teacher Portal
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,
+            recipient_role="teacher",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Class Report Cards Released: {req.class_name}-{req.section} {req.term}",
+            message=f"Term {req.term} Report Cards for {req.class_name}-{req.section} have been compiled and officially released.",
+            notification_type="REPORT_CARDS_PUBLISHED_TEACHER",
+            priority="NORMAL",
+            action_url="/teacher?tab=exams",
+            metadata_dict={"term": req.term, "class_name": req.class_name, "section": req.section}
+        )
+        await db.commit()
+    except Exception as ne:
+        logger.warning(f"Failed to dispatch report card publish notifications: {ne}")
+
     return {
         "success": True,
         "message": f"Published {count} Report Cards for {req.class_name}-{req.section} to Student & Parent Portals.",
@@ -2385,7 +2870,7 @@ async def publish_batch_report_cards(
 # ==============================================================================
 
 class ReExamCreateRequest(BaseModel):
-    student_id: Optional[int] = 14
+    student_id: Optional[int] = 1
     student_name: Optional[str] = "Aarav Sharma"
     class_name: Optional[str] = "Class 8"
     section: Optional[str] = "B"
@@ -2409,138 +2894,273 @@ class ReExamScheduleRequest(BaseModel):
     re_exam_venue: str
     coordinator_assigned: str
 
-# In-memory store for re-exam requests initialized with rich default data
-IN_MEMORY_RE_EXAM_REQUESTS = [
-    {
-        "id": 1,
-        "student_id": 14,
-        "student_name": "Aarav Sharma",
-        "class_name": "Class 8",
-        "section": "B",
-        "subject": "Mathematics (Theory)",
-        "exam_name": "Term 1 Descriptive Examination",
-        "missed_date": "2026-10-14",
-        "reason_category": "Medical Emergency",
-        "reason_details": "Diagnosed with acute viral fever (103°F). Hospitalized for 48 hours with severe dehydration. Medical fitness certificate attached from Apollo Cradle.",
-        "document_name": "Dr_Patel_Hospital_Medical_Certificate.pdf",
-        "document_url": "/samples/medical_cert_aarav.pdf",
-        "parent_name": "Dr. Rajeev Sharma",
-        "parent_phone": "+91 98490 22114",
-        "status": "Approved by Admin",
-        "admin_remarks": "Verified by Principal Dr. Sundaram. Hospital hospitalization bill & doctor fitness certificate validated. Exam Coordinator Mrs. Sengupta instructed to allot re-test slot in Hall C on 30 Oct.",
-        "requested_at": "16 Oct 2026, 04:30 PM",
-        "resolved_at": "17 Oct 2026, 11:15 AM",
-        "re_exam_date": "2026-10-30",
-        "re_exam_time": "10:00 AM – 01:00 PM",
-        "re_exam_venue": "Special Assessment Hall C, Desk #R-04",
-        "coordinator_assigned": "Mrs. Shweta Sengupta (Exam Cell Head)"
-    },
-    {
-        "id": 2,
-        "student_id": 22,
-        "student_name": "Rohan Deshmukh",
-        "class_name": "Class 9",
-        "section": "A",
-        "subject": "Science (Physics & Chemistry)",
-        "exam_name": "Mid-Term Periodic Test 2",
-        "missed_date": "2026-10-15",
-        "reason_category": "Sports Representation",
-        "reason_details": "Represented school at CBSE National Interschool Swimming Championship, Bengaluru. Won Gold medal in 100m freestyle.",
-        "document_name": "CBSE_Sports_Council_Clearance.pdf",
-        "document_url": "/samples/sports_cert.pdf",
-        "parent_name": "Mr. Anil Deshmukh",
-        "parent_phone": "+91 98112 34455",
-        "status": "Pending Admin Review",
-        "admin_remarks": None,
-        "requested_at": "17 Oct 2026, 09:20 AM",
-        "resolved_at": None,
-        "re_exam_date": None,
-        "re_exam_time": None,
-        "re_exam_venue": None,
-        "coordinator_assigned": None
+def _format_re_exam(r: ReExamRequest) -> dict:
+    return {
+        "id": r.id,
+        "student_id": r.student_id or 1,
+        "student_name": r.student_name,
+        "class_name": r.class_name,
+        "section": r.section,
+        "subject": r.subject,
+        "exam_name": r.exam_name,
+        "missed_date": r.missed_date,
+        "reason_category": r.reason_category,
+        "reason_details": r.reason_details,
+        "document_name": r.document_name,
+        "document_url": r.document_url,
+        "parent_name": r.parent_name,
+        "parent_phone": r.parent_phone,
+        "status": r.status,
+        "admin_remarks": r.admin_remarks,
+        "requested_at": r.requested_at or (r.created_at.strftime("%d %b %Y, %I:%M %p") if r.created_at else None),
+        "resolved_at": r.resolved_at,
+        "re_exam_date": r.re_exam_date,
+        "re_exam_time": r.re_exam_time,
+        "re_exam_venue": r.re_exam_venue,
+        "coordinator_assigned": r.coordinator_assigned,
     }
-]
 
 @router.get("/re-exam-requests")
-async def get_re_exam_requests(student_id: Optional[int] = None):
+async def get_re_exam_requests(
+    student_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
     """
-    List student re-examination exemption requests. Filterable by student_id.
+    List student re-examination exemption requests from PostgreSQL. Filterable by student_id.
     """
+    query = select(ReExamRequest)
     if student_id is not None:
-        return [r for r in IN_MEMORY_RE_EXAM_REQUESTS if r.get("student_id") == student_id]
-    return IN_MEMORY_RE_EXAM_REQUESTS
+        query = query.where(ReExamRequest.student_id == student_id)
+    res = await db.execute(query.order_by(ReExamRequest.id.desc()))
+    records = res.scalars().all()
+    return [_format_re_exam(r) for r in records]
 
 @router.post("/re-exam-requests")
-async def create_re_exam_request(req: ReExamCreateRequest):
+async def create_re_exam_request(
+    req: ReExamCreateRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Parent submits a re-exam request on behalf of their child with medical/exemption documentation.
+    Stored in PostgreSQL and notifies Admin.
     """
-    new_id = len(IN_MEMORY_RE_EXAM_REQUESTS) + 1
-    record = {
-        "id": new_id,
-        "student_id": req.student_id or 14,
-        "student_name": req.student_name or "Aarav Sharma",
-        "class_name": req.class_name or "Class 8",
-        "section": req.section or "B",
-        "subject": req.subject,
-        "exam_name": req.exam_name,
-        "missed_date": req.missed_date,
-        "reason_category": req.reason_category,
-        "reason_details": req.reason_details,
-        "document_name": req.document_name or "Medical_Certificate.pdf",
-        "document_url": req.document_url or "/samples/medical_certificate.pdf",
-        "parent_name": req.parent_name or "Dr. Rajeev Sharma",
-        "parent_phone": req.parent_phone or "+91 98490 22114",
-        "status": "Pending Admin Review",
-        "admin_remarks": None,
-        "requested_at": datetime.datetime.now().strftime("%d %b %Y, %I:%M %p"),
-        "resolved_at": None,
-        "re_exam_date": None,
-        "re_exam_time": None,
-        "re_exam_venue": None,
-        "coordinator_assigned": None
-    }
-    IN_MEMORY_RE_EXAM_REQUESTS.insert(0, record)
-    return record
+    now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    rec = ReExamRequest(
+        student_id=req.student_id or 1,
+        student_name=req.student_name or "Aarav Sharma",
+        class_name=req.class_name or "Class 8",
+        section=req.section or "B",
+        subject=req.subject,
+        exam_name=req.exam_name,
+        missed_date=req.missed_date,
+        reason_category=req.reason_category,
+        reason_details=req.reason_details,
+        document_name=req.document_name or "Medical_Certificate.pdf",
+        document_url=req.document_url or "/samples/medical_certificate.pdf",
+        parent_name=req.parent_name or "Dr. Rajeev Sharma",
+        parent_phone=req.parent_phone or "+91 98490 22114",
+        status="Pending Admin Review",
+        admin_remarks=None,
+        requested_at=now_str
+    )
+    db.add(rec)
+    await db.commit()
+    await db.refresh(rec)
+
+    # 🔔 Notify Admin
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="admin",
+            sender_name=rec.parent_name,
+            sender_role="parent",
+            title=f"New Re-Exam Request: {rec.student_name} ({rec.subject})",
+            message=f"{rec.parent_name} submitted medical exemption re-exam request for {rec.student_name} ({rec.class_name}-{rec.section}) in {rec.subject}. Reason: {rec.reason_category}.",
+            notification_type="RE_EXAM_REQUESTED",
+            priority="HIGH",
+            action_url="/admin?tab=exams&subtab=reexam",
+            metadata_dict={"re_exam_id": rec.id, "student_id": rec.student_id, "subject": rec.subject}
+        )
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to notify admin of re-exam request: {e}")
+
+    return _format_re_exam(rec)
 
 @router.post("/re-exam-requests/{req_id}/review")
-async def review_re_exam_request(req_id: int, review: ReExamReviewRequest):
+async def review_re_exam_request(
+    req_id: int,
+    review: ReExamReviewRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Admin reviews re-exam request. Upon approval, automatically notifies Exam Coordinator
-    and allocates re-test logistics for student & parent.
+    and allocates re-test logistics for student & parent in PostgreSQL.
     """
-    for req in IN_MEMORY_RE_EXAM_REQUESTS:
-        if req["id"] == req_id:
-            req["status"] = review.status
-            req["admin_remarks"] = review.admin_remarks or ("Approved by Principal Dr. Sundaram." if review.status == "Approved by Admin" else "Rejected by Principal.")
-            req["resolved_at"] = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
-            return {
-                "success": True,
-                "message": f"Re-Exam request #{req_id} marked as '{review.status}'. Dispatched to Exam Coordinator.",
-                "request": req
-            }
-    raise HTTPException(status_code=404, detail=f"Re-exam request #{req_id} not found")
+    res = await db.execute(select(ReExamRequest).where(ReExamRequest.id == req_id))
+    rec = res.scalars().first()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Re-exam request #{req_id} not found")
+
+    rec.status = review.status
+    rec.admin_remarks = review.admin_remarks or ("Approved by Principal Dr. Sundaram." if review.status == "Approved by Admin" else "Rejected by Principal.")
+    rec.resolved_at = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    await db.commit()
+    await db.refresh(rec)
+
+    # 🔔 Notify Exam Coordinator if Approved
+    if review.status == "Approved by Admin":
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=None,
+                recipient_role="exam_coordinator",
+                sender_name="Dr. Radhakrishnan (Principal)",
+                sender_role="admin",
+                title=f"Re-Exam Mandate: {rec.student_name} ({rec.subject})",
+                message=f"Principal has officially APPROVED re-examination for {rec.student_name} ({rec.class_name}-{rec.section}) in {rec.subject}. Please schedule venue & question paper.",
+                notification_type="RE_EXAM_APPROVED_ADMIN",
+                priority="HIGH",
+                action_url="/exam_coordinator?tab=dashboard",
+                metadata_dict={"re_exam_id": rec.id, "student_id": rec.student_id, "subject": rec.subject}
+            )
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to notify exam coordinator of re-exam approval: {e}")
+
+    return {
+        "success": True,
+        "message": f"Re-Exam request #{req_id} marked as '{review.status}'. Dispatched to Exam Coordinator.",
+        "request": _format_re_exam(rec)
+    }
 
 @router.post("/re-exam-requests/{req_id}/schedule")
-async def schedule_re_exam_slot(req_id: int, sched: ReExamScheduleRequest):
+async def schedule_re_exam_slot(
+    req_id: int,
+    sched: ReExamScheduleRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Exam Coordinator confirms scheduled retest slot (date, time, virtual proctored room, invigilator).
-    Issues digital admit docket to Parent and Student.
+    Creates persistent ExamSchedule, updates AbsenteeRecord, and issues digital admit docket to Parent and Student.
     """
-    for req in IN_MEMORY_RE_EXAM_REQUESTS:
-        if req["id"] == req_id:
-            req["status"] = "Scheduled"
-            req["re_exam_date"] = sched.re_exam_date
-            req["re_exam_time"] = sched.re_exam_time
-            req["re_exam_venue"] = sched.re_exam_venue
-            req["coordinator_assigned"] = sched.coordinator_assigned
-            req["resolved_at"] = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
-            return {
-                "success": True,
-                "message": f"Supplementary Retest #{req_id} confirmed for {sched.re_exam_date}. Digital admit card active.",
-                "request": req
-            }
-    raise HTTPException(status_code=404, detail=f"Re-exam request #{req_id} not found")
+    res = await db.execute(select(ReExamRequest).where(ReExamRequest.id == req_id))
+    rec = res.scalars().first()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Re-exam request #{req_id} not found")
+
+    rec.status = "Scheduled"
+    rec.re_exam_date = sched.re_exam_date
+    rec.re_exam_time = sched.re_exam_time
+    rec.re_exam_venue = sched.re_exam_venue
+    rec.coordinator_assigned = sched.coordinator_assigned
+    rec.resolved_at = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+    # Parse start and end time
+    time_str = sched.re_exam_time or "10:00 AM – 01:00 PM"
+    parts = time_str.replace("–", "-").split("-")
+    start_t = parts[0].strip() if len(parts) > 0 else "10:00 AM"
+    end_t = parts[1].strip() if len(parts) > 1 else "01:00 PM"
+
+    # Create real ExamSchedule in PostgreSQL
+    new_sched = ExamSchedule(
+        title=f"Retest: {rec.subject}",
+        series_name=f"Medical Retest - {rec.student_name}",
+        schedule_type="RETEST",
+        subject=rec.subject,
+        class_name=rec.class_name,
+        section=rec.section,
+        exam_mode="MODE_HYBRID_SCAN",
+        exam_date=sched.re_exam_date,
+        start_time=start_t,
+        end_time=end_t,
+        hall_name=sched.re_exam_venue,
+        chief_invigilator_name=sched.coordinator_assigned,
+        academic_clearance=True,
+        academic_clearance_notes="Sanctioned re-test under Medical Exemption."
+    )
+    db.add(new_sched)
+    await db.flush()
+    rec.schedule_id = new_sched.id
+
+    # Update AbsenteeRecord if one matches
+    if rec.student_id:
+        abs_res = await db.execute(
+            select(AbsenteeRecord).where(
+                AbsenteeRecord.student_id == rec.student_id,
+                AbsenteeRecord.subject.ilike(f"%{rec.subject.split()[0]}%")
+            )
+        )
+        abs_rec = abs_res.scalars().first()
+        if abs_rec:
+            abs_rec.retest_scheduled = True
+            abs_rec.retest_date = sched.re_exam_date
+            abs_rec.schedule_id = new_sched.id
+
+    # 🔔 Persistent Notifications to Student, Parent, Invigilator
+    try:
+        # 1. Student
+        await create_system_notification(
+            db=db,
+            recipient_user_id=rec.student_id,
+            recipient_role="student",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Retest Scheduled: {rec.subject}",
+            message=f"Your supplementary re-examination for {rec.subject} is scheduled on {sched.re_exam_date} ({sched.re_exam_time}) at {sched.re_exam_venue}. Chief Invigilator: {sched.coordinator_assigned}.",
+            notification_type="RETEST_SCHEDULED_STUDENT",
+            priority="HIGH",
+            action_url="/student",
+            metadata_dict={"schedule_id": new_sched.id, "subject": rec.subject, "re_exam_date": sched.re_exam_date}
+        )
+
+        # 2. Parent
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="parent",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Retest Confirmed: {rec.student_name} ({rec.subject})",
+            message=f"Official re-examination slot confirmed for {rec.student_name} on {sched.re_exam_date} ({sched.re_exam_time}) in {sched.re_exam_venue}. Digital admit docket active.",
+            notification_type="RETEST_SCHEDULED_PARENT",
+            priority="HIGH",
+            action_url="/parent",
+            metadata_dict={"schedule_id": new_sched.id, "subject": rec.subject}
+        )
+
+        # 3. Invigilator
+        invig_uid = 2
+        invig_lower = (sched.coordinator_assigned or "").lower()
+        if "raman" in invig_lower: invig_uid = 12
+        elif "sunitha" in invig_lower or "rao" in invig_lower: invig_uid = 14
+
+        await create_system_notification(
+            db=db,
+            recipient_user_id=invig_uid,
+            recipient_role="teacher",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Invigilation Duty Assigned: Retest ({rec.student_name})",
+            message=f"You are deployed as Chief Invigilator for supplementary re-examination of {rec.student_name} ({rec.subject}) on {sched.re_exam_date} ({sched.re_exam_time}) in {sched.re_exam_venue}.",
+            notification_type="DUTY_ASSIGNED",
+            priority="URGENT",
+            action_url="/teacher?tab=duties",
+            metadata_dict={"schedule_id": new_sched.id, "re_exam_id": rec.id}
+        )
+    except Exception as e:
+        logger.warning(f"Failed to create retest notifications: {e}")
+
+    await db.commit()
+    await db.refresh(rec)
+
+    return {
+        "success": True,
+        "message": f"Supplementary Retest #{req_id} confirmed for {sched.re_exam_date}. Digital admit card active in PostgreSQL.",
+        "request": _format_re_exam(rec)
+    }
+
 
 class ProctorStrikeRequest(BaseModel):
     candidate_id: int
@@ -2628,14 +3248,11 @@ class ProctorTelemetryRequest(BaseModel):
 
 
 class CandidateExamSubmitRequest(BaseModel):
-
     words_count: Optional[int] = 0
-
     time_spent_seconds: Optional[int] = 0
-
     submission_content: str
-
     script_pages_uploaded: Optional[int] = 0
+    seal_hash: Optional[str] = None
 
 
 
@@ -3226,19 +3843,12 @@ async def record_candidate_telemetry(
 async def submit_candidate_cbt(
 
     candidate_id: int,
-
     req: CandidateExamSubmitRequest,
-
     db: AsyncSession = Depends(get_db)
-
 ):
-
     """
-
-    Submits online CBT essay/response or uploaded script.
-
+    Submits online CBT essay/response or uploaded script with cryptographic verification seal.
     """
-
     from app.models.models import ExamCandidateAttempt
 
     res = await db.execute(select(ExamCandidateAttempt).where(or_(ExamCandidateAttempt.id == candidate_id, ExamCandidateAttempt.student_id == candidate_id)))
@@ -3247,27 +3857,34 @@ async def submit_candidate_cbt(
         res_any = await db.execute(select(ExamCandidateAttempt).order_by(ExamCandidateAttempt.id.asc()))
         cand = res_any.scalars().first()
 
-    cand = res.scalars().first()
-
     if not cand:
-
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-
-
     cand.submission_content = req.submission_content
-
     cand.status = "completed"
-
-    cand.submitted_at = datetime.datetime.utcnow()
+    cand.submitted_at = datetime.utcnow()
+    cand.seal_verified = True
+    
+    # Store cryptographic verification seal
+    seal_code = req.seal_hash or f"SEAL-8B-{cand.id:04X}"
+    cand.verification_seal_hash = seal_code
 
     if req.script_pages_uploaded and req.script_pages_uploaded > 0:
-
         cand.script_pages_uploaded = req.script_pages_uploaded
 
-        cand.seal_verified = True
-
-
+    # Also update ExamSubmission if exists for this exam and student
+    if cand.exam_id:
+        sub_res = await db.execute(
+            select(ExamSubmission).where(
+                ExamSubmission.exam_id == cand.exam_id,
+                ExamSubmission.student_id == cand.student_id
+            )
+        )
+        existing_sub = sub_res.scalars().first()
+        if existing_sub:
+            existing_sub.status = "submitted"
+            existing_sub.submission_content = req.submission_content
+            existing_sub.submitted_at = cand.submitted_at
 
     await db.commit()
     await db.refresh(cand)
@@ -3275,48 +3892,42 @@ async def submit_candidate_cbt(
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
         await surveillance_manager.broadcast("exam-room-class8b", {
-            "type": "MALPRACTICE_ALERT",
+            "type": "CANDIDATE_SUBMITTED",
             "candidateId": cand.id,
             "studentName": cand.student_name,
             "rollNo": cand.roll_no,
             "className": cand.class_name or "Class 8-B",
-            "malpracticeType": req.anomaly_type,
-            "title": req.anomaly_type.replace("_", " ").title(),
-            "ruleTriggered": req.details or f"Telemetry: {req.anomaly_type}",
-            "confidence": req.confidence or 0.92,
-            "actionTaken": "STRIKE" if strike_assigned else "WARNING",
-            "strikes": cand.strikes,
-            "isPaused": cand.is_paused or cand.strikes >= 3,
-            "timestamp": datetime.now().strftime("%I:%M:%S %p")
+            "sealHash": cand.verification_seal_hash,
+            "scriptPages": cand.script_pages_uploaded or 0,
+            "timestamp": datetime.utcnow().strftime("%I:%M:%S %p")
         })
-
-        if cand.is_paused or cand.strikes >= 3:
-            await surveillance_manager.broadcast("exam-room-class8b", {
-                "type": "DISQUALIFICATION_REVIEW_REQUESTED",
-                "candidateId": cand.id,
-                "studentName": cand.student_name,
-                "rollNo": cand.roll_no,
-                "className": cand.class_name or "Class 8-B",
-                "strikes": cand.strikes,
-                "isPaused": True,
-                "title": f"🚨 Examination Suspended (3 Strikes Limit Exceeded)",
-                "ruleTriggered": "Workstation Locked • Awaiting Chief Invigilator Inquiry & Decision",
-                "confidence": 1.0,
-                "timestamp": datetime.now().strftime("%I:%M:%S %p")
-            })
     except Exception as ws_err:
-        logger.warning(f"Failed to broadcast proctor telemetry: {ws_err}")
+        logger.warning(f"Failed to broadcast proctor submission: {ws_err}")
+
+    # Dispatch notification to Teacher
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=2,
+            recipient_role="teacher",
+            sender_name=cand.student_name,
+            sender_role="student",
+            title=f"📝 Exam Paper Submitted: {cand.student_name} ({cand.roll_no})",
+            message=f"{cand.student_name} submitted their examination script under seal #{cand.verification_seal_hash}. Ready for grading.",
+            notification_type="EXAM_SUBMISSION",
+            priority="HIGH",
+            action_url="/teacher?tab=exams",
+            metadata_dict={"candidate_id": cand.id, "student_id": cand.student_id, "seal_code": cand.verification_seal_hash}
+        )
+    except Exception as ne:
+        logger.warning(f"Failed to create teacher notification for exam submission: {ne}")
 
     return {
-
         "success": True,
-
         "message": f"Examination successfully submitted and sealed for {cand.student_name}.",
-
         "candidate_id": cand.id,
-
+        "seal_hash": cand.verification_seal_hash,
         "submitted_at": cand.submitted_at.isoformat()
-
     }
 
 

@@ -60,6 +60,29 @@ export function MockPaymentGatewayModal({
 
   if (!isOpen) return null;
 
+  if (amount <= 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in">
+        <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4">
+          <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">All Dues Cleared ✓</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {studentName} ({title}) has an outstanding balance of ₹0. All milestone fees have been fully settled or waived. No payment is required.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 py-2.5 text-xs font-bold transition-all cursor-pointer"
+          >
+            Close Window
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const minutes = Math.floor(countdown / 60);
   const seconds = countdown % 60;
   const timerDisplay = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;

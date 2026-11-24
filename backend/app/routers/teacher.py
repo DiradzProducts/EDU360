@@ -1,13 +1,15 @@
 import datetime
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from app.core.database import get_db
 from app.models.models import (
     LiveClass, AttendanceRecord, Student, Homework, HomeworkSubmission,
     FocusTable, LeaveRequest, ParentTeacherMessage, RemedialSprint, SecurityAuditLog,
-    PTMSlot, ParentTeacherNote,
+    PTMSlot, ParentTeacherNote, StaffPermission, SubstitutionSlot,
     AcademicSubject, SubjectAttendanceSession, SubjectAttendanceEntry
 )
 from app.schemas.schemas import (
@@ -534,61 +536,210 @@ _my_permissions = [
     }
 ]
 
+_teacher_attendance_today = {
+    "checked_in": False,
+    "check_in_time": None,
+    "check_out_time": None,
+    "status": "Not Checked In",
+    "date": datetime.date.today().strftime("%Y-%m-%d")
+}
+
+@router.get("/attendance/today")
+async def get_teacher_attendance_today(db: AsyncSession = Depends(get_db)):
+    """Returns today's teacher check-in status."""
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    try:
+        from app.models.models import StaffAttendanceDaily
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if rec:
+            return {
+                "checked_in": True,
+                "check_in_time": rec.check_in_time,
+                "check_out_time": rec.check_out_time,
+                "status": rec.status,
+                "date": today_str
+            }
+    except Exception:
+        pass
+    return _teacher_attendance_today
+
+@router.post("/attendance/check-in")
+async def teacher_check_in(req: dict = None, db: AsyncSession = Depends(get_db)):
+    """1-Click daily teacher morning check-in."""
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    _teacher_attendance_today["checked_in"] = True
+    _teacher_attendance_today["check_in_time"] = now_time
+    _teacher_attendance_today["status"] = "Present"
+    _teacher_attendance_today["date"] = today_str
+
+    try:
+        from app.models.models import StaffAttendanceDaily, StaffMember
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if not rec:
+            rec = StaffAttendanceDaily(
+                staff_id=1,
+                staff_name="Mrs. Ananya Verma",
+                attendance_date=today_str,
+                check_in_time=now_time,
+                status="Present"
+            )
+            db.add(rec)
+        else:
+            rec.check_in_time = now_time
+            rec.status = "Present"
+        
+        await db.execute(
+            update(StaffMember)
+            .where(StaffMember.id == 1)
+            .values(attendance_status="Present")
+        )
+        await db.commit()
+    except Exception as ex:
+        print("Attendance check-in persist warning:", ex)
+
+    return {"success": True, "message": f"Checked in successfully at {now_time}", "data": _teacher_attendance_today}
+
+@router.post("/attendance/check-out")
+async def teacher_check_out(req: dict = None, db: AsyncSession = Depends(get_db)):
+    """1-Click daily teacher evening check-out."""
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    _teacher_attendance_today["check_out_time"] = now_time
+
+    try:
+        from app.models.models import StaffAttendanceDaily
+        res = await db.execute(
+            select(StaffAttendanceDaily).where(
+                StaffAttendanceDaily.staff_id == 1,
+                StaffAttendanceDaily.attendance_date == today_str
+            )
+        )
+        rec = res.scalars().first()
+        if rec:
+            rec.check_out_time = now_time
+            await db.commit()
+    except Exception as ex:
+        print("Attendance check-out persist warning:", ex)
+
+    return {"success": True, "message": f"Checked out successfully at {now_time}", "data": _teacher_attendance_today}
+
 @router.get("/my-permissions")
-async def get_my_permissions():
+async def get_my_permissions(db: AsyncSession = Depends(get_db)):
+    """
+    Query all staff permissions for the logged-in teacher from PostgreSQL staff_permissions table.
+    """
+    try:
+        res = await db.execute(
+            select(StaffPermission)
+            .where(or_(StaffPermission.staff_id == 2, StaffPermission.staff_name.ilike("%Verma%")))
+            .order_by(StaffPermission.id.desc())
+        )
+        perms = res.scalars().all()
+        if perms:
+            return [
+                {
+                    "id": p.id,
+                    "teacher_name": p.staff_name,
+                    "type": p.leave_category or p.permission_type,
+                    "leave_category": p.leave_category or p.permission_type,
+                    "total_days": p.total_days or 1,
+                    "reason": p.reason,
+                    "status": p.status,
+                    "date": f"{p.from_date} to {p.to_date}" if p.to_date and p.to_date != p.from_date else (p.from_date or "Today"),
+                    "shift": "Full Day" if (p.total_days or 1) >= 1 else "Short Permission",
+                    "affected_periods": p.affected_periods or "All Scheduled Periods",
+                    "suggested_substitute": "Mrs. Neha Roy (TGT Science)",
+                    "approved_by": p.approved_by,
+                    "applied_at": p.created_at.strftime("%d %b %Y, %I:%M %p") if p.created_at else "Recently"
+                }
+                for p in perms
+            ]
+    except Exception as ex:
+        print("StaffPermission DB read warning:", ex)
     return _my_permissions
 
 @router.post("/apply-permission")
 async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)):
-    new_perm = {
-        "id": len(_my_permissions) + 10,
-        "teacher_name": req.get("teacher_name", "Mrs. Ananya Verma"),
-        "type": req.get("type", "Short Permission (1 hr)"),
-        "reason": req.get("reason", "Personal errand"),
-        "status": "Pending",
-        "date": req.get("date", "Tomorrow"),
-        "shift": req.get("shift", "Morning Shift (08:30 AM - 12:30 PM)"),
-        "affected_periods": req.get("affected_periods", "Period 2 & Period 4"),
-        "suggested_substitute": req.get("suggested_substitute", "Mrs. Neha Roy (TGT Science)"),
-        "applied_at": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
-    }
-    _my_permissions.insert(0, new_perm)
+    leave_cat = req.get("leave_category") or req.get("type") or "Casual Leave (CL)"
+    tot_days = int(req.get("total_days", 1) or 1)
+    teacher_name = req.get("teacher_name", "Mrs. Ananya Verma")
+    reason = req.get("reason", "Personal errand")
+    from_date = req.get("date") or datetime.date.today().isoformat()
+    to_date = req.get("to_date") or from_date
+    affected = req.get("affected_periods") or "Period 2 (Class 8-B Math), Period 5 (Class 9-A Math)"
 
-    # Cross-Role Interlock: push directly into Admin permissions queue
+    perm_record = StaffPermission(
+        staff_id=2,
+        staff_name=teacher_name,
+        role="Teacher",
+        permission_type=leave_cat,
+        leave_category=leave_cat,
+        total_days=tot_days,
+        from_date=from_date,
+        to_date=to_date,
+        affected_periods=affected,
+        reason=reason,
+        status="Pending",
+        created_at=datetime.datetime.utcnow()
+    )
+    db.add(perm_record)
+    await db.commit()
+    await db.refresh(perm_record)
+
+    new_perm = {
+        "id": perm_record.id,
+        "teacher_name": teacher_name,
+        "type": leave_cat,
+        "leave_category": leave_cat,
+        "total_days": tot_days,
+        "reason": reason,
+        "status": "Pending",
+        "date": from_date,
+        "shift": "Full Day" if tot_days >= 1 else "Short Permission",
+        "affected_periods": affected,
+        "suggested_substitute": req.get("suggested_substitute", "Mrs. Neha Roy (TGT Science)"),
+        "applied_at": perm_record.created_at.strftime("%d %b %Y, %I:%M %p")
+    }
+
+    # Cross-Role Interlock: also maintain in-memory stores for instant fallback
     try:
         from app.routers.admin import _teacher_permissions
-        _teacher_permissions.insert(0, {
-            "id": new_perm["id"],
-            "teacher_name": new_perm["teacher_name"],
-            "type": new_perm["type"],
-            "reason": new_perm["reason"],
-            "status": "Pending",
-            "date": new_perm["date"],
-            "shift": new_perm["shift"],
-            "affected_periods": new_perm["affected_periods"],
-            "suggested_substitute": new_perm["suggested_substitute"]
-        })
-    except Exception as ex:
-        print("Admin permissions queue sync warning:", ex)
+        _teacher_permissions.insert(0, dict(new_perm))
+        _my_permissions.insert(0, dict(new_perm))
+    except Exception:
+        pass
 
-    # Persist in SQLite staff_permissions table
+    # Dispatch notification to Admin / Principal
     try:
-        from app.models.models import StaffPermission
-        perm_record = StaffPermission(
-            staff_id=1,
-            staff_name=new_perm["teacher_name"],
-            role="Teacher",
-            permission_type=new_perm["type"],
-            from_date=new_perm["date"],
-            to_date=new_perm["date"],
-            affected_periods=new_perm.get("affected_periods", "General Periods"),
-            reason=new_perm["reason"],
-            status="Pending"
+        await create_system_notification(
+            db=db,
+            recipient_user_id=1,
+            recipient_role="admin",
+            sender_name=teacher_name,
+            sender_role="teacher",
+            title=f"Staff Leave Request: {leave_cat}",
+            message=f"{teacher_name} requested {leave_cat} ({tot_days} day(s)) on {from_date}. Reason: {reason}. Review pending.",
+            notification_type="STAFF_PERMISSION_REQUEST",
+            priority="HIGH",
+            action_url="/admin?tab=staff_leaves",
+            metadata_dict={"permission_id": perm_record.id, "leave_category": leave_cat}
         )
-        db.add(perm_record)
         await db.commit()
-    except Exception as ex:
-        print("StaffPermission DB persist warning:", ex)
+    except Exception as notif_err:
+        print("Leave request notification error:", notif_err)
 
     return {"success": True, "permission": new_perm}
 
@@ -1242,22 +1393,59 @@ _ptm_slots = [
         "teacher_id": "ananya",
         "start_time": "10:24 AM",
         "end_time": "10:34 AM",
-        "status": "BOOKED",
-        "interaction_scope": "SUBJECT_SPECIFIC",
-        "booked_student_id": 4,
-        "booked_student_name": "Siddharth Verma",
-        "booked_class": "8-A",
-        "booked_parent_id": "alok_verma",
-        "booked_parent_name": "Mr. Alok Verma",
-        "subject_name": "Mathematics",
+        "status": "AVAILABLE",
+        "interaction_scope": "HOMEROOM_CLASS",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Mathematics & Class 8-B Homeroom",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
-        "meeting_url": "https://meet.google.com/edu-ptm-siddharth-math",
-        "focus_table_agenda": [
-            "Arithmetic Progressions Common Difference Backlog (#EVD-BKLOG-820)",
-            "Exam Score 44% Decreasing Sequence Diagnostic"
-        ]
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-05c",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-05d",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "raman",
+        "start_time": "10:36 AM",
+        "end_time": "10:46 AM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Science & Physics (Dr. K. Raman)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-05d",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-05e",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "sunitha",
+        "start_time": "10:48 AM",
+        "end_time": "10:58 AM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Mathematics (Mrs. Sunitha Rao)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-05e",
+        "focus_table_agenda": []
     },
     {
         "id": "slot-break-tea",
@@ -1292,12 +1480,115 @@ _ptm_slots = [
         "booked_class": None,
         "booked_parent_id": None,
         "booked_parent_name": None,
-        "subject_name": None,
+        "subject_name": "Mathematics & Class 8-B Homeroom",
         "is_sibling_combo": False,
         "sibling_student_id": None,
         "sibling_student_name": None,
         "meeting_url": "https://meet.google.com/edu-ptm-slot-06",
         "focus_table_agenda": []
+    },
+    {
+        "id": "slot-06b",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "sen",
+        "start_time": "11:32 AM",
+        "end_time": "11:42 AM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Chemistry (Mrs. S. Sen)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-06b",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-06c",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "ananya",
+        "start_time": "11:44 AM",
+        "end_time": "11:54 AM",
+        "status": "AVAILABLE",
+        "interaction_scope": "HOMEROOM_CLASS",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Mathematics & Class 8-B Homeroom",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-06c",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-06d",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "raman",
+        "start_time": "12:00 PM",
+        "end_time": "12:10 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Science & Physics (Dr. K. Raman)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-06d",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-06e",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "rajesh_nair",
+        "start_time": "12:12 PM",
+        "end_time": "12:22 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Social Studies & History (Mr. Rajesh Nair)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-06e",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-06f",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "ananya",
+        "start_time": "12:24 PM",
+        "end_time": "12:34 PM",
+        "status": "BOOKED",
+        "interaction_scope": "HOMEROOM_CLASS",
+        "booked_student_id": 5,
+        "booked_student_name": "Diya Patel",
+        "booked_class": "8-B",
+        "booked_parent_id": "suresh_patel",
+        "booked_parent_name": "Mr. Suresh Patel",
+        "subject_name": "Mathematics",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-diya-math",
+        "focus_table_agenda": [
+            "Quadratic Equations Factorization Deficit",
+            "Speed-Distance Word Problem Modeling"
+        ]
     },
     {
         "id": "slot-break-lunch",
@@ -1326,7 +1617,7 @@ _ptm_slots = [
         "start_time": "02:00 PM",
         "end_time": "02:10 PM",
         "status": "AVAILABLE",
-        "interaction_scope": "SUBJECT_SPECIFIC",
+        "interaction_scope": "HOMEROOM_CLASS",
         "booked_student_id": None,
         "booked_student_name": None,
         "booked_class": None,
@@ -1338,6 +1629,126 @@ _ptm_slots = [
         "sibling_student_name": None,
         "meeting_url": "https://meet.google.com/edu-ptm-slot-07",
         "focus_table_agenda": []
+    },
+    {
+        "id": "slot-07b",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "raman",
+        "start_time": "02:12 PM",
+        "end_time": "02:22 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Science & Physics (Dr. K. Raman)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-07b",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-07c",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "sen",
+        "start_time": "02:24 PM",
+        "end_time": "02:34 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Chemistry (Mrs. S. Sen)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-07c",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-07d",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "sunitha",
+        "start_time": "02:36 PM",
+        "end_time": "02:46 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Senior Mathematics (Mrs. Sunitha Rao)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-07d",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-08",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "ananya",
+        "start_time": "02:48 PM",
+        "end_time": "02:58 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "HOMEROOM_CLASS",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Mathematics & Class 8-B Homeroom",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-08",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-09",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "ananya",
+        "start_time": "03:00 PM",
+        "end_time": "03:10 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "Mathematics",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-09",
+        "focus_table_agenda": []
+    },
+    {
+        "id": "slot-10",
+        "event_id": "ptm-conf-2026-term1",
+        "teacher_id": "deepa",
+        "start_time": "03:12 PM",
+        "end_time": "03:22 PM",
+        "status": "AVAILABLE",
+        "interaction_scope": "SUBJECT_SPECIFIC",
+        "booked_student_id": None,
+        "booked_student_name": None,
+        "booked_class": None,
+        "booked_parent_id": None,
+        "booked_parent_name": None,
+        "subject_name": "English Literature (Ms. Deepa Menon)",
+        "is_sibling_combo": False,
+        "sibling_student_id": None,
+        "sibling_student_name": None,
+        "meeting_url": "https://meet.google.com/edu-ptm-slot-10",
+        "focus_table_agenda": []
     }
 ]
 
@@ -1345,6 +1756,22 @@ _ptm_slots = [
 @router.get("/ptm/config", response_model=PTMEventConfigResponse)
 async def get_ptm_event_config():
     return _ptm_event_config
+
+def _parse_time_sort_key(t_str: str) -> int:
+    try:
+        if not t_str:
+            return 0
+        parts = t_str.strip().split()
+        time_part = parts[0]
+        ampm = parts[1].upper() if len(parts) > 1 else "AM"
+        hh, mm = map(int, time_part.split(":"))
+        if ampm == "PM" and hh != 12:
+            hh += 12
+        elif ampm == "AM" and hh == 12:
+            hh = 0
+        return hh * 60 + mm
+    except Exception:
+        return 0
 
 def _slot_to_dict(s) -> dict:
     import json
@@ -1380,31 +1807,36 @@ def _slot_to_dict(s) -> dict:
 
 async def _ensure_ptm_slots_seeded(db: AsyncSession):
     try:
-        check = await db.execute(select(PTMSlot).limit(1))
-        if not check.scalars().first():
+        from sqlalchemy import func
+        count_res = await db.execute(select(func.count(PTMSlot.id)))
+        count = count_res.scalar() or 0
+        if count < len(_ptm_slots):
             import json
+            existing_ids_res = await db.execute(select(PTMSlot.id))
+            existing_ids = set(existing_ids_res.scalars().all())
             for s in _ptm_slots:
-                db_slot = PTMSlot(
-                    id=s["id"],
-                    event_id=s["event_id"],
-                    teacher_id=s["teacher_id"],
-                    start_time=s["start_time"],
-                    end_time=s["end_time"],
-                    status=s["status"],
-                    interaction_scope=s["interaction_scope"],
-                    booked_student_id=s.get("booked_student_id"),
-                    booked_student_name=s.get("booked_student_name"),
-                    booked_class=s.get("booked_class"),
-                    booked_parent_id=s.get("booked_parent_id"),
-                    booked_parent_name=s.get("booked_parent_name"),
-                    subject_name=s.get("subject_name"),
-                    is_sibling_combo=s.get("is_sibling_combo", False),
-                    sibling_student_id=s.get("sibling_student_id"),
-                    sibling_student_name=s.get("sibling_student_name"),
-                    meeting_url=s.get("meeting_url"),
-                    focus_table_agenda=json.dumps(s.get("focus_table_agenda", []))
-                )
-                db.add(db_slot)
+                if s["id"] not in existing_ids:
+                    db_slot = PTMSlot(
+                        id=s["id"],
+                        event_id=s["event_id"],
+                        teacher_id=s["teacher_id"],
+                        start_time=s["start_time"],
+                        end_time=s["end_time"],
+                        status=s["status"],
+                        interaction_scope=s["interaction_scope"],
+                        booked_student_id=s.get("booked_student_id"),
+                        booked_student_name=s.get("booked_student_name"),
+                        booked_class=s.get("booked_class"),
+                        booked_parent_id=s.get("booked_parent_id"),
+                        booked_parent_name=s.get("booked_parent_name"),
+                        subject_name=s.get("subject_name"),
+                        is_sibling_combo=s.get("is_sibling_combo", False),
+                        sibling_student_id=s.get("sibling_student_id"),
+                        sibling_student_name=s.get("sibling_student_name"),
+                        meeting_url=s.get("meeting_url"),
+                        focus_table_agenda=json.dumps(s.get("focus_table_agenda", []))
+                    )
+                    db.add(db_slot)
             await db.commit()
     except Exception as e:
         print(f"Error seeding PTMSlot: {e}")
@@ -1417,16 +1849,17 @@ async def get_ptm_slots(scope: str = None, db: AsyncSession = Depends(get_db)):
         stmt = select(PTMSlot)
         if scope and scope != "ALL":
             stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
-        stmt = stmt.order_by(PTMSlot.start_time.asc())
         res = await db.execute(stmt)
         slots = res.scalars().all()
         if slots:
-            return [_slot_to_dict(s) for s in slots]
+            slot_dicts = [_slot_to_dict(s) for s in slots]
+            slot_dicts.sort(key=lambda s: _parse_time_sort_key(s.get("start_time", "")))
+            return slot_dicts
     except Exception as e:
         print(f"Error querying PTMSlot: {e}")
-    if scope and scope != "ALL":
-        return [s for s in _ptm_slots if s["interaction_scope"] == scope or s["status"] == "BREAK"]
-    return _ptm_slots
+    res_list = [s for s in _ptm_slots if scope != "ALL" and scope and (s["interaction_scope"] == scope or s["status"] == "BREAK")] if (scope and scope != "ALL") else list(_ptm_slots)
+    res_list.sort(key=lambda s: _parse_time_sort_key(s.get("start_time", "")))
+    return res_list
 
 @router.post("/ptm/slots/{slot_id}/hold")
 async def hold_ptm_slot(slot_id: str, db: AsyncSession = Depends(get_db)):
@@ -1539,7 +1972,7 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
             slot_time = f"{db_slot.start_time} - {db_slot.end_time}"
             db_slot.cancellation_reason = req.cancellation_reason
             db_slot.cancelled_by = req.cancelled_by
-            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat()
+            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat() + "Z"
 
             if req.reopen_as_free:
                 db_slot.status = "AVAILABLE"
@@ -1561,14 +1994,20 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
             if req.notify_parent:
                 try:
                     await create_system_notification(
-                        user_id=1,
+                        db=db,
+                        sender_name=req.cancelled_by or "Faculty",
+                        sender_role="teacher",
+                        recipient_role="parent",
+                        recipient_user_id=3,
                         title=f"PTM Conference Update: {slot_time}",
                         message=f"Your PTM conference for {student_name} was cancelled by {req.cancelled_by.lower()}. Reason: {req.cancellation_reason}. You may re-book an available slot.",
-                        category="ptm",
-                        db=db
+                        notification_type="PTM_SLOT_CANCELLED",
+                        priority="HIGH",
+                        action_url="/parent?tab=ptm_connect",
+                        metadata_dict={"slot_id": slot_id, "student_name": student_name, "reason": req.cancellation_reason}
                     )
-                except Exception:
-                    pass
+                except Exception as ne:
+                    print(f"Error notifying parent of teacher cancellation: {ne}")
 
             for s in _ptm_slots:
                 if s["id"] == slot_id:
@@ -1591,7 +2030,7 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
             prev_snapshot = dict(slot)
             slot["cancellation_reason"] = req.cancellation_reason
             slot["cancelled_by"] = req.cancelled_by
-            slot["cancelled_at"] = datetime.datetime.utcnow().isoformat()
+            slot["cancelled_at"] = datetime.datetime.utcnow().isoformat() + "Z"
 
             student_name = slot.get("booked_student_name") or "Student"
             slot_time = f"{slot.get('start_time')} - {slot.get('end_time')}"
@@ -1677,6 +2116,82 @@ async def restore_ptm_slot(slot_id: str, req: PTMSlotRestoreRequest, db: AsyncSe
             }
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
+class PtmMarkAttendanceRequest(BaseModel):
+    teacher_attended: Optional[bool] = True
+    parent_attended: Optional[bool] = True
+    attendance_status: Optional[str] = "COMPLETED"
+    meeting_notes: Optional[str] = None
+
+@router.post("/ptm/slots/{slot_id}/mark-attendance")
+async def teacher_mark_ptm_slot_attendance(
+    slot_id: str,
+    req: Optional[PtmMarkAttendanceRequest] = None,
+    teacher_attended: Optional[bool] = Query(None),
+    parent_attended: Optional[bool] = Query(None),
+    attendance_status: Optional[str] = Query(None),
+    meeting_notes: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Teacher records completion of PTM conference and logs qualitative parent consultation notes to PostgreSQL.
+    """
+    t_att = teacher_attended if teacher_attended is not None else (req.teacher_attended if req and req.teacher_attended is not None else True)
+    p_att = parent_attended if parent_attended is not None else (req.parent_attended if req and req.parent_attended is not None else True)
+    att_stat = attendance_status or (req.attendance_status if req and req.attendance_status else "COMPLETED")
+    notes = meeting_notes if meeting_notes is not None else (req.meeting_notes if req and req.meeting_notes is not None else None)
+
+    await _ensure_ptm_slots_seeded(db)
+    res = await db.execute(select(PTMSlot).where(PTMSlot.id == slot_id))
+    slot = res.scalars().first()
+    if not slot:
+        raise HTTPException(status_code=404, detail="PTM slot not found")
+
+    slot.teacher_attended = t_att
+    slot.parent_attended = p_att
+    slot.attendance_status = att_stat
+    if notes:
+        slot.meeting_notes = notes
+    if att_stat == "COMPLETED":
+        slot.completed_at = datetime.datetime.utcnow()
+        slot.status = "COMPLETED"
+
+    # Also sync in-memory copy
+    for s in _ptm_slots:
+        if s["id"] == slot_id:
+            s["teacher_attended"] = t_att
+            s["parent_attended"] = p_att
+            s["attendance_status"] = att_stat
+            if notes:
+                s["meeting_notes"] = notes
+            s["status"] = "COMPLETED"
+
+    # Notify parent if completed
+    if slot.booked_parent_id and att_stat == "COMPLETED":
+        try:
+            await create_system_notification(
+                db=db,
+                recipient_user_id=None,
+                recipient_role="parent",
+                sender_name="Mrs. Ananya Verma",
+                sender_role="teacher",
+                title="PTM Conference Completed",
+                message=f"Parent-Teacher Conference for {slot.booked_student_name or 'Student'} has concluded. Teacher summary notes recorded.",
+                notification_type="PTM_COMPLETED",
+                priority="NORMAL",
+                action_url="/parent?tab=ptm_connect",
+                metadata_dict={"slot_id": slot_id, "notes": notes}
+            )
+        except Exception:
+            pass
+
+    await db.commit()
+    await db.refresh(slot)
+    return {
+        "success": True,
+        "message": f"PTM slot {slot_id} marked as {att_stat}.",
+        "slot": _slot_to_dict(slot)
+    }
+
 # --- 14. Teacher Curriculum Delivery & Timetable Proxy Sync ---
 def inject_substitution_period(period_num: int, class_name: str, subject: str, absent_teacher: str, time_slot: str):
     for p in _personal_schedule:
@@ -1702,15 +2217,79 @@ def inject_substitution_period(period_num: int, class_name: str, subject: str, a
     })
 
 @router.post("/curriculum/log-unit")
-async def teacher_log_curriculum_unit(req: dict):
+async def teacher_log_curriculum_unit(req: dict, db: AsyncSession = Depends(get_db)):
     from app.routers.admin import _curriculum_pacing_items, _add_audit_log
     class_name = req.get("class_name", "Class 8-B")
     subject = req.get("subject", "Mathematics")
     units_to_add = req.get("units_to_add", 1)
     lesson_title = req.get("lesson_title")
-    
+
+    try:
+        from app.models.models import CurriculumPacing
+        p_res = await db.execute(
+            select(CurriculumPacing).where(
+                CurriculumPacing.class_name.ilike(class_name.strip()),
+                CurriculumPacing.subject.ilike(subject.strip())
+            )
+        )
+        row = p_res.scalars().first()
+        if row:
+            new_completed = min(row.total_units, row.completed_units + units_to_add)
+            row.completed_units = new_completed
+            pct = round((new_completed / row.total_units) * 100, 1) if row.total_units else 0.0
+            diff = new_completed - row.calendar_target_units
+            row.lag_units = max(0, -diff)
+
+            if diff >= 1:
+                row.status = f"Ahead (+{diff} Unit{'s' if diff > 1 else ''})"
+            elif diff < 0:
+                row.status = f"Lagging ({abs(diff)} Unit{'s' if abs(diff) > 1 else ''} Behind)"
+            else:
+                row.status = "On Track"
+            if lesson_title:
+                row.last_lesson_title = lesson_title
+            row.updated_at = datetime.datetime.utcnow()
+            await db.commit()
+            await db.refresh(row)
+
+            # Sync in-memory copy
+            for item in _curriculum_pacing_items:
+                if item["class_name"].lower() == class_name.lower() and item["subject"].lower() == subject.lower():
+                    item["completed_units"] = new_completed
+                    item["completion_pct"] = pct
+                    item["status"] = row.status
+                    if lesson_title:
+                        item["last_lesson_title"] = lesson_title
+
+            _add_audit_log(
+                actor_name=row.teacher_name,
+                actor_role="teacher",
+                action_type="LESSON_DELIVERY_CHECKOFF",
+                target_entity=f"{row.class_name} {row.subject}",
+                status="VERIFIED",
+                details=f"Faculty checked off unit delivery: {row.completed_units}/{row.total_units} ({pct}%)."
+            )
+            return {
+                "success": True,
+                "item": {
+                    "id": row.id,
+                    "class_name": row.class_name,
+                    "subject": row.subject,
+                    "teacher_name": row.teacher_name,
+                    "completed_units": row.completed_units,
+                    "total_units": row.total_units,
+                    "calendar_target_units": row.calendar_target_units,
+                    "completion_pct": pct,
+                    "status": row.status,
+                    "last_lesson_title": row.last_lesson_title,
+                    "next_milestone_date": "31 Oct 2026 (Unit Checkpoint)"
+                }
+            }
+    except Exception as e:
+        logger.warning(f"Error persisting teacher curriculum unit: {e}")
+
     for item in _curriculum_pacing_items:
-        if item["class_name"] == class_name and item["subject"] == subject:
+        if item["class_name"].lower() == class_name.lower() and item["subject"].lower() == subject.lower():
             item["completed_units"] = min(item["total_units"], item["completed_units"] + units_to_add)
             item["completion_pct"] = round((item["completed_units"] / item["total_units"]) * 100, 1)
             diff = item["completed_units"] - item["calendar_target_units"]

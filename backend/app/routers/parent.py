@@ -3,12 +3,13 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, and_
+from sqlalchemy import select, update, func, and_, or_
 from app.core.database import get_db
 from app.models.models import (
     Student, FocusTable, HomeworkSubmission, BusRoute, FeeMilestone,
     LeaveRequest, ExitClearance, Homework, FeeDefaulter, PaymentTransaction,
-    ParentTeacherMessage, ReportCard, SecurityAuditLog
+    ParentTeacherMessage, ReportCard, SecurityAuditLog, OfficialDocument, AdmissionEnquiry,
+    User
 )
 from app.routers.notifications import create_system_notification
 from app.schemas.schemas import (
@@ -88,8 +89,39 @@ async def get_parent_children(
 ):
     """
     Dynamically returns children for the logged-in parent account.
-    Supports legacy test parents (Sharma, Fernandes) and newly enrolled students.
+    Prioritizes direct relational link (Student.parent_user_id), then falls back
+    to legacy test parents (Sharma, Fernandes) and phone/email queries.
     """
+    # 0. Primary relational lookup: Match Student by parent_user_id
+    if username or email:
+        clean_u = (username or "").strip().lower()
+        clean_e = (email or "").strip().lower()
+        user_query = select(User).where(or_(
+            User.username.ilike(clean_u) if clean_u else False,
+            User.email.ilike(clean_e) if clean_e else False
+        ))
+        u_res = await db.execute(user_query)
+        parent_user = u_res.scalars().first()
+        if parent_user:
+            rel_res = await db.execute(
+                select(Student).where(Student.parent_user_id == parent_user.id).order_by(Student.id.asc())
+            )
+            rel_students = rel_res.scalars().all()
+            if rel_students:
+                return [{
+                    "id": st.id,
+                    "name": st.name,
+                    "className": f"{st.class_name}-{st.section}",
+                    "rollNo": int(st.roll_no) if str(st.roll_no).isdigit() else 1,
+                    "initials": "".join([part[0].upper() for part in st.name.split() if part])[:2],
+                    "admissionNo": st.admission_no or f"EDU-2026-{st.id:03d}",
+                    "attendance": f"{st.attendance_pct}%" if st.attendance_pct is not None else "100.0%",
+                    "gradeTier": st.grade_tier or f"{st.class_name}",
+                    "academicAvg": f"{st.academic_average_pct}%" if st.academic_average_pct is not None else "Enrolled",
+                    "busRoute": "Route #4 (Campus Shuttle)",
+                    "mentor": "Mrs. Ananya Verma"
+                } for st in rel_students]
+
     # 1. If username is parent_john or contains fernandes
     if username == "parent_john" or (username and "fernandes" in username.lower()) or (email and "fernandes" in email.lower()):
         st_res = await db.execute(select(Student).where(Student.id == 12))
@@ -232,7 +264,7 @@ async def get_parent_banners():
         {
             "id": 3,
             "title": "Fee Milestone 2 Due on 25th Oct",
-            "subtitle": "Term 2 tuition & transport fee installment open for online payment.",
+            "subtitle": "Term 2 tuition & academic curriculum fee installment open for online payment.",
             "badge": "Payment Due",
             "badge_color": "amber",
             "action_text": "Pay via UPI / Card",
@@ -242,14 +274,14 @@ async def get_parent_banners():
         },
         {
             "id": 4,
-            "title": "School Bus Route 4 — On Schedule",
-            "subtitle": "Bus is 8 mins away from Sector 15 Crossroad Stop.",
-            "badge": "Live GPS",
-            "badge_color": "emerald",
-            "action_text": "Open Live Tracker",
-            "action_target": "bus",
-            "icon": "Navigation",
-            "gradient": "from-emerald-600 to-teal-700"
+            "title": "Annual STEM & Robotics Exhibition 2026",
+            "subtitle": "Inter-school science showcase registrations open for Middle & Senior wings.",
+            "badge": "Campus Event",
+            "badge_color": "purple",
+            "action_text": "View Campus Calendar",
+            "action_target": "events",
+            "icon": "Calendar",
+            "gradient": "from-purple-600 to-indigo-700"
         }
     ]
 
@@ -421,57 +453,146 @@ async def advance_bus_simulation(student_id: int, db: AsyncSession = Depends(get
 # --- 4. Fee Milestones & Online Payment ---
 @router.get("/fees/{student_id}", response_model=list[FeeMilestoneResponse])
 async def get_student_fees(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(FeeMilestone).where(FeeMilestone.student_id == student_id))
+    result = await db.execute(select(FeeMilestone).where(FeeMilestone.student_id == student_id).order_by(FeeMilestone.id.asc()))
     fees = result.scalars().all()
     if not fees:
         if student_id == 12:
-            return [
-                FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Grade 10 Board Fee & Tuition", amount=42000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-4011", paid_at="10 Jul 2026, 10:00 AM", payment_method="Net Banking (SBI)"),
-                FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Term 2 Grade 10 Board & Lab Fee", amount=42000, due_date="15 Oct 2026", status="Paid", receipt_no="REC-2026-FEE-4012", paid_at="12 Oct 2026, 02:30 PM", payment_method="UPI (PhonePe)"),
-                FeeMilestone(id=3, student_id=student_id, title="Milestone 3: Complete Exit & TC Account Clearance", amount=0, due_date="30 Oct 2026", status="Paid", receipt_no="REC-2026-EXIT-CLEAR", paid_at="30 Oct 2026, 11:00 AM", payment_method="Institutional Accounts Clearance")
+            default_rows = [
+                {"title": "Milestone 1: Term 1 Grade 10 Board Fee & Tuition", "amount": 42000, "due_date": "15 Jul 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-4011", "paid_at": "10 Jul 2026, 10:00 AM", "payment_method": "Net Banking (SBI)"},
+                {"title": "Milestone 2: Term 2 Grade 10 Board & Lab Fee", "amount": 42000, "due_date": "15 Oct 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-4012", "paid_at": "12 Oct 2026, 02:30 PM", "payment_method": "UPI (PhonePe)"},
+                {"title": "Milestone 3: Complete Exit & TC Account Clearance", "amount": 0, "due_date": "30 Oct 2026", "status": "Paid", "receipt_no": "REC-2026-EXIT-CLEAR", "paid_at": "30 Oct 2026, 11:00 AM", "payment_method": "Institutional Accounts Clearance"}
             ]
-        if student_id == 1:
-            return [
-                FeeMilestone(id=1, student_id=student_id, title="Milestone 1: Term 1 Tuition & Curriculum Fee", amount=35000, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5821", paid_at="12 Jul 2026, 11:20 AM", payment_method="UPI (Google Pay)"),
-                FeeMilestone(id=2, student_id=student_id, title="Milestone 2: Q1 AC Bus Transport & GPS Fee", amount=14500, due_date="15 Jul 2026", status="Paid", receipt_no="REC-2026-FEE-5822", paid_at="15 Jul 2026, 03:40 PM", payment_method="Net Banking (HDFC)"),
-                FeeMilestone(id=3, student_id=student_id, title="Milestone 3: STEM Robotics, Composite Lab & Library Fee", amount=12000, due_date="18 Aug 2026", status="Paid", receipt_no="REC-2026-FEE-5823", paid_at="18 Aug 2026, 09:15 AM", payment_method="Debit Card"),
-                FeeMilestone(id=4, student_id=student_id, title="Milestone 4: Term 2 Tuition & Infrastructure Fee", amount=35000, due_date="25 Oct 2026", status="Overdue"),
-                FeeMilestone(id=5, student_id=student_id, title="Milestone 5: Q2 AC Bus Transport Fee", amount=14500, due_date="10 Nov 2026", status="Upcoming"),
-                FeeMilestone(id=6, student_id=student_id, title="Milestone 6: Annual Day, Sports & CBSE Exam Fee", amount=16500, due_date="15 Dec 2026", status="Upcoming"),
+        elif student_id in [7, 2, 5, 8]:
+            default_rows = [
+                {"title": "Milestone 1: Primary Term 1 Tuition & Curriculum (15% Sibling Concession Applied)", "amount": 15300, "due_date": "15 Jul 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-9102", "paid_at": "12 Jul 2026, 11:25 AM", "payment_method": "UPI (Google Pay)"},
+                {"title": "Milestone 2: Early Learning Kit, Phonics Readers & Art Stationery", "amount": 6200, "due_date": "15 Jul 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-9103", "paid_at": "15 Jul 2026, 03:45 PM", "payment_method": "Net Banking (HDFC)"},
+                {"title": "Milestone 3: Primary Activity & Discovery Hub Lab Fee", "amount": 4500, "due_date": "18 Aug 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-9104", "paid_at": "18 Aug 2026, 09:20 AM", "payment_method": "Debit Card"},
+                {"title": "Milestone 4: Primary Term 2 Tuition & Activity (15% Sibling Concession Applied)", "amount": 15300, "due_date": "25 Oct 2026", "status": "Overdue", "receipt_no": None, "paid_at": None, "payment_method": None},
+                {"title": "Milestone 5: Junior Annual Concert, Sports & Stage Performance", "amount": 5000, "due_date": "15 Dec 2026", "status": "Upcoming", "receipt_no": None, "paid_at": None, "payment_method": None}
             ]
-        # Any newly enrolled student with no fee milestones has clean slate
-        return []
+        else:
+            default_rows = [
+                {"title": "Milestone 1: Term 1 Tuition & Curriculum Fee", "amount": 35000, "due_date": "15 Jul 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-5821", "paid_at": "12 Jul 2026, 11:20 AM", "payment_method": "UPI (Google Pay)"},
+                {"title": "Milestone 2: Digital Learning Platform & Cloud LMS Fee", "amount": 14500, "due_date": "15 Jul 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-5822", "paid_at": "15 Jul 2026, 03:40 PM", "payment_method": "Net Banking (HDFC)"},
+                {"title": "Milestone 3: STEM Robotics, Composite Lab & Library Fee", "amount": 12000, "due_date": "18 Aug 2026", "status": "Paid", "receipt_no": "REC-2026-FEE-5823", "paid_at": "18 Aug 2026, 09:15 AM", "payment_method": "Debit Card"},
+                {"title": "Milestone 4: Term 2 Tuition & Infrastructure Fee", "amount": 35000, "due_date": "25 Oct 2026", "status": "Overdue", "receipt_no": None, "paid_at": None, "payment_method": None},
+                {"title": "Milestone 5: Interactive Virtual Labs & AI Proctoring Fee", "amount": 14500, "due_date": "10 Nov 2026", "status": "Upcoming", "receipt_no": None, "paid_at": None, "payment_method": None},
+                {"title": "Milestone 6: Annual Day, Sports & CBSE Exam Fee", "amount": 16500, "due_date": "15 Dec 2026", "status": "Upcoming", "receipt_no": None, "paid_at": None, "payment_method": None},
+            ]
+
+        # Verify if student exists in database before bulk inserting
+        st_res = await db.execute(select(Student.id).where(Student.id == student_id))
+        if st_res.scalars().first():
+            for d in default_rows:
+                db.add(FeeMilestone(
+                    student_id=student_id,
+                    title=d["title"],
+                    amount=d["amount"],
+                    due_date=d["due_date"],
+                    status=d["status"],
+                    receipt_no=d["receipt_no"],
+                    paid_at=d["paid_at"],
+                    payment_method=d["payment_method"]
+                ))
+            await db.commit()
+            result = await db.execute(select(FeeMilestone).where(FeeMilestone.student_id == student_id).order_by(FeeMilestone.id.asc()))
+            fees = result.scalars().all()
+        else:
+            return [FeeMilestone(id=i+1, student_id=student_id, **d) for i, d in enumerate(default_rows)]
     return fees
+
+@router.post("/fees/reset")
+async def reset_fee_demo_data(db: AsyncSession = Depends(get_db)):
+    """
+    Resets all demo fee payments and test receipts back to the initial pending dues state.
+    Milestones 1-3 remain Paid, Milestone 4 becomes Overdue, Milestones 5-6 become Upcoming.
+    """
+    try:
+        # Delete any test milestones dynamically added with ID >= 4
+        res = await db.execute(select(FeeMilestone).where(FeeMilestone.id >= 4))
+        for m in res.scalars().all():
+            await db.delete(m)
+
+        # Re-initialize or reset student 1 milestone 4
+        res4 = await db.execute(select(FeeMilestone).where(FeeMilestone.id == 4))
+        m4 = res4.scalars().first()
+        if m4:
+            m4.status = "Overdue"
+            m4.receipt_no = None
+            m4.paid_at = None
+            m4.payment_method = None
+
+        # Clean test transactions
+        tx_res = await db.execute(select(PaymentTransaction).where(PaymentTransaction.gateway_ref.like("REC-2026-FEE-%")))
+        for tx in tx_res.scalars().all():
+            await db.delete(tx)
+
+        # Restore FeeDefaulters for demo students
+        def_res = await db.execute(select(FeeDefaulter).where(FeeDefaulter.student_id.in_([1, 2, 5, 7, 8])))
+        for d in def_res.scalars().all():
+            d.status = "Overdue"
+            d.amount_due = 35000.0 if d.student_id == 1 else 15300.0
+
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        return {"success": False, "error": str(e)}
+
+    return {"success": True, "message": "Fee milestones reset to default pending dues state"}
 
 @router.post("/fees/{milestone_id}/pay", response_model=FeeMilestoneResponse)
 async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(FeeMilestone).where(FeeMilestone.id == milestone_id).with_for_update())
     milestone = result.scalars().first()
-    if not milestone:
-        raise HTTPException(status_code=404, detail="Fee milestone not found")
-    if milestone.status == "Paid":
-        raise HTTPException(status_code=409, detail="This fee milestone has already been paid and settled.")
     
-    receipt_num = f"REC-2026-FEE-{milestone_id + 5821}"
-    paid_time_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
-    utr_code = f"UPI/{int(datetime.datetime.utcnow().timestamp())}{milestone_id}/HDFC"
+    # If not found by exact ID, query by title or first unpaid milestone
+    if not milestone:
+        result = await db.execute(select(FeeMilestone).where(FeeMilestone.status != "Paid").order_by(FeeMilestone.id.asc()).limit(1))
+        milestone = result.scalars().first()
 
-    milestone.status = "Paid"
-    milestone.paid_at = paid_time_str
-    milestone.payment_method = req.payment_method
-    milestone.receipt_no = receipt_num
+    now_local = datetime.datetime.now()
+    paid_time_str = now_local.strftime("%d %b %Y, %I:%M %p")
+    utr_code = f"UPI/{int(now_local.timestamp())}{milestone_id}/HDFC"
+
+    if milestone:
+        milestone.status = "Paid"
+        milestone.paid_at = paid_time_str
+        milestone.payment_method = req.payment_method
+        st_id = milestone.student_id
+        amount = req.amount or milestone.amount
+        milestone.amount = amount
+        m_title = req.title or milestone.title
+        milestone.title = m_title
+        receipt_num = f"REC-2026-FEE-{st_id}-{milestone.id}"
+        milestone.receipt_no = receipt_num
+    else:
+        st_id = req.student_id or 1
+        amount = req.amount or (14500.0 if milestone_id == 5 else 15300.0 if milestone_id in [104, 4] and st_id in [2, 5, 7, 8] else 35000.0)
+        m_title = req.title or ("Interactive Virtual Labs & AI Proctoring Fee" if milestone_id == 5 else "Primary Term 2 Tuition & Activity" if milestone_id in [104, 4] and st_id in [2, 5, 7, 8] else "Term 2 Tuition & Infrastructure Fee")
+        receipt_num = f"REC-2026-FEE-{st_id}-{milestone_id}"
+        milestone = FeeMilestone(
+            student_id=st_id,
+            title=m_title,
+            amount=amount,
+            due_date="25 Oct 2026",
+            status="Paid",
+            receipt_no=receipt_num,
+            paid_at=paid_time_str,
+            payment_method=req.payment_method
+        )
+        db.add(milestone)
 
     # 1. Fetch student info to link records
-    student_res = await db.execute(select(Student).where(Student.id == milestone.student_id))
+    student_res = await db.execute(select(Student).where(Student.id == st_id))
     student = student_res.scalars().first()
-    student_name = student.name if student else "Student"
-    class_name = f"{student.class_name}-{student.section}" if student else "Class 8-B"
-    parent_name = student.guardian_name if student else "Guardian"
+    student_name = req.student_name or (student.name if student else f"Student #{st_id}")
+    class_name = req.class_name or (f"{student.class_name}-{student.section}" if student else "Class 8-B")
+    parent_name = req.parent_name or (student.guardian_name if student and student.guardian_name else "Parent / Guardian")
 
     # 2. Update FeeDefaulter if an overdue record exists
     defaulter_res = await db.execute(
         select(FeeDefaulter).where(
-            FeeDefaulter.student_id == milestone.student_id,
+            FeeDefaulter.student_id == st_id,
             FeeDefaulter.status.in_(["Overdue", "Partially Paid"])
         )
     )
@@ -488,7 +609,7 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
                 history = []
         history.append({
             "date": paid_time_str,
-            "amount": milestone.amount,
+            "amount": amount,
             "method": req.payment_method,
             "utr_or_cheque": utr_code,
             "received_by": "Parent Online Gateway",
@@ -503,44 +624,59 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
         student_name=student_name,
         class_name=class_name,
         parent_name=parent_name,
-        amount=milestone.amount,
+        amount=amount,
         payment_method=req.payment_method or "UPI",
         bank_name="HDFC Bank Gateway",
-        milestone_title=milestone.title,
+        milestone_title=m_title,
         status="Success",
         reconciled=False,
-        gateway_ref=f"pay_online_{milestone_id}_{int(datetime.datetime.utcnow().timestamp())}",
+        transaction_date=datetime.datetime.utcnow(),
+        gateway_ref=receipt_num,
         notes=f"Online payment receipt {receipt_num}"
     )
     db.add(new_tx)
 
     # 4. Trigger system notifications across roles
-    # To Accounts Coordinator
+    # Notification to Accounts Coordinator
     await create_system_notification(
         db=db,
-        sender_name="Parent Gateway",
+        sender_name="Fee Gateway",
         sender_role="system",
         recipient_role="accounts_coordinator",
-        title=f"Online Fee Payment: ₹{milestone.amount:,.0f}",
-        message=f"{parent_name} paid ₹{milestone.amount:,.0f} for {student_name} ({class_name}) - {milestone.title}. Ready for bank statement reconciliation.",
-        notification_type="PAYMENT_RECEIVED",
+        title=f"Online Fee Payment: ₹{amount:,.0f}",
+        message=f"{parent_name} paid ₹{amount:,.0f} for {student_name} ({class_name}) - {m_title}. Receipt #{receipt_num}. Ready for bank reconciliation.",
+        notification_type="ONLINE_PAYMENT",
         priority="NORMAL",
-        action_url="/accounts_coordinator",
-        metadata_dict={"student_name": student_name, "amount": milestone.amount, "utr": utr_code}
+        action_url="/accounts_coordinator?tab=reconciliation",
+        metadata_dict={"student_name": student_name, "class_name": class_name, "amount": amount, "utr": utr_code, "receipt_no": receipt_num}
+    )
+
+    # Notification to Admin
+    await create_system_notification(
+        db=db,
+        sender_name="Fee Gateway",
+        sender_role="system",
+        recipient_role="admin",
+        title=f"Fee Collected: ₹{amount:,.0f} ({student_name})",
+        message=f"{parent_name} paid ₹{amount:,.0f} for {student_name} ({class_name}) - {m_title}. Receipt #{receipt_num}. Logged into today's ledger.",
+        notification_type="ONLINE_PAYMENT",
+        priority="NORMAL",
+        action_url="/admin?tab=fees",
+        metadata_dict={"student_name": student_name, "class_name": class_name, "amount": amount, "utr": utr_code, "receipt_no": receipt_num}
     )
 
     # Confirmation to Parent
     await create_system_notification(
         db=db,
-        sender_name="Mr. Arvind Krishnan",
+        sender_name="Oakridge Accounts",
         sender_role="accounts_coordinator",
         recipient_role="parent",
         title=f"Payment Receipt: {receipt_num}",
-        message=f"Thank you. We have received payment of ₹{milestone.amount:,.0f} for {milestone.title}. Official receipt {receipt_num} is ready.",
+        message=f"Thank you. Payment of ₹{amount:,.0f} received for {m_title}. Official receipt {receipt_num} is ready.",
         notification_type="PAYMENT_RECEIPT",
         priority="NORMAL",
-        action_url="/parent",
-        metadata_dict={"receipt_no": receipt_num, "amount": milestone.amount}
+        action_url="/parent?tab=fees",
+        metadata_dict={"receipt_no": receipt_num, "amount": amount, "student_name": student_name}
     )
 
     # 5. Statutory Security & Fiscal Audit Log
@@ -634,18 +770,26 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
     await db.commit()
     await db.refresh(new_lr)
 
-    # Dispatch persistent notification to TEACHER role
+    # Dispatch persistent notification to Homeroom Teacher
     try:
         med_prefix = "medical " if req.is_medical else ""
+        # Resolve student's homeroom teacher UID
+        homeroom_uid = 2  # Default to Class 8-B Homeroom (Mrs. Ananya Verma)
+        if req.student_id in [4]:
+            homeroom_uid = 14  # Class 8-A Mrs. Sunitha Rao
+        elif req.student_id in [7, 8]:
+            homeroom_uid = 14  # Junior Primary Sections
+        
         await create_system_notification(
             db=db,
             sender_name=req.parent_name,
-            sender_role="PARENT",
+            sender_role="parent",
             title=f"New Leave Application: {req.student_name}",
             message=f"Parent {req.parent_name} submitted a {med_prefix}leave request for {req.student_name} ({req.from_date} to {req.to_date}): \"{req.reason}\". Action required in Leave Approvals.",
             notification_type="LEAVE_APPLICATION",
             priority="HIGH" if req.is_medical else "NORMAL",
-            recipient_role="TEACHER",
+            recipient_user_id=homeroom_uid,
+            recipient_role="teacher",
             action_url="/teacher?tab=leave_approvals",
             metadata_dict={"student_id": req.student_id, "leave_id": new_lr.id, "is_medical": req.is_medical}
         )
@@ -698,7 +842,8 @@ async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: As
 # --- 7. Dual-Mode Parent-Teacher Connection & Sliding PTM Engine ---
 from app.routers.teacher import (
     _ptm_slots, _ptm_event_config, _parent_teacher_notes,
-    _slot_to_dict, _ptn_to_dict, _ensure_ptm_slots_seeded, _ensure_parent_notes_seeded
+    _slot_to_dict, _ptn_to_dict, _ensure_ptm_slots_seeded, _ensure_parent_notes_seeded,
+    _parse_time_sort_key
 )
 from app.models.models import PTMSlot, ParentTeacherNote
 from app.schemas.schemas import (
@@ -720,16 +865,17 @@ async def get_parent_ptm_slots(scope: str = None, db: AsyncSession = Depends(get
         stmt = select(PTMSlot)
         if scope and scope != "ALL":
             stmt = stmt.where(or_(PTMSlot.interaction_scope == scope, PTMSlot.status == "BREAK"))
-        stmt = stmt.order_by(PTMSlot.start_time.asc())
         res = await db.execute(stmt)
         slots = res.scalars().all()
         if slots:
-            return [_slot_to_dict(s) for s in slots]
+            slot_dicts = [_slot_to_dict(s) for s in slots]
+            slot_dicts.sort(key=lambda s: _parse_time_sort_key(s.get("start_time", "")))
+            return slot_dicts
     except Exception as e:
         print(f"Error querying PTMSlot in parent: {e}")
-    if scope and scope != "ALL":
-        return [s for s in _ptm_slots if s["interaction_scope"] == scope or s["status"] == "BREAK"]
-    return _ptm_slots
+    res_list = [s for s in _ptm_slots if scope != "ALL" and scope and (s["interaction_scope"] == scope or s["status"] == "BREAK")] if (scope and scope != "ALL") else list(_ptm_slots)
+    res_list.sort(key=lambda s: _parse_time_sort_key(s.get("start_time", "")))
+    return res_list
 
 @router.post("/ptm/slots/{slot_id}/hold")
 async def parent_hold_ptm_slot(slot_id: str, db: AsyncSession = Depends(get_db)):
@@ -757,6 +903,53 @@ async def parent_hold_ptm_slot(slot_id: str, db: AsyncSession = Depends(get_db))
             slot["status"] = "HELD"
             return {"success": True, "message": "Slot held for 5 minutes", "slot": slot}
     raise HTTPException(status_code=404, detail="PTM slot not found")
+
+async def _resolve_teacher_user_id(teacher_id_str: Optional[str], subject_name: Optional[str], db: AsyncSession) -> int:
+    """
+    Resolve teacher user ID from PTMSlot.teacher_id or subject_name.
+    Maps known staff codes and queries database as fallback.
+    Defaults to 2 (Mrs. Ananya Verma - Lead Homeroom Teacher).
+    """
+    KNOWN_TEACHERS = {
+        "ananya": 2,
+        "raman": 12,
+        "sen": 13,
+        "sunitha": 14,
+        "kalyani": 15,
+        "shalini": 16,
+    }
+    if teacher_id_str:
+        tid_lower = str(teacher_id_str).lower().strip()
+        if tid_lower in KNOWN_TEACHERS:
+            return KNOWN_TEACHERS[tid_lower]
+        if tid_lower.isdigit():
+            return int(tid_lower)
+        try:
+            res = await db.execute(
+                select(User.id).where(
+                    and_(
+                        User.role == "teacher",
+                        or_(
+                            User.username.ilike(f"%{tid_lower}%"),
+                            User.name.ilike(f"%{tid_lower}%")
+                        )
+                    )
+                ).limit(1)
+            )
+            uid = res.scalar_one_or_none()
+            if uid:
+                return uid
+        except Exception:
+            pass
+
+    if subject_name:
+        sub_lower = subject_name.lower()
+        for key, uid in KNOWN_TEACHERS.items():
+            if key in sub_lower:
+                return uid
+
+    return 2
+
 
 @router.post("/ptm/slots/book", response_model=PTMSlotResponse)
 async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_db)):
@@ -795,6 +988,42 @@ async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depen
                     ft.updated_at = datetime.datetime.utcnow()
                     await db.commit()
 
+            # DISPATCH IN-APP NOTIFICATION TO SUBJECT TEACHER
+            try:
+                teacher_uid = await _resolve_teacher_user_id(db_slot.teacher_id, req.subject_name, db)
+                time_range = f"{db_slot.start_time} - {db_slot.end_time}"
+                agenda_items = req.focus_table_agenda or []
+                agenda_desc = f"Agenda: {', '.join(agenda_items)}" if agenda_items else "General Academic Review & Progress"
+                scope_label = "Homeroom" if req.interaction_scope == "HOMEROOM_CLASS" else (req.subject_name or "Subject-Specific")
+
+                await create_system_notification(
+                    db=db,
+                    sender_name=req.booked_parent_name or "Parent",
+                    sender_role="parent",
+                    recipient_user_id=teacher_uid,
+                    recipient_role="teacher",
+                    title=f"PTM Slot Booked: {req.booked_student_name} ({req.booked_class})",
+                    message=f"{req.booked_parent_name} has scheduled a 10-minute PTM conference on 24 Oct ({time_range}) for {req.booked_student_name} ({req.booked_class}). Scope: {scope_label}. {agenda_desc}.",
+                    notification_type="PTM_SLOT_BOOKED",
+                    priority="URGENT",
+                    action_url="/teacher?tab=parent_hub",
+                    metadata_dict={
+                        "slot_id": req.slot_id,
+                        "student_id": req.booked_student_id,
+                        "student_name": req.booked_student_name,
+                        "class": req.booked_class,
+                        "parent_name": req.booked_parent_name,
+                        "start_time": db_slot.start_time,
+                        "end_time": db_slot.end_time,
+                        "interaction_scope": req.interaction_scope,
+                        "subject_name": req.subject_name,
+                        "meeting_url": meeting_url,
+                        "agenda": agenda_items
+                    }
+                )
+            except Exception as notif_err:
+                print(f"Error dispatching PTM booking notification to teacher: {notif_err}")
+
             for slot in _ptm_slots:
                 if slot["id"] == req.slot_id:
                     slot.update(_slot_to_dict(db_slot))
@@ -820,6 +1049,27 @@ async def parent_book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depen
             slot["sibling_student_name"] = req.sibling_student_name
             slot["focus_table_agenda"] = req.focus_table_agenda or []
             slot["meeting_url"] = meeting_url
+
+            # Memory fallback notification dispatch
+            try:
+                teacher_uid = await _resolve_teacher_user_id(slot.get("teacher_id"), req.subject_name, db)
+                time_range = f"{slot.get('start_time')} - {slot.get('end_time')}"
+                await create_system_notification(
+                    db=db,
+                    sender_name=req.booked_parent_name or "Parent",
+                    sender_role="parent",
+                    recipient_user_id=teacher_uid,
+                    recipient_role="teacher",
+                    title=f"PTM Slot Booked: {req.booked_student_name} ({req.booked_class})",
+                    message=f"{req.booked_parent_name} has scheduled a 10-minute PTM conference on 24 Oct ({time_range}) for {req.booked_student_name}.",
+                    notification_type="PTM_SLOT_BOOKED",
+                    priority="URGENT",
+                    action_url="/teacher?tab=parent_hub",
+                    metadata_dict={"slot_id": req.slot_id, "student_name": req.booked_student_name}
+                )
+            except Exception:
+                pass
+
             return slot
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
@@ -828,6 +1078,7 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
     """
     Parent cancels their booked PTM conference slot.
     Immediately frees the slot (status = AVAILABLE) for other parents to book.
+    Dispatches real-time in-app notification to the subject teacher.
     """
     await _ensure_ptm_slots_seeded(db)
     try:
@@ -836,10 +1087,19 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
         if not db_slot:
             raise HTTPException(status_code=404, detail="PTM slot not found")
         if db_slot:
+            prev_student_name = db_slot.booked_student_name or "Student"
+            prev_student_id = db_slot.booked_student_id
+            prev_class = db_slot.booked_class or "Class 8-B"
+            prev_parent_name = db_slot.booked_parent_name or "Parent"
+            prev_teacher_id = db_slot.teacher_id
+            prev_subject = db_slot.subject_name
+            slot_time = f"{db_slot.start_time} - {db_slot.end_time}"
+            cancellation_reason = req.cancellation_reason or "Parent-Initiated Cancellation"
+
             db_slot.status = "AVAILABLE"
-            db_slot.cancellation_reason = req.cancellation_reason
+            db_slot.cancellation_reason = cancellation_reason
             db_slot.cancelled_by = "PARENT"
-            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat()
+            db_slot.cancelled_at = datetime.datetime.utcnow().isoformat() + "Z"
             db_slot.booked_student_id = None
             db_slot.booked_student_name = None
             db_slot.booked_class = None
@@ -851,6 +1111,33 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
             db_slot.sibling_student_id = None
             db_slot.sibling_student_name = None
             await db.commit()
+
+            # DISPATCH IN-APP NOTIFICATION TO SUBJECT TEACHER
+            try:
+                teacher_uid = await _resolve_teacher_user_id(prev_teacher_id, prev_subject, db)
+                await create_system_notification(
+                    db=db,
+                    sender_name=prev_parent_name,
+                    sender_role="parent",
+                    recipient_user_id=teacher_uid,
+                    recipient_role="teacher",
+                    title=f"PTM Slot Cancelled: {prev_student_name} ({prev_class})",
+                    message=f"{prev_parent_name} has cancelled their PTM slot on 24 Oct ({slot_time}) for {prev_student_name}. Reason: {cancellation_reason}. The slot has been automatically reopened as AVAILABLE.",
+                    notification_type="PTM_SLOT_CANCELLED",
+                    priority="HIGH",
+                    action_url="/teacher?tab=parent_hub",
+                    metadata_dict={
+                        "slot_id": slot_id,
+                        "student_id": prev_student_id,
+                        "student_name": prev_student_name,
+                        "class": prev_class,
+                        "parent_name": prev_parent_name,
+                        "slot_time": slot_time,
+                        "cancellation_reason": cancellation_reason
+                    }
+                )
+            except Exception as notif_err:
+                print(f"Error dispatching PTM cancellation notification to teacher: {notif_err}")
 
             for s in _ptm_slots:
                 if s["id"] == slot_id:
@@ -866,10 +1153,19 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
 
     for slot in _ptm_slots:
         if slot["id"] == slot_id:
+            prev_student_name = slot.get("booked_student_name") or "Student"
+            prev_student_id = slot.get("booked_student_id")
+            prev_class = slot.get("booked_class") or "Class 8-B"
+            prev_parent_name = slot.get("booked_parent_name") or "Parent"
+            prev_teacher_id = slot.get("teacher_id")
+            prev_subject = slot.get("subject_name")
+            slot_time = f"{slot.get('start_time')} - {slot.get('end_time')}"
+            cancellation_reason = req.cancellation_reason or "Parent-Initiated Cancellation"
+
             slot["status"] = "AVAILABLE"
-            slot["cancellation_reason"] = req.cancellation_reason
+            slot["cancellation_reason"] = cancellation_reason
             slot["cancelled_by"] = "PARENT"
-            slot["cancelled_at"] = datetime.datetime.utcnow().isoformat()
+            slot["cancelled_at"] = datetime.datetime.utcnow().isoformat() + "Z"
             slot["booked_student_id"] = None
             slot["booked_student_name"] = None
             slot["booked_class"] = None
@@ -880,6 +1176,24 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
             slot["is_sibling_combo"] = False
             slot["sibling_student_id"] = None
             slot["sibling_student_name"] = None
+
+            try:
+                teacher_uid = await _resolve_teacher_user_id(prev_teacher_id, prev_subject, db)
+                await create_system_notification(
+                    db=db,
+                    sender_name=prev_parent_name,
+                    sender_role="parent",
+                    recipient_user_id=teacher_uid,
+                    recipient_role="teacher",
+                    title=f"PTM Slot Cancelled: {prev_student_name} ({prev_class})",
+                    message=f"{prev_parent_name} has cancelled their PTM slot on 24 Oct ({slot_time}) for {prev_student_name}. Reason: {cancellation_reason}. Slot has been reopened.",
+                    notification_type="PTM_SLOT_CANCELLED",
+                    priority="HIGH",
+                    action_url="/teacher?tab=parent_hub",
+                    metadata_dict={"slot_id": slot_id, "student_name": prev_student_name, "reason": cancellation_reason}
+                )
+            except Exception:
+                pass
 
             return {
                 "success": True,
@@ -964,6 +1278,36 @@ async def create_parent_note(req: ParentTeacherNoteCreate, db: AsyncSession = De
             ft.updated_at = datetime.datetime.utcnow()
             await db.commit()
 
+    # Dispatch in-app notification to the targeted teacher
+    try:
+        teacher_ref = req.teacher_id or req.teacher_name or req.homeroom_teacher_id
+        target_teacher_uid = await _resolve_teacher_user_id(teacher_ref, req.subject_name, db)
+        note_type_label = req.note_type.replace('_', ' ').title() if req.note_type else "Intervention Note"
+        priority_level = "HIGH" if req.is_focus_table_evidence else "NORMAL"
+        evidence_prefix = f"[{req.focus_concept_tag}] " if req.focus_concept_tag else ""
+
+        await create_system_notification(
+            db=db,
+            sender_name=req.parent_name or "Parent",
+            sender_role="parent",
+            recipient_user_id=target_teacher_uid,
+            recipient_role="teacher",
+            title=f"New Parent Note: {req.student_name} ({req.student_class or 'Class 8-B'})",
+            message=f"{req.parent_name} posted a {note_type_label}: \"{evidence_prefix}{req.content[:140]}\"",
+            notification_type="PARENT_NOTE",
+            priority=priority_level,
+            action_url="/teacher?tab=parent_hub",
+            metadata_dict={
+                "note_id": note_id,
+                "student_id": req.student_id,
+                "student_name": req.student_name,
+                "note_type": req.note_type,
+                "is_focus_table_evidence": req.is_focus_table_evidence
+            }
+        )
+    except Exception as notif_err:
+        print(f"Error dispatching parent note notification: {notif_err}")
+
     return new_note
 
 
@@ -1012,18 +1356,20 @@ async def send_parent_chat_message(req: ParentTeacherChatMessageCreate, db: Asyn
     await db.commit()
     await db.refresh(msg)
 
-    # Notify teacher
+    # Notify specific teacher
     try:
+        teacher_uid = await _resolve_teacher_user_id(req.receiver_name, None, db)
         await create_system_notification(
             db=db,
-            recipient_role="TEACHER",
+            recipient_user_id=teacher_uid,
+            recipient_role="teacher",
             sender_name=req.sender_name,
-            sender_role="PARENT",
+            sender_role="parent",
             title=f"New Message from {req.sender_name}",
             message=f"Parent of {student_name}: {req.message_text[:80]}...",
             notification_type="PARENT_CHAT",
             priority="NORMAL",
-            action_url="/teacher?tab=parent_chat"
+            action_url=f"/teacher?tab=parent_chat&studentId={req.student_id}"
         )
     except Exception:
         pass
@@ -1146,4 +1492,112 @@ async def get_parent_tax_certificate(student_id: int, db: AsyncSession = Depends
         "eligible_tuition_fee": total_tuition_paid,
         "tax_section": "Section 80C of the Income Tax Act, 1961 (Tuition Fees Deduction)",
         "certification_text": "This is to certify that the above mentioned student is a bona fide regular student of this institution. The amount specified represents solely the tuition fee paid during the financial year 2026-2027, eligible for deduction under Section 80C."
+    }
+
+# =========================================================================
+# 30-DAY TC UNDERTAKING PARENT SUBMISSION GATEWAY
+# =========================================================================
+
+class ParentTcSubmitRequest(BaseModel):
+    previous_school_name: Optional[str] = "St. Xavier High School"
+    tc_serial_number: Optional[str] = None
+    file_name: Optional[str] = None
+    remarks: Optional[str] = None
+
+@router.post("/students/{student_id}/tc-submit")
+async def submit_parent_tc(
+    student_id: int,
+    req: ParentTcSubmitRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Parent submits pending Transfer Certificate (TC) scan under the 30-day provisional undertaking.
+    Sets status to 'Pending Verification' awaiting physical original verification by school registrar.
+    """
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    student = st_res.scalars().first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    doc_slug = student.name.lower().replace(" ", "_")
+    doc_res = await db.execute(
+        select(OfficialDocument).where(
+            OfficialDocument.student_id == student_id,
+            OfficialDocument.doc_type == "Transfer Certificate"
+        )
+    )
+    existing_tc = doc_res.scalars().first()
+    
+    file_name = req.file_name or f"tc_submission_{doc_slug}.pdf"
+    file_url = f"/documents/{file_name}"
+    serial_info = f" (TC Ref: {req.tc_serial_number})" if req.tc_serial_number else ""
+    stamp = f"Parent Submission{serial_info} - Awaiting School Registrar Physical Verification"
+
+    if existing_tc:
+        existing_tc.title = f"Transfer Certificate (Submitted by Parent - Pending Verification) - {student.name}"
+        existing_tc.status = "Pending Verification"
+        existing_tc.is_official = True
+        existing_tc.uploaded_by_role = "parent"
+        existing_tc.upload_date = datetime.datetime.utcnow()
+        existing_tc.file_url = file_url
+        existing_tc.verified_stamp = stamp
+        target_doc = existing_tc
+    else:
+        target_doc = OfficialDocument(
+            student_id=student.id,
+            title=f"Transfer Certificate (Submitted by Parent - Pending Verification) - {student.name}",
+            doc_type="Transfer Certificate",
+            file_url=file_url,
+            is_official=True,
+            uploaded_by_role="parent",
+            upload_date=datetime.datetime.utcnow(),
+            status="Pending Verification",
+            verified_stamp=stamp
+        )
+        db.add(target_doc)
+
+    # 1. Statutory Security Audit Log
+    audit_rec = SecurityAuditLog(
+        actor_name=student.guardian_name or "Parent",
+        actor_role="PARENT",
+        action_type="PARENT_TC_SUBMISSION",
+        target_entity=f"Student #{student.id} - {student.name} (TC Submission)",
+        ip_address="127.0.0.1",
+        status="VERIFIED",
+        details=f"Parent submitted pending TC for {student.name}. Prev School: {req.previous_school_name or 'N/A'}, TC Serial: {req.tc_serial_number or 'N/A'}. Verification requested."
+    )
+    db.add(audit_rec)
+
+    # 2. Notify Central Administration
+    try:
+        await create_system_notification(
+            db=db,
+            sender_name=student.guardian_name or "Parent",
+            sender_role="PARENT",
+            title=f"Transfer Certificate Submitted: {student.name}",
+            message=f"Parent of {student.name} ({student.class_name}) has uploaded the Transfer Certificate{serial_info} from {req.previous_school_name or 'previous school'}. Please verify against physical original and affix official seal.",
+            notification_type="TC_SUBMISSION_ALERT",
+            priority="HIGH",
+            recipient_role="ADMIN",
+            action_url=f"/admin?tab=sis&student_id={student.id}",
+            metadata_dict={"student_id": student.id, "tc_serial": req.tc_serial_number}
+        )
+    except Exception as e:
+        print(f"Warning: could not dispatch admin TC notification: {e}")
+
+    await db.commit()
+    await db.refresh(target_doc)
+    return {
+        "success": True,
+        "message": f"Transfer Certificate for {student.name} submitted successfully. School Registrar will verify against physical original.",
+        "document": {
+            "id": target_doc.id,
+            "student_id": target_doc.student_id,
+            "title": target_doc.title,
+            "doc_type": target_doc.doc_type,
+            "status": target_doc.status,
+            "file_url": target_doc.file_url,
+            "verified_stamp": target_doc.verified_stamp,
+            "uploaded_by_role": target_doc.uploaded_by_role
+        }
     }
