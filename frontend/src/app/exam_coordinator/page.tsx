@@ -1463,7 +1463,7 @@ export default function ExamCoordinatorPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
 
                     EX
 
@@ -1481,7 +1481,7 @@ export default function ExamCoordinatorPage() {
 
               ) : (
 
-                <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
 
                   EX
 
@@ -1598,10 +1598,8 @@ export default function ExamCoordinatorPage() {
                     className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
 
                       active 
-
-                        ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400' 
-
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                        ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                     }`}
 
@@ -1611,7 +1609,7 @@ export default function ExamCoordinatorPage() {
 
                     <div className="flex items-center gap-2.5 min-w-0">
 
-                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
 
                       {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
 
@@ -1715,7 +1713,7 @@ export default function ExamCoordinatorPage() {
 
                 <div className="flex items-center gap-2">
 
-                  <span className="rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 px-2.5 py-0.5 text-[10px] font-bold border border-violet-200/60 dark:border-violet-800/60">
+                  <span className="rounded-full bg-[var(--primary)]/10 text-[var(--primary)] dark:text-[var(--primary-soft)] px-2.5 py-0.5 text-[10px] font-bold border border-[var(--primary)]/20">
 
                     Examination Authority
 
@@ -1753,7 +1751,7 @@ export default function ExamCoordinatorPage() {
 
                   onClick={() => setShowBatchModal(true)}
 
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                 >
 
@@ -1771,7 +1769,7 @@ export default function ExamCoordinatorPage() {
 
                   onClick={() => setShowCreateModal(true)}
 
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                 >
 
@@ -1789,7 +1787,7 @@ export default function ExamCoordinatorPage() {
 
                   onClick={() => setActiveTab('schedules')}
 
-                  className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                 >
 
@@ -1855,7 +1853,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                       {questionPapers.filter(p => p.status === 'sent_to_exam_cell' || p.status === 'approved').length} / {questionPapers.length}
 
@@ -1921,7 +1919,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                       {schedules.filter(s => s.academic_clearance).length} / {schedules.length}
 
@@ -1931,7 +1929,7 @@ export default function ExamCoordinatorPage() {
 
                       <div 
 
-                        className="bg-blue-600 h-1.5 rounded-full" 
+                        className="bg-[var(--primary)] h-1.5 rounded-full" 
 
                         style={{ width: `${Math.round((schedules.filter(s => s.academic_clearance).length / (schedules.length || 1)) * 100)}%` }} 
 
@@ -1999,7 +1997,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
 
                       100% Issued
 
@@ -2065,7 +2063,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                       {moderationList.length} Subject Sets
 
@@ -2131,7 +2129,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                       {reportCards.length} Generated
 
@@ -2197,7 +2195,7 @@ export default function ExamCoordinatorPage() {
 
                   <div className="my-3">
 
-                    <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                    <div className="text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums">
 
                       {reExamMandates.length} Retests
 
@@ -3017,7 +3015,7 @@ export default function ExamCoordinatorPage() {
 
                     onClick={() => setShowRequisitionModal(true)}
 
-                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                    className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                   >
 
@@ -3247,7 +3245,7 @@ export default function ExamCoordinatorPage() {
 
                               onClick={() => setSelectedPaperForVault(qp)}
 
-                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                             >
 
@@ -3662,7 +3660,7 @@ export default function ExamCoordinatorPage() {
 
                     onClick={() => setShowBatchModal(true)}
 
-                    className="flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                    className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                   >
 
@@ -4011,7 +4009,7 @@ export default function ExamCoordinatorPage() {
                       <button
                         type="button"
                         onClick={() => setShowBatchModal(true)}
-                        className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
+                        className="px-3.5 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold cursor-pointer transition-all shadow-xs"
                       >
                         Batch Schedule Class
                       </button>
@@ -4195,7 +4193,7 @@ export default function ExamCoordinatorPage() {
 
                               onClick={() => handleLockGradebook(item.exam_id)}
 
-                              className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                              className="rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
                             >
 
@@ -4341,7 +4339,7 @@ export default function ExamCoordinatorPage() {
 
                             }}
 
-                            className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            className="bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
 
                           >
 
@@ -4897,7 +4895,7 @@ export default function ExamCoordinatorPage() {
 
                         newTaskLabel === lbl
 
-                          ? 'bg-violet-600 text-white shadow-xs'
+                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
 
                           : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
 
@@ -5013,7 +5011,7 @@ export default function ExamCoordinatorPage() {
 
               </div>
 
-              <button type="submit" className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold mt-2 cursor-pointer shadow-sm">
+              <button type="submit" className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 py-2.5 font-bold mt-2 cursor-pointer shadow-sm">
 
                 Assign Task ✓
 
@@ -5037,7 +5035,7 @@ export default function ExamCoordinatorPage() {
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b pb-4 border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-violet-600/10 text-violet-600 flex items-center justify-center font-bold">
+                <div className="h-10 w-10 rounded-2xl bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center font-bold">
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
@@ -5615,7 +5613,7 @@ export default function ExamCoordinatorPage() {
 
                 type="submit"
 
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold transition-all shadow-md cursor-pointer"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 py-2.5 font-bold transition-all shadow-md cursor-pointer"
 
               >
 
@@ -5821,7 +5819,7 @@ export default function ExamCoordinatorPage() {
 
                 type="submit"
 
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold transition-all shadow-md cursor-pointer"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 py-2.5 font-bold transition-all shadow-md cursor-pointer"
 
               >
 
@@ -5989,7 +5987,7 @@ export default function ExamCoordinatorPage() {
 
                 onClick={handleScheduleRetest}
 
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold cursor-pointer transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 py-2.5 font-bold cursor-pointer transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
 
               >
 
@@ -6249,7 +6247,7 @@ export default function ExamCoordinatorPage() {
 
                 }}
 
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
 
               >
 
@@ -6413,7 +6411,7 @@ export default function ExamCoordinatorPage() {
 
                 }}
 
-                className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white py-2.5 font-bold cursor-pointer flex items-center justify-center gap-2"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 py-2.5 font-bold cursor-pointer flex items-center justify-center gap-2"
 
               >
 
