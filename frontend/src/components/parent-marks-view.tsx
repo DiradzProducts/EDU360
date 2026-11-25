@@ -698,7 +698,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('ut2')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut2'
-                ? 'bg-blue-600 text-white shadow-xs'
+                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -708,7 +708,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('midterm')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'midterm'
-                ? 'bg-blue-600 text-white shadow-xs'
+                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -718,7 +718,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('ut1')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut1'
-                ? 'bg-blue-600 text-white shadow-xs'
+                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -911,7 +911,7 @@ export function ParentMarksView({
           </div>
           <button
             onClick={handleOpenAdmitCard}
-            className="flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer self-start sm:self-auto"
+            className="flex items-center gap-2 rounded-2xl bg-[var(--primary)] hover:opacity-95 text-white px-4 py-2 text-xs font-bold shadow-sm shadow-[var(--primary)]/20 cursor-pointer self-start sm:self-auto"
           >
             <Award className="h-4 w-4" />
             <span>Download Upcoming Admit Card</span>
@@ -1051,7 +1051,7 @@ export function ParentMarksView({
                   <button
                     onClick={handleSendEmail}
                     disabled={emailSending}
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-5 py-2.5 text-xs font-bold shadow-sm shadow-[var(--primary)]/20 transition-all active:scale-95 disabled:opacity-50"
                   >
                     <Mail className="h-4 w-4" />
                     <span>{emailSending ? 'Dispatching PDF...' : 'Confirm & Send to My Email'}</span>
