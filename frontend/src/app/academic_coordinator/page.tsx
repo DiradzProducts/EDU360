@@ -633,7 +633,7 @@ export default function AcademicCoordinatorPage() {
             <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
               {!sidebarCollapsed ? (
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                     AC
                   </div>
                   <div className="min-w-0">
@@ -642,7 +642,7 @@ export default function AcademicCoordinatorPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                   AC
                 </div>
               )}
@@ -701,13 +701,13 @@ export default function AcademicCoordinatorPage() {
                     }}
                     className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                       active 
-                        ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400' 
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                        ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                     }`}
                     title={item.label}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
                       {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                     </div>
                     {!sidebarCollapsed && item.badge && (
@@ -760,7 +760,7 @@ export default function AcademicCoordinatorPage() {
               </button>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60">
+                  <span className="rounded-full bg-[var(--primary-soft)] text-[var(--primary)] px-2.5 py-0.5 text-[10px] font-bold border border-[var(--primary)]/20">
                     Academic &amp; Dean Office
                   </span>
                   <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">Classes 6–12 Curriculum &amp; Faculty Coordination</span>
@@ -779,7 +779,7 @@ export default function AcademicCoordinatorPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm shadow-[var(--primary)]/20 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Assign Academic Task</span>
@@ -816,7 +816,7 @@ export default function AcademicCoordinatorPage() {
                     </span>
                   </div>
                   <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                       {substitutions.filter(s => s.status === 'Assigned').length} / {substitutions.length}
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
@@ -849,11 +849,11 @@ export default function AcademicCoordinatorPage() {
                     </span>
                   </div>
                   <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                       {curriculum.filter(c => c.status === 'On Track' || c.status === 'Ahead').length} / {curriculum.length}
                     </div>
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: '94%' }} />
+                      <div className="bg-[var(--primary)] h-1.5 rounded-full" style={{ width: '94%' }} />
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
                       {curriculum.filter(c => c.status === 'Lagging').length} subjects lagging behind planned term syllabus
@@ -885,7 +885,7 @@ export default function AcademicCoordinatorPage() {
                     </span>
                   </div>
                   <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                       {questionPapers.filter(q => q.status === 'approved' || q.status === 'sent_to_exam_cell' || q.status === 'sealed_in_vault').length} / {questionPapers.length}
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
@@ -918,7 +918,7 @@ export default function AcademicCoordinatorPage() {
                     </span>
                   </div>
                   <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                       {examSchedules.filter(e => e.academic_clearance).length} / {examSchedules.length}
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
@@ -951,7 +951,7 @@ export default function AcademicCoordinatorPage() {
                     </span>
                   </div>
                   <div className="my-3">
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">
+                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                       {faculty.length} Free
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
@@ -1046,7 +1046,7 @@ export default function AcademicCoordinatorPage() {
                               setSelectedSubSlot(slot);
                               setActiveTab('substitutions');
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white text-xs font-bold shadow-xs shrink-0 cursor-pointer"
                           >
                             Assign Proxy
                           </button>
@@ -1171,7 +1171,7 @@ export default function AcademicCoordinatorPage() {
                                 setSelectedReviewQp(qp);
                                 setActiveTab('paper_blueprints');
                               }}
-                              className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 hover:bg-blue-100 font-bold text-[11px] cursor-pointer"
+                              className="px-3 py-1 rounded-xl bg-[var(--primary-soft)] text-[var(--primary)] hover:opacity-90 font-bold text-[11px] cursor-pointer"
                             >
                               {qp.status === 'under_review' ? 'Review Blueprint' : 'View Blueprint'}
                             </button>
@@ -1194,7 +1194,7 @@ export default function AcademicCoordinatorPage() {
                 <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/20 p-5 shadow-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3.5">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-9 w-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+                      <div className="h-9 w-9 rounded-2xl bg-[var(--primary)] text-white flex items-center justify-center font-bold shadow-sm shadow-[var(--primary)]/20">
                         <CalendarRange className="h-4 w-4" />
                       </div>
                       <div>
@@ -1226,7 +1226,7 @@ export default function AcademicCoordinatorPage() {
                       <button
                         onClick={handleRemindPTMTeachers}
                         disabled={remindingTeachers}
-                        className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                        className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 disabled:opacity-50 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm shadow-[var(--primary)]/20 cursor-pointer shrink-0"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${remindingTeachers ? 'animate-spin' : ''}`} />
                         <span>📢 Remind Defaulting Teachers ({ptmGovernance.unready_teachers.length})</span>
@@ -1243,7 +1243,7 @@ export default function AcademicCoordinatorPage() {
                         <span className="text-[11px] text-slate-500 font-semibold">{ptmGovernance.published_teachers_count}/{ptmGovernance.total_teachers} faculty</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div className="bg-indigo-600 h-full rounded-full transition-all duration-500" style={{ width: `${ptmGovernance.readiness_percentage}%` }} />
+                        <div className="bg-[var(--primary)] h-full rounded-full transition-all duration-500" style={{ width: `${ptmGovernance.readiness_percentage}%` }} />
                       </div>
                     </div>
 
@@ -1407,7 +1407,7 @@ export default function AcademicCoordinatorPage() {
                               setReliefModalTask(rt);
                               if (rt.suggested_peer_teacher) setMigrationPeer(rt.suggested_peer_teacher);
                             }}
-                            className="flex-1 py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs"
+                            className="flex-1 py-1.5 px-3 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white text-xs font-bold transition-all shadow-sm shadow-[var(--primary)]/20"
                           >
                             Approve Migration
                           </button>
@@ -1659,7 +1659,7 @@ export default function AcademicCoordinatorPage() {
                       {substitutions.filter(s => s.status === 'Unassigned').length > 0 ? 'Urgent Action' : 'All Covered'}
                     </span>
                   </div>
-                  <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                     {substitutions.filter(s => s.status === 'Unassigned').length} <span className="text-xs font-normal text-slate-500">periods unmanned</span>
                   </div>
                 </div>
@@ -1756,7 +1756,7 @@ export default function AcademicCoordinatorPage() {
                                   const eligible = faculty.filter(f => f.name !== sub.absent_teacher_name);
                                   setChosenFacultyId(sub.substitute_teacher_id || eligible[0]?.id || null);
                                 }}
-                                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+                                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm shadow-[var(--primary)]/20 transition-all cursor-pointer"
                               >
                                 <UserPlus className="h-3.5 w-3.5" />
                                 <span>Assign Proxy</span>
@@ -1925,7 +1925,7 @@ export default function AcademicCoordinatorPage() {
                         <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden mt-3">
                           <div 
                             className={`h-full rounded-full transition-all duration-500 ${
-                              item.status.toLowerCase().includes('lag') ? 'bg-rose-500' : 'bg-indigo-600'
+                              item.status.toLowerCase().includes('lag') ? 'bg-rose-500' : 'bg-[var(--primary)]'
                             }`}
                             style={{ width: `${Math.min(100, item.completion_pct)}%` }} 
                           />
@@ -2079,7 +2079,7 @@ export default function AcademicCoordinatorPage() {
                 </div>
                 <button
                   onClick={() => setShowOrderQpModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-4 py-2.5 text-xs font-bold shadow-sm shadow-[var(--primary)]/20 transition-all cursor-pointer shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Commission New Paper</span>
@@ -2168,7 +2168,7 @@ export default function AcademicCoordinatorPage() {
                           {paper.status === 'approved' && (
                             <button
                               onClick={() => handleHandoffToExamCell(paper.id)}
-                              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                              className="rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm shadow-[var(--primary)]/20 cursor-pointer flex items-center gap-1.5"
                             >
                               <Lock className="h-4 w-4" />
                               <span>Handoff to Exam Vault &rarr;</span>
@@ -2470,7 +2470,7 @@ export default function AcademicCoordinatorPage() {
                         }}
                         className={`px-2 py-1 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                            ? 'bg-[var(--primary)] text-white border-[var(--primary)] font-bold shadow-2xs'
                             : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                         }`}
                       >
@@ -2531,7 +2531,7 @@ export default function AcademicCoordinatorPage() {
               <button 
                 type="submit" 
                 disabled={creatingTask}
-                className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 font-bold mt-2 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 disabled:opacity-50 text-white py-2.5 font-bold mt-2 shadow-sm shadow-[var(--primary)]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {creatingTask ? (
                   <>
@@ -2632,7 +2632,7 @@ export default function AcademicCoordinatorPage() {
                   type="button"
                   disabled={!chosenFacultyId} 
                   onClick={handleAssignSub}
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 font-bold shadow-md transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                  className="flex-1 rounded-xl bg-[var(--primary)] hover:opacity-95 disabled:opacity-50 text-white py-2.5 font-bold shadow-sm shadow-[var(--primary)]/20 transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5"
                 >
                   <Check className="h-4 w-4" />
                   <span>Confirm Proxy Allocation</span>
@@ -2709,7 +2709,7 @@ export default function AcademicCoordinatorPage() {
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={() => handleApproveRelief(reliefModalTask)}
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold shadow-xs"
+                  className="flex-1 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white py-2.5 font-bold shadow-sm shadow-[var(--primary)]/20"
                 >
                   Confirm Migration to {migrationPeer}
                 </button>
@@ -2760,7 +2760,7 @@ export default function AcademicCoordinatorPage() {
                       onClick={() => setSlaExtensionHours(ext.hrs)}
                       className={`py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
                         slaExtensionHours === ext.hrs
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          ? 'bg-[var(--primary)] text-white border-[var(--primary)] font-bold shadow-2xs'
                           : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                       }`}
                     >
@@ -2784,7 +2784,7 @@ export default function AcademicCoordinatorPage() {
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={() => handleExtendSla(extensionModalTask)}
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold shadow-xs"
+                  className="flex-1 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white py-2.5 font-bold shadow-sm shadow-[var(--primary)]/20"
                 >
                   Grant +{slaExtensionHours}h Extension
                 </button>
@@ -3009,7 +3009,7 @@ export default function AcademicCoordinatorPage() {
           <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 my-8">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                <div className="h-9 w-9 rounded-xl bg-[var(--primary)] text-white flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                   <FileText className="h-4.5 w-4.5" />
                 </div>
                 <div>
@@ -3133,7 +3133,7 @@ export default function AcademicCoordinatorPage() {
 
               <button
                 type="submit"
-                className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-3 font-bold mt-2 shadow-xs cursor-pointer"
+                className="w-full rounded-xl bg-[var(--primary)] hover:opacity-95 text-white py-3 font-bold mt-2 shadow-sm shadow-[var(--primary)]/20 cursor-pointer"
               >
                 Dispatch Commissioning Blueprint to Faculty
               </button>
