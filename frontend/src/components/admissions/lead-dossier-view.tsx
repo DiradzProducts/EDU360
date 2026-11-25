@@ -272,7 +272,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
         <p className="text-xs text-slate-500">The requested student enquiry ID could not be loaded.</p>
         <Link
           href={backUrl}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white text-xs font-bold shadow-sm shadow-[var(--primary)]/20 cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Return to {role === 'admin' ? 'Admin CRM' : 'Calling Queue'}</span>
@@ -377,7 +377,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                     if (textarea) textarea.focus();
                   }
                 }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold transition-all shadow-xs cursor-pointer"
                 title="Add New Follow-Up Interaction"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -412,7 +412,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
             <button
               type="button"
               onClick={handleReopenLead}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>Reopen Lead &amp; Restore</span>
@@ -424,7 +424,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
               <button
                 type="button"
                 onClick={() => setShowCredentialsModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-black shadow-md shadow-[var(--primary)]/20 transition-all cursor-pointer"
               >
                 <Key className="h-4 w-4" />
                 <span>View Credentials</span>
@@ -755,7 +755,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                   <button
                     type="submit"
                     disabled={isSubmittingLog || !callNote.trim()}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
                   >
                     <Send className="h-3.5 w-3.5" />
                     <span>{isSubmittingLog ? 'Saving...' : 'Add Follow-up Log'}</span>
@@ -794,7 +794,7 @@ export function LeadDossierView({ enquiryId, backUrl, role }: LeadDossierViewPro
                 {interactionHistory.map((item) => (
                   <div key={item.id} className="relative pl-8 space-y-1">
                     {/* Timeline bullet dot */}
-                    <div className="absolute left-2 top-1.5 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 dark:bg-blue-400" />
+                    <div className="absolute left-2 top-1.5 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white dark:border-slate-900 bg-[var(--primary)]" />
 
                     <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-3.5 space-y-1.5 shadow-2xs">
                       <div className="flex items-center justify-between text-xs">
