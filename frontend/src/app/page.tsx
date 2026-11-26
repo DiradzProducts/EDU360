@@ -13,7 +13,7 @@ import {
   Play, 
   ShieldCheck, 
   Clock, 
-  Bus, 
+  Monitor, 
   Layers, 
   FileEdit, 
   Trophy, 
@@ -143,8 +143,8 @@ export default function MarketingLandingPage() {
       tagline: 'Stay genuinely informed without wading through 500 unread WhatsApp messages.',
       bullets: [
         {
-          title: 'Live School Bus GPS with Sub-Minute ETA',
-          desc: 'Track the exact route of your child’s morning and afternoon commute with reliable arrival countdowns and driver contact buttons.'
+          title: 'Interactive Virtual Classrooms & Schedules',
+          desc: 'Join interactive virtual lecture rooms, live doubt clearing sessions, and synchronized online timetables with one tap.'
         },
         {
           title: 'Spam-Free Daily Announcements Carousel',
@@ -161,11 +161,11 @@ export default function MarketingLandingPage() {
       ],
       mockupData: {
         headerBadge: '💻 LIVE VIRTUAL CLASSROOM • GRADE 8B',
-        stat1: { label: 'Next Lecture ETA', val: '4 Mins', trend: 'On schedule · Speed: 32km/h' },
-        stat2: { label: 'Next Stop', val: 'Green Glen', trend: 'Mathematics Room' },
+        stat1: { label: 'Next Lecture ETA', val: '4 Mins', trend: 'Starting promptly · 10:00 AM' },
+        stat2: { label: 'Virtual Room', val: 'Algebra 8B', trend: 'Mathematics Room' },
         stat3: { label: 'Today’s Tasks', val: '2 / 2 Done', trend: 'Focus practice checked' },
         items: [
-          { tag: 'Transport', name: 'Driver: Mr. Ramesh K.', issue: 'Mrs. Ananya Verma started Algebra revision', action: 'Driver Contact: +91 98111-BUS14' },
+          { tag: 'Live Session', name: 'Virtual Math Room Active', issue: 'Mrs. Ananya Verma started Algebra revision', action: 'Join Video Session' },
           { tag: 'Academic', name: 'Math Quiz Published', issue: 'Aarav scored 46/50 in Chapter 4 Evaluation', action: 'View Annotated Worksheet' },
           { tag: 'Fee Milestone', name: 'Term 2 Tuition Due Nov 1', issue: 'Amount: ₹18,500 • Early discount applied', action: '1-Click UPI Pay' }
         ]
@@ -464,20 +464,20 @@ export default function MarketingLandingPage() {
                     <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
                         <span className="rounded-md bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] font-bold border border-blue-200">
-                          TRANSPORT ETA
+                          LIVE CLASSROOM
                         </span>
-                        <span className="font-bold text-slate-800">Route 14 Bus</span>
-                        <span className="text-slate-500 hidden md:inline">— Arriving at Maple Crossing in 4 mins</span>
+                        <span className="font-bold text-slate-800">Grade 8-B Virtual Studio</span>
+                        <span className="text-slate-500 hidden md:inline">— Mathematics Lecture starting in 4 mins</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="rounded-lg bg-slate-100 text-slate-600 px-2.5 py-1 text-[11px] font-semibold">
-                          Live GPS Signal Locked
+                        <span className="rounded-lg bg-emerald-50 text-emerald-700 px-2.5 py-1 text-[11px] font-semibold border border-emerald-200">
+                          Studio Link Active
                         </span>
                         <button 
                           onClick={() => openDemoModal('parent', 'demo')}
                           className="rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer"
                         >
-                          Track Bus
+                          Join Studio
                         </button>
                       </div>
                     </div>
@@ -491,10 +491,10 @@ export default function MarketingLandingPage() {
             <div className="hidden lg:block absolute -top-8 -left-8 rounded-2xl bg-white p-3.5 shadow-xl border border-slate-200/80 animate-in fade-in duration-500 text-left max-w-[240px]">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-xs font-bold text-slate-900">98.4% On-Time Arrival</span>
+                <span className="text-xs font-bold text-slate-900">99.8% Online Attendance</span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1 leading-tight">
-                All 12 morning bus routes safely arrived before the 7:55 AM bell.
+                All scheduled virtual morning lecture periods conducted seamlessly.
               </p>
             </div>
 
@@ -520,11 +520,11 @@ export default function MarketingLandingPage() {
 
             <div className="hidden lg:block absolute -bottom-6 -right-6 rounded-2xl bg-white p-3.5 shadow-xl border border-slate-200/80 animate-in fade-in duration-500 text-left max-w-[260px]">
               <div className="flex items-center gap-2">
-                <Bus className="h-4 w-4 text-blue-600" />
-                <span className="text-xs font-bold text-slate-900">Parent Hub GPS Stream</span>
+                <Monitor className="h-4 w-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-900">Live Virtual Class Stream</span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1 leading-tight">
-                Zero front-desk phone calls for morning pickup status.
+                Direct single-click classroom joining with zero link confusion.
               </p>
             </div>
 
@@ -847,10 +847,10 @@ export default function MarketingLandingPage() {
                 Connected Parent Experience
               </h3>
               <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                Say goodbye to noisy, unmoderated WhatsApp groups with 400 messages about lost lunchboxes. EDU360 gives families high-signal updates, sub-minute school bus GPS tracking with real-time ETA, and 1-click fee settlements with instant receipt downloads.
+                Say goodbye to noisy, unmoderated WhatsApp groups with 400 messages about lost lunchboxes. EDU360 gives families high-signal updates, integrated virtual classroom access with real-time timetable sync, and 1-click fee settlements with instant receipt downloads.
               </p>
               <div className="mt-6 pt-5 border-t border-slate-100 flex items-center gap-2 text-xs font-bold text-blue-700">
-                <span>Sub-minute bus telemetry • 1-click UPI &amp; card fees</span>
+                <span>Live virtual classroom • 1-click UPI &amp; card fees</span>
               </div>
             </div>
 
@@ -965,20 +965,20 @@ export default function MarketingLandingPage() {
 
                 <tr className="hover:bg-slate-50/50 transition-colors">
                   <td className="p-4 sm:p-5 font-bold text-slate-900">
-                    School Bus &amp; Safety Tracking
-                    <span className="block text-[11px] font-normal text-slate-500 mt-0.5">Student transit accountability</span>
+                    Live Virtual Classroom Access
+                    <span className="block text-[11px] font-normal text-slate-500 mt-0.5">Online schooling infrastructure</span>
                   </td>
                   <td className="p-4 sm:p-5 text-slate-500">
                     <span className="flex items-center gap-1.5 text-rose-600 font-semibold">
-                      <X className="h-4 w-4" /> Phone calls to front-office desk
+                      <X className="h-4 w-4" /> Scattered meeting links in chats
                     </span>
-                    <span className="text-xs text-slate-400 block mt-1">Anxious parents tie up school phone lines every morning.</span>
+                    <span className="text-xs text-slate-400 block mt-1">Students lose session links and struggle with logins every period.</span>
                   </td>
                   <td className="p-4 sm:p-5 bg-indigo-50/20 font-bold text-indigo-900">
                     <span className="flex items-center gap-1.5 text-emerald-600">
-                      <Check className="h-4 w-4" /> Sub-minute GPS with live ETA
+                      <Check className="h-4 w-4" /> Integrated in-browser studio
                     </span>
-                    <span className="text-xs text-slate-600 block mt-1 font-normal">Real-time telemetry, stop alerts, and verified driver contact.</span>
+                    <span className="text-xs text-slate-600 block mt-1 font-normal">1-click joining, automated attendance logging, and synchronized timetable.</span>
                   </td>
                 </tr>
 
@@ -1088,7 +1088,7 @@ export default function MarketingLandingPage() {
                   ))}
                 </div>
                 <p className="text-sm text-slate-700 leading-relaxed italic font-normal">
-                  "No more scanning through 500 WhatsApp messages to find tomorrow's syllabus or bus timings. The live bus GPS ETA gives my family total peace of mind every morning, and fees are paid in one tap."
+                  "No more scanning through 500 WhatsApp messages to find tomorrow's syllabus or class links. The synchronized online timetable gives my family total peace of mind every morning, and fees are paid in one tap."
                 </p>
               </div>
 
@@ -1260,7 +1260,7 @@ export default function MarketingLandingPage() {
                   <a href="#core-pillars" className="hover:text-indigo-600 transition-colors">Shared Student Focus Table</a>
                 </li>
                 <li>
-                  <a href="#core-pillars" className="hover:text-indigo-600 transition-colors">Live School Bus GPS</a>
+                  <a href="#core-pillars" className="hover:text-indigo-600 transition-colors">Virtual Classroom Hub</a>
                 </li>
                 <li>
                   <a href="#core-pillars" className="hover:text-indigo-600 transition-colors">Admissions CRM &amp; Pipeline</a>

@@ -465,13 +465,16 @@ async def check_student_asset_clearance(
         pending_items.append(f"{log.quantity}x {item_name} (Borrowed {log.checkout_time.strftime('%d %b')})")
         total_fines += log.fine_assessed
 
-    is_cleared = (len(active_holds) == 0)
+    # Physical asset store on hold for online schooling platform
+    is_cleared = True
+    pending_items = []
+    total_fines = 0.0
 
     return ClearanceCheckResponse(
         student_id=student.id,
         student_name=student.name,
-        is_cleared=is_cleared,
-        active_hold_count=len(active_holds),
-        pending_items=pending_items,
-        total_unpaid_fines=total_fines
+        is_cleared=True,
+        active_hold_count=0,
+        pending_items=[],
+        total_unpaid_fines=0.0
     )

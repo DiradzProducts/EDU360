@@ -211,7 +211,19 @@ async def run_e2e_tests():
         assert len(pacing_list) > 0, "No curriculum pacing items found!"
         math_item = next((p for p in pacing_list if p["class_name"] == "Class 8-B" and p["subject"] == "Mathematics"), None)
         assert math_item is not None, "Class 8-B Math not found in pacing list!"
-        prev_completed = math_item["completed_units"]
+
+        async with AsyncSessionLocal() as db:
+            cp_row = (await db.execute(select(CurriculumPacing).where(
+                CurriculumPacing.class_name == "Class 8-B",
+                CurriculumPacing.subject == "Mathematics"
+            ))).scalars().first()
+            if cp_row and cp_row.completed_units >= cp_row.total_units:
+                cp_row.completed_units = cp_row.total_units - 2
+                await db.commit()
+                prev_completed = cp_row.completed_units
+            else:
+                prev_completed = math_item["completed_units"]
+
         print(f"  ✓ Initial Class 8-B Mathematics pacing: {prev_completed}/{math_item['total_units']} units completed")
 
         # B. Teacher logs unit completion
@@ -222,19 +234,6 @@ async def run_e2e_tests():
             "lesson_title": "Quadratic Equations: Derivation of Quadratic Formula"
         }
         r_log = await client.post("/api/teacher/curriculum/log-unit", json=log_payload, headers=teacher_headers)
-        assert r_log.status_code == 200, f"Log unit failed: {r_log.text}"
-        log_res = r_log.json()
-        assert log_res["success"] is True
-        print(f"  ✓ Teacher logged unit completion: new completed units = {log_res['item']['completed_units']}")
-
-        # Verify in DB
-        async with AsyncSessionLocal() as db:
-            db_cp = (await db.execute(select(CurriculumPacing).where(
-                CurriculumPacing.class_name == "Class 8-B",
-                CurriculumPacing.subject == "Mathematics"
-            ))).scalars().first()
-            assert db_cp.completed_units == prev_completed + 1
-            print(f"  ✓ Database verified: CurriculumPacing completed_units={db_cp.completed_units}")
         assert r_log.status_code == 200, f"Log unit failed: {r_log.text}"
         log_res = r_log.json()
         assert log_res["success"] is True

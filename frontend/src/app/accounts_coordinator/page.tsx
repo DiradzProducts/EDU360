@@ -141,6 +141,7 @@ export default function AccountsCoordinatorPage() {
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [defaulterTierFilter, setDefaulterTierFilter] = useState<string>('ALL');
   const [defaulterCategoryFilter, setDefaulterCategoryFilter] = useState<'ALL' | 'NEW_ADMISSION' | 'EXISTING'>('ALL');
+  const [defaulterStatusFilter, setDefaulterStatusFilter] = useState<'ACTIVE_DUES' | 'SETTLED' | 'ALL'>('ACTIVE_DUES');
   const [defaulterClassFilter, setDefaulterClassFilter] = useState<string>('All Classes');
   const [defaulterSearch, setDefaulterSearch] = useState<string>('');
   const [txReconcileFilter, setTxReconcileFilter] = useState<string>('all');
@@ -189,7 +190,7 @@ export default function AccountsCoordinatorPage() {
   const [showNewInvoiceModal, setShowNewInvoiceModal] = useState(false);
   const [newInvNo, setNewInvNo] = useState('');
   const [newInvVendor, setNewInvVendor] = useState('');
-  const [newInvCategory, setNewInvCategory] = useState('Transport & Fuel');
+  const [newInvCategory, setNewInvCategory] = useState('Platform & Infrastructure');
   const [newInvFor, setNewInvFor] = useState('');
   const [newInvAmount, setNewInvAmount] = useState<number>(0);
   const [newInvDueDate, setNewInvDueDate] = useState('30 Oct 2026');
@@ -256,7 +257,7 @@ export default function AccountsCoordinatorPage() {
     try {
       const [statsRes, defRes, txRes, invRes, logsRes, tRes, payrollBatchesRes, poRes, fleetRes, inquiriesRes] = await Promise.all([
         api.getFinanceStats().catch(() => null),
-        api.getFeeDefaulters(),
+        api.getFeeDefaulters({ include_settled: true }),
         api.getPaymentTransactions(),
         api.getVendorInvoices(),
         api.getFinanceDispatchLogs(),
@@ -519,7 +520,21 @@ export default function AccountsCoordinatorPage() {
     try {
       reconcileLiveTransaction(txId);
       await api.reconcileTransaction(txId);
-      triggerToast(`Bank reconciliation verified and ledger updated.`);
+      const matchedTx = transactions.find(t => t.id === txId);
+      if (matchedTx) {
+        recordLiveReceipt({
+          recNo: matchedTx.gateway_ref || `REC-2026-${matchedTx.id}`,
+          name: matchedTx.student_name,
+          classSec: matchedTx.class_name,
+          head: matchedTx.milestone_title,
+          amount: matchedTx.amount,
+          mode: matchedTx.payment_method,
+          ref: matchedTx.utr_number,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          status: 'Bank Cleared'
+        });
+      }
+      triggerToast(`Bank reconciliation verified and live ledger updated.`);
       loadData();
     } catch (err) {
       triggerToast(`Reconciliation updated.`);
@@ -546,6 +561,19 @@ export default function AccountsCoordinatorPage() {
         pendingIds,
         'Mr. Arvind Krishnan (Senior Accounts Officer)'
       );
+      for (const t of pendingTransactions) {
+        recordLiveReceipt({
+          recNo: t.gateway_ref || `REC-2026-${t.id}`,
+          name: t.student_name,
+          classSec: t.class_name,
+          head: t.milestone_title,
+          amount: t.amount,
+          mode: t.payment_method,
+          ref: t.utr_number,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          status: 'Bank Cleared'
+        });
+      }
       triggerToast(res?.message || `✓ Batch reconciliation completed: ${pendingTransactions.length} transactions verified against bank statement.`);
       setShowBulkReconcileModal(false);
       loadData();
@@ -888,6 +916,8 @@ export default function AccountsCoordinatorPage() {
 
   // Filtered Defaulters
   const filteredDefaulters = defaulters.filter(d => {
+    if (defaulterStatusFilter === 'ACTIVE_DUES' && d.amount_due <= 0) return false;
+    if (defaulterStatusFilter === 'SETTLED' && d.amount_due > 0) return false;
     const isNewAdm = Boolean(d.is_admission_fee);
     if (defaulterCategoryFilter === 'NEW_ADMISSION' && !isNewAdm) return false;
     if (defaulterCategoryFilter === 'EXISTING' && isNewAdm) return false;
@@ -1314,7 +1344,7 @@ export default function AccountsCoordinatorPage() {
                     ₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                    Bus diesel, laboratory chemicals &amp; internet bills
+                    Cloud server hosting, virtual labs &amp; digital platform bills
                   </p>
                 </div>
                 <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -1846,6 +1876,43 @@ export default function AccountsCoordinatorPage() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Status Filter: Active Dues vs Settled Ledger vs All */}
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setDefaulterStatusFilter('ACTIVE_DUES')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      defaulterStatusFilter === 'ACTIVE_DUES'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Active Overdue ({defaulters.filter(d => d.amount_due > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaulterStatusFilter('SETTLED')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      defaulterStatusFilter === 'SETTLED'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Settled / Cleared ({defaulters.filter(d => d.amount_due <= 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaulterStatusFilter('ALL')}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      defaulterStatusFilter === 'ALL'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    All ({defaulters.length})
+                  </button>
+                </div>
+
                 {/* Category Filter: All vs New SIS Admissions */}
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   <button
@@ -1926,10 +1993,11 @@ export default function AccountsCoordinatorPage() {
                 </div>
 
                 {/* Clear Filters Button */}
-                {(defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
+                {(defaulterStatusFilter !== 'ACTIVE_DUES' || defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
                   <button
                     type="button"
                     onClick={() => {
+                      setDefaulterStatusFilter('ACTIVE_DUES');
                       setDefaulterCategoryFilter('ALL');
                       setDefaulterTierFilter('ALL');
                       setDefaulterClassFilter('All Classes');
@@ -2006,10 +2074,11 @@ export default function AccountsCoordinatorPage() {
                             <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                               No fee defaulters matching current filter criteria.
                             </p>
-                            {(defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
+                            {(defaulterStatusFilter !== 'ACTIVE_DUES' || defaulterCategoryFilter !== 'ALL' || defaulterTierFilter !== 'ALL' || defaulterClassFilter !== 'All Classes' || Boolean(defaulterSearch.trim())) && (
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setDefaulterStatusFilter('ACTIVE_DUES');
                                   setDefaulterCategoryFilter('ALL');
                                   setDefaulterTierFilter('ALL');
                                   setDefaulterClassFilter('All Classes');
@@ -2372,7 +2441,7 @@ export default function AccountsCoordinatorPage() {
                   Institutional Vendor Invoices &amp; Accounts Payable
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Manage campus expenditures: Yellow bus fleet diesel, composite science laboratory supplies, campus leased lines, and security services.
+                  Manage institutional expenditures: Cloud server hosting, LMS licenses, virtual science lab subscriptions, and platform infrastructure.
                 </p>
               </div>
 
@@ -3125,7 +3194,7 @@ export default function AccountsCoordinatorPage() {
                   rows={3}
                   value={bulkCustomMsg} 
                   onChange={e => setBulkCustomMsg(e.target.value)} 
-                  placeholder="e.g. Dear Parent, Term 2 fees are overdue. Please settle online to ensure uninterrupted bus and report card access." 
+                  placeholder="e.g. Dear Parent, Term 2 fees are overdue. Please settle online to ensure uninterrupted digital portal and report card access." 
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
@@ -3532,7 +3601,7 @@ export default function AccountsCoordinatorPage() {
                   required
                   value={newInvVendor} 
                   onChange={e => setNewInvVendor(e.target.value)} 
-                  placeholder="e.g. Bharat Petroleum Corporation Ltd" 
+                  placeholder="e.g. AWS Cloud Infrastructure Services" 
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
@@ -3543,7 +3612,7 @@ export default function AccountsCoordinatorPage() {
                   required
                   value={newInvFor} 
                   onChange={e => setNewInvFor(e.target.value)} 
-                  placeholder="e.g. Monthly Diesel replenishment for Bus Routes 1-14" 
+                  placeholder="e.g. Monthly Dedicated LMS Server Hosting & Virtual Labs" 
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-2.5 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>

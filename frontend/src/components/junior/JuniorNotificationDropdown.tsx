@@ -94,14 +94,14 @@ const initialJuniorAlerts: JuniorAlert[] = [
   },
   {
     id: 5,
-    title: "Yellow Bus Route #1 Started 🚍",
-    message: "Driver Ramesh has completed the morning pickup route. Have a wonderful day at campus!",
+    title: "Virtual Science & Robotics Studio Active 🚀",
+    message: "Ms. Priya has uploaded new interactive 3D simulations. Explore and test your experiments!",
     category: 'announcement',
-    emoji: "🚌",
+    emoji: "🚀",
     isRead: true,
     timeAgo: "3h ago",
-    actionTab: 'profile',
-    actionLabel: "Check Bus Radar"
+    actionTab: 'launchpad',
+    actionLabel: "Open Virtual Studio"
   }
 ];
 

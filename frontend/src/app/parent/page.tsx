@@ -432,6 +432,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   const [leaveDoctorNote, setLeaveDoctorNote] = useState<File | null>(null);
   const [leaveDoctorNoteName, setLeaveDoctorNoteName] = useState<string>('');
   const [leaveDoctorNoteSize, setLeaveDoctorNoteSize] = useState<string>('');
+  const [leaveDoctorNoteDataUrl, setLeaveDoctorNoteDataUrl] = useState<string>('');
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
 
   // High-Signal Notification Drawer State
@@ -477,11 +478,11 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
   useEffect(() => {
     async function loadData() {
       try {
-        const [ftRes, feesRes, subRes, exitsRes, hwRes, leaveRes, calRes] = await Promise.all([
+        const [ftRes, feesRes, subRes, kidClearance, hwRes, leaveRes, calRes] = await Promise.all([
           api.getFocusTable(activeKidId),
           api.getFees(activeKidId),
           api.getSubmission(activeKidId),
-          api.getExitClearances(),
+          api.getStudentExitClearance(activeKidId),
           api.getTodayHomework(activeKidId),
           api.getParentLeaveRequests(activeKidId),
           api.getCalendarEvents()
@@ -494,12 +495,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
           setFees(activeKidId === 7 ? DEFAULT_PARENT_FEES_ANANYA : activeKidId === 12 ? DEFAULT_PARENT_FEES_JOHN : activeKidId === 1 ? DEFAULT_PARENT_FEES_AARAV : []); 
         }
         setSubmission(subRes);
-        if (exitsRes && exitsRes.length > 0) {
-          const kidClearance = exitsRes.find(e => e.student_id === activeKidId);
-          setExitClearance(kidClearance || null);
-        } else {
-          setExitClearance(null);
-        }
+        setExitClearance(kidClearance || null);
         setTodayHomework(hwRes);
         if (leaveRes && leaveRes.length > 0) {
           setLeaveHistory(leaveRes);
@@ -528,11 +524,11 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                 level = 'red';
                 targetTab = 'leave';
                 actionLabel = 'View Attendance Record';
-              } else if (titleLower.includes('exam') || titleLower.includes('marks') || titleLower.includes('timetable') || titleLower.includes('admit') || titleLower.includes('retest')) {
+              } else if (titleLower.includes('exam') || titleLower.includes('marks') || titleLower.includes('timetable') || titleLower.includes('admit') || titleLower.includes('retest') || titleLower.includes('report card') || titleLower.includes('report-card')) {
                 category = 'Exam Marks';
                 level = 'purple';
                 targetTab = 'marks';
-                actionLabel = titleLower.includes('admit') ? 'Download Admit Docket' : 'View Exam Datesheet';
+                actionLabel = titleLower.includes('admit') ? 'Download Admit Docket' : (titleLower.includes('report') || titleLower.includes('card')) ? 'View Report Card' : 'View Exam Datesheet';
               }
 
               return {
@@ -668,7 +664,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
     setLeaveSubmitted(true);
     try {
-      await api.applyParentLeave({
+      const res = await api.applyParentLeave({
         student_id: activeKid.id,
         student_name: activeKid.name,
         parent_name: activeKid.guardianName || 'Mr. Rajesh Sharma',
@@ -677,8 +673,13 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
         reason: leaveReason,
         is_medical: isMedicalLeave,
         attachment_name: leaveDoctorNoteName || undefined,
-        attachment_url: leaveDoctorNoteName ? `/uploads/${leaveDoctorNoteName}` : undefined
+        attachment_url: leaveDoctorNoteDataUrl || (leaveDoctorNoteName ? `/uploads/${leaveDoctorNoteName}` : undefined)
       });
+      if (res && res.id && leaveDoctorNoteDataUrl) {
+        try {
+          localStorage.setItem(`edu360_leave_receipt_${res.id}`, leaveDoctorNoteDataUrl);
+        } catch {}
+      }
       // Refresh real-time leave history from backend
       const updatedHistory = await api.getParentLeaveRequests(activeKid.id);
       if (updatedHistory) {
@@ -690,6 +691,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
       setLeaveTo('');
       setLeaveDoctorNote(null);
       setLeaveDoctorNoteName('');
+      setLeaveDoctorNoteDataUrl('');
       playStarCollect();
       triggerToast(`✓ Leave application${noteMsg} for ${activeKid.name} (${activeKid.className}) dispatched to ${activeKid.homeroomFaculty}! Class Teacher notified.`);
     } catch (err: any) {
@@ -702,12 +704,9 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
 
   const handleDigitalSignExit = async () => {
     await api.parentDigitalSignTC(activeKidId);
-    const updatedExits = await api.getExitClearances();
-    if (updatedExits && updatedExits.length > 0) {
-      const kidClearance = updatedExits.find(e => e.student_id === activeKidId);
-      setExitClearance(kidClearance || null);
-    }
-    triggerToast('In-app parent digital signature stamped with legal seal');
+    const updated = await api.getStudentExitClearance(activeKidId);
+    setExitClearance(updated);
+    triggerToast('✓ In-app parent digital signature stamped with legal seal');
   };
 
   const handleBannerAction = (target: string) => {
@@ -1846,6 +1845,37 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                     </div>
                   )}
 
+                  {/* Top Alert Banner for Transfer Certificate (TC) & Exit Clearance */}
+                  {exitClearance && (
+                    <div className="rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-transparent p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md ring-2 ring-amber-500/10 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                          <GraduationCap className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-amber-900 dark:text-amber-200">
+                              ⚡ Statutory Exit Protocol Active: Transfer Certificate (TC) Clearance
+                            </span>
+                            <span className="rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold border border-amber-300">
+                              {exitClearance.status}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                            School Administration has initiated the official school-leaving workflow. Please verify cleared fee dues and submit your digital declaration below.
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href="#parent-exit-clearance-section"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
+                      >
+                        <span>Review &amp; Sign Below</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  )}
+
                   {/* Header & Controls */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
@@ -1921,7 +1951,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                         25 Oct 2026
                       </div>
                       <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 block mt-1">
-                        Term 2 Tuition &amp; Transport Fee
+                        Term 2 Tuition &amp; Digital Infrastructure Fee
                       </span>
                     </div>
                   </div>
@@ -1966,7 +1996,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                               </h4>
                               
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                Breakdown: Tuition Fee ₹14,000 • Transport &amp; Science Lab ₹4,500
+                                Breakdown: Tuition Fee ₹14,000 • Virtual Lab &amp; Digital Learning ₹4,500
                               </p>
 
                               <div className="mt-4 p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
@@ -2067,6 +2097,46 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                       ))}
                     </div>
                   </div>
+
+                  {/* Dynamic Transfer Certificate (TC) & School Exit Clearance Module */}
+                  {exitClearance && (
+                    <div id="parent-exit-clearance-section" className="rounded-3xl border-2 border-amber-500/40 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xl space-y-6 animate-in slide-in-from-bottom-4 duration-300 ring-4 ring-amber-500/10">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
+                            <GraduationCap className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-800">
+                                Statutory Exit Protocol
+                              </span>
+                              <span className="text-[11px] text-slate-400">CBSE Rule 44 Clearance</span>
+                            </div>
+                            <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                              Transfer Certificate (TC) &amp; School Exit Clearance
+                            </h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Official statutory exit verification and digital sign-off for {activeKid.name} ({activeKid.className} &bull; Roll #{activeKid.rollNo})
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold border shrink-0 ${
+                          exitClearance.digital_parent_approved
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 animate-pulse'
+                        }`}>
+                          {exitClearance.status}
+                        </span>
+                      </div>
+
+                      <ExitClearanceView
+                        clearance={exitClearance}
+                        role="parent"
+                        onDigitalSign={handleDigitalSignExit}
+                      />
+                    </div>
+                  )}
 
                   {/* Instant Mock Payment Gateway Modal (UPI QR, Card, Net Banking) */}
                   {payingMilestone && (
@@ -2224,6 +2294,16 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                             setLeaveDoctorNoteName(file.name);
                             const kb = Math.round(file.size / 1024);
                             setLeaveDoctorNoteSize(kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`);
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const result = reader.result as string;
+                              setLeaveDoctorNoteDataUrl(result);
+                              try {
+                                localStorage.setItem(`edu360_leave_receipt_${file.name}`, result);
+                                localStorage.setItem('edu360_leave_receipt_latest', result);
+                              } catch {}
+                            };
+                            reader.readAsDataURL(file);
                           }
                         }}
                       />
@@ -2252,6 +2332,7 @@ const DEFAULT_PARENT_FEES = DEFAULT_PARENT_FEES_AARAV;
                               onClick={() => {
                                 setLeaveDoctorNote(null);
                                 setLeaveDoctorNoteName('');
+                                setLeaveDoctorNoteDataUrl('');
                               }}
                               className="p-1 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
                             >

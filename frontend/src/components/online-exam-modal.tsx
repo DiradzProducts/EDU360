@@ -89,6 +89,9 @@ interface OnlineExamModalProps {
 
   examMode?: 'MODE_CBT' | 'MODE_HYBRID_SCAN';
   scheduleId?: number;
+  roomName?: string;
+  className?: string;
+  section?: string;
   onSubmitted?: (result: { wordsCount: number; timeSpentSeconds: number; content: string }) => void;
   onOpenPdfUpload?: (data: { sealCode: string; subject: string; examTitle: string }) => void;
 }
@@ -114,9 +117,12 @@ export function OnlineExamModal({
 
   onSubmitted,
 
-  onOpenPdfUpload
-
+  onOpenPdfUpload,
+  roomName,
+  className,
+  section
 }: OnlineExamModalProps) {
+  const effectiveRoomId = roomName || (className ? `exam-room-${className.toLowerCase().replace(/[^a-z0-9]/g, '')}${section ? `-${section.toLowerCase().replace(/[^a-z0-9]/g, '')}` : ''}` : 'exam-room-class8b');
 
   // Proctoring states
 
@@ -344,6 +350,7 @@ export function OnlineExamModal({
       localStorage.removeItem('edu360_student_hard_suspended');
       localStorage.removeItem('edu360_exam_resume_signal');
       localStorage.removeItem('edu360_candidate_14_status');
+      localStorage.removeItem('edu360_latest_malpractice_alert');
     } catch {}
     api.sendProctorAction({
       candidate_id: candidateId || 1,
@@ -480,7 +487,7 @@ export function OnlineExamModal({
           // Connect to real LiveKit SFU Cloud & publish camera and mic tracks
           try {
             api.getLiveKitToken({
-              room_name: 'exam-room-class8b',
+              room_name: effectiveRoomId,
               participant_name: studentName || 'Aarav Sharma',
               participant_identity: 'student_aarav_sharma',
               role: 'STUDENT'
@@ -537,7 +544,7 @@ export function OnlineExamModal({
           // Connect to real LiveKit SFU Cloud & publish camera and mic tracks
           try {
             api.getLiveKitToken({
-              room_name: 'exam-room-class8b',
+              room_name: effectiveRoomId,
               participant_name: studentName || 'Aarav Sharma',
               participant_identity: 'student_aarav_sharma',
               role: 'STUDENT'
@@ -807,6 +814,7 @@ export function OnlineExamModal({
         });
       } catch {}
       try { localStorage.removeItem('edu360_student_live_frame'); } catch {}
+      try { localStorage.removeItem('edu360_latest_malpractice_alert'); } catch {}
       try { examLiveBroadcast.close(); } catch {}
 
     };
@@ -1060,7 +1068,7 @@ export function OnlineExamModal({
 
     // 1. Establish Real LiveKit SFU Proctor Room Connection
     api.getLiveKitToken({
-      room_name: 'exam-room-class8b',
+      room_name: effectiveRoomId,
       participant_name: studentName || 'Aarav Sharma',
       participant_identity: 'aarav-sharma-14',
       role: 'STUDENT'
@@ -1634,7 +1642,7 @@ export function OnlineExamModal({
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname || 'localhost';
         const port = '8000';
-        const wsUrl = `${protocol}//${host}:${port}/api/exams/ws/surveillance/exam-room-class8b`;
+        const wsUrl = `${protocol}//${host}:${port}/api/exams/ws/surveillance/${effectiveRoomId}`;
         ws = new WebSocket(wsUrl);
         surveillanceWsRef.current = ws;
 
@@ -2722,7 +2730,15 @@ export function OnlineExamModal({
                   />
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      const stId = candidateId || 1;
+                      try {
+                        const checkRes = await api.getStudentHallTicket(stId);
+                        if (checkRes && checkRes.is_on_hold) {
+                          alert(`⚠️ Admission Denied: ${checkRes.hold_reason || 'Official examination hall ticket withheld due to institutional fee hold.'}`);
+                          return;
+                        }
+                      } catch {}
                       setIsHallTicketSubmitted(true);
                       try {
                         const channel = new BroadcastChannel('edu360_exam_live_channel');

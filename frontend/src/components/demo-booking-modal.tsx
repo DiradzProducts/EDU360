@@ -16,7 +16,7 @@ import {
   ExternalLink,
   Layers,
   FileEdit,
-  Bus,
+  Monitor,
   Trophy,
   GraduationCap,
   Phone,
@@ -145,9 +145,9 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
     {
       title: 'Anti-Spam Parent Experience',
       duration: '0:25',
-      icon: Bus,
+      icon: Monitor,
       color: 'bg-blue-50 text-blue-600 border-blue-200',
-      description: 'Sub-minute school bus GPS updates with live ETA, eliminating 90% of front-office morning phone calls.',
+      description: 'High-signal daily announcements, 1-click fee settlements, and live virtual classroom schedule updates.',
       highlight: '99.4% verified parent satisfaction rate.'
     },
     {

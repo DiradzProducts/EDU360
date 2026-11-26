@@ -68,6 +68,7 @@ export default function AdmissionsCoordinatorPage() {
     student_name: string;
     target_grade: string;
     parent_name: string;
+    email: string;
     phone: string;
     source: string;
     lead_temperature: 'hot' | 'warm' | 'cold';
@@ -255,23 +256,44 @@ export default function AdmissionsCoordinatorPage() {
 
     // Check if line 0 is a header row
     const firstLineLower = lines[0].toLowerCase();
-    const hasHeader = firstLineLower.includes('name') || firstLineLower.includes('student') || firstLineLower.includes('phone') || firstLineLower.includes('grade');
+    const hasHeader = firstLineLower.includes('name') || firstLineLower.includes('student') || firstLineLower.includes('phone') || firstLineLower.includes('grade') || firstLineLower.includes('email');
+    
+    let headers: string[] = [];
+    if (hasHeader) {
+      headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(h => h.trim().replace(/^["]|["]$/g, '').toLowerCase());
+    }
     const dataLines = hasHeader ? lines.slice(1) : lines;
 
-    const parsed = dataLines.map((line, idx) => {
+    const findCol = (parts: string[], aliases: string[], fallbackIdx: number): string => {
+      if (hasHeader && headers.length > 0) {
+        const found = headers.findIndex(h => aliases.some(a => h.includes(a)));
+        if (found !== -1 && parts[found] !== undefined) return parts[found].trim();
+      }
+      return (fallbackIdx >= 0 && parts[fallbackIdx] !== undefined ? parts[fallbackIdx].trim() : '');
+    };
+
+    const parsed = dataLines.map((line) => {
       // Split by comma or tab, taking quotes into account
       const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(p => p.trim().replace(/^["]|["]$/g, ''));
       
-      const student_name = parts[0] || '';
-      const target_grade = parts[1] || 'Grade 8';
-      const parent_name = parts[2] || 'Parent / Guardian';
-      const rawPhone = parts[3] || '';
-      const source = parts[4] || 'Website';
-      const tempRaw = (parts[5] || 'warm').toLowerCase();
+      const student_name = findCol(parts, ['student', 'child'], 0) || parts[0] || '';
+      const target_grade = findCol(parts, ['grade', 'class'], 1) || 'Grade 8';
+      const parent_name = findCol(parts, ['parent', 'guardian', 'father', 'mother'], 2) || 'Parent / Guardian';
+      
+      // Parse real parent email: header alias match, or column containing '@'
+      let email = findCol(parts, ['email', 'mail'], -1);
+      if (!email) {
+        const emailCol = parts.find(p => p.includes('@') && p.includes('.'));
+        if (emailCol) email = emailCol.trim();
+      }
+
+      const rawPhone = findCol(parts, ['phone', 'mobile', 'contact'], 3) || parts[3] || '';
+      const source = findCol(parts, ['source', 'channel'], 4) || parts[4] || 'Website';
+      const tempRaw = (findCol(parts, ['temp', 'status', 'priority'], 5) || parts[5] || 'warm').toLowerCase();
       const lead_temperature: 'hot' | 'warm' | 'cold' = 
         tempRaw.includes('hot') ? 'hot' : tempRaw.includes('cold') ? 'cold' : 'warm';
-      const notes = parts[6] || 'Bulk imported inquiry';
-      const next_followup_date = parts[7] || todayStr;
+      const notes = findCol(parts, ['note', 'remark', 'comment'], 6) || parts[6] || 'Bulk imported inquiry';
+      const next_followup_date = findCol(parts, ['follow', 'date'], 7) || parts[7] || todayStr;
 
       // Validate
       const isValid = student_name.trim().length >= 2 && rawPhone.trim().length >= 7;
@@ -283,6 +305,7 @@ export default function AdmissionsCoordinatorPage() {
         student_name: student_name.trim(),
         target_grade: target_grade.trim(),
         parent_name: parent_name.trim(),
+        email: email.trim(),
         phone: rawPhone.trim(),
         source: source.trim(),
         lead_temperature,
@@ -311,11 +334,11 @@ export default function AdmissionsCoordinatorPage() {
   };
 
   const handleDownloadSampleCsv = () => {
-    const sample = `student_name,target_grade,parent_name,phone,source,lead_temperature,notes,next_followup_date
-Aarav Sharma,Grade 8,Dr. Rajeev Sharma,+91 98490 22114,Website,hot,Inquired for CBSE Class 8 Science,2026-10-30
-Meera Patel,Grade 6,Suresh Patel,+91 98220 11223,Walk-in,warm,Relocating from Pune in November,2026-11-02
-Kavya Reddy,Grade 9,Venkatesh Reddy,+91 97010 33445,Referral,hot,Interested in IIT Foundation stream,2026-10-29
-Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested fee structure brochure,2026-11-05`;
+    const sample = `student_name,target_grade,parent_name,email,phone,source,lead_temperature,notes,next_followup_date
+Aarav Sharma,Grade 8,Dr. Rajeev Sharma,rajeev.sharma@example.com,+91 98490 22114,Website,hot,Inquired for CBSE Class 8 Science,2026-10-30
+Meera Patel,Grade 6,Suresh Patel,suresh.patel@gmail.com,+91 98220 11223,Walk-in,warm,Relocating from Pune in November,2026-11-02
+Kavya Reddy,Grade 9,Venkatesh Reddy,venkatesh.reddy@yahoo.com,+91 97010 33445,Referral,hot,Interested in IIT Foundation stream,2026-10-29
+Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Media,cold,Requested fee structure brochure,2026-11-05`;
 
     const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -326,7 +349,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    triggerToast('Sample CSV template downloaded!');
+    triggerToast('Sample CSV template downloaded with email column!');
   };
 
   const handleExecuteBulkImport = async () => {
@@ -340,10 +363,15 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
     let count = 0;
     for (const row of validRows) {
       try {
+        const cleanName = (row.student_name || 'student').toLowerCase().replace(/\s+/g, '.');
+        const finalEmail = row.email && row.email.includes('@')
+          ? row.email
+          : `${cleanName}.parent@edu360.internal`;
+
         await api.createEnquiry({
           student_name: row.student_name,
           parent_name: row.parent_name,
-          email: `${row.student_name.toLowerCase().replace(/\s+/g, '.')}@inquiry.local`,
+          email: finalEmail,
           phone: row.phone,
           target_grade: row.target_grade,
           lead_temperature: row.lead_temperature,
@@ -1301,6 +1329,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                       <th className="p-2">student_name *</th>
                       <th className="p-2">target_grade *</th>
                       <th className="p-2">parent_name *</th>
+                      <th className="p-2">email</th>
                       <th className="p-2">phone *</th>
                       <th className="p-2">source</th>
                       <th className="p-2">lead_temperature</th>
@@ -1313,6 +1342,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                       <td className="p-2 font-bold font-sans">Aarav Sharma</td>
                       <td className="p-2">Grade 8</td>
                       <td className="p-2 font-sans">Dr. Rajeev Sharma</td>
+                      <td className="p-2">rajeev.sharma@example.com</td>
                       <td className="p-2">+91 98490 22114</td>
                       <td className="p-2">Website</td>
                       <td className="p-2 text-rose-600 font-bold">hot</td>
@@ -1323,6 +1353,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                       <td className="p-2 font-bold font-sans">Meera Patel</td>
                       <td className="p-2">Grade 6</td>
                       <td className="p-2 font-sans">Suresh Patel</td>
+                      <td className="p-2">suresh.patel@gmail.com</td>
                       <td className="p-2">+91 98220 11223</td>
                       <td className="p-2">Walk-in</td>
                       <td className="p-2 text-amber-600 font-bold">warm</td>
@@ -1397,6 +1428,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                         <th className="p-2.5">Student</th>
                         <th className="p-2.5">Grade</th>
                         <th className="p-2.5">Parent</th>
+                        <th className="p-2.5">Email</th>
                         <th className="p-2.5">Phone</th>
                         <th className="p-2.5">Priority</th>
                         <th className="p-2.5">Notes</th>
@@ -1421,6 +1453,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,+91 98401 55667,Social Media,cold,Requested f
                           <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.student_name || '—'}</td>
                           <td className="p-2.5 font-medium">{row.target_grade}</td>
                           <td className="p-2.5">{row.parent_name}</td>
+                          <td className="p-2.5 font-mono text-[11px] text-slate-500">{row.email || '—'}</td>
                           <td className="p-2.5 font-mono text-[11px]">{row.phone}</td>
                           <td className="p-2.5">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${

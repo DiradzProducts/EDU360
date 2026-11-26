@@ -58,12 +58,19 @@ export interface UnifiedSISProps {
   studentId?: number;
   student?: Student | null;
   viewerRole: 'admin' | 'teacher' | 'parent' | 'student' | 'coordinator';
+  initialTab?: 'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees' | 'exit';
   onBack?: () => void;
   hideBack?: boolean;
 }
 
-export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hideBack }: UnifiedSISProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees' | 'exit'>('profile');
+export function UnifiedSISView({ studentId = 1, student, viewerRole, initialTab = 'profile', onBack, hideBack }: UnifiedSISProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees' | 'exit'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   
   // Exit Clearance State (Admin Exclusive)
   const [exitClearance, setExitClearance] = useState<ExitClearance | null>(null);
@@ -195,6 +202,10 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
 
   const handleSaveSecondary = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (viewerRole !== 'student') {
+      setIsEditingSecondary(false);
+      return;
+    }
     setIsSavingSecondary(true);
     try {
       const res = await api.updateStudentSecondaryProfile(effectiveStudentId, secondaryForm);
@@ -548,9 +559,19 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
                 <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-bold">
                   Roll #{currentRoll}
                 </span>
-                <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" /> Active Student
-                </span>
+                {student?.status === 'Withdrawn' ? (
+                  <span className="rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1">
+                    <LogOut className="h-3 w-3 text-slate-500" /> Withdrawn / TC Issued
+                  </span>
+                ) : student?.status === 'Exit / TC Processing' ? (
+                  <span className="rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1 animate-pulse">
+                    <Clock className="h-3 w-3 text-amber-600" /> Exit Clearance In Progress
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Active Student
+                  </span>
+                )}
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                 <span>Adm ID: <strong className="text-slate-700 dark:text-slate-200">{currentAdmissionNo}</strong></span>
@@ -714,23 +735,29 @@ export function UnifiedSISView({ studentId = 1, student, viewerRole, onBack, hid
               </div>
 
               <div className="flex items-center gap-2">
-                {!isEditingSecondary ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingSecondary(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                    <span>Edit Secondary Details</span>
-                  </button>
+                {viewerRole === 'student' ? (
+                  !isEditingSecondary ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSecondary(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                      <span>Edit Secondary Details</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSecondary(false)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingSecondary(false)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
+                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 italic bg-slate-100 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
+                    🔒 Editable solely by Student
+                  </span>
                 )}
               </div>
             </div>
