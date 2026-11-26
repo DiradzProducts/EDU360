@@ -2,79 +2,509 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root {
-  --background: #F8FAFC;
-  --foreground: #0F172A;
+@theme inline {
+  --font-sans: var(--font-sans), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-display), "Plus Jakarta Sans", var(--font-sans), sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ========================================================================== */
+/* PALETTE: IVORY STONE & COBALT INDIGO (Clean, Modern & High-Trust)          */
+/* Light-Mode-First: Crisp Alabaster Canvas, Pure White Cards, Deep Ink Navy  */
+/* Canvas: #F8FAFC | Cards: #FFFFFF (border: #E2E8F0)                         */
+/* Primary: #2563EB (Cobalt Blue) | Secondary: #0D9488 (Sophisticated Teal)   */
+/* Highlight: #F97316 (Warm Coral) | Text: #0F172A & #475569                  */
+/* Sidebar: #0B1120 (Deep Navy Command Center)                                */
+/* ========================================================================== */
+/* 6 CURATED INSTITUTIONAL DESIGN PALETTES                                    */
+/* 1. lime: Deep Forest & Tech Lime (Futuristic Fintech / Growth)             */
+/* 2. cobalt: Ivory Stone & Cobalt Indigo (Stripe / Linear High-Trust)        */
+/* 3. violet: Iris Violet & Electric Lavender (Modern AI Intelligence)        */
+/* 4. amber: Obsidian & Amber Gold (Prestige Academy & Executive Command)     */
+/* 5. ocean: Nordic Ocean & Glacier Cyan (Deep Maritime & High-Tech)          */
+/* 6. crimson: Heritage Crimson & Antique Gold (Oxford / Ivy League Classic)  */
+/* ========================================================================== */
+
+/* --- 1. LIME PALETTE (Default) --- */
+:root,
+html[data-palette="lime"] {
+  --background: #F4FBF7;
+  --foreground: #022C22;
+  --surface-canvas: #F4FBF7;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #ECFDF5;
+  --surface-hover: #D1FAE5;
+  --sidebar-bg: #022423;
+  --sidebar-border: #134E4A;
+  --sidebar-hover: #0D4844;
+  --sidebar-text: #F0FDF4;
+  --sidebar-muted: #99F6E4;
   --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --accent: #2563EB;
-  --border: #E2E8F0;
-  --muted: #64748B;
+  --card-foreground: #022C22;
+  --primary: #84CC16;
+  --primary-hover: #65A30D;
+  --primary-soft: rgba(132, 204, 22, 0.14);
+  --primary-soft-border: rgba(132, 204, 22, 0.35);
+  --primary-foreground: #022C22;
+  --secondary: #0284C7;
+  --border: #D1FAE5;
+  --border-subtle: #ECFDF5;
+  --text-primary: #022C22;
+  --text-secondary: #166534;
+  --text-muted: #4B5563;
+  --focus-ring: #84CC16;
+  --accent-shadow: rgba(132, 204, 22, 0.35);
   color-scheme: light;
 }
 
-.dark {
-  --background: #070B14;
-  --foreground: #F8FAFC;
-  --card: #0F172A;
-  --card-foreground: #F8FAFC;
-  --primary: #3B82F6;
-  --primary-foreground: #FFFFFF;
-  --accent: #3B82F6;
-  --border: #1E293B;
-  --muted: #94A3B8;
+.dark,
+html.dark[data-palette="lime"] {
+  --background: #042F2E;
+  --foreground: #F0FDF4;
+  --surface-canvas: #042F2E;
+  --surface-card: #0D4844;
+  --surface-subtle: #093734;
+  --surface-hover: #115E59;
+  --sidebar-bg: #011817;
+  --sidebar-border: #0D4844;
+  --sidebar-hover: #093734;
+  --sidebar-text: #F0FDF4;
+  --sidebar-muted: #99F6E4;
+  --card: #0D4844;
+  --card-foreground: #F0FDF4;
+  --primary: #A3E635;
+  --primary-hover: #BEF264;
+  --primary-soft: rgba(163, 230, 53, 0.18);
+  --primary-soft-border: rgba(163, 230, 53, 0.45);
+  --primary-foreground: #022C22;
+  --secondary: #38BDF8;
+  --border: #14726C;
+  --border-subtle: #093734;
+  --text-primary: #F0FDF4;
+  --text-secondary: #99F6E4;
+  --text-muted: #5EEAD4;
+  --focus-ring: #A3E635;
+  --accent-shadow: rgba(163, 230, 53, 0.4);
   color-scheme: dark;
 }
 
-/* Universal EDU360 Global Utility Classes */
+/* --- 2. COBALT PALETTE --- */
+html[data-palette="cobalt"] {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --surface-canvas: #F8FAFC;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #F1F5F9;
+  --surface-hover: #E2E8F0;
+  --sidebar-bg: #0B1120;
+  --sidebar-border: #1E293B;
+  --sidebar-hover: #1E293B;
+  --sidebar-text: #F8FAFC;
+  --sidebar-muted: #94A3B8;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-soft: rgba(37, 99, 235, 0.1);
+  --primary-soft-border: rgba(37, 99, 235, 0.28);
+  --primary-foreground: #FFFFFF;
+  --secondary: #0D9488;
+  --border: #E2E8F0;
+  --border-subtle: #F1F5F9;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --focus-ring: #2563EB;
+  --accent-shadow: rgba(37, 99, 235, 0.35);
+  color-scheme: light;
+}
+
+html.dark[data-palette="cobalt"] {
+  --background: #0B0F19;
+  --foreground: #F8FAFC;
+  --surface-canvas: #0B0F19;
+  --surface-card: #1E293B;
+  --surface-subtle: #151E2E;
+  --surface-hover: #283548;
+  --sidebar-bg: #070B14;
+  --sidebar-border: #1E293B;
+  --sidebar-hover: #151E2E;
+  --sidebar-text: #F8FAFC;
+  --sidebar-muted: #94A3B8;
+  --card: #1E293B;
+  --card-foreground: #F8FAFC;
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --primary-soft: rgba(59, 130, 246, 0.18);
+  --primary-soft-border: rgba(59, 130, 246, 0.4);
+  --primary-foreground: #FFFFFF;
+  --secondary: #14B8A6;
+  --border: #334155;
+  --border-subtle: #1E293B;
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --focus-ring: #3B82F6;
+  --accent-shadow: rgba(59, 130, 246, 0.4);
+  color-scheme: dark;
+}
+
+/* --- 3. VIOLET PALETTE --- */
+html[data-palette="violet"] {
+  --background: #FAF8FF;
+  --foreground: #1E1235;
+  --surface-canvas: #FAF8FF;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #F3EEFF;
+  --surface-hover: #E9DDFD;
+  --sidebar-bg: #120A24;
+  --sidebar-border: #2A1B4A;
+  --sidebar-hover: #1D1138;
+  --sidebar-text: #FAF8FF;
+  --sidebar-muted: #C4B5FD;
+  --card: #FFFFFF;
+  --card-foreground: #1E1235;
+  --primary: #7C3AED;
+  --primary-hover: #6D28D9;
+  --primary-soft: rgba(124, 58, 237, 0.1);
+  --primary-soft-border: rgba(124, 58, 237, 0.3);
+  --primary-foreground: #FFFFFF;
+  --secondary: #EC4899;
+  --border: #E9DDFD;
+  --border-subtle: #F3EEFF;
+  --text-primary: #1E1235;
+  --text-secondary: #5B4380;
+  --text-muted: #7E6B9E;
+  --focus-ring: #7C3AED;
+  --accent-shadow: rgba(124, 58, 237, 0.35);
+  color-scheme: light;
+}
+
+html.dark[data-palette="violet"] {
+  --background: #0D071E;
+  --foreground: #F5F3FF;
+  --surface-canvas: #0D071E;
+  --surface-card: #1A1033;
+  --surface-subtle: #140C28;
+  --surface-hover: #261846;
+  --sidebar-bg: #0A0518;
+  --sidebar-border: #261846;
+  --sidebar-hover: #170E30;
+  --sidebar-text: #F5F3FF;
+  --sidebar-muted: #C4B5FD;
+  --card: #1A1033;
+  --card-foreground: #F5F3FF;
+  --primary: #8B5CF6;
+  --primary-hover: #A78BFA;
+  --primary-soft: rgba(139, 92, 246, 0.18);
+  --primary-soft-border: rgba(139, 92, 246, 0.4);
+  --primary-foreground: #FFFFFF;
+  --secondary: #F472B6;
+  --border: #2E1E54;
+  --border-subtle: #1E123A;
+  --text-primary: #F5F3FF;
+  --text-secondary: #DDD6FE;
+  --text-muted: #A78BFA;
+  --focus-ring: #8B5CF6;
+  --accent-shadow: rgba(139, 92, 246, 0.4);
+  color-scheme: dark;
+}
+
+/* --- 4. AMBER PALETTE --- */
+html[data-palette="amber"] {
+  --background: #FDFBF7;
+  --foreground: #291C0E;
+  --surface-canvas: #FDFBF7;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #FEF7ED;
+  --surface-hover: #FED7AA;
+  --sidebar-bg: #18130E;
+  --sidebar-border: #2D2318;
+  --sidebar-hover: #241D15;
+  --sidebar-text: #FFFBEB;
+  --sidebar-muted: #FDE68A;
+  --card: #FFFFFF;
+  --card-foreground: #291C0E;
+  --primary: #D97706;
+  --primary-hover: #B45309;
+  --primary-soft: rgba(217, 119, 6, 0.12);
+  --primary-soft-border: rgba(217, 119, 6, 0.35);
+  --primary-foreground: #FFFFFF;
+  --secondary: #059669;
+  --border: #FED7AA;
+  --border-subtle: #FEF7ED;
+  --text-primary: #291C0E;
+  --text-secondary: #6E4924;
+  --text-muted: #8A643A;
+  --focus-ring: #D97706;
+  --accent-shadow: rgba(217, 119, 6, 0.35);
+  color-scheme: light;
+}
+
+html.dark[data-palette="amber"] {
+  --background: #120F0C;
+  --foreground: #FFFBEB;
+  --surface-canvas: #120F0C;
+  --surface-card: #1E1914;
+  --surface-subtle: #17130F;
+  --surface-hover: #2A231C;
+  --sidebar-bg: #0D0B08;
+  --sidebar-border: #2C241B;
+  --sidebar-hover: #1B150F;
+  --sidebar-text: #FFFBEB;
+  --sidebar-muted: #FDE68A;
+  --card: #1E1914;
+  --card-foreground: #FFFBEB;
+  --primary: #F59E0B;
+  --primary-hover: #FBBF24;
+  --primary-soft: rgba(245, 158, 11, 0.18);
+  --primary-soft-border: rgba(245, 158, 11, 0.4);
+  --primary-foreground: #1C1304;
+  --secondary: #10B981;
+  --border: #3A2E1F;
+  --border-subtle: #241D14;
+  --text-primary: #FFFBEB;
+  --text-secondary: #FDE68A;
+  --text-muted: #D97706;
+  --focus-ring: #F59E0B;
+  --accent-shadow: rgba(245, 158, 11, 0.4);
+  color-scheme: dark;
+}
+
+/* --- 5. OCEAN PALETTE --- */
+html[data-palette="ocean"] {
+  --background: #F0F9FF;
+  --foreground: #082F49;
+  --surface-canvas: #F0F9FF;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #E0F2FE;
+  --surface-hover: #BAE6FD;
+  --sidebar-bg: #041B2E;
+  --sidebar-border: #0A3559;
+  --sidebar-hover: #07253F;
+  --sidebar-text: #F0F9FF;
+  --sidebar-muted: #7DD3FC;
+  --card: #FFFFFF;
+  --card-foreground: #082F49;
+  --primary: #0284C7;
+  --primary-hover: #0369A1;
+  --primary-soft: rgba(2, 132, 199, 0.12);
+  --primary-soft-border: rgba(2, 132, 199, 0.35);
+  --primary-foreground: #FFFFFF;
+  --secondary: #10B981;
+  --border: #BAE6FD;
+  --border-subtle: #E0F2FE;
+  --text-primary: #082F49;
+  --text-secondary: #0369A1;
+  --text-muted: #38BDF8;
+  --focus-ring: #0284C7;
+  --accent-shadow: rgba(2, 132, 199, 0.35);
+  color-scheme: light;
+}
+
+html.dark[data-palette="ocean"] {
+  --background: #031525;
+  --foreground: #F0F9FF;
+  --surface-canvas: #031525;
+  --surface-card: #0A2742;
+  --surface-subtle: #061D33;
+  --surface-hover: #0F3B63;
+  --sidebar-bg: #020F1C;
+  --sidebar-border: #0D3A63;
+  --sidebar-hover: #082138;
+  --sidebar-text: #F0F9FF;
+  --sidebar-muted: #7DD3FC;
+  --card: #0A2742;
+  --card-foreground: #F0F9FF;
+  --primary: #38BDF8;
+  --primary-hover: #7DD3FC;
+  --primary-soft: rgba(56, 189, 248, 0.18);
+  --primary-soft-border: rgba(56, 189, 248, 0.45);
+  --primary-foreground: #022C22;
+  --secondary: #34D399;
+  --border: #0F4777;
+  --border-subtle: #082742;
+  --text-primary: #F0F9FF;
+  --text-secondary: #BAE6FD;
+  --text-muted: #38BDF8;
+  --focus-ring: #38BDF8;
+  --accent-shadow: rgba(56, 189, 248, 0.4);
+  color-scheme: dark;
+}
+
+/* --- 6. CRIMSON PALETTE --- */
+html[data-palette="crimson"] {
+  --background: #FFF8F8;
+  --foreground: #330C16;
+  --surface-canvas: #FFF8F8;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #FFE4E6;
+  --surface-hover: #FECDD3;
+  --sidebar-bg: #210A12;
+  --sidebar-border: #3D1422;
+  --sidebar-hover: #2C0E19;
+  --sidebar-text: #FFF1F2;
+  --sidebar-muted: #FDA4AF;
+  --card: #FFFFFF;
+  --card-foreground: #330C16;
+  --primary: #BE123C;
+  --primary-hover: #9F1239;
+  --primary-soft: rgba(190, 18, 60, 0.12);
+  --primary-soft-border: rgba(190, 18, 60, 0.35);
+  --primary-foreground: #FFFFFF;
+  --secondary: #D97706;
+  --border: #FECDD3;
+  --border-subtle: #FFE4E6;
+  --text-primary: #330C16;
+  --text-secondary: #6B172C;
+  --text-muted: #9F1239;
+  --focus-ring: #BE123C;
+  --accent-shadow: rgba(190, 18, 60, 0.35);
+  color-scheme: light;
+}
+
+html.dark[data-palette="crimson"] {
+  --background: #16060B;
+  --foreground: #FFF1F2;
+  --surface-canvas: #16060B;
+  --surface-card: #270D16;
+  --surface-subtle: #1D0810;
+  --surface-hover: #3A1421;
+  --sidebar-bg: #100307;
+  --sidebar-border: #38121E;
+  --sidebar-hover: #1F0710;
+  --sidebar-text: #FFF1F2;
+  --sidebar-muted: #FDA4AF;
+  --card: #270D16;
+  --card-foreground: #FFF1F2;
+  --primary: #E11D48;
+  --primary-hover: #F43F5E;
+  --primary-soft: rgba(225, 29, 72, 0.18);
+  --primary-soft-border: rgba(225, 29, 72, 0.45);
+  --primary-foreground: #FFFFFF;
+  --secondary: #F59E0B;
+  --border: #421524;
+  --border-subtle: #290A15;
+  --text-primary: #FFF1F2;
+  --text-secondary: #FECDD3;
+  --text-muted: #FB7185;
+  --focus-ring: #E11D48;
+  --accent-shadow: rgba(225, 29, 72, 0.4);
+  color-scheme: dark;
+}
+
+/* ========================================================================== */
+/* TYPOGRAPHY, READABILITY & NUMERIC ALIGNMENT                                */
+/* ========================================================================== */
+body {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  text-wrap: balance;
+}
+
+table,
+thead,
+tbody,
+th,
+td,
+[data-kpi],
+.kpi-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Minimum 12px readability floor inside internal portals */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[8px\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[9px\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[10px\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[11px\] {
+  font-size: 0.75rem !important;
+  line-height: 1.35 !important;
+}
+
+/* ========================================================================== */
+/* GLOBAL WCAG 2.2 KEYBOARD FOCUS VISIBILITY                                  */
+/* ========================================================================== */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+}
+
+.dark a:focus-visible,
+.dark button:focus-visible,
+.dark input:focus-visible,
+.dark select:focus-visible,
+.dark textarea:focus-visible,
+.dark [tabindex]:not([tabindex="-1"]):focus-visible,
+.dark [role="button"]:focus-visible,
+.dark [role="tab"]:focus-visible {
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.28);
+}
+
+/* ========================================================================== */
+/* UNIVERSAL EDU360 CARD & SEMANTIC BADGE SURFACES                            */
+/* ========================================================================== */
 .edu-card {
-  background-color: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  transition: box-shadow 180ms cubic-bezier(0.2, 0, 0, 1), border-color 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 .edu-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
 }
 .dark .edu-card {
-  background-color: #0F172A;
-  border-color: #1E293B;
+  background-color: var(--surface-card);
+  border-color: var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 .edu-badge-success {
   background-color: #ECFDF5;
-  color: #047857;
+  color: #065F46;
   border: 1px solid #A7F3D0;
 }
 .dark .edu-badge-success {
-  background-color: rgba(6, 78, 59, 0.5);
+  background-color: rgba(5, 150, 105, 0.25);
   color: #6EE7B7;
   border-color: #065F46;
 }
 
 .edu-badge-warning {
-  background-color: #FFFBEB;
-  color: #B45309;
-  border: 1px solid #FDE68A;
+  background-color: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FED7AA;
 }
 .dark .edu-badge-warning {
-  background-color: rgba(120, 53, 15, 0.5);
-  color: #FCD34D;
-  border-color: #92400E;
+  background-color: rgba(249, 115, 22, 0.25);
+  color: #FDBA74;
+  border-color: #9A3412;
 }
 
 .edu-badge-critical {
-  background-color: #FFF1F2;
-  color: #BE123C;
-  border: 1px solid #FECDD3;
+  background-color: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
 }
 .dark .edu-badge-critical {
-  background-color: rgba(136, 19, 55, 0.5);
-  color: #FDA4AF;
-  border-color: #9F1239;
+  background-color: rgba(220, 38, 38, 0.25);
+  color: #FCA5A5;
+  border-color: #991B1B;
 }
 
 .edu-badge-info {
@@ -83,124 +513,499 @@
   border: 1px solid #BFDBFE;
 }
 .dark .edu-badge-info {
-  background-color: rgba(30, 58, 138, 0.5);
+  background-color: rgba(37, 99, 235, 0.25);
   color: #93C5FD;
-  border-color: #1E40AF;
+  border-color: #1D4ED8;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
-  -webkit-font-smoothing: antialiased;
+.edu-badge-teal {
+  background-color: #F0FDFA;
+  color: #0F766E;
+  border: 1px solid #99F6E4;
+}
+.dark .edu-badge-teal {
+  background-color: rgba(13, 148, 136, 0.25);
+  color: #5EEAD4;
+  border-color: #0F766E;
 }
 
-/* Custom Scrollbar */
+/* ========================================================================== */
+/* 6 PALETTES - PORTAL-WIDE HARMONIZED LAYER                                  */
+/* ========================================================================== */
+
+/* 1. Canvas & Elevated Cards */
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) body,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main {
+  background-color: var(--surface-canvas) !important;
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white:not(aside),
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/95:not(aside),
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/90:not(aside),
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/80:not(aside) {
+  background-color: #FFFFFF !important;
+  border-color: var(--border) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-slate-50:not(aside),
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#F8FAFC\]:not(aside) {
+  background-color: var(--surface-canvas) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-slate-100:not(aside),
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#F1F5F9\]:not(aside) {
+  background-color: var(--surface-subtle) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-100,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-300,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-\[\#E2E8F0\] {
+  border-color: var(--border) !important;
+}
+
+/* Light Mode High-Contrast Typography across all palettes */
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-900,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-800,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#0F172A\] {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-700,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-600,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-500,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#475569\],
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#334155\] {
+  color: var(--text-secondary) !important;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-400,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#94A3B8\] {
+  color: var(--text-muted) !important;
+}
+
+/* 2. Dark Mode Canvas & Muted Cards */
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) body,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main {
+  background-color: var(--surface-canvas) !important;
+  color: var(--text-primary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-slate-900:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#111827\]:not(aside) {
+  background-color: var(--surface-card) !important;
+  border-color: var(--border) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-slate-50:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-slate-100:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#1E293B\]:not(aside) {
+  background-color: var(--surface-subtle) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-700,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-800,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-\[\#1E293B\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-\[\#334155\] {
+  border-color: var(--border) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-900,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-800,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#0F172A\] {
+  color: var(--text-primary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-700,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-600,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-500,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#475569\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#334155\] {
+  color: var(--text-secondary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-400,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#94A3B8\] {
+  color: var(--text-muted) !important;
+}
+
+/* 3. Navigation Sidebar across All 6 Palettes */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside {
+  background-color: var(--sidebar-bg) !important;
+  color: var(--sidebar-text) !important;
+  border-right-color: var(--sidebar-border) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside > div,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .border-b,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .border-t {
+  border-color: var(--sidebar-border) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h1,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h2,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h3,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-white,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-\[\#F0FDF4\] {
+  color: #FFFFFF !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside span.uppercase {
+  color: var(--sidebar-muted) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Sidebar Inactive Navigation Links */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button:not(.bg-blue-600):not(.bg-blue-700):not(.bg-\[\#2563EB\]):not(.bg-\[\#84CC16\]):not(.bg-\[\#A3E635\]) {
+  color: var(--sidebar-muted) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button:not(.bg-blue-600):not(.bg-blue-700):not(.bg-\[\#2563EB\]):not(.bg-\[\#84CC16\]):not(.bg-\[\#A3E635\]):hover {
+  background-color: var(--sidebar-hover) !important;
+  color: #FFFFFF !important;
+}
+
+/* Sidebar Active Navigation Link -> Dynamically themed per palette */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-700,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-\[\#2563EB\] {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  box-shadow: 0 4px 14px var(--accent-shadow) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-600 svg,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-700 svg,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-\[\#2563EB\] svg,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-600 span,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-blue-700 span,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button.bg-\[\#2563EB\] span {
+  color: var(--primary-foreground) !important;
+  font-weight: 700 !important;
+}
+
+/* ========================================================================== */
+/* 4. DYNAMIC BRAND ACCENT HARMONIZATION (ALL 6 PALETTES)                     */
+/* Ensures buttons, text, badges, borders & rings update on palette change    */
+/* ========================================================================== */
+
+/* A. Primary Interactive Solid Buttons & Active Badges */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-700,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-700 {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-700 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#2563EB\] *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-700 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-600 *,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-700 * {
+  color: var(--primary-foreground) !important;
+}
+
+/* B. Hover States for Primary Buttons */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-blue-700:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-blue-800:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-\[\#1D4ED8\]:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-violet-700:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-violet-800:hover,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-indigo-700:hover {
+  background-color: var(--primary-hover) !important;
+  color: var(--primary-foreground) !important;
+}
+
+/* C. Dynamic Brand Primary Text & Icon Colors */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-500,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-violet-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-indigo-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-violet-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-indigo-400,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-indigo-300 {
+  color: var(--primary) !important;
+}
+
+/* D. Dynamic Soft Backgrounds (Pills, Chips, Notification Centers) */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-violet-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-indigo-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/60,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/40,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/70,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-950\/80,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-blue-900\/80,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-violet-950,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:bg-indigo-950 {
+  background-color: var(--primary-soft) !important;
+}
+
+/* E. Dynamic Soft Borders (Pills, Chips, Inputs) */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-blue-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-blue-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-violet-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-violet-300,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-violet-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-indigo-200,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:border-indigo-800 {
+  border-color: var(--primary-soft-border) !important;
+}
+
+/* F. High-Contrast Text inside Soft Badges (Light mode legible dark, Dark mode bright) */
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-700,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-blue-800,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-violet-700,
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-indigo-700 {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+}
+
+/* G. Focus Rings */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-blue-500:focus,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-blue-600:focus,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .focus\:ring-violet-500:focus {
+  outline-color: var(--focus-ring) !important;
+  --tw-ring-color: var(--focus-ring) !important;
+}
+
+/* H. Brand Logo Gradient & Highlights */
+html[data-palette="lime"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #65A30D, #84CC16, #A3E635) !important;
+}
+html[data-palette="amber"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #B45309, #D97706, #F59E0B) !important;
+}
+html[data-palette="violet"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #6D28D9, #7C3AED, #A855F7) !important;
+}
+html[data-palette="ocean"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #0369A1, #0284C7, #38BDF8) !important;
+}
+html[data-palette="crimson"] .from-blue-600.via-indigo-600.to-sky-500 {
+  background-image: linear-gradient(to top right, #9F1239, #BE123C, #E11D48) !important;
+}
+
+/* 5. Standard Badges */
+.edu-badge-critical {
+  background-color: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+.dark .edu-badge-critical {
+  background-color: rgba(220, 38, 38, 0.2);
+  color: #FCA5A5;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+}
+
+.edu-badge-warning {
+  background-color: #FFF7ED;
+  color: #D97706;
+  border: 1px solid #FED7AA;
+}
+.dark .edu-badge-warning {
+  background-color: rgba(217, 119, 6, 0.2);
+  color: #FDBA74;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+
+.edu-badge-success {
+  background-color: #F0FDF4;
+  color: #16A34A;
+  border: 1px solid #BBF7D0;
+}
+.dark .edu-badge-success {
+  background-color: rgba(22, 163, 74, 0.2);
+  color: #86EFAC;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.edu-badge-info {
+  background-color: #EFF6FF;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+.dark .edu-badge-info {
+  background-color: rgba(37, 99, 235, 0.2);
+  color: #93C5FD;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+}
+
+/* 4. Data Table Clarity: Cool Stone Sticky Headers & Soft Cobalt Hover */
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #F1F5F9;
+  color: #0F172A;
+  border-bottom: 1px solid #E2E8F0;
+  font-weight: 700;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main table thead th {
+  background-color: #1E293B;
+  color: #F8FAFC;
+  border-bottom: 1px solid #334155;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main table tbody tr {
+  transition: background-color 140ms ease-out;
+}
+
+html:not(.dark):not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main table tbody tr:hover {
+  background-color: rgba(37, 99, 235, 0.04);
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main table tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+/* 5. Tinted Midnight Navy (#0B0F19) Dark Mode Theme Rules */
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) body {
+  background-color: var(--surface-canvas) !important;
+  color: var(--text-primary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) header:not(.public-marketing-header) {
+  background-color: rgba(11, 15, 25, 0.96) !important;
+  border-color: var(--border) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main {
+  background-color: var(--surface-canvas) !important;
+  color: var(--text-primary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/95:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/90:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-white\/80:not(aside),
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#FFFDF9\]:not(aside) {
+  background-color: var(--surface-card) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#F8FAFC\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#F1F5F9\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .bg-\[\#F6F4EE\] {
+  background-color: var(--surface-canvas) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-100,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200\/90,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200\/80,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200\/70,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-200\/60,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-300,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-slate-800,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-\[\#E2E8F0\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .border-\[\#DDD6C7\] {
+  border-color: var(--border) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-900,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#0F172A\],
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-\[\#1B2420\] {
+  color: var(--text-primary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-800 {
+  color: #F1F5F9 !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-700 {
+  color: var(--text-secondary) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-600 {
+  color: #CBD5E1 !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .text-slate-500,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .dark\:text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+/* Removed hardcoded #60A5FA - mapped dynamically below */
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-blue-950\/60,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-blue-950\/70,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-blue-950\/80 {
+  background-color: var(--primary-soft) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:border-blue-800 {
+  border-color: var(--primary-soft-border) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .bg-slate-50,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .bg-slate-50\/80,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .bg-slate-50\/70,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .bg-slate-100,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-slate-900,
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) main .dark\:bg-slate-800 {
+  background-color: var(--surface-subtle) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-slate-50:hover {
+  background-color: var(--surface-subtle) !important;
+}
+
+html.dark:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) .hover\:bg-slate-100:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+/* Custom Scrollbar (Cool Slate / Midnight Navy) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F1F5F9;
 }
 .dark ::-webkit-scrollbar-track {
-  background: #0b1120;
+  background: #0B0F19;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 .dark ::-webkit-scrollbar-thumb {
   background: #334155;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #94A3B8;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 
-/* Bulletproof Full-Application Dark Mode Theme Rules (For internal portals only) */
-html.dark:not(:has(.public-marketing)) body {
-  background-color: #070B14 !important;
-  color: #F8FAFC !important;
-}
-
-html.dark:not(:has(.public-marketing)) header:not(.public-marketing-header) {
-  background-color: rgba(7, 11, 20, 0.95) !important;
-  border-color: #1E293B !important;
-}
-
-html.dark:not(:has(.public-marketing)) main {
-  background-color: #070B14 !important;
-  color: #F8FAFC !important;
-}
-
-html.dark:not(:has(.public-marketing)) .bg-white,
-html.dark:not(:has(.public-marketing)) .bg-white\/95,
-html.dark:not(:has(.public-marketing)) .bg-white\/90,
-html.dark:not(:has(.public-marketing)) .bg-white\/80 {
-  background-color: #0F172A !important;
-}
-
-html.dark:not(:has(.public-marketing)) .bg-\[\#F8FAFC\] {
-  background-color: #070B14 !important;
-}
-
-html.dark:not(:has(.public-marketing)) .border-slate-100,
-html.dark:not(:has(.public-marketing)) .border-slate-200,
-html.dark:not(:has(.public-marketing)) .border-slate-200\/90,
-html.dark:not(:has(.public-marketing)) .border-slate-200\/80,
-html.dark:not(:has(.public-marketing)) .border-slate-200\/70,
-html.dark:not(:has(.public-marketing)) .border-slate-200\/60,
-html.dark:not(:has(.public-marketing)) .border-\[\#E2E8F0\] {
-  border-color: #1E293B !important;
-}
-
-html.dark:not(:has(.public-marketing)) .text-slate-900,
-html.dark:not(:has(.public-marketing)) .text-\[\#0F172A\] {
-  color: #F8FAFC !important;
-}
-
-html.dark:not(:has(.public-marketing)) .text-slate-800 {
-  color: #F1F5F9 !important;
-}
-
-html.dark:not(:has(.public-marketing)) .text-slate-700 {
-  color: #CBD5E1 !important;
-}
-
-html.dark:not(:has(.public-marketing)) .text-slate-600 {
-  color: #94A3B8 !important;
-}
-
-html.dark:not(:has(.public-marketing)) .text-slate-500 {
-  color: #94A3B8 !important;
-}
-
-html.dark:not(:has(.public-marketing)) .bg-slate-50,
-html.dark:not(:has(.public-marketing)) .bg-slate-50\/80,
-html.dark:not(:has(.public-marketing)) .bg-slate-50\/70 {
-  background-color: #1E293B !important;
-}
-
-html.dark:not(:has(.public-marketing)) .bg-slate-100 {
-  background-color: #1E293B !important;
-}
-
-html.dark:not(:has(.public-marketing)) .hover\:bg-slate-50:hover {
-  background-color: #1E293B !important;
-}
-
-html.dark:not(:has(.public-marketing)) .hover\:bg-slate-100:hover {
-  background-color: #334155 !important;
-}
-
-
 /* Pulse animation for red triage indicator */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.55; }
 }
 
 .animate-pulse-subtle {
@@ -222,12 +1027,12 @@ div[data-nextjs-dev-indicators] {
 /* Brand Footer Styles */
 .brand-footer {
   text-align: center;
-  color: #64748b;
-  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .brand-name {
-  color: #6366f1;
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -282,4 +1087,30 @@ div[data-nextjs-dev-indicators] {
   animation: sun-spin 16s linear infinite;
 }
 
+/* ========================================================================== */
+/* RESPECT USER REDUCED MOTION PREFERENCES                                    */
+/* ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 
+  .animate-ping,
+  .animate-pulse,
+  .animate-pulse-subtle,
+  .animate-bounce,
+  .animate-spin,
+  .animate-monkey-swing,
+  .animate-sign-sway,
+  .animate-float-pencil,
+  .animate-rocket-bob,
+  .animate-water-spray,
+  .animate-sun-spin {
+    animation: none !important;
+  }
+}

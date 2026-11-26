@@ -580,7 +580,7 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
   const currentOverview = overview || defaultJuniorOverview;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[url('/junior/junior_jungle_background.webp')] bg-cover bg-center bg-no-repeat text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
+    <div className="junior-jungle-portal flex h-screen w-full overflow-hidden bg-[url('/junior/junior_jungle_background.webp')] bg-cover bg-center bg-no-repeat text-[#0F172A] dark:text-slate-100 font-sans antialiased transition-colors duration-150">
       
       {/* ========================================================= */}
       {/* 1. LEFT SIDEBAR NAVIGATION (Matching Reference Layout)     */}
