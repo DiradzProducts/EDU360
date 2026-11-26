@@ -13808,7 +13808,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   moderateExamGradebook: async (examId: number): Promise<any> => {
 
-    return await fetchWithFallback<any>(`/api/exams/${examId}/moderate-gradebook`, {
+    return await fetchWithFallback<any>(`/api/exams/${examId}/moderate`, {
 
       method: 'POST'
 
