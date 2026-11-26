@@ -1065,7 +1065,7 @@ export function CommandPalette({ isOpen, onClose, currentRole = 'admin' }: Comma
         action: () => toggleTheme(),
         badge: 'Theme',
         badgeColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-        role: ['student', 'teacher', 'parent', 'admin', 'super_admin', 'exam_coordinator', 'admissions_coordinator', 'academic_coordinator', 'accounts_coordinator', 'inventory_coordinator', 'transport_coordinator']
+        role: ['student', 'teacher', 'parent', 'admin', 'super_admin', 'exam_coordinator', 'admissions_coordinator', 'academic_coordinator', 'accounts_coordinator']
       }
     ];
   }, [theme, toggleTheme]);

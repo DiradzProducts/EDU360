@@ -2484,7 +2484,7 @@ let fallbackPaymentTransactions: PaymentTransactionItem[] = [
     amount: 15000,
     payment_method: "Cash Counter",
     bank_name: "School Cash Counter Vault",
-    milestone_title: "Term 2 Transport Fee",
+    milestone_title: "Term 2 Virtual Infrastructure Fee",
     status: "Success",
     transaction_date: "Today",
     reconciled: true,
@@ -2649,7 +2649,7 @@ let fallbackPaymentTransactions: PaymentTransactionItem[] = [
     amount: 28000,
     payment_method: "Bank Demand Draft / Cheque",
     bank_name: "Kotak Mahindra Bank",
-    milestone_title: "Term 1 School Bus Fleet & Transport Fee",
+    milestone_title: "Term 1 Digital Platform & LMS Fee",
     status: "Success",
     transaction_date: "10 Nov 2026",
     reconciled: true,
@@ -7049,23 +7049,23 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   getExitClearances: async () => {
-
+    try {
+      const res = await fetchWithFallback<ExitClearance[]>('/api/parent/exit-clearances', undefined, []);
+      if (res && res.length > 0) return res;
+    } catch {}
     return fetchWithFallback<ExitClearance[]>('/api/admin/exit-clearances', undefined, fallbackExitClearance);
-
   },
 
   getStudentExitClearance: async (studentId: number) => {
-
     try {
-
+      const res = await fetchWithFallback<ExitClearance | null>(`/api/parent/exit-clearance/${studentId}`, undefined, null);
+      if (res) return res;
+    } catch {}
+    try {
       return await fetchWithFallback<ExitClearance | null>(`/api/admin/exit-clearances/student/${studentId}`, undefined, null);
-
     } catch {
-
       return fallbackExitClearance.find(ec => ec.student_id === studentId) || null;
-
     }
-
   },
 
   initiateExitClearance: async (studentId: number) => {
@@ -7547,7 +7547,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     return await fetchWithFallback<any[]>('/api/finance/fee-structures', undefined, []);
   },
 
-  getFeeDefaulters: async (params?: { aging_tier?: string; status?: string; class_name?: string; search?: string }): Promise<FeeDefaulter[]> => {
+  getFeeDefaulters: async (params?: { aging_tier?: string; status?: string; class_name?: string; search?: string; include_settled?: boolean }): Promise<FeeDefaulter[]> => {
 
     try {
 
@@ -7560,6 +7560,8 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       if (params?.class_name) q.set('class_name', params.class_name);
 
       if (params?.search) q.set('search', params.search);
+
+      if (params?.include_settled !== undefined) q.set('include_settled', String(params.include_settled));
 
       const url = `/api/finance/defaulters${q.toString() ? '?' + q.toString() : ''}`;
 
@@ -8380,16 +8382,17 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   // --- Teacher Cockpit & Operations Hub (Master Architecture Spec) ---
 
-  getTeacherPersonalSchedule: async (dayOfWeek?: string) => {
-
-    const url = dayOfWeek ? `/api/teacher/personal-schedule?day_of_week=${encodeURIComponent(dayOfWeek)}` : '/api/teacher/personal-schedule';
+  getTeacherPersonalSchedule: async (dayOfWeek?: string, teacherId?: number | string, teacherName?: string) => {
+    let url = '/api/teacher/personal-schedule';
+    const params: string[] = [];
+    if (dayOfWeek) params.push(`day_of_week=${encodeURIComponent(dayOfWeek)}`);
+    if (teacherId !== undefined && teacherId !== null) params.push(`teacher_id=${encodeURIComponent(teacherId)}`);
+    if (teacherName) params.push(`teacher_name=${encodeURIComponent(teacherName)}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
 
     return fetchWithFallback<TeacherPersonalScheduleItem[]>(url, undefined, 
-
       dayOfWeek ? fallbackTeacherPersonalSchedule.filter(s => s.day_of_week === dayOfWeek) : fallbackTeacherPersonalSchedule
-
     );
-
   },
 
   getFacultyDutyTasks: async (teacherId?: string) => {
@@ -10998,10 +11001,6 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         { domain: 'academic', label: 'Academic & Curriculum', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
 
         { domain: 'exam', label: 'Examination Cell', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
-
-        { domain: 'transport', label: 'Yellow Bus Fleet', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
-
-        { domain: 'inventory', label: 'Asset & Lab Store', total_tasks: 1, open_tasks: 1, completed_tasks: 0, completion_rate_pct: 0 },
 
         { domain: 'admissions', label: 'Admissions & CRM', total_tasks: 1, open_tasks: 0, completed_tasks: 1, completion_rate_pct: 100 },
 
@@ -13696,6 +13695,18 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   },
 
+  publishSingleReportCard: async (reportCardId: number): Promise<any> => {
+    try {
+      const res = await fetchWithFallback<any>(`/api/exams/report-cards/${reportCardId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      return res;
+    } catch {
+      return { success: true, message: 'Report card published.' };
+    }
+  },
+
 
 
   // --- Class-Wise Batch Schedules ---
@@ -15936,7 +15947,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
             incidents: [
               { date: 'Nov 04, 2026', time: '08:44 AM', elapsed: 14.2, status: 'Late', note: 'Joined at +14.2m (>10m rule exceeded).', action: 'Pending Faculty Review' },
               { date: 'Nov 02, 2026', time: '08:52 AM', elapsed: 22.0, status: 'Absent', note: 'Session locked at +22m (>20m limit). Video recording available in portal.', action: 'Session Locked (Unexcused)' },
-              { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Route #4 school bus mechanical delay.', action: 'Approved by Mrs. Verma' },
+              { date: 'Oct 28, 2026', time: '08:42 AM', elapsed: 12.0, status: 'Present', note: 'Network ISP routing delay.', action: 'Approved by Mrs. Verma' },
               { date: 'Oct 24, 2026', time: '08:45 AM', elapsed: 15.0, status: 'Late', note: 'Device Wi-Fi reconnect lag.', action: 'Flagged Late (+15m)' },
               { date: 'Oct 19, 2026', time: '—', elapsed: 0, status: 'Excused', note: 'Parent Medical Slip #MED-891 approved.', action: 'Excused Leave (Doctor Note)' }
             ]

@@ -29,7 +29,7 @@ from app.services.ai_analytics import evaluate_attendance_rule
 from app.routers.notifications import create_system_notification
 from app.core.rbac import require_role
 
-router = APIRouter(prefix="/api/teacher", tags=["teacher"], dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
+router = APIRouter(prefix="/api/teacher", tags=["teacher"], dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator", "student", "parent"]))])
 
 # --- 1. Live Class & 10-Minute Auto-Attendance Rule ---
 @router.get("/live-classes", response_model=list[LiveClassResponse])
@@ -63,11 +63,11 @@ async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: 
         )
     )
     record = result.scalars().first()
+    s_res = await db.execute(select(Student).where(Student.id == req.student_id))
+    st = s_res.scalars().first()
+    student_name = st.name if st else f"Student #{req.student_id}"
+
     if not record:
-        # Check if student exists
-        s_res = await db.execute(select(Student).where(Student.id == req.student_id))
-        st = s_res.scalars().first()
-        student_name = st.name if st else f"Student #{req.student_id}"
         record = AttendanceRecord(
             class_id=class_id,
             student_id=req.student_id,
@@ -75,6 +75,8 @@ async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: 
             date=datetime.date.today().isoformat()
         )
         db.add(record)
+    elif st:
+        record.student_name = st.name
     
     status, rationale = evaluate_attendance_rule(req.minutes_elapsed)
     record.minutes_late = req.minutes_elapsed
@@ -111,7 +113,7 @@ async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: 
         "rule_triggered": "10-Minute Auto-Attendance Engine"
     }
 
-@router.post("/live-classes/{class_id}/attendance/{record_id}/override", response_model=AttendanceRecordResponse)
+@router.post("/live-classes/{class_id}/attendance/{record_id}/override", response_model=AttendanceRecordResponse, dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
 async def override_attendance_record(class_id: int, record_id: int, req: AttendanceOverride, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AttendanceRecord).where(AttendanceRecord.id == record_id))
     record = result.scalars().first()
@@ -131,6 +133,24 @@ async def override_attendance_record(class_id: int, record_id: int, req: Attenda
     )
     db.add(audit_entry)
 
+    # Automated Absence Notice to Parent on Morning / Roll Call Absence
+    if req.status == "Absent":
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name="Mrs. Ananya Verma",
+                sender_role="TEACHER",
+                title="Student Absence Notice: Morning Roll Call",
+                message=f"Student {record.student_name} was marked ABSENT during morning homeroom attendance by Class Teacher. Please check in with school or submit an excused leave request.",
+                notification_type="STUDENT_ABSENT",
+                priority="CRITICAL",
+                recipient_role="parent",
+                action_url="/parent?tab=leave",
+                metadata_dict={"student_id": record.student_id, "status": "Absent", "class_id": class_id}
+            )
+        except Exception as notif_err:
+            print(f"Warning: could not dispatch morning absence alert to parent: {notif_err}")
+
     await db.commit()
     await db.refresh(record)
     return record
@@ -144,7 +164,7 @@ async def list_teacher_homework(task_type: str = None, db: AsyncSession = Depend
     result = await db.execute(stmt.order_by(Homework.id.desc()))
     return result.scalars().all()
 
-@router.post("/homework", response_model=HomeworkResponse)
+@router.post("/homework", response_model=HomeworkResponse, dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
 async def create_teacher_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
     new_hw = Homework(
         title=req.title,
@@ -166,6 +186,40 @@ async def create_teacher_homework(req: HomeworkCreate, db: AsyncSession = Depend
     db.add(new_hw)
     await db.commit()
     await db.refresh(new_hw)
+
+    try:
+        from app.routers.notifications import create_system_notification
+        # 1. Notify Student Cohort
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="student",
+            sender_name=req.teacher_name or "Subject Teacher",
+            sender_role="teacher",
+            title=f"New Homework Assigned: {req.subject}",
+            message=f"{req.title} for {req.class_name} is due on {req.due_date} ({req.due_time or '17:00'}). Max scale: {req.max_marks} marks.",
+            notification_type="HOMEWORK_ASSIGNED",
+            priority="NORMAL",
+            action_url="/student",
+            metadata_dict={"homework_id": new_hw.id, "subject": req.subject, "class_name": req.class_name}
+        )
+        # 2. Notify Parents
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="parent",
+            sender_name=req.teacher_name or "Subject Teacher",
+            sender_role="teacher",
+            title=f"Tonight's Homework: {req.subject}",
+            message=f"{req.teacher_name or 'Teacher'} assigned '{req.title}' for {req.class_name}. Please inspect child's practice work.",
+            notification_type="HOMEWORK_ASSIGNED",
+            priority="NORMAL",
+            action_url="/parent",
+            metadata_dict={"homework_id": new_hw.id, "subject": req.subject, "class_name": req.class_name}
+        )
+    except Exception as e:
+        print(f"Warning: could not dispatch homework notifications: {e}")
+
     return new_hw
 
 @router.get("/homework/{homework_id}/submissions", response_model=list[HomeworkSubmissionResponse])
@@ -255,15 +309,23 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
     
     today_iso = datetime.date.today().isoformat()
 
+    # Resolve student's enrolled class ID dynamically
+    st_lookup = await db.execute(select(Student).where(Student.id == lr.student_id))
+    st_obj = st_lookup.scalars().first()
+    target_class_id = getattr(st_obj, "class_id", None) or 1
+
     if req.status == "Approved":
         lr.approval_stage = "Attendance Adjusted"
 
-        # 1. Update or create AttendanceRecord for class_id=1 (and today's class)
+        # 1. Update or create AttendanceRecord dynamically for student
         att_res = await db.execute(
             select(AttendanceRecord).where(
                 AttendanceRecord.student_id == lr.student_id,
-                AttendanceRecord.class_id == 1
-            )
+                or_(
+                    AttendanceRecord.date == today_iso,
+                    AttendanceRecord.class_id == target_class_id
+                )
+            ).order_by(AttendanceRecord.id.desc())
         )
         att_rec = att_res.scalars().first()
         if att_rec:
@@ -273,7 +335,7 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
             att_rec.minutes_late = 0.0
         else:
             att_rec = AttendanceRecord(
-                class_id=1,
+                class_id=target_class_id,
                 student_id=lr.student_id,
                 student_name=lr.student_name,
                 date=today_iso,
@@ -321,8 +383,11 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
         att_res = await db.execute(
             select(AttendanceRecord).where(
                 AttendanceRecord.student_id == lr.student_id,
-                AttendanceRecord.class_id == 1
-            )
+                or_(
+                    AttendanceRecord.date == today_iso,
+                    AttendanceRecord.class_id == target_class_id
+                )
+            ).order_by(AttendanceRecord.id.desc())
         )
         att_rec = att_res.scalars().first()
         if att_rec and att_rec.status == "Leave":
@@ -385,8 +450,11 @@ async def get_parent_chat_context(student_id: int, db: AsyncSession = Depends(ge
 
 # --- 5. Student Roster (Class 8B & 9A) ---
 @router.get("/students")
-async def list_teacher_students(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Student).order_by(Student.roll_no))
+async def list_teacher_students(include_withdrawn: bool = False, db: AsyncSession = Depends(get_db)):
+    stmt = select(Student)
+    if not include_withdrawn:
+        stmt = stmt.where(or_(Student.status != "Withdrawn", Student.status.is_(None)))
+    result = await db.execute(stmt.order_by(Student.roll_no))
     students = result.scalars().all()
     
     # Map remedial sprints for focus table indicators
@@ -404,9 +472,20 @@ async def list_teacher_students(db: AsyncSession = Depends(get_db)):
         if lr.student_id not in leave_map:
             leave_map[lr.student_id] = lr
 
-    # Query Attendance Records for Class 1 (or current active live class)
-    att_res = await db.execute(select(AttendanceRecord).where(AttendanceRecord.class_id == 1))
-    att_map = {a.student_id: a for a in att_res.scalars().all()}
+    # Query Attendance Records for today across all enrolled students
+    today_iso = datetime.date.today().isoformat()
+    att_res = await db.execute(
+        select(AttendanceRecord).where(
+            or_(
+                AttendanceRecord.date == today_iso,
+                AttendanceRecord.class_id.isnot(None)
+            )
+        ).order_by(AttendanceRecord.id.desc())
+    )
+    att_map = {}
+    for a in att_res.scalars().all():
+        if a.student_id not in att_map:
+            att_map[a.student_id] = a
 
     output = []
     for s in students:
@@ -446,6 +525,7 @@ async def list_teacher_students(db: AsyncSession = Depends(get_db)):
             "id": s.id,
             "name": s.name,
             "roll_no": s.roll_no,
+            "status": s.status or "Active",
             "class_name": f"{s.class_name}-{s.section}",
             "raw_class": s.class_name,
             "section": s.section,
@@ -845,9 +925,162 @@ _personal_schedule = [
     }
 ]
 
+# Map of teacher ID (or identifier) to their personal schedule list
+_teacher_personal_schedules: Dict[int, List[dict]] = {
+    1: _personal_schedule,
+    2: _personal_schedule,
+}
+
+def get_or_create_teacher_schedule(teacher_id: int, teacher_name: Optional[str] = None) -> List[dict]:
+    if teacher_id in _teacher_personal_schedules:
+        return _teacher_personal_schedules[teacher_id]
+
+    if teacher_name and ("ananya" in teacher_name.lower() or "verma" in teacher_name.lower()):
+        return _personal_schedule
+
+    dept_subject = "General Instruction"
+    if teacher_name:
+        tn_lower = teacher_name.lower()
+        if "deepak" in tn_lower or "rao" in tn_lower:
+            dept_subject = "English Literature"
+        elif "sunita" in tn_lower or "roy" in tn_lower:
+            dept_subject = "Biology"
+        elif "arvind" in tn_lower or "swamy" in tn_lower:
+            dept_subject = "Advanced Mathematics"
+        elif "shalini" in tn_lower or "nair" in tn_lower:
+            dept_subject = "Computer Science"
+
+    new_schedule = [
+        {
+            "id": f"sched-t{teacher_id}-1",
+            "period_number": 1,
+            "start_time": "08:30 AM",
+            "end_time": "09:15 AM",
+            "day_of_week": "Friday",
+            "activity_type": "TEACHING_SESSION",
+            "class_grade": "Grade 9",
+            "section": "A",
+            "subject_name": dept_subject,
+            "room_number": "Room 102",
+            "is_current_active_period": False,
+            "notes": "Regular syllabus delivery"
+        },
+        {
+            "id": f"sched-t{teacher_id}-2",
+            "period_number": 2,
+            "start_time": "09:20 AM",
+            "end_time": "10:05 AM",
+            "day_of_week": "Friday",
+            "activity_type": "FREE_PREP_PERIOD",
+            "class_grade": None,
+            "section": None,
+            "subject_name": None,
+            "room_number": "Staff Room",
+            "is_current_active_period": False,
+            "notes": "Lesson planning and assignment evaluation"
+        },
+        {
+            "id": f"sched-t{teacher_id}-3",
+            "period_number": 3,
+            "start_time": "10:15 AM",
+            "end_time": "11:00 AM",
+            "day_of_week": "Friday",
+            "activity_type": "TEACHING_SESSION",
+            "class_grade": "Grade 10",
+            "section": "B",
+            "subject_name": dept_subject,
+            "room_number": "Room 305",
+            "is_current_active_period": False,
+            "notes": "Practical exercises and chapter revision"
+        },
+        {
+            "id": f"sched-t{teacher_id}-4",
+            "period_number": 4,
+            "start_time": "11:15 AM",
+            "end_time": "12:00 PM",
+            "day_of_week": "Friday",
+            "activity_type": "FREE_PREP_PERIOD",
+            "class_grade": None,
+            "section": None,
+            "subject_name": None,
+            "room_number": "Staff Room",
+            "is_current_active_period": False,
+            "notes": "Remedial preparation"
+        },
+        {
+            "id": f"sched-t{teacher_id}-5",
+            "period_number": 5,
+            "start_time": "12:45 PM",
+            "end_time": "01:30 PM",
+            "day_of_week": "Friday",
+            "activity_type": "TEACHING_SESSION",
+            "class_grade": "Grade 8",
+            "section": "A",
+            "subject_name": dept_subject,
+            "room_number": "Room 201",
+            "is_current_active_period": False,
+            "notes": "Interactive class discussion"
+        },
+        {
+            "id": f"sched-t{teacher_id}-6",
+            "period_number": 6,
+            "start_time": "01:35 PM",
+            "end_time": "02:20 PM",
+            "day_of_week": "Friday",
+            "activity_type": "FREE_PREP_PERIOD",
+            "class_grade": None,
+            "section": None,
+            "subject_name": None,
+            "room_number": "Staff Room",
+            "is_current_active_period": False,
+            "notes": "Co-curricular coordination"
+        },
+        {
+            "id": f"sched-t{teacher_id}-7",
+            "period_number": 7,
+            "start_time": "02:25 PM",
+            "end_time": "03:10 PM",
+            "day_of_week": "Friday",
+            "activity_type": "TEACHING_SESSION",
+            "class_grade": "Grade 7",
+            "section": "B",
+            "subject_name": dept_subject,
+            "room_number": "Room 105",
+            "is_current_active_period": False,
+            "notes": "Unit quiz & review"
+        }
+    ]
+    _teacher_personal_schedules[teacher_id] = new_schedule
+    return new_schedule
+
 @router.get("/personal-schedule", response_model=list[TeacherPersonalScheduleResponse])
-async def get_teacher_personal_schedule(day_of_week: str = "Friday"):
-    return [s for s in _personal_schedule if s["day_of_week"].lower() == day_of_week.lower()] or _personal_schedule
+async def get_teacher_personal_schedule(
+    day_of_week: Optional[str] = "Friday",
+    teacher_id: Optional[int] = None,
+    teacher_name: Optional[str] = None
+):
+    target_sched = _personal_schedule
+    if teacher_id is not None:
+        if teacher_id in (1, 2):
+            target_sched = _personal_schedule
+        else:
+            target_sched = get_or_create_teacher_schedule(teacher_id, teacher_name)
+    elif teacher_name is not None:
+        if "ananya" in teacher_name.lower() or "verma" in teacher_name.lower():
+            target_sched = _personal_schedule
+        else:
+            sub_id = (
+                4 if "deepak" in teacher_name.lower() else
+                5 if "sunita" in teacher_name.lower() else
+                6 if "arvind" in teacher_name.lower() else
+                7 if "shalini" in teacher_name.lower() else
+                99
+            )
+            target_sched = get_or_create_teacher_schedule(sub_id, teacher_name)
+
+    dow = day_of_week.lower() if day_of_week else "friday"
+    filtered = [s for s in target_sched if s.get("day_of_week", "").lower() in (dow, "today")]
+    return filtered or target_sched
 
 # --- 10. Consolidated Faculty Duties & Task Center ---
 _faculty_duty_tasks = [
@@ -1925,6 +2158,48 @@ async def book_ptm_slot(req: PTMSlotBookRequest, db: AsyncSession = Depends(get_
                     ft.updated_at = datetime.datetime.utcnow()
                     await db.commit()
 
+            # DISPATCH IN-APP NOTIFICATION TO TEACHER & PARENT
+            try:
+                time_range = f"{db_slot.start_time} - {db_slot.end_time}"
+                agenda_items = req.focus_table_agenda or []
+                agenda_desc = f"Agenda: {', '.join(agenda_items)}" if agenda_items else "General Academic Review & Progress"
+                scope_label = "Homeroom" if req.interaction_scope == "HOMEROOM_CLASS" else (req.subject_name or "Subject-Specific")
+                teacher_uid = 2
+                tid_lower = str(db_slot.teacher_id or "").lower().strip()
+                KNOWN_TEACHERS = {"ananya": 2, "raman": 12, "sen": 13, "sunitha": 14, "kalyani": 15, "shalini": 16}
+                if tid_lower in KNOWN_TEACHERS:
+                    teacher_uid = KNOWN_TEACHERS[tid_lower]
+                elif tid_lower.isdigit():
+                    teacher_uid = int(tid_lower)
+
+                await create_system_notification(
+                    db=db,
+                    sender_name=req.booked_parent_name or "Parent",
+                    sender_role="parent",
+                    recipient_user_id=teacher_uid,
+                    recipient_role="teacher",
+                    title=f"PTM Slot Booked: {req.booked_student_name} ({req.booked_class})",
+                    message=f"{req.booked_parent_name} has scheduled a 10-minute PTM conference on 24 Oct ({time_range}) for {req.booked_student_name} ({req.booked_class}). Scope: {scope_label}. {agenda_desc}.",
+                    notification_type="PTM_SLOT_BOOKED",
+                    priority="URGENT",
+                    action_url="/teacher?tab=parent_hub",
+                    metadata_dict={
+                        "slot_id": req.slot_id,
+                        "student_id": req.booked_student_id,
+                        "student_name": req.booked_student_name,
+                        "class": req.booked_class,
+                        "parent_name": req.booked_parent_name,
+                        "start_time": db_slot.start_time,
+                        "end_time": db_slot.end_time,
+                        "interaction_scope": req.interaction_scope,
+                        "subject_name": req.subject_name,
+                        "meeting_url": meeting_url,
+                        "agenda": agenda_items
+                    }
+                )
+            except Exception as notif_err:
+                print(f"Error dispatching PTM booking notification in teacher router: {notif_err}")
+
             # sync in memory
             for slot in _ptm_slots:
                 if slot["id"] == req.slot_id:
@@ -2008,6 +2283,31 @@ async def cancel_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: AsyncSess
                     )
                 except Exception as ne:
                     print(f"Error notifying parent of teacher cancellation: {ne}")
+
+            if req.cancelled_by and "parent" in str(req.cancelled_by).lower():
+                try:
+                    teacher_uid = 2
+                    tid_lower = str(db_slot.teacher_id or "").lower().strip()
+                    KNOWN_TEACHERS = {"ananya": 2, "raman": 12, "sen": 13, "sunitha": 14, "kalyani": 15, "shalini": 16}
+                    if tid_lower in KNOWN_TEACHERS:
+                        teacher_uid = KNOWN_TEACHERS[tid_lower]
+                    elif tid_lower.isdigit():
+                        teacher_uid = int(tid_lower)
+                    await create_system_notification(
+                        db=db,
+                        sender_name=req.cancelled_by or "Parent",
+                        sender_role="parent",
+                        recipient_role="teacher",
+                        recipient_user_id=teacher_uid,
+                        title=f"PTM Slot Cancelled: {student_name}",
+                        message=f"PTM conference for {student_name} on 24 Oct ({slot_time}) was cancelled by {req.cancelled_by}. Reason: {req.cancellation_reason}.",
+                        notification_type="PTM_SLOT_CANCELLED",
+                        priority="HIGH",
+                        action_url="/teacher?tab=parent_hub",
+                        metadata_dict={"slot_id": slot_id, "student_name": student_name, "reason": req.cancellation_reason}
+                    )
+                except Exception as ne:
+                    print(f"Error notifying teacher of parent cancellation: {ne}")
 
             for s in _ptm_slots:
                 if s["id"] == slot_id:
@@ -2193,23 +2493,52 @@ async def teacher_mark_ptm_slot_attendance(
     }
 
 # --- 14. Teacher Curriculum Delivery & Timetable Proxy Sync ---
-def inject_substitution_period(period_num: int, class_name: str, subject: str, absent_teacher: str, time_slot: str):
-    for p in _personal_schedule:
+def inject_substitution_period(
+    period_num: int,
+    class_name: str,
+    subject: str,
+    absent_teacher: str,
+    time_slot: str,
+    substitute_teacher_id: Optional[int] = None,
+    substitute_teacher_name: Optional[str] = None
+):
+    # Determine target teacher: strictly route to the chosen substitute teacher
+    is_ananya = False
+    if substitute_teacher_id in (1, 2):
+        is_ananya = True
+    elif substitute_teacher_name and ("ananya" in substitute_teacher_name.lower() or "verma" in substitute_teacher_name.lower()):
+        is_ananya = True
+
+    if is_ananya:
+        target_sched = _personal_schedule
+    else:
+        # Route to the selected substitute teacher, preserving Mrs. Ananya Verma's personal schedule
+        sub_id = substitute_teacher_id or (
+            4 if (substitute_teacher_name and "deepak" in substitute_teacher_name.lower()) else
+            5 if (substitute_teacher_name and "sunita" in substitute_teacher_name.lower()) else
+            6 if (substitute_teacher_name and "arvind" in substitute_teacher_name.lower()) else
+            7 if (substitute_teacher_name and "shalini" in substitute_teacher_name.lower()) else
+            99
+        )
+        target_sched = get_or_create_teacher_schedule(sub_id, substitute_teacher_name)
+
+    for p in target_sched:
         if p["period_number"] == period_num:
             p["activity_type"] = "SUBSTITUTION_COVER"
             p["class_grade"] = class_name
             p["subject_name"] = f"{subject} (Proxy Cover)"
             p["notes"] = f"Covering for absent faculty {absent_teacher} (Leave Approved)"
             return
-    _personal_schedule.append({
-        "id": f"sub-cover-{period_num}",
+
+    target_sched.append({
+        "id": f"sub-cover-{substitute_teacher_id or 'proxy'}-{period_num}",
         "period_number": period_num,
         "start_time": time_slot.split("-")[0].strip() if "-" in time_slot else "10:30 AM",
         "end_time": time_slot.split("-")[1].strip() if "-" in time_slot else "11:15 AM",
         "day_of_week": "Today",
         "activity_type": "SUBSTITUTION_COVER",
         "class_grade": class_name,
-        "section": "B",
+        "section": class_name.split("-")[1].strip() if "-" in class_name else "B",
         "subject_name": f"{subject} (Proxy Cover)",
         "room_number": "Room 204",
         "is_current_active_period": False,
@@ -2446,9 +2775,28 @@ async def mark_period_attendance(
                 status_val = "Late"
                 rule = "LATE_GT_10M"
                 action = f"Flagged Late (+{rec.elapsed_minutes:.1f}m)"
-        elif rec.status == "Absent":
+        elif rec.status == "Absent" or status_val == "Absent":
             rule = "UNEXCUSED_BUNK"
             action = "Marked Absent"
+            # Dispatch automated absence alert to parent
+            try:
+                st_lookup = await db.execute(select(Student).where(Student.id == rec.student_id))
+                st_rec = st_lookup.scalars().first()
+                st_name = st_rec.name if st_rec else f"Student #{rec.student_id}"
+                await create_system_notification(
+                    db=db,
+                    sender_name="Mrs. Ananya Verma",
+                    sender_role="TEACHER",
+                    title=f"Student Absence Notice: Period {payload.period_no} ({payload.subject_code})",
+                    message=f"Student {st_name} was marked ABSENT during Period {payload.period_no} ({payload.subject_code}) attendance by faculty. Please review or submit an excused leave request.",
+                    notification_type="STUDENT_ABSENT",
+                    priority="CRITICAL",
+                    recipient_role="parent",
+                    action_url="/parent?tab=leave",
+                    metadata_dict={"student_id": rec.student_id, "period_no": payload.period_no, "subject_code": payload.subject_code, "date": payload.session_date}
+                )
+            except Exception as notif_err:
+                print(f"Warning: failed to dispatch period absence alert: {notif_err}")
         elif rec.status == "Excused":
             rule = "PARENT_EXCUSED"
             action = "Parent/Medical Leave Excused"

@@ -81,6 +81,7 @@ export function ParentMarksView({
   const [reExamFileSize, setReExamFileSize] = useState<string>('340 KB');
   const [submittingReExam, setSubmittingReExam] = useState(false);
   const [admitCardData, setAdmitCardData] = useState<any>(null);
+  const [admitCardHold, setAdmitCardHold] = useState<string | null>(null);
   const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
 
   const handleOpenAdmitCard = async () => {
@@ -88,8 +89,14 @@ export function ParentMarksView({
     setShowAdmitCardModal(true);
     try {
       const res = await api.getStudentHallTicket(studentId);
-      if (res && res.success && res.ticket) {
-        setAdmitCardData(res.ticket);
+      if (res && res.is_on_hold) {
+        setAdmitCardHold(res.hold_reason || 'Institutional Fee Hold Active');
+        setAdmitCardData(null);
+      } else if (res && (res.ticket || res.hall_ticket)) {
+        setAdmitCardHold(null);
+        setAdmitCardData(res.ticket || res.hall_ticket);
+      } else {
+        setAdmitCardHold(null);
       }
     } catch (err) {
       console.error('Failed to load hall ticket', err);
@@ -404,17 +411,34 @@ export function ParentMarksView({
           )}
 
           <button
-            onClick={handleDownloadMemo}
-            className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer"
+            onClick={liveReportCard?.is_on_hold ? undefined : handleDownloadMemo}
+            disabled={Boolean(liveReportCard?.is_on_hold || (liveReportCard && !liveReportCard.is_published))}
+            title={liveReportCard?.is_on_hold ? "Report card withheld pending Accounts fee clearance" : undefined}
+            className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-colors ${
+              liveReportCard?.is_on_hold
+                ? 'border-rose-200 bg-rose-50/50 text-rose-400 cursor-not-allowed dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-400'
+                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer'
+            }`}
           >
             <Download className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <span>Download Official PDF Memo</span>
+            <span>{liveReportCard?.is_on_hold ? "Memo Withheld (Fee Hold)" : "Download Official PDF Memo"}</span>
           </button>
         </div>
       </div>
 
+      {/* Institutional Fee Clearance Hold Notice for Parents */}
+      {liveReportCard && liveReportCard.is_on_hold && (
+        <div className="rounded-2xl border border-rose-300 dark:border-rose-900 bg-rose-50/90 dark:bg-rose-950/40 p-4 flex items-center gap-3 text-xs text-rose-900 dark:text-rose-200 shadow-xs">
+          <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
+          <div>
+            <span className="font-bold block">Institutional Fee Clearance Hold: Term Report Card Withheld</span>
+            <span>{liveReportCard.hold_reason || "Official CBSE Report Card is withheld by Accounts Office due to outstanding fee arrears. Please clear pending dues with the Accounts Office to unlock term marks and the official marks memo."}</span>
+          </div>
+        </div>
+      )}
+
       {/* Official Release Pending Notice for Parents */}
-      {liveReportCard && !liveReportCard.is_published && (
+      {liveReportCard && !liveReportCard.is_published && !liveReportCard.is_on_hold && (
         <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 p-4 flex items-center gap-3 text-xs text-blue-900 dark:text-blue-200">
           <Clock className="h-5 w-5 text-blue-600 shrink-0" />
           <div>
@@ -759,7 +783,21 @@ export function ParentMarksView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {isTerm1 && liveReportCard ? (
+              {liveReportCard?.is_on_hold ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-xs text-rose-600 dark:text-rose-400 font-medium">
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center font-bold">
+                        <AlertCircle className="h-5 w-5" />
+                      </div>
+                      <p className="font-bold text-sm text-slate-900 dark:text-white">Subject Evaluation Withheld</p>
+                      <p className="text-slate-500 text-xs">
+                        Official subject marks, grades, and teacher observations are on institutional hold pending Accounts Department fee clearance.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : isTerm1 && liveReportCard ? (
                 Object.entries(liveReportCard.grades_grid || {}).map(([sub, detail]) => {
                   const subjectAiObservations: Record<string, string> = {
                     'Mathematics': 'Gemini AI Diagnostic: Identified misconception in distributive sign multiplication during quadratic binomial expansion. Recommendation: Daily 15-min sign bracket drills before bedtime.',
@@ -1086,13 +1124,15 @@ export function ParentMarksView({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Print Copy</span>
-                </button>
+                {!admitCardHold && (
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Print Copy</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowAdmitCardModal(false)}
                   className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
@@ -1106,6 +1146,23 @@ export function ParentMarksView({
               <div className="py-16 text-center space-y-3">
                 <RefreshCw className="h-8 w-8 text-purple-600 animate-spin mx-auto" />
                 <p className="text-xs font-bold text-slate-500">Retrieving official cryptographically signed hall ticket...</p>
+              </div>
+            ) : admitCardHold ? (
+              <div className="py-12 px-6 text-center space-y-4 rounded-2xl border-2 border-dashed border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20">
+                <div className="h-16 w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                  <AlertCircle className="h-8 w-8" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-rose-700 dark:text-rose-400">Official Examination Admit Card Withheld</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 max-w-lg mx-auto font-medium">
+                    {admitCardHold}
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-xs font-bold border border-amber-300 dark:border-amber-800">
+                    <span>⚠️ Examination admit card and desk allocation will be unlocked immediately once fee clearance is authorized by the Accounts Department.</span>
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="space-y-5 print:p-0">

@@ -130,7 +130,7 @@ class TriageActionRequest(BaseModel):
 
 class TriageAlertResponse(TriageAlertBase):
     id: int
-    created_at: datetime.datetime
+    created_at: Optional[datetime.datetime] = None
     class Config:
         from_attributes = True
 

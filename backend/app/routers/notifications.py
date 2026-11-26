@@ -46,6 +46,8 @@ async def create_system_notification(
     Internal helper to create and commit a persistent notification with 5-minute deduplication.
     """
     try:
+        if recipient_role:
+            recipient_role = recipient_role.lower()
         # 1. 5-Minute Deduplication & Spam Protection
         five_mins_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
         conditions = [
@@ -120,21 +122,23 @@ async def get_notifications(
     conditions = []
     
     if user_id is not None and role:
+        r_clean = role.lower()
         # Match user ID specifically or match role-wide notification (including "all")
         conditions.append(or_(
             Notification.recipient_user_id == user_id,
-            Notification.recipient_role == role,
-            Notification.recipient_role == "all"
+            Notification.recipient_role.in_([r_clean, r_clean.upper()]),
+            Notification.recipient_role.in_(["all", "ALL"])
         ))
     elif user_id is not None:
         conditions.append(or_(
             Notification.recipient_user_id == user_id,
-            Notification.recipient_role == "all"
+            Notification.recipient_role.in_(["all", "ALL"])
         ))
     elif role:
+        r_clean = role.lower()
         conditions.append(or_(
-            Notification.recipient_role == role,
-            Notification.recipient_role == "all"
+            Notification.recipient_role.in_([r_clean, r_clean.upper()]),
+            Notification.recipient_role.in_(["all", "ALL"])
         ))
 
     if unread_only:

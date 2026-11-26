@@ -755,7 +755,7 @@ export function JuniorStudentDashboard({ user, onSwitchToSecondary, onLogout }: 
                             <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
                               My Explorer Passport
                             </div>
-                            <div className="text-[10px] text-slate-400">View ID card, badges & bus tracker</div>
+                            <div className="text-[10px] text-slate-400">View student profile, passport &amp; badges</div>
                           </div>
                         </div>
                         <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />

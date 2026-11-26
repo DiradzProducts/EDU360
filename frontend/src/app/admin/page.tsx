@@ -54,6 +54,7 @@ import {
   DollarSign,
   ClipboardCheck,
   BookOpen,
+  LogOut,
   Award,
   Activity,
   Bell,
@@ -334,9 +335,14 @@ export default function AdminPage() {
   const [selectedStudentForSIS, setSelectedStudentForSIS] = useState<Student | null>(null);
   const [studentClassFilter, setStudentClassFilter] = useState('All');
   const [studentSectionFilter, setStudentSectionFilter] = useState('All');
+  const [studentStatusFilter, setStudentStatusFilter] = useState('All');
+  const [sisInitialTab, setSisInitialTab] = useState<'profile' | 'academics' | 'remarks' | 'attendance' | 'vault' | 'fees' | 'exit'>('profile');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentRiskOnly, setStudentRiskOnly] = useState(false);
   const [sisActiveSubTab, setSisActiveSubTab] = useState<'profile' | 'academic' | 'certificates' | 'fees'>('profile');
+  const [showInitiateExitModal, setShowInitiateExitModal] = useState(false);
+  const [initiateExitStudentId, setInitiateExitStudentId] = useState<number | null>(null);
+  const [isInitiatingExit, setIsInitiatingExit] = useState(false);
 
   // Staff Directory Search & Modal State
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
@@ -384,6 +390,7 @@ export default function AdminPage() {
   // Fee Defaulters Search & Filters State
   const [feeDefaulterSearch, setFeeDefaulterSearch] = useState<string>('');
   const [feeDefaulterTierFilter, setFeeDefaulterTierFilter] = useState<string>('ALL');
+  const [feeDefaulterStatusFilter, setFeeDefaulterStatusFilter] = useState<'ACTIVE_DUES' | 'SETTLED' | 'ALL'>('ACTIVE_DUES');
   const [feeDefaulterClassFilter, setFeeDefaulterClassFilter] = useState<string>('All Classes');
   const [feeDefaulterCategoryFilter, setFeeDefaulterCategoryFilter] = useState<'ALL' | 'NEW_ADMISSION' | 'EXISTING'>('ALL');
 
@@ -1418,6 +1425,14 @@ export default function AdminPage() {
     setSelectedSubSlot(null);
     setChosenFacultyId(null);
     setSubNotes('');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('edu360_substitutions_updated', { detail: updatedSubs }));
+      try {
+        const ch = new BroadcastChannel('edu360_global_notifications');
+        ch.postMessage({ type: 'SUBSTITUTION_ASSIGNED', slots: updatedSubs });
+        ch.close();
+      } catch {}
+    }
     triggerToast(`Assigned ${faculty.name} to ${selectedSubSlot.class_name} ${selectedSubSlot.subject} (Period ${selectedSubSlot.period_number})`);
   };
 
@@ -1429,6 +1444,14 @@ export default function AdminPage() {
     setSubstitutions(updatedSubs);
     setAvailableFaculty(updatedFaculty);
     setAuditLogs(updatedLogs);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('edu360_substitutions_updated', { detail: updatedSubs }));
+      try {
+        const ch = new BroadcastChannel('edu360_global_notifications');
+        ch.postMessage({ type: 'SUBSTITUTION_ASSIGNED', slots: updatedSubs });
+        ch.close();
+      } catch {}
+    }
     triggerToast(res.message || 'Auto-resolved all timetable proxy gaps');
   };
 
@@ -1544,11 +1567,15 @@ export default function AdminPage() {
 
     const matchesClass = feeDefaulterClassFilter === 'All Classes' || (d.class_name && d.class_name.toLowerCase().includes(feeDefaulterClassFilter.toLowerCase()));
 
+    const matchesStatus = feeDefaulterStatusFilter === 'ALL' ||
+      (feeDefaulterStatusFilter === 'ACTIVE_DUES' && d.amount_due > 0) ||
+      (feeDefaulterStatusFilter === 'SETTLED' && d.amount_due <= 0);
+
     const matchesCategory = feeDefaulterCategoryFilter === 'ALL' ||
       (feeDefaulterCategoryFilter === 'NEW_ADMISSION' && d.is_admission_fee) ||
       (feeDefaulterCategoryFilter === 'EXISTING' && !d.is_admission_fee);
 
-    return matchesSearch && matchesTier && matchesClass && matchesCategory;
+    return matchesStatus && matchesSearch && matchesTier && matchesClass && matchesCategory;
   });
 
   const handleExportFeeLedger = () => {
@@ -2448,7 +2475,11 @@ export default function AdminPage() {
                   studentId={selectedStudentForSIS.id}
                   student={selectedStudentForSIS}
                   viewerRole="admin"
-                  onBack={() => setSelectedStudentForSIS(null)}
+                  initialTab={sisInitialTab}
+                  onBack={() => {
+                    setSelectedStudentForSIS(null);
+                    setSisInitialTab('profile');
+                  }}
                   hideBack={true}
                 />
               ) : (() => {
@@ -2470,6 +2501,7 @@ export default function AdminPage() {
                     s.roll_no.toLowerCase().includes(q);
                   return matchClass && matchSec && matchRisk && matchQ;
                 });
+
 
                 return (
                   <div className="space-y-4">
@@ -2549,6 +2581,7 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </div>
+
 
                     {/* Refined Warm Forest Roster Table */}
                     <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 overflow-hidden">
@@ -3550,9 +3583,48 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Aging Tier Selector */}
-                      <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
-                        {['ALL', 'TIER_1', 'TIER_2', 'TIER_3'].map(tier => (
+
+                      {/* Status Filter: Active Dues vs Settled vs All */}
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setFeeDefaulterStatusFilter('ACTIVE_DUES')}
+                          className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                            feeDefaulterStatusFilter === 'ACTIVE_DUES'
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          Active Overdue ({feeDefaulters.filter(d => d.amount_due > 0).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFeeDefaulterStatusFilter('SETTLED')}
+                          className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                            feeDefaulterStatusFilter === 'SETTLED'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          Settled ({feeDefaulters.filter(d => d.amount_due <= 0).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFeeDefaulterStatusFilter('ALL')}
+                          className={`px-2 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
+                            feeDefaulterStatusFilter === 'ALL'
+                              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          All ({feeDefaulters.length})
+                        </button>
+                      </div>
+
+                      {/* Tier Filter */}
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                        {(['ALL', '0-15', '16-30', '30+'] as const).map(tier => (
+
                           <button
                             key={tier}
                             type="button"
@@ -3580,11 +3652,21 @@ export default function AdminPage() {
                         ))}
                       </select>
 
-                      {feeDefaulterCategoryFilter !== 'ALL' && (
+
+                      {/* Clear Filters Button */}
+                      {(feeDefaulterStatusFilter !== 'ACTIVE_DUES' || feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
                         <button
                           type="button"
-                          onClick={() => setFeeDefaulterCategoryFilter('ALL')}
-                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer"
+                          onClick={() => {
+                            setFeeDefaulterStatusFilter('ACTIVE_DUES');
+                            setFeeDefaulterTierFilter('ALL');
+                            setFeeDefaulterCategoryFilter('ALL');
+                            setFeeDefaulterClassFilter('All Classes');
+                            setFeeDefaulterSearch('');
+                          }}
+                          className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer animate-in fade-in shrink-0"
+                          title="Reset fee defaulters filter"
+
                         >
                           Clear Filter
                         </button>
@@ -3624,8 +3706,33 @@ export default function AdminPage() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredFeeDefaulters.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
-                                No fee accounts match the selected filter criteria.
+
+                              <td colSpan={8} className="py-10 text-center">
+                                <div className="flex flex-col items-center justify-center space-y-2">
+                                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                    <Filter className="h-5 w-5" />
+                                  </div>
+                                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                    No fee accounts match the selected filter criteria.
+                                  </p>
+                                  {(feeDefaulterStatusFilter !== 'ACTIVE_DUES' || feeDefaulterTierFilter !== 'ALL' || feeDefaulterCategoryFilter !== 'ALL' || feeDefaulterClassFilter !== 'All Classes' || Boolean(feeDefaulterSearch.trim())) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFeeDefaulterStatusFilter('ACTIVE_DUES');
+                                        setFeeDefaulterTierFilter('ALL');
+                                        setFeeDefaulterCategoryFilter('ALL');
+                                        setFeeDefaulterClassFilter('All Classes');
+                                        setFeeDefaulterSearch('');
+                                      }}
+                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                                    >
+                                      <RotateCcw className="h-3.5 w-3.5" />
+                                      <span>Reset All Filters</span>
+                                    </button>
+                                  )}
+                                </div>
+
                               </td>
                             </tr>
                           ) : (
@@ -3762,8 +3869,10 @@ export default function AdminPage() {
                         <span className="text-xs font-bold text-rose-600 dark:text-rose-400">30 Overdue</span>
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Transport</h4>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Maturity Date: 25 Oct 2026 • ₹18,500 / student</span>
+
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Term 2 Tuition &amp; Infrastructure</h4>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Due: 25 Oct 2026 • ₹18,500 / student</span>
+
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2">
                         <div className="bg-amber-500 h-2 rounded-full w-[78.2%]" />
@@ -8025,21 +8134,29 @@ export default function AdminPage() {
 
                 <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                   <button
-                    type="button"
-                    onClick={() => setShowNewTCModal(true)}
-                    className="flex items-center gap-2 rounded-xl bg-primary hover:opacity-95 text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95"
+
+                    onClick={() => {
+                      if (!initiateExitStudentId && studentsList.length > 0) {
+                        const candidate = studentsList.find(s => s.id === 32) || studentsList.find(s => s.status !== 'Withdrawn');
+                        if (candidate) setInitiateExitStudentId(candidate.id);
+                      }
+                      setShowInitiateExitModal(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-xs cursor-pointer transition-all"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>Issue TC Application</span>
+                    <span>Initiate Exit Clearance</span>
                   </button>
                   <button
-                    type="button"
+
                     onClick={async () => {
                       const updated = await api.getExitClearances();
                       setExitClearances(updated);
                       triggerToast('Refreshed exit clearances from statutory legal ledger');
                     }}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer shadow-xs"
+
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 text-xs font-bold shadow-xs cursor-pointer transition-all"
+
                   >
                     <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
                     <span>Refresh Ledger</span>
@@ -8302,6 +8419,96 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Modal to Initiate Exit Clearance */}
+          {showInitiateExitModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+              <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Initiate Exit Clearance &amp; TC
+                      </h4>
+                      <span className="text-[10px] text-slate-500">CBSE Rule 44 Statutory Dual-Custody Protocol</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowInitiateExitModal(false)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Select Departing Student:
+                    </label>
+                    <select
+                      value={initiateExitStudentId || ''}
+                      onChange={(e) => setInitiateExitStudentId(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    >
+                      {studentsList
+                        .filter(s => s.status !== 'Withdrawn')
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.class_name}-{s.section} &bull; Roll #{s.roll_no}) {s.id === 32 ? '★ Rohan Deshmukh (Test Candidate)' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Statutory 4-Department Pre-Check:</p>
+                    <ul className="list-disc list-inside text-[11px] space-y-0.5 text-slate-500">
+                      <li>Accounts &amp; Fee dues validation</li>
+                      <li>Library book return audit</li>
+                      <li>Science &amp; Computer laboratory clearance</li>
+                      <li>Digital library &amp; LMS access deprovisioning</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowInitiateExitModal(false)}
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!initiateExitStudentId || isInitiatingExit}
+                    onClick={async () => {
+                      if (!initiateExitStudentId) return;
+                      setIsInitiatingExit(true);
+                      try {
+                        await api.initiateExitClearance(initiateExitStudentId);
+                        const updated = await api.getExitClearances();
+                        setExitClearances(updated);
+                        setShowInitiateExitModal(false);
+                        triggerToast(`✓ Exit clearance protocol initiated for student #${initiateExitStudentId}!`);
+                      } catch (err: any) {
+                        triggerToast(err.message || 'Failed to initiate exit clearance');
+                      } finally {
+                        setIsInitiatingExit(false);
+                      }
+                    }}
+                    className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <span>{isInitiatingExit ? 'Initiating...' : 'Start Clearance Protocol'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

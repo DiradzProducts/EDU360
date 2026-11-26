@@ -1397,6 +1397,8 @@ export interface ReportCardItem {
   parent_signer_name?: string | null;
   parent_signature_hash?: string | null;
   parent_remarks?: string | null;
+  is_on_hold?: boolean;
+  hold_reason?: string;
 }
 
 export interface ParentTeacherChatMessage {

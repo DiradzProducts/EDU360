@@ -57,6 +57,8 @@ interface EduVideoConferenceModalProps {
   roomTitle: string;
   userName: string;
   userRole: 'TEACHER' | 'STUDENT' | 'PARENT' | 'INVIGILATOR';
+  studentId?: number;
+  classId?: number;
   studentContextName?: string;
   onAttendanceVerified?: (data?: { minutesElapsed?: number; status?: string }) => void;
 }
@@ -248,9 +250,14 @@ export function EduVideoConferenceModal({
   roomTitle,
   userName,
   userRole,
+  studentId,
+  classId,
   studentContextName,
   onAttendanceVerified
 }: EduVideoConferenceModalProps) {
+  const effectiveStudentId = studentId || 1;
+  const effectiveClassId = classId || 1;
+
   // Device & Layout States
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -282,6 +289,8 @@ export function EduVideoConferenceModal({
   } | null>(null);
   const [activeLateJoinToast, setActiveLateJoinToast] = useState<{
     studentName: string;
+    studentId?: number;
+    classId?: number;
     elapsed: number;
     time: string;
   } | null>(null);
@@ -344,10 +353,10 @@ export function EduVideoConferenceModal({
             if (!status.is_live) {
               setIsRoomLive(false);
               setIsWaitingInLobby(true);
-              api.joinLiveRoom(roomName, 1, userName, userRole);
+              api.joinLiveRoom(roomName, effectiveStudentId, userName, userRole);
             } else {
               setIsRoomLive(true);
-              const joinRes = await api.joinLiveRoom(roomName, 1, userName, userRole);
+              const joinRes = await api.joinLiveRoom(roomName, effectiveStudentId, userName, userRole);
               if (joinRes?.locked) {
                 setIsSessionLocked(true);
                 setIsWaitingInLobby(false);
@@ -392,7 +401,7 @@ export function EduVideoConferenceModal({
               setWaitingCount(currentStatus.waiting_students_count || 0);
               if (currentStatus.is_live && !isRoomLive) {
                 setIsRoomLive(true);
-                const joinRes = await api.joinLiveRoom(roomName, 1, userName, userRole);
+                const joinRes = await api.joinLiveRoom(roomName, effectiveStudentId, userName, userRole);
                 if (joinRes?.locked) {
                   setIsSessionLocked(true);
                   setIsWaitingInLobby(false);
@@ -431,10 +440,10 @@ export function EduVideoConferenceModal({
       isMounted = false;
       if (pollInterval) clearInterval(pollInterval);
       if (userRole === 'STUDENT') {
-        api.leaveLiveRoom(roomName, 1, userName).catch(() => {});
+        api.leaveLiveRoom(roomName, effectiveStudentId, userName).catch(() => {});
       }
     };
-  }, [isOpen, roomName, userName, userRole, isRoomLive, onAttendanceVerified]);
+  }, [isOpen, roomName, userName, userRole, isRoomLive, onAttendanceVerified, effectiveStudentId]);
 
   // 2. Fetch LiveKit Token & Establish LiveKit WebRTC Room Connection
   useEffect(() => {
@@ -928,7 +937,9 @@ export function EduVideoConferenceModal({
             <div className="mt-3 flex items-center justify-end gap-2">
               <button
                 onClick={() => {
-                  api.overrideAttendance(1, 1, 'Present').catch(() => {});
+                  const targetClassId = activeLateJoinToast?.classId || effectiveClassId;
+                  const targetStudentId = activeLateJoinToast?.studentId || 1;
+                  api.overrideAttendance(targetClassId, targetStudentId, 'Present').catch(() => {});
                   setActiveLateJoinToast(null);
                 }}
                 className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-all shadow-md"

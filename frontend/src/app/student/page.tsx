@@ -75,7 +75,8 @@ import {
   ReportCardItem,
   ChapterTimestamp,
   ReExamRequestItem,
-  ExamScheduleItem
+  ExamScheduleItem,
+  SubstitutionSlot
 } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { RoleGuard } from '@/components/role-guard';
@@ -197,6 +198,7 @@ function StandardStudentDashboard() {
   const [onlineExamMaxMarks, setOnlineExamMaxMarks] = useState<number>(20);
   const [onlineExamMode, setOnlineExamMode] = useState<'MODE_CBT' | 'MODE_HYBRID_SCAN'>('MODE_HYBRID_SCAN');
   const [studentExamSchedules, setStudentExamSchedules] = useState<ExamScheduleItem[]>([]);
+  const [dailySubstitutions, setDailySubstitutions] = useState<SubstitutionSlot[]>([]);
   const [isPdfUploadModalOpen, setIsPdfUploadModalOpen] = useState<boolean>(false);
   const [pdfUploadData, setPdfUploadData] = useState<{
     sealCode: string;
@@ -238,14 +240,34 @@ function StandardStudentDashboard() {
     return currentSystemTime.getHours() * 60 + currentSystemTime.getMinutes();
   }, [currentSystemTime]);
 
-  const SCHOOL_PERIODS = useMemo(() => [
-    { id: 1, periodNum: 'P1', name: 'Physics: Kinematics & Laws', topic: 'Kinematics & Laws', subject: 'Physics', teacher: 'Dr. K. Raman', faculty: 'Dr. K. Raman', room: 'Lab 2', startTime: '08:30', endTime: '09:15', timing: '08:30 – 09:15 AM', timeRange: '08:30 – 09:15 AM', startMin: 510, endMin: 555 },
-    { id: 2, periodNum: 'P2', name: 'Chemistry: Acids & Bases', topic: 'Acids & Bases', subject: 'Chemistry', teacher: 'Mrs. S. Sen', faculty: 'Mrs. S. Sen', room: 'Room 204', startTime: '09:15', endTime: '10:00', timing: '09:15 – 10:00 AM', timeRange: '09:15 – 10:00 AM', startMin: 555, endMin: 600 },
-    { id: 3, periodNum: 'P3', name: 'Mathematics: Quadratic Equations', topic: 'Quadratic Equations', subject: 'Mathematics', teacher: 'Mrs. Ananya Verma', faculty: 'Mrs. Ananya Verma', room: 'Room 204 & Stream', startTime: '10:30', endTime: '11:15', timing: '10:30 – 11:15 AM', timeRange: '10:30 – 11:15 AM', startMin: 630, endMin: 675 },
-    { id: 4, periodNum: 'P4', name: 'Computer Science: Python Logic', topic: 'Python Logic', subject: 'Computer Science', teacher: 'Mr. V. Nair', faculty: 'Mr. V. Nair', room: 'Lab 1', startTime: '11:15', endTime: '12:00', timing: '11:15 – 12:00 PM', timeRange: '11:15 – 12:00 PM', startMin: 675, endMin: 720 },
-    { id: 5, periodNum: 'P5', name: 'Social Science: Indian Constitution', topic: 'Indian Constitution', subject: 'Social Science', teacher: 'Ms. P. Roy', faculty: 'Ms. P. Roy', room: 'Room 204', startTime: '13:00', endTime: '13:45', timing: '01:00 – 01:45 PM', timeRange: '01:00 – 01:45 PM', startMin: 780, endMin: 825 },
-    { id: 6, periodNum: 'P6', name: 'Western Choir Rehearsal', topic: 'Choral Harmonization', subject: 'Music / Co-curricular', teacher: 'Music Faculty', faculty: 'Music Faculty', room: 'Auditorium', startTime: '13:45', endTime: '14:30', timing: '01:45 – 02:30 PM', timeRange: '01:45 – 02:30 PM', startMin: 825, endMin: 870 },
-  ], []);
+  const SCHOOL_PERIODS = useMemo(() => {
+    const basePeriods = [
+      { id: 1, periodNum: 'P1', name: 'Physics: Kinematics & Laws', topic: 'Kinematics & Laws', subject: 'Physics', teacher: 'Dr. K. Raman', faculty: 'Dr. K. Raman', room: 'Lab 2', startTime: '08:30', endTime: '09:15', timing: '08:30 – 09:15 AM', timeRange: '08:30 – 09:15 AM', startMin: 510, endMin: 555 },
+      { id: 2, periodNum: 'P2', name: 'Chemistry: Acids & Bases', topic: 'Acids & Bases', subject: 'Chemistry', teacher: 'Mrs. S. Sen', faculty: 'Mrs. S. Sen', room: 'Room 204', startTime: '09:15', endTime: '10:00', timing: '09:15 – 10:00 AM', timeRange: '09:15 – 10:00 AM', startMin: 555, endMin: 600 },
+      { id: 3, periodNum: 'P3', name: 'Mathematics: Quadratic Equations', topic: 'Quadratic Equations', subject: 'Mathematics', teacher: 'Mrs. Ananya Verma', faculty: 'Mrs. Ananya Verma', room: 'Room 204 & Stream', startTime: '10:30', endTime: '11:15', timing: '10:30 – 11:15 AM', timeRange: '10:30 – 11:15 AM', startMin: 630, endMin: 675 },
+      { id: 4, periodNum: 'P4', name: 'Computer Science: Python Logic', topic: 'Python Logic', subject: 'Computer Science', teacher: 'Mr. V. Nair', faculty: 'Mr. V. Nair', room: 'Lab 1', startTime: '11:15', endTime: '12:00', timing: '11:15 – 12:00 PM', timeRange: '11:15 – 12:00 PM', startMin: 675, endMin: 720 },
+      { id: 5, periodNum: 'P5', name: 'Social Science: Indian Constitution', topic: 'Indian Constitution', subject: 'Social Science', teacher: 'Ms. P. Roy', faculty: 'Ms. P. Roy', room: 'Room 204', startTime: '13:00', endTime: '13:45', timing: '01:00 – 01:45 PM', timeRange: '01:00 – 01:45 PM', startMin: 780, endMin: 825 },
+      { id: 6, periodNum: 'P6', name: 'Western Choir Rehearsal', topic: 'Choral Harmonization', subject: 'Music / Co-curricular', teacher: 'Music Faculty', faculty: 'Music Faculty', room: 'Auditorium', startTime: '13:45', endTime: '14:30', timing: '01:45 – 02:30 PM', timeRange: '01:45 – 02:30 PM', startMin: 825, endMin: 870 },
+    ];
+    return basePeriods.map(p => {
+      const sub = dailySubstitutions.find(s =>
+        (s.status === 'Assigned' || s.status === 'Completed') &&
+        s.period_number === p.id &&
+        s.substitute_teacher_name
+      );
+      if (sub && sub.substitute_teacher_name) {
+        return {
+          ...p,
+          teacher: `${sub.substitute_teacher_name} (Proxy)`,
+          faculty: `${sub.substitute_teacher_name} (Proxy Cover)`,
+          name: `${p.subject}: ${p.topic} [Proxy: ${sub.substitute_teacher_name}]`,
+          is_proxy: true,
+          absent_teacher: sub.absent_teacher_name
+        };
+      }
+      return p;
+    });
+  }, [dailySubstitutions]);
 
   const evaluatedPeriods = useMemo(() => {
     return SCHOOL_PERIODS.map(p => {
@@ -291,28 +313,77 @@ function StandardStudentDashboard() {
     return null;
   }, [studentExamSchedules, examSubmissionState, currentSystemTime]);
 
+  const isExamTimeExpired = (timeStr?: string, examDate?: string): boolean => {
+    if (!timeStr) return false;
+    try {
+      const parts = timeStr.split('-');
+      const endStr = (parts[1] || parts[0]).trim();
+      const match = endStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const meridiem = match[3].toUpperCase();
+        if (meridiem === 'PM' && hours < 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
+        const now = new Date();
+        const examEndMins = hours * 60 + minutes;
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+        if (examDate && examDate !== 'Today') {
+          const examD = new Date(examDate);
+          if (!isNaN(examD.getTime())) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            examD.setHours(0,0,0,0);
+            if (today.getTime() > examD.getTime()) return true;
+            if (today.getTime() < examD.getTime()) return false;
+          }
+        }
+        return currentMins >= examEndMins;
+      }
+    } catch {}
+    return false;
+  };
+
+  const handleDismissExamAlert = () => {
+    setNewExamStudentAlert(null);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('edu360_active_exam_schedule');
+        sessionStorage.setItem('edu360_exam_dismissed_active', 'true');
+      } catch {}
+    }
+  };
+
   // Dynamic pop-up trigger when an active commenced exam is detected
   useEffect(() => {
-    if (examSubmissionState === 'completed') return;
+    if (examSubmissionState === 'completed') {
+      if (newExamStudentAlert) setNewExamStudentAlert(null);
+      return;
+    }
     const liveSched = studentExamSchedules.find(s => 
       ((s as any).session_status === 'COMMENCED' || s.lifecycle_status === 'LIVE') &&
       (s as any).session_status !== 'CONCLUDED' && 
-      s.lifecycle_status !== 'CONCLUDED'
+      s.lifecycle_status !== 'CONCLUDED' &&
+      !isExamTimeExpired(`${s.start_time || ''} - ${s.end_time || ''}`, s.exam_date)
     );
-    if (liveSched && !newExamStudentAlert) {
-      if (typeof window !== 'undefined') {
-        const dismissedKey = `edu360_exam_dismissed_${liveSched.id}`;
-        if (!sessionStorage.getItem(dismissedKey)) {
-          setNewExamStudentAlert({
-            title: liveSched.title || `${liveSched.subject} Examination`,
-            subject: liveSched.subject || 'Assessment',
-            className: liveSched.class_name || 'Class 8-B',
-            invigilator: liveSched.chief_invigilator_name || 'Assigned Invigilator',
-            date: liveSched.exam_date || 'Today',
-            time: `${liveSched.start_time || ''} - ${liveSched.end_time || ''}`,
-            hall: liveSched.hall_name || 'Virtual Exam Hall'
-          });
-        }
+    if (!liveSched) {
+      if (newExamStudentAlert) {
+        setNewExamStudentAlert(null);
+      }
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      const dismissedKey = `edu360_exam_dismissed_${liveSched.id}`;
+      if (!sessionStorage.getItem(dismissedKey) && !sessionStorage.getItem('edu360_exam_dismissed_active')) {
+        setNewExamStudentAlert({
+          title: liveSched.title || `${liveSched.subject} Examination`,
+          subject: liveSched.subject || 'Assessment',
+          className: liveSched.class_name || 'Class 8-B',
+          invigilator: liveSched.chief_invigilator_name || 'Assigned Invigilator',
+          date: liveSched.exam_date || 'Today',
+          time: `${liveSched.start_time || ''} - ${liveSched.end_time || ''}`,
+          hall: liveSched.hall_name || 'Virtual Exam Hall'
+        });
       }
     }
   }, [studentExamSchedules, examSubmissionState, newExamStudentAlert]);
@@ -329,7 +400,15 @@ function StandardStudentDashboard() {
         const stored = localStorage.getItem('edu360_active_exam_schedule');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed) setNewExamStudentAlert(parsed);
+          const expired = isExamTimeExpired(parsed?.time, parsed?.date);
+          const concluded = parsed?.session_status === 'CONCLUDED' || parsed?.lifecycle_status === 'CONCLUDED';
+          const dismissed = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('edu360_exam_dismissed_active') === 'true';
+          if (expired || concluded || dismissed || examSubmissionState === 'completed') {
+            localStorage.removeItem('edu360_active_exam_schedule');
+            setNewExamStudentAlert(null);
+          } else {
+            setNewExamStudentAlert(parsed);
+          }
         }
       } catch {}
 
@@ -370,22 +449,28 @@ function StandardStudentDashboard() {
       channel.onmessage = (e) => {
         const data = e.data;
         if (!data) return;
-        if (data.type === 'EXAM_SCHEDULED') {
+        if (data.type === 'EXAM_COMMENCED') {
+          if (examSubmissionState !== 'completed' && !isExamTimeExpired(data.time, data.date)) {
+            setNewExamStudentAlert({
+              title: data.title || `${data.subject || 'Mathematics'} Examination`,
+              subject: data.subject || 'Mathematics',
+              className: data.className || 'Class 8-B',
+              invigilator: data.invigilator || 'Mrs. Ananya Verma',
+              date: data.date || 'Today',
+              time: data.time || '09:00 AM - 12:00 PM',
+              hall: data.hall || 'Virtual Room Alpha (Camera AI)'
+            });
+          }
+        } else if (data.type === 'EXAM_SCHEDULED') {
           triggerToast(`🎫 Official Admit Card Released: ${data.subject || 'Mathematics'} Examination scheduled for ${data.className || 'Class 8-B'}. Hall Ticket #14 is active.`);
-          setNewExamStudentAlert({
-            title: data.title || `${data.subject || 'Mathematics'} Examination`,
-            subject: data.subject || 'Mathematics',
-            className: data.className || 'Class 8-B',
-            invigilator: data.invigilator || 'Mrs. Ananya Verma',
-            date: data.date || 'Today',
-            time: data.time || '09:00 AM - 12:00 PM',
-            hall: data.hall || 'Virtual Room Alpha (Camera AI)'
-          });
+        } else if (data.type === 'EXAM_ENDED_BY_TEACHER' || data.type === 'EXAM_CONCLUDED') {
+          handleDismissExamAlert();
         } else if (data.type === 'STUDENT_SUBMITTED') {
           setExamSubmissionState('upload_pending');
         } else if (data.type === 'STUDENT_SCRIPT_UPLOADED') {
           setExamSubmissionState('completed');
           setExamUploadDetails(data);
+          handleDismissExamAlert();
         }
       };
     } catch {}
@@ -395,18 +480,25 @@ function StandardStudentDashboard() {
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname || 'localhost';
-      ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+      const studentClass = user?.class_name ? `exam-room-${String(user.class_name).toLowerCase().replace(/[^a-z0-9]/g, '')}` : 'exam-room-class8b';
+      ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/${studentClass}`);
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
-          if (data && data.type === 'EXAM_SCHEDULED') {
+          if (data && data.type === 'EXAM_COMMENCED') {
+            if (examSubmissionState !== 'completed' && !isExamTimeExpired(data.time, data.date)) {
+              setNewExamStudentAlert(data);
+            }
+          } else if (data && data.type === 'EXAM_SCHEDULED') {
             triggerToast(`🎫 Official Admit Card Released: ${data.subject || 'Mathematics'} Examination scheduled! Hall Ticket #14 active.`);
-            setNewExamStudentAlert(data);
+          } else if (data && (data.type === 'EXAM_ENDED_BY_TEACHER' || data.type === 'EXAM_CONCLUDED')) {
+            handleDismissExamAlert();
           } else if (data && data.type === 'STUDENT_SUBMITTED') {
             setExamSubmissionState('upload_pending');
           } else if (data && data.type === 'STUDENT_SCRIPT_UPLOADED') {
             setExamSubmissionState('completed');
             setExamUploadDetails(data);
+            handleDismissExamAlert();
           }
         } catch {}
       };
@@ -520,6 +612,7 @@ function StandardStudentDashboard() {
   const [examSubTab, setExamSubTab] = useState<'timetable' | 'results' | 'report_card'>('timetable');
   const [recordingsSearch, setRecordingsSearch] = useState('');
   const [admitCardData, setAdmitCardData] = useState<any>(null);
+  const [admitCardHold, setAdmitCardHold] = useState<string | null>(null);
   const [loadingAdmitCard, setLoadingAdmitCard] = useState(false);
 
   const handleOpenAdmitCard = async () => {
@@ -528,8 +621,14 @@ function StandardStudentDashboard() {
     try {
       const studentId = currentStudentId;
       const res = await api.getStudentHallTicket(studentId);
-      if (res && res.success && res.ticket) {
-        setAdmitCardData(res.ticket);
+      if (res && res.is_on_hold) {
+        setAdmitCardHold(res.hold_reason || 'Institutional Fee Hold Active');
+        setAdmitCardData(null);
+      } else if (res && (res.ticket || res.hall_ticket)) {
+        setAdmitCardHold(null);
+        setAdmitCardData(res.ticket || res.hall_ticket);
+      } else {
+        setAdmitCardHold(null);
       }
     } catch (err) {
       console.error('Failed to load hall ticket', err);
@@ -701,7 +800,7 @@ function StandardStudentDashboard() {
   useEffect(() => {
     async function loadPortalData() {
       try {
-        const [recRes, portRes, subRes, docsRes, hwRes, compRes, rcRes, reExamRes, schedRes, calEvents] = await Promise.all([
+        const [recRes, portRes, subRes, docsRes, hwRes, compRes, rcRes, reExamRes, schedRes, calEvents, subsRes] = await Promise.all([
           api.getStudentRecordings(currentStudentId),
           api.getPortfolio(currentStudentId),
           api.getSubmission(currentStudentId),
@@ -711,13 +810,17 @@ function StandardStudentDashboard() {
           api.getReportCards({ student_id: currentStudentId }),
           api.getReExamRequests(currentStudentId),
           api.getExamSchedules(user?.class_name, user?.section),
-          api.getCalendarEvents()
+          api.getCalendarEvents(),
+          api.getSubstitutions()
         ]);
         if (schedRes && Array.isArray(schedRes)) {
           setStudentExamSchedules(schedRes);
         }
         if (calEvents && Array.isArray(calEvents)) {
           setServerCalendarEvents(calEvents);
+        }
+        if (subsRes && Array.isArray(subsRes)) {
+          setDailySubstitutions(subsRes);
         }
         setReExamRequests(reExamRes || []);
         setRecordings(recRes || []);
@@ -731,6 +834,22 @@ function StandardStudentDashboard() {
         } else {
           setStudentReportCard(null);
         }
+
+        // Fetch official exam notifications for Student Portal
+        try {
+          const notifs = await api.getNotifications({ user_id: currentStudentId, role: 'student', limit: 10 });
+          if (notifs && notifs.notifications && notifs.notifications.length > 0) {
+            const rcNotif = notifs.notifications.find((n: any) => 
+              n.notification_type === 'REPORT_CARD_PUBLISHED' || 
+              (n.title && (n.title.toLowerCase().includes('report card') || n.title.toLowerCase().includes('exam marks')))
+            );
+            if (rcNotif && typeof window !== 'undefined' && !sessionStorage.getItem(`seen_rc_notif_${rcNotif.id}`)) {
+              setToastMessage(`📢 ${rcNotif.title}: ${rcNotif.message}`);
+              sessionStorage.setItem(`seen_rc_notif_${rcNotif.id}`, 'true');
+            }
+          }
+        } catch {}
+
         await loadDescriptiveExams();
       } catch (err) {
         console.error('Error fetching student data', err);
@@ -739,7 +858,7 @@ function StandardStudentDashboard() {
     loadPortalData();
   }, [user, currentStudentId, isDemoStudent]);
 
-  // Multi-window role testing sync: automatically update schedules when Exam Coordinator creates new slots in other windows
+  // Multi-window role testing sync: automatically update schedules & substitutions when assigned by coordinators
   useEffect(() => {
     const syncSchedulesFromStorage = () => {
       api.getExamSchedules(user?.class_name, user?.section).then(res => {
@@ -749,13 +868,37 @@ function StandardStudentDashboard() {
       }).catch(() => {});
     };
 
+    const syncSubstitutions = () => {
+      api.getSubstitutions().then(res => {
+        if (res && Array.isArray(res)) {
+          setDailySubstitutions(res);
+        }
+      }).catch(() => {});
+    };
+
     window.addEventListener('storage', syncSchedulesFromStorage);
+    window.addEventListener('storage', syncSubstitutions);
     window.addEventListener('edu360_exam_schedules_updated', syncSchedulesFromStorage);
+    window.addEventListener('edu360_substitutions_updated', syncSubstitutions);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('edu360_global_notifications');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'SUBSTITUTION_ASSIGNED' || event.data?.type === 'PROXY_ASSIGNED') {
+          syncSubstitutions();
+        }
+      };
+    } catch {}
+
     return () => {
       window.removeEventListener('storage', syncSchedulesFromStorage);
+      window.removeEventListener('storage', syncSubstitutions);
       window.removeEventListener('edu360_exam_schedules_updated', syncSchedulesFromStorage);
+      window.removeEventListener('edu360_substitutions_updated', syncSubstitutions);
+      if (bc) bc.close();
     };
-  }, []);
+  }, [user?.class_name, user?.section]);
 
   // Continuous Carousel Auto-Advancement (pauses on hover)
   useEffect(() => {
@@ -3432,18 +3575,18 @@ function StandardStudentDashboard() {
                       );
                     })()}
 
-                    {/* Upcoming Final Exam Seating Card */}
-                    {(admitCardData || isDemoStudent) && (
+                    {/* Upcoming Final Exam Proctoring Room Card */}
+                    {!admitCardHold && (admitCardData || isDemoStudent) && (
                       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs flex items-center justify-between gap-4">
                         <div className="space-y-1">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                            Board &amp; Term Seating Allocation
+                            Board &amp; Term Proctoring Allocation
                           </span>
                           <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                            Upcoming Exam — {admitCardData?.hall_name || 'Examination Hall B'}, Desk #{admitCardData?.desk_number || 'A-14'}
+                            Upcoming Exam — {admitCardData?.hall_name || 'Virtual Exam Room B'}, Seat #{admitCardData?.desk_number || 'A-14'}
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Candidate: {admitCardData?.student_name || user?.name || 'Aarav Sharma'} &bull; Examination Block 2 &bull; Entry Gate 3
+                            Candidate: {admitCardData?.student_name || user?.name || 'Aarav Sharma'} &bull; Online Proctored Session &bull; Browser Lockdown
                           </p>
                           <div className="pt-1">
                             <button
@@ -4147,7 +4290,23 @@ function StandardStudentDashboard() {
               {/* SUB-TAB 3: OFFICIAL CBSE REPORT CARD & MARKSHEET        */}
               {/* ======================================================= */}
               {examSubTab === 'report_card' && (
-                !studentReportCard || !studentReportCard.is_published ? (
+                studentReportCard?.is_on_hold ? (
+                  <div className="rounded-2xl border border-rose-300 dark:border-rose-900 bg-rose-50/70 dark:bg-rose-950/30 p-8 text-center space-y-3">
+                    <div className="h-12 w-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center font-bold">
+                      <AlertCircle className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                      Institutional Fee Clearance Hold: Report Card Withheld
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 max-w-md mx-auto">
+                      {studentReportCard.hold_reason || "Your official term report card has been withheld by the Accounts Department due to pending fee dues. Please contact the Accounts Office to clear outstanding balances."}
+                    </p>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <span>Accounts Lock Active · Academic Memo Withheld</span>
+                    </div>
+                  </div>
+                ) : !studentReportCard || !studentReportCard.is_published ? (
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
                     <div className="h-12 w-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
                       <Clock className="h-6 w-6" />
@@ -5336,6 +5495,41 @@ function StandardStudentDashboard() {
               { day: 'Friday', p1: 'Chemistry Lab', p2: 'Mathematics (Mrs. Verma)', p3: 'Robotics & STEM Lab', p4: 'History & Civics', p5: 'English Grammar', p6: 'Club Activities' }
             ];
 
+            const renderPeriodCell = (pNum: number, rawText: string, isToday: boolean, isFocus: boolean = false) => {
+              if (!isToday) {
+                return <span>{rawText}</span>;
+              }
+
+              // Check if there is an active proxy substitution for today's period
+              const sub = dailySubstitutions.find(s => 
+                (s.status === 'Assigned' || s.status === 'Completed') &&
+                s.period_number === pNum &&
+                s.substitute_teacher_name
+              );
+
+              if (sub && sub.substitute_teacher_name) {
+                const subjectName = rawText.includes('(') ? rawText.split('(')[0].trim() : (sub.subject || rawText);
+                return (
+                  <div className="flex flex-col gap-1 py-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {subjectName}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 shadow-2xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Proxy: {sub.substitute_teacher_name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                      Covering for {sub.absent_teacher_name} ({sub.absent_reason || 'On Leave'})
+                    </span>
+                  </div>
+                );
+              }
+
+              return <span>{rawText}</span>;
+            };
+
             return (
               <div className="space-y-6 max-w-7xl mx-auto">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -5347,9 +5541,17 @@ function StandardStudentDashboard() {
                       Today is <strong>{todayDay}</strong> &bull; Instructional timetable for {user?.name || 'Student'} ({user?.class_name || 'Class 8'})
                     </p>
                   </div>
-                  <span className="self-start sm:self-auto rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3 py-1.5 text-xs font-bold">
-                    Session: Term 1 (Autumn 2026)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {dailySubstitutions.some(s => (s.status === 'Assigned' || s.status === 'Completed') && s.substitute_teacher_name) && (
+                      <span className="rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-3 py-1.5 text-xs font-bold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        Active Emergency Substitutions Today
+                      </span>
+                    )}
+                    <span className="self-start sm:self-auto rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3 py-1.5 text-xs font-bold">
+                      Session: Term 1 (Autumn 2026)
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
@@ -5369,7 +5571,7 @@ function StandardStudentDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {timetableData.map((row, idx) => {
-                        const isToday = row.day === todayDay;
+                        const isToday = row.day === todayDay || (idx === 0 && (todayDay === 'Saturday' || todayDay === 'Sunday'));
                         return (
                           <tr key={idx} className={isToday ? 'bg-blue-50/40 dark:bg-blue-950/30 font-semibold' : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'}>
                             <td className="p-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -5380,14 +5582,14 @@ function StandardStudentDashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p1}</td>
-                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p2}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{renderPeriodCell(1, row.p1, isToday)}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{renderPeriodCell(2, row.p2, isToday)}</td>
                             <td className="p-3.5 bg-blue-50/30 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 font-bold border-x border-blue-100 dark:border-blue-900/60">
-                              {row.p3}
+                              {renderPeriodCell(3, row.p3, isToday, true)}
                             </td>
-                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p4}</td>
-                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p5}</td>
-                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{row.p6}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{renderPeriodCell(4, row.p4, isToday)}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{renderPeriodCell(5, row.p5, isToday)}</td>
+                            <td className="p-3.5 text-slate-700 dark:text-slate-300">{renderPeriodCell(6, row.p6, isToday)}</td>
                           </tr>
                         );
                       })}
@@ -5611,11 +5813,11 @@ function StandardStudentDashboard() {
                     <div className="h-20 rounded-xl bg-slate-50/40 dark:bg-slate-900/40 border border-transparent"></div>
 
                     {[
-                      { day: 1, weekday: 'Thu', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:05 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:44 AM)' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Normal school day' },
+                      { day: 1, weekday: 'Thu', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:05 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Normal school day' },
                       { day: 2, weekday: 'Fri', status: 'holiday', holidayName: 'Gandhi Jayanti', holidayType: 'National Gazetted Holiday' },
                       { day: 3, weekday: 'Sat', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:12 AM' : undefined, rfid: isDemoStudent ? 'Gate 1' : undefined, periods: isDemoStudent ? '4/4 Attended (Half Day)' : '4 Periods Scheduled', notes: 'Club activities' },
                       { day: 4, weekday: 'Sun', status: 'weekend' },
-                      { day: 5, weekday: 'Mon', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:01 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:41 AM)' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Weekly assembly' },
+                      { day: 5, weekday: 'Mon', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:01 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled', notes: 'Weekly assembly' },
                       { day: 6, weekday: 'Tue', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:03 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
                       { day: 7, weekday: 'Wed', status: isDemoStudent ? 'absent' : 'upcoming', leaveReason: isDemoStudent ? 'Approved Sick Leave' : undefined, doctorNote: isDemoStudent ? 'Dr. Sen Paediatrics note on record' : undefined, notes: isDemoStudent ? 'Viral fever — approved by Principal' : 'Regular School Day' },
                       { day: 8, weekday: 'Thu', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:08 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
@@ -5624,7 +5826,7 @@ function StandardStudentDashboard() {
                       { day: 11, weekday: 'Sun', status: 'holiday', holidayName: 'Dussehra (Vijayadashami)', holidayType: 'Festival Public Holiday' },
                       { day: 12, weekday: 'Mon', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:02 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
                       { day: 13, weekday: 'Tue', status: isDemoStudent ? 'present' : 'upcoming', checkIn: isDemoStudent ? '08:05 AM' : undefined, rfid: isDemoStudent ? 'Gate 2' : undefined, periods: isDemoStudent ? '6/6 Attended' : '6 Periods Scheduled' },
-                      { day: 14, weekday: 'Wed', status: isDemoStudent ? 'present' : 'upcoming', isToday: isDemoStudent, checkIn: isDemoStudent ? '08:02 AM' : undefined, rfid: isDemoStudent ? 'Gate 2 Turnstile' : undefined, bus: isDemoStudent ? 'KA-05-EB-4491 (07:42 AM)' : undefined, periods: isDemoStudent ? (isSchoolConcluded ? '6/6 Attended (Day Concluded)' : activePeriod ? `${activePeriod.periodNum.replace('P', '')}/6 Attended (${activePeriod.periodNum} Live)` : '6 Periods Scheduled') : '6 Periods Scheduled', notes: isSchoolConcluded ? 'Academic day concluded' : 'Classes in session' },
+                      { day: 14, weekday: 'Wed', status: isDemoStudent ? 'present' : 'upcoming', isToday: isDemoStudent, checkIn: isDemoStudent ? '08:02 AM' : undefined, rfid: isDemoStudent ? 'Gate 2 Turnstile' : undefined, periods: isDemoStudent ? (isSchoolConcluded ? '6/6 Attended (Day Concluded)' : activePeriod ? `${activePeriod.periodNum.replace('P', '')}/6 Attended (${activePeriod.periodNum} Live)` : '6 Periods Scheduled') : '6 Periods Scheduled', notes: isSchoolConcluded ? 'Academic day concluded' : 'Classes in session' },
                       { day: 15, weekday: 'Thu', status: 'upcoming', eventName: 'U-14 Football Trial Match', targetNav: 'calendar' },
                       { day: 16, weekday: 'Fri', status: 'event', eventName: 'UT-2 Results Discussion Assembly', eventTime: '10:00 AM • Auditorium', targetNav: 'exams' },
                       { day: 17, weekday: 'Sat', status: 'upcoming' },
@@ -5794,7 +5996,7 @@ function StandardStudentDashboard() {
                             {selectedCalendarDay === 2 ? 'Gandhi Jayanti (National Holiday)' : 'Diwali & Chhath Puja Vacation (8 Days)'}
                           </span>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                            Campus offices, academic blocks, and school bus fleet closed. Online LMS homework repositories remain accessible.
+                            Online schooling platform scheduled session break. Online LMS homework repositories remain accessible.
                           </p>
                           <button
                             onClick={() => setActiveNav('homework')}
@@ -6178,9 +6380,11 @@ function StandardStudentDashboard() {
         onClose={() => setIsLiveClassModalOpen(false)}
         roomName="class-8b-mathematics"
         roomTitle="Class 8-B Mathematics: Quadratic Equations & Roots"
-        userName="Aarav Sharma"
+        userName={user?.name || "Aarav Sharma"}
         userRole="STUDENT"
-        studentContextName="Aarav Sharma"
+        studentId={currentStudentId}
+        classId={(user as any)?.class_id || 1}
+        studentContextName={user?.name || "Aarav Sharma"}
         onAttendanceVerified={(data?: { minutesElapsed?: number; status?: string }) => {
           const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setAttendanceTimestamp(nowStr);
@@ -6192,7 +6396,8 @@ function StandardStudentDashboard() {
           } else {
             triggerToast(`🟢 LiveKit WebRTC Connected: Auto-Attendance Verified as PRESENT (joined +${elapsed.toFixed(1)}m on-time).`);
           }
-          api.simulateJoin(1, 1, elapsed).catch(() => {});
+          const effectiveClassId = (user as any)?.class_id || 1;
+          api.simulateJoin(effectiveClassId, currentStudentId, elapsed).catch(() => {});
         }}
       />
 
@@ -6738,7 +6943,7 @@ function StandardStudentDashboard() {
       })()}
 
       {/* Dynamic Pop-Up Modal for Live Examination Session */}
-      {newExamStudentAlert && examSubmissionState !== 'completed' && (
+      {newExamStudentAlert && examSubmissionState !== 'completed' && !isExamTimeExpired(newExamStudentAlert.time, newExamStudentAlert.date) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-lg rounded-3xl bg-slate-900 border-2 border-indigo-500/80 p-6 sm:p-7 shadow-2xl text-white space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -6753,7 +6958,7 @@ function StandardStudentDashboard() {
               </div>
               <button 
                 type="button" 
-                onClick={() => setNewExamStudentAlert(null)} 
+                onClick={handleDismissExamAlert} 
                 className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -6782,7 +6987,7 @@ function StandardStudentDashboard() {
                   setOnlineExamSubject(newExamStudentAlert.subject);
                   setOnlineExamTopic(newExamStudentAlert.title);
                   setIsOnlineExamOpen(true);
-                  setNewExamStudentAlert(null);
+                  handleDismissExamAlert();
                 }}
                 className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-xs shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
@@ -6791,7 +6996,7 @@ function StandardStudentDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => setNewExamStudentAlert(null)}
+                onClick={handleDismissExamAlert}
                 className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all cursor-pointer"
               >
                 Dismiss
@@ -7356,13 +7561,15 @@ function StandardStudentDashboard() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Print</span>
-                </button>
+                {!admitCardHold && (
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Print</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowAdmitCardModal(false)}
                   className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
@@ -7376,6 +7583,23 @@ function StandardStudentDashboard() {
               <div className="py-16 text-center space-y-3">
                 <RefreshCw className="h-8 w-8 text-purple-600 animate-spin mx-auto" />
                 <p className="text-xs font-bold text-slate-500">Retrieving official cryptographically signed hall ticket...</p>
+              </div>
+            ) : admitCardHold ? (
+              <div className="py-12 px-6 text-center space-y-4 rounded-2xl border-2 border-dashed border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20">
+                <div className="h-16 w-16 mx-auto rounded-full bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                  <AlertCircle className="h-8 w-8" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-rose-700 dark:text-rose-400">Examination Hall Ticket Withheld</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 max-w-lg mx-auto font-medium">
+                    {admitCardHold}
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-xs font-bold border border-amber-300 dark:border-amber-800">
+                    <span>⚠️ Contact the Accounts &amp; Bursar Department to clear financial holds prior to examination commencement.</span>
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="space-y-5 print:p-0">
