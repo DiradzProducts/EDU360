@@ -4422,7 +4422,7 @@ export default function TeacherPage() {
 
           dataRows.forEach(row => {
 
-            const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(c => c.trim().replace(/^["]|["]$/g, ''));
 
             if (cols.length >= 5) {
 
