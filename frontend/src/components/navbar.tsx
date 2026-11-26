@@ -169,14 +169,14 @@ export function Navbar() {
         
         {/* Left: Brand Logo & Uniform Role Pill */}
         <div className="flex items-center gap-3">
-          <Link href={user ? `/${safeRole || role}` : '/'} className="group flex items-center gap-2.5 rounded-xl">
+          <Link href={mounted && user ? `/${safeRole || role}` : '/'} className="group flex items-center gap-2.5 rounded-xl">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary via-indigo-600 to-blue-500 text-primary-foreground shadow-md shadow-primary/25 transition-transform duration-150 group-hover:scale-105">
               <Sparkles className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">EDU<span className="text-blue-600 dark:text-blue-400">360</span></span>
-                {user && (
+                {mounted && user && (
                   <span
                     suppressHydrationWarning
                     className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 tracking-wide uppercase"
@@ -191,7 +191,7 @@ export function Navbar() {
         </div>
 
         {/* Center: Global Omnisearch / Command Palette Trigger */}
-        {user ? (
+        {mounted && user ? (
           <div className="flex-1 max-w-lg mx-3 sm:mx-6 hidden md:block">
             <button
               type="button"
@@ -218,7 +218,7 @@ export function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3">
           
           {/* Mobile Search Button */}
-          {user && (
+          {mounted && user && (
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
