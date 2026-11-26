@@ -177,7 +177,20 @@ const INITIAL_CANDIDATES: ProctorCandidate[] = ROSTER_SEED_STUDENTS.map(s => {
   };
 });
 
-export function LiveInvigilatorCockpit() {
+export interface LiveInvigilatorCockpitProps {
+  roomId?: string;
+  roomName?: string;
+  className?: string;
+  section?: string;
+}
+
+export function LiveInvigilatorCockpit({
+  roomId,
+  roomName,
+  className,
+  section
+}: LiveInvigilatorCockpitProps = {}) {
+  const effectiveRoomId = roomName || roomId || (className ? `exam-room-${className.toLowerCase().replace(/[^a-z0-9]/g, '')}${section ? `-${section.toLowerCase().replace(/[^a-z0-9]/g, '')}` : ''}` : 'exam-room-class8b');
   const [candidates, setCandidates] = useState<ProctorCandidate[]>(INITIAL_CANDIDATES);
   const [spotlightCandidateId, setSpotlightCandidateId] = useState<number>(1);
   const [isSessionInitiated, setIsSessionInitiated] = useState<boolean>(() => {
@@ -280,7 +293,7 @@ export function LiveInvigilatorCockpit() {
     }
 
     api.getLiveKitToken({
-      room_name: 'exam-room-class8b',
+      room_name: effectiveRoomId,
       participant_name: 'Mrs. Ananya Verma',
       participant_identity: 'invigilator-ananya-verma',
       role: 'INVIGILATOR'
@@ -630,7 +643,7 @@ export function LiveInvigilatorCockpit() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname || 'localhost';
       const port = '8000';
-      const wsUrl = `${protocol}//${host}:${port}/api/exams/ws/surveillance/exam-room-class8b`;
+      const wsUrl = `${protocol}//${host}:${port}/api/exams/ws/surveillance/${effectiveRoomId}`;
       ws = new WebSocket(wsUrl);
       surveillanceWsRef.current = ws;
 
@@ -1181,6 +1194,9 @@ export function LiveInvigilatorCockpit() {
         timestamp: Date.now()
       }));
       localStorage.removeItem('edu360_exam_commenced');
+      localStorage.removeItem('edu360_active_exam_schedule');
+      localStorage.removeItem('edu360_latest_malpractice_alert');
+      localStorage.removeItem('edu360_candidate_14_status');
     } catch {}
 
     try {
@@ -1920,7 +1936,7 @@ export function LiveInvigilatorCockpit() {
 
           <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2">
             <span>Live Invigilator Command Cockpit</span>
-            <span className="text-violet-400 font-normal">&bull; Class 8-B (Mathematics)</span>
+            <span className="text-violet-400 font-normal">&bull; {className || 'Class 8-B'} (Room: {effectiveRoomId})</span>
           </h1>
 
           <p className="text-xs text-violet-200/70 max-w-2xl leading-relaxed">

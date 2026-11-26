@@ -1,4 +1,5 @@
 import datetime
+import json
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
@@ -598,8 +599,13 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
     )
     defaulter = defaulter_res.scalars().first()
     if defaulter:
-        defaulter.status = "Paid"
-        defaulter.amount_due = 0.0
+        new_amount_due = max(0.0, round(float(defaulter.amount_due) - float(amount), 2))
+        defaulter.amount_due = new_amount_due
+        if new_amount_due <= 0.0:
+            defaulter.status = "Paid"
+            defaulter.days_overdue = 0
+        else:
+            defaulter.status = "Partially Paid"
         history = []
         if defaulter.payment_history_json:
             try:
@@ -798,12 +804,34 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
 
     return new_lr
 
+@router.get("/leave-requests", response_model=list[LeaveRequestResponse])
 @router.get("/leave-requests/{student_id}", response_model=list[LeaveRequestResponse])
-async def get_student_leave_requests(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(LeaveRequest).where(LeaveRequest.student_id == student_id).order_by(LeaveRequest.applied_at.desc()))
+async def get_student_leave_requests(student_id: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    if student_id:
+        stmt = select(LeaveRequest).where(LeaveRequest.student_id == student_id)
+    else:
+        stmt = select(LeaveRequest)
+    result = await db.execute(stmt.order_by(LeaveRequest.applied_at.desc()))
     return result.scalars().all()
 
-# --- 6. Digital TC Sign-Off ---
+# --- 6. Digital TC Sign-Off & Exit Clearance ---
+@router.get("/exit-clearance/{student_id}", response_model=Optional[ExitClearanceResponse])
+async def get_parent_student_exit_clearance(student_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ExitClearance)
+        .where(ExitClearance.student_id == student_id)
+        .order_by(ExitClearance.id.desc())
+    )
+    return result.scalars().first()
+
+@router.get("/exit-clearances", response_model=list[ExitClearanceResponse])
+async def list_parent_exit_clearances(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ExitClearance)
+        .order_by(ExitClearance.id.desc())
+    )
+    return result.scalars().all()
+
 @router.post("/exit-clearance/{student_id}/digital-sign")
 async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ExitClearance).where(ExitClearance.student_id == student_id).order_by(ExitClearance.id.desc()))
@@ -816,6 +844,11 @@ async def digital_sign_tc(student_id: int, req: ExitClearanceDigitalSign, db: As
     
     if clearance.digital_parent_approved and clearance.physical_sign_verified:
         clearance.status = "Completed & Permanently Archived"
+        # Terminate active SIS lifecycle and transition student status to Withdrawn
+        st_res = await db.execute(select(Student).where(Student.id == student_id))
+        student = st_res.scalars().first()
+        if student:
+            student.status = "Withdrawn"
     else:
         clearance.status = "Digital Approved - Pending Physical Sign Scan"
 
@@ -1202,18 +1235,20 @@ async def cancel_parent_ptm_slot(slot_id: str, req: PTMSlotCancelRequest, db: As
             }
     raise HTTPException(status_code=404, detail="PTM slot not found")
 
+@router.get("/notes", response_model=list[ParentTeacherNoteResponse])
 @router.get("/notes/{student_id}", response_model=list[ParentTeacherNoteResponse])
-async def get_parent_student_notes(student_id: int, db: AsyncSession = Depends(get_db)):
+async def get_parent_student_notes(student_id: Optional[int] = 1, db: AsyncSession = Depends(get_db)):
+    target_student_id = student_id or 1
     await _ensure_parent_notes_seeded(db)
     try:
-        stmt = select(ParentTeacherNote).where(ParentTeacherNote.student_id == student_id).order_by(ParentTeacherNote.recorded_at.desc())
+        stmt = select(ParentTeacherNote).where(ParentTeacherNote.student_id == target_student_id).order_by(ParentTeacherNote.recorded_at.desc())
         res = await db.execute(stmt)
         notes = res.scalars().all()
         if notes:
             return [_ptn_to_dict(n) for n in notes]
     except Exception as e:
         print(f"Error querying ParentTeacherNote in parent: {e}")
-    return [n for n in _parent_teacher_notes if n["student_id"] == student_id]
+    return [n for n in _parent_teacher_notes if n["student_id"] == target_student_id]
 
 @router.post("/notes", response_model=ParentTeacherNoteResponse)
 async def create_parent_note(req: ParentTeacherNoteCreate, db: AsyncSession = Depends(get_db)):

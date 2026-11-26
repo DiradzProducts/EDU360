@@ -1,14 +1,18 @@
 import datetime
-from datetime import datetime
+datetime.now = datetime.datetime.now
+datetime.utcnow = datetime.datetime.utcnow
+datetime.strptime = datetime.datetime.strptime
+datetime.combine = datetime.datetime.combine
 import json
 import logging
+import re
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_
+from sqlalchemy import select, update, or_, and_
 from app.core.database import get_db
-from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask, ExamCandidateAttempt, ProctorTelemetryLog, SecurityAuditLog, ReExamRequest
+from app.models.models import Exam, ExamSubmission, Student, User, RemedialSprint, FocusTable, QuestionPaper, ExamSchedule, ReportCard, HallTicket, AbsenteeRecord, AdminTask, ExamCandidateAttempt, ProctorTelemetryLog, SecurityAuditLog, ReExamRequest, FeeDefaulter
 from app.core.rbac import require_role
 from app.core.config import settings, get_current_gemini_key, get_current_gemini_model
 from app.routers.notifications import create_system_notification
@@ -48,13 +52,34 @@ class ExamSurveillanceManager:
 
 surveillance_manager = ExamSurveillanceManager()
 
+def get_surveillance_room(class_name: Optional[str] = None, section: Optional[str] = None, room_name: Optional[str] = None) -> str:
+    """
+    Dynamically resolve surveillance room channel based on class and section,
+    defaulting gracefully to 'exam-room-class8b' for backward compatibility.
+    """
+    if room_name and room_name.strip():
+        return room_name.strip()
+    if class_name:
+        clean_cls = re.sub(r'[^a-zA-Z0-9]', '', class_name).lower()
+        clean_sec = re.sub(r'[^a-zA-Z0-9]', '', section or '').lower()
+        if clean_sec:
+            return f"exam-room-{clean_cls}-{clean_sec}"
+        return f"exam-room-{clean_cls}"
+    return "exam-room-class8b"
+
+async def broadcast_surveillance(room_id: str, message: dict, sender: Optional[WebSocket] = None):
+    """
+    Broadcasts message strictly to the target exam room channel.
+    """
+    await surveillance_manager.broadcast(room_id, message, sender=sender)
+
 @router.websocket("/ws/surveillance/{room_id}")
 async def exam_surveillance_ws(websocket: WebSocket, room_id: str):
     await surveillance_manager.connect(room_id, websocket)
     try:
         while True:
             data = await websocket.receive_json()
-            await surveillance_manager.broadcast(room_id, data, sender=websocket)
+            await broadcast_surveillance(room_id, data, sender=websocket)
     except WebSocketDisconnect:
         surveillance_manager.disconnect(room_id, websocket)
     except Exception:
@@ -276,7 +301,8 @@ async def submit_exam_paper(
     await db.commit()
 
     # Broadcast to live invigilators in the exam room
-    await surveillance_manager.broadcast("exam-room-class8b", {
+    target_room = get_surveillance_room(st.class_name if st else (exam.class_name if exam else None), st.section if st else (exam.section if exam else None))
+    await broadcast_surveillance(target_room, {
         "type": "STUDENT_SCRIPT_UPLOADED",
         "candidateId": req.student_id,
         "studentName": student_name,
@@ -2038,8 +2064,11 @@ async def get_submissions_summary(
     
     summary = []
     for ex in exams:
-        # Fetch all students in that class
-        student_query = select(Student).where(Student.class_name == ex.class_name)
+        # Fetch all active students in that class (exclude Withdrawn)
+        student_query = select(Student).where(
+            Student.class_name == ex.class_name,
+            or_(Student.status != "Withdrawn", Student.status.is_(None))
+        )
         if ex.section:
             student_query = student_query.where(Student.section == ex.section)
         std_res = await db.execute(student_query.order_by(Student.roll_no.asc()))
@@ -2156,7 +2185,37 @@ async def get_student_hall_ticket(
     student = s_res.scalars().first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-        
+
+    # Financial Fee Hold Enforcement:
+    # Check if student has an active FeeDefaulter record with exam_clearance == False
+    defaulter_res = await db.execute(
+        select(FeeDefaulter).where(
+            or_(
+                FeeDefaulter.student_id == student_id,
+                and_(FeeDefaulter.student_name == student.name, FeeDefaulter.class_name.like(f"%{student.class_name}%"))
+            ),
+            FeeDefaulter.exam_clearance == False
+        )
+    )
+    defaulter_hold = defaulter_res.scalars().first()
+
+    if defaulter_hold:
+        return {
+            "success": False,
+            "is_on_hold": True,
+            "hold_reason": f"Institutional Fee Hold: Official examination admit card withheld pending Accounts Department clearance for {defaulter_hold.milestone_title} (Outstanding: ₹{defaulter_hold.amount_due:,.2f}). Please contact the Accounts Office.",
+            "student": {
+                "id": student.id,
+                "name": student.name,
+                "roll_no": student.roll_no,
+                "class_name": student.class_name,
+                "section": student.section,
+                "admission_no": f"ADM-2026-{student.roll_no or '01'}"
+            },
+            "hall_ticket": None,
+            "exam_timetable": []
+        }
+
     ht_res = await db.execute(select(HallTicket).where(HallTicket.student_id == student_id))
     ht = ht_res.scalars().first()
     
@@ -2545,13 +2604,27 @@ async def list_report_cards(
     Fetch consolidated report cards with CBSE grades grid and AI teacher narrative.
     Enforces privacy: Student & Parent queries only receive officially published report cards.
     """
+    # Check active Accounts fee holds
+    defaulters_res = await db.execute(
+        select(FeeDefaulter).where(
+            FeeDefaulter.exam_clearance == False,
+            FeeDefaulter.amount_due > 0
+        )
+    )
+    defaulters = defaulters_res.scalars().all()
+    held_student_ids = {d.student_id for d in defaulters if d.student_id}
+    defaulter_map = {d.student_id: d for d in defaulters if d.student_id}
+    defaulter_name_map = {d.student_name.strip().lower(): d for d in defaulters if d.student_name}
+
     query = select(ReportCard)
     if student_id:
         query = query.where(ReportCard.student_id == student_id)
         if only_published is None:
-            only_published = True
-
-    if only_published:
+            # Return published cards OR cards withheld due to fee hold so student/parent sees fee hold banner
+            query = query.where(or_(ReportCard.is_published == True, ReportCard.student_id.in_(held_student_ids)))
+        elif only_published:
+            query = query.where(ReportCard.is_published == True)
+    elif only_published:
         query = query.where(ReportCard.is_published == True)
 
     if class_name:
@@ -2566,11 +2639,20 @@ async def list_report_cards(
 
     out = []
     for rc in cards:
+        is_held = (rc.student_id in held_student_ids) or (rc.student_name.strip().lower() in defaulter_name_map)
+        def_record = defaulter_map.get(rc.student_id) or defaulter_name_map.get(rc.student_name.strip().lower())
+        hold_reason = (
+            f"Institutional Fee Clearance Hold: Term report card withheld by Accounts Office due to pending balance for {def_record.milestone_title} (Outstanding: ₹{def_record.amount_due:,.2f}). Please contact Accounts Department to clear dues."
+            if (is_held and def_record) else
+            ("Institutional Fee Clearance Hold: Term report card withheld pending Accounts Department dues clearance." if is_held else None)
+        )
+
         grid = {}
-        try:
-            grid = json.loads(rc.grades_grid_json) if rc.grades_grid_json else {}
-        except Exception:
-            pass
+        if not is_held:
+            try:
+                grid = json.loads(rc.grades_grid_json) if rc.grades_grid_json else {}
+            except Exception:
+                pass
 
         out.append({
             "id": rc.id,
@@ -2582,19 +2664,21 @@ async def list_report_cards(
             "term": rc.term,
             "academic_year": rc.academic_year,
             "grades_grid": grid,
-            "total_marks_obtained": rc.total_marks_obtained,
+            "total_marks_obtained": 0.0 if is_held else rc.total_marks_obtained,
             "max_total_marks": rc.max_total_marks,
-            "overall_percentage": rc.overall_percentage,
-            "overall_grade": rc.overall_grade,
+            "overall_percentage": 0.0 if is_held else rc.overall_percentage,
+            "overall_grade": "WITHHELD" if is_held else rc.overall_grade,
             "attendance_pct": rc.attendance_pct,
-            "ai_teacher_narrative": rc.ai_teacher_narrative,
+            "ai_teacher_narrative": "Academic evaluation narrative and marks are withheld pending fee clearance by the Accounts Office." if is_held else rc.ai_teacher_narrative,
             "is_moderated": rc.is_moderated,
-            "is_published": rc.is_published,
-            "published_at": rc.published_at.isoformat() if rc.published_at else None,
+            "is_published": False if is_held else rc.is_published,
+            "published_at": None if is_held else (rc.published_at.isoformat() if rc.published_at else None),
             "parent_signed_at": rc.parent_signed_at.isoformat() if rc.parent_signed_at else None,
             "parent_signer_name": rc.parent_signer_name,
             "parent_signature_hash": rc.parent_signature_hash,
-            "parent_remarks": rc.parent_remarks
+            "parent_remarks": rc.parent_remarks,
+            "is_on_hold": is_held,
+            "hold_reason": hold_reason
         })
     return {"success": True, "report_cards": out}
 
@@ -2791,7 +2875,8 @@ async def publish_batch_report_cards(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Exam Coordinator officially releases Report Cards to Student and Parent Portals.
+    Exam Coordinator officially releases Report Cards to Student and Parent Portals,
+    cross-checking Accounts fee clearance and dispatching multi-portal notifications.
     """
     res = await db.execute(
         select(ReportCard).where(
@@ -2802,45 +2887,86 @@ async def publish_batch_report_cards(
     )
     cards = res.scalars().all()
     now = datetime.datetime.utcnow()
-    count = 0
+
+    # 1. Accounts Fee Clearance Gate
+    defaulters_res = await db.execute(
+        select(FeeDefaulter).where(
+            FeeDefaulter.exam_clearance == False,
+            FeeDefaulter.amount_due > 0
+        )
+    )
+    defaulters = defaulters_res.scalars().all()
+    held_student_ids = {d.student_id for d in defaulters if d.student_id}
+    held_student_names = {d.student_name.strip().lower() for d in defaulters if d.student_name}
+
+    published_count = 0
+    withheld_count = 0
+    withheld_names = []
+    published_student_ids = []
+
     for rc in cards:
-        rc.is_published = True
-        rc.published_at = now
-        count += 1
+        is_held = (rc.student_id in held_student_ids) or (rc.student_name.strip().lower() in held_student_names)
+        if is_held:
+            # Active institutional fee hold: withhold report card publication
+            rc.is_published = False
+            rc.published_at = None
+            withheld_count += 1
+            withheld_names.append(rc.student_name)
+        else:
+            rc.is_published = True
+            rc.published_at = now
+            published_count += 1
+            published_student_ids.append(rc.student_id)
 
     await db.commit()
 
-    # 🔔 Dispatch Notifications to Student, Parent, Teacher
+    # 🔔 Dispatch Targeted & Broad Notifications to Student, Parent, Teacher
     try:
-        # 1. Student Portal
+        # 1. Student Portal General Notification
         await create_system_notification(
             db=db,
             recipient_user_id=None,
             recipient_role="student",
             sender_name="Exam Office (Dr. Hemanth Sen)",
             sender_role="exam_coordinator",
-            title=f"Report Card Published: {req.term}",
-            message=f"Official CBSE Term Report Card for {req.class_name}-{req.section} ({req.term}) has been published. View your marks memo.",
+            title=f"Exam Marks & Report Card Published: {req.class_name}-{req.section} ({req.term})",
+            message=f"Official CBSE Term Exam Marks and Report Cards for {req.class_name}-{req.section} ({req.term}) have been officially published. View your marks memo.",
             notification_type="REPORT_CARD_PUBLISHED",
             priority="HIGH",
             action_url="/student",
             metadata_dict={"term": req.term, "class_name": req.class_name, "section": req.section}
         )
-        # 2. Parent Portal
+        # 2. Parent Portal General Notification (Title matching keyword classifier)
         await create_system_notification(
             db=db,
             recipient_user_id=None,
             recipient_role="parent",
             sender_name="Exam Office (Dr. Hemanth Sen)",
             sender_role="exam_coordinator",
-            title=f"Report Card Published: {req.class_name}-{req.section} {req.term}",
-            message=f"Official Term Report Card for your ward has been published. Please review performance and complete digital parent signature.",
+            title=f"Exam Marks & Report Card Published: {req.class_name}-{req.section} {req.term}",
+            message=f"Official CBSE Term Exam Marks and Report Cards for your ward have been published. Please review performance memo and complete digital signature.",
             notification_type="REPORT_CARD_PUBLISHED_PARENT",
             priority="HIGH",
             action_url="/parent",
             metadata_dict={"term": req.term, "class_name": req.class_name, "section": req.section}
         )
-        # 3. Teacher Portal
+        # 3. Targeted Student Notifications for Published Students
+        for sid in published_student_ids:
+            if sid:
+                await create_system_notification(
+                    db=db,
+                    recipient_user_id=sid,
+                    recipient_role="student",
+                    sender_name="Exam Office (Dr. Hemanth Sen)",
+                    sender_role="exam_coordinator",
+                    title=f"Exam Marks Memo Released: {req.term}",
+                    message=f"Your official CBSE Term Report Card for {req.term} is now published. Open the report cards tab to review your marks memo.",
+                    notification_type="REPORT_CARD_PUBLISHED",
+                    priority="HIGH",
+                    action_url="/student",
+                    metadata_dict={"term": req.term, "student_id": sid}
+                )
+        # 4. Teacher Portal
         await create_system_notification(
             db=db,
             recipient_user_id=2,
@@ -2848,7 +2974,7 @@ async def publish_batch_report_cards(
             sender_name="Exam Office (Dr. Hemanth Sen)",
             sender_role="exam_coordinator",
             title=f"Class Report Cards Released: {req.class_name}-{req.section} {req.term}",
-            message=f"Term {req.term} Report Cards for {req.class_name}-{req.section} have been compiled and officially released.",
+            message=f"Term {req.term} Report Cards for {req.class_name}-{req.section} have been officially released ({published_count} published, {withheld_count} withheld for Accounts fee hold).",
             notification_type="REPORT_CARDS_PUBLISHED_TEACHER",
             priority="NORMAL",
             action_url="/teacher?tab=exams",
@@ -2858,10 +2984,89 @@ async def publish_batch_report_cards(
     except Exception as ne:
         logger.warning(f"Failed to dispatch report card publish notifications: {ne}")
 
+    hold_detail = f" ({withheld_count} withheld due to Accounts fee hold: {', '.join(withheld_names)})" if withheld_count > 0 else ""
     return {
         "success": True,
-        "message": f"Published {count} Report Cards for {req.class_name}-{req.section} to Student & Parent Portals.",
-        "published_count": count
+        "message": f"Published {published_count} Report Cards for {req.class_name}-{req.section} to Student & Parent Portals.{hold_detail}",
+        "published_count": published_count,
+        "withheld_count": withheld_count,
+        "withheld_names": withheld_names
+    }
+
+
+@router.post("/report-cards/{report_card_id}/publish")
+async def publish_single_report_card(
+    report_card_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Publish a single student's report card with Accounts fee clearance verification.
+    """
+    res = await db.execute(select(ReportCard).where(ReportCard.id == report_card_id))
+    rc = res.scalars().first()
+    if not rc:
+        raise HTTPException(status_code=404, detail="Report Card not found")
+
+    # Check fee hold
+    defaulter_res = await db.execute(
+        select(FeeDefaulter).where(
+            or_(
+                FeeDefaulter.student_id == rc.student_id,
+                and_(FeeDefaulter.student_name == rc.student_name, FeeDefaulter.class_name.like(f"%{rc.class_name}%"))
+            ),
+            FeeDefaulter.exam_clearance == False,
+            FeeDefaulter.amount_due > 0
+        )
+    )
+    defaulter_hold = defaulter_res.scalars().first()
+    if defaulter_hold:
+        return {
+            "success": False,
+            "is_on_hold": True,
+            "message": f"Cannot publish report card for {rc.student_name}: Institutional Fee Hold active ({defaulter_hold.milestone_title}, Outstanding: ₹{defaulter_hold.amount_due:,.2f}). Accounts clearance required."
+        }
+
+    rc.is_published = True
+    rc.published_at = datetime.datetime.utcnow()
+    await db.commit()
+
+    # Dispatch targeted notification
+    try:
+        await create_system_notification(
+            db=db,
+            recipient_user_id=rc.student_id,
+            recipient_role="student",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Exam Marks & Report Card Published: {rc.term}",
+            message=f"Official CBSE Term Report Card for {rc.student_name} ({rc.term}) is now officially released. View marks memo.",
+            notification_type="REPORT_CARD_PUBLISHED",
+            priority="HIGH",
+            action_url="/student",
+            metadata_dict={"term": rc.term, "student_id": rc.student_id}
+        )
+        await create_system_notification(
+            db=db,
+            recipient_user_id=None,
+            recipient_role="parent",
+            sender_name="Exam Office (Dr. Hemanth Sen)",
+            sender_role="exam_coordinator",
+            title=f"Exam Marks & Report Card Published: {rc.student_name} ({rc.term})",
+            message=f"Official Term Report Card for {rc.student_name} ({rc.term}) is now available for digital parent review and signature.",
+            notification_type="REPORT_CARD_PUBLISHED_PARENT",
+            priority="HIGH",
+            action_url="/parent",
+            metadata_dict={"term": rc.term, "student_id": rc.student_id}
+        )
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to dispatch single report card publish notification: {e}")
+
+    return {
+        "success": True,
+        "message": f"Successfully published report card for {rc.student_name} to Student & Parent Portals.",
+        "report_card_id": rc.id,
+        "student_name": rc.student_name
     }
 
 
@@ -3587,7 +3792,8 @@ async def execute_proctor_action(
 
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
-        await surveillance_manager.broadcast("exam-room-class8b", {
+        target_room = get_surveillance_room(cand.class_name)
+        await broadcast_surveillance(target_room, {
             "type": "MALPRACTICE_ALERT",
             "candidateId": cand.id,
             "studentName": cand.student_name,
@@ -3604,7 +3810,7 @@ async def execute_proctor_action(
         })
 
         if cand.is_paused or cand.strikes >= 3:
-            await surveillance_manager.broadcast("exam-room-class8b", {
+            await broadcast_surveillance(target_room, {
                 "type": "DISQUALIFICATION_REVIEW_REQUESTED",
                 "candidateId": cand.id,
                 "studentName": cand.student_name,
@@ -3787,7 +3993,8 @@ async def record_candidate_telemetry(
 
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
-        await surveillance_manager.broadcast("exam-room-class8b", {
+        target_room = get_surveillance_room(cand.class_name)
+        await broadcast_surveillance(target_room, {
             "type": "MALPRACTICE_ALERT",
             "candidateId": cand.id,
             "studentName": cand.student_name,
@@ -3804,7 +4011,7 @@ async def record_candidate_telemetry(
         })
 
         if cand.is_paused or cand.strikes >= 3:
-            await surveillance_manager.broadcast("exam-room-class8b", {
+            await broadcast_surveillance(target_room, {
                 "type": "DISQUALIFICATION_REVIEW_REQUESTED",
                 "candidateId": cand.id,
                 "studentName": cand.student_name,
@@ -3891,7 +4098,8 @@ async def submit_candidate_cbt(
 
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
-        await surveillance_manager.broadcast("exam-room-class8b", {
+        target_room = get_surveillance_room(cand.class_name)
+        await broadcast_surveillance(target_room, {
             "type": "CANDIDATE_SUBMITTED",
             "candidateId": cand.id,
             "studentName": cand.student_name,
@@ -3971,7 +4179,8 @@ async def evaluate_candidate_submission(
 
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
-        await surveillance_manager.broadcast("exam-room-class8b", {
+        target_room = get_surveillance_room(cand.class_name)
+        await broadcast_surveillance(target_room, {
             "type": "MALPRACTICE_ALERT",
             "candidateId": cand.id,
             "studentName": cand.student_name,
@@ -3988,7 +4197,7 @@ async def evaluate_candidate_submission(
         })
 
         if cand.is_paused or cand.strikes >= 3:
-            await surveillance_manager.broadcast("exam-room-class8b", {
+            await broadcast_surveillance(target_room, {
                 "type": "DISQUALIFICATION_REVIEW_REQUESTED",
                 "candidateId": cand.id,
                 "studentName": cand.student_name,
@@ -4481,7 +4690,8 @@ async def submit_candidate_dossier_verdict(
 
     # Real-time WebSocket Multi-Device Broadcast to Invigilator Cockpit
     try:
-        await surveillance_manager.broadcast("exam-room-class8b", {
+        target_room = get_surveillance_room(cand.class_name)
+        await broadcast_surveillance(target_room, {
             "type": "MALPRACTICE_ALERT",
             "candidateId": cand.id,
             "studentName": cand.student_name,
@@ -4498,7 +4708,7 @@ async def submit_candidate_dossier_verdict(
         })
 
         if cand.is_paused or cand.strikes >= 3:
-            await surveillance_manager.broadcast("exam-room-class8b", {
+            await broadcast_surveillance(target_room, {
                 "type": "DISQUALIFICATION_REVIEW_REQUESTED",
                 "candidateId": cand.id,
                 "studentName": cand.student_name,

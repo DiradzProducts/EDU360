@@ -102,3 +102,6 @@ k-5.mp4
 *.tmp.pdf
 raw_temp_*.pdf
 scratch/
+
+# Temporary test upload files
+backend/uploads/

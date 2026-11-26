@@ -111,10 +111,14 @@ async def get_finance_dashboard_stats(db: AsyncSession = Depends(get_db)):
     - Overall collection target progress %
     """
     # 1. Fee Defaulters aggregation
+    today = datetime.datetime.utcnow().date()
     defaulters_res = await db.execute(
-        select(FeeDefaulter).where(FeeDefaulter.status.in_(["Overdue", "Partially Paid"]))
+        select(FeeDefaulter).where(FeeDefaulter.status.in_(["Overdue", "Partially Paid"]), FeeDefaulter.amount_due > 0)
     )
     defaulters = defaulters_res.scalars().all()
+    for d in defaulters:
+        if d.created_at:
+            d.days_overdue = max(0, (today - d.created_at.date()).days)
 
     total_arrears = sum(d.amount_due for d in defaulters)
     tier_15 = sum(1 for d in defaulters if d.days_overdue <= 15)
@@ -175,12 +179,37 @@ async def get_fee_defaulters(
     class_name: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     is_admission_fee: Optional[bool] = Query(None),
+    include_settled: bool = Query(False, description="Whether to include settled/paid records with 0 dues"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     List student fee defaulters with real-time aging, payment history, and waiver state.
+    Dynamically synchronizes days_overdue from student joining/created_at timestamp.
     """
+    # 1. Real-time dynamic aging calculation
+    today = datetime.datetime.utcnow().date()
+    all_defs_res = await db.execute(select(FeeDefaulter))
+    all_defs = all_defs_res.scalars().all()
+    needs_commit = False
+    for d in all_defs:
+        if d.created_at:
+            if d.amount_due > 0 and d.status not in ["Paid", "Waived"]:
+                elapsed = max(0, (today - d.created_at.date()).days)
+                if d.days_overdue != elapsed:
+                    d.days_overdue = elapsed
+                    needs_commit = True
+            elif d.amount_due <= 0 or d.status in ["Paid", "Waived"]:
+                if d.days_overdue != 0:
+                    d.days_overdue = 0
+                    needs_commit = True
+    if needs_commit:
+        await db.commit()
+
     query = select(FeeDefaulter)
+
+    # Exclude settled records unless explicitly requested or querying Paid/ALL status
+    if not include_settled and (not status or status not in ["Paid", "ALL"]):
+        query = query.where(FeeDefaulter.amount_due > 0)
 
     if is_admission_fee is not None:
         query = query.where(FeeDefaulter.is_admission_fee == is_admission_fee)
@@ -685,6 +714,40 @@ async def reconcile_transaction(
     tx.reconciled_at = datetime.datetime.utcnow()
     tx.reconciled_by = reconciled_by
 
+    # Settle / deduct from matching FeeDefaulter record for the student
+    def_res = await db.execute(
+        select(FeeDefaulter).where(
+            FeeDefaulter.student_name == tx.student_name,
+            FeeDefaulter.amount_due > 0
+        )
+    )
+    defaulter = def_res.scalars().first()
+    if defaulter:
+        new_amt = max(0.0, round(float(defaulter.amount_due) - float(tx.amount), 2))
+        defaulter.amount_due = new_amt
+        if new_amt <= 0.0:
+            defaulter.status = "Paid"
+            defaulter.days_overdue = 0
+            defaulter.exam_clearance = True
+        else:
+            defaulter.status = "Partially Paid"
+
+        hist = []
+        if defaulter.payment_history_json:
+            try:
+                hist = json.loads(defaulter.payment_history_json)
+            except Exception:
+                hist = []
+        hist.append({
+            "date": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p"),
+            "amount": float(tx.amount),
+            "method": tx.payment_method,
+            "utr_or_cheque": tx.utr_number,
+            "received_by": f"Bank Verified ({reconciled_by})",
+            "notes": f"Bank reconciliation verified against statement. Ref: {tx.gateway_ref or tx.utr_number}"
+        })
+        defaulter.payment_history_json = json.dumps(hist)
+
     await log_financial_audit(
         db=db,
         actor_name=reconciled_by,
@@ -723,6 +786,40 @@ async def bulk_reconcile_transactions(
         tx.reconciled = True
         tx.reconciled_at = now
         tx.reconciled_by = reconciled_by
+
+        # Settle / deduct from matching FeeDefaulter record for the student
+        def_res = await db.execute(
+            select(FeeDefaulter).where(
+                FeeDefaulter.student_name == tx.student_name,
+                FeeDefaulter.amount_due > 0
+            )
+        )
+        defaulter = def_res.scalars().first()
+        if defaulter:
+            new_amt = max(0.0, round(float(defaulter.amount_due) - float(tx.amount), 2))
+            defaulter.amount_due = new_amt
+            if new_amt <= 0.0:
+                defaulter.status = "Paid"
+                defaulter.days_overdue = 0
+                defaulter.exam_clearance = True
+            else:
+                defaulter.status = "Partially Paid"
+
+            hist = []
+            if defaulter.payment_history_json:
+                try:
+                    hist = json.loads(defaulter.payment_history_json)
+                except Exception:
+                    hist = []
+            hist.append({
+                "date": now.strftime("%d %b %Y, %I:%M %p"),
+                "amount": float(tx.amount),
+                "method": tx.payment_method,
+                "utr_or_cheque": tx.utr_number,
+                "received_by": f"Batch Bank Verified ({reconciled_by})",
+                "notes": f"Batch bank reconciliation verified against statement. Ref: {tx.gateway_ref or tx.utr_number}"
+            })
+            defaulter.payment_history_json = json.dumps(hist)
 
     if len(txs) > 0:
         await log_financial_audit(

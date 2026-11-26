@@ -30,7 +30,7 @@ from app.schemas.schemas import (
     SecondaryProfileUpdateRequest, EventResponse, StudentResponse
 )
 from app.services.backlog_engine import BacklogEngine, parse_deadline_datetime
-from app.core.rbac import require_role
+from app.core.rbac import require_role, get_current_user_role
 
 router = APIRouter(prefix="/api/student", tags=["student"], dependencies=[Depends(require_role(["student", "admin", "principal", "super_admin", "teacher", "parent"]))])
 
@@ -455,8 +455,14 @@ async def get_student_profile(student_id: int, db: AsyncSession = Depends(get_db
 async def update_student_secondary_profile(
     student_id: int,
     req: SecondaryProfileUpdateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    identity: dict = Depends(get_current_user_role)
 ):
+    if (identity.get("role") or "").lower() != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only the student may edit secondary profile and 2nd guardian details."
+        )
     res = await db.execute(select(Student).where(Student.id == student_id))
     st = res.scalars().first()
     if not st:

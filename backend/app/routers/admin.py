@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func
 from app.core.database import get_db
@@ -84,13 +84,13 @@ async def get_executive_pulse(db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # Students count
+    # Students count (active enrollments, excluding Withdrawn students)
     enrolled_count = 142
     try:
         students_res = await db.execute(select(Student))
         students = students_res.scalars().all()
         if students:
-            enrolled_count = len(students)
+            enrolled_count = len([s for s in students if s.status != "Withdrawn"])
     except Exception:
         pass
 
@@ -1081,6 +1081,63 @@ class ConvertEnquiryPayload(BaseModel):
     sibling_student_id: Optional[int] = None
     sibling_discount_pct: Optional[float] = 15.0
 
+async def _next_sequential_roll_no(db: AsyncSession, class_name: str, section: str) -> str:
+    """Compute the next sequential numeric roll number within a class and section."""
+    res = await db.execute(
+        select(Student.roll_no).where(
+            Student.class_name == class_name,
+            Student.section == section
+        )
+    )
+    nums = [int(r.strip()) for r in res.scalars().all() if r and r.strip().isdigit()]
+    return str(max(nums) + 1) if nums else "1"
+
+
+def _parse_grade_number(class_name: Optional[str]) -> Optional[int]:
+    """Extract numeric grade (e.g. 'Class 8' -> 8, 'Grade 10' -> 10)."""
+    if not class_name:
+        return None
+    digits = "".join(ch for ch in class_name.split("-")[0] if ch.isdigit())
+    return int(digits) if digits else None
+
+
+async def _seed_student_fee_milestones(db: AsyncSession, student: Student) -> None:
+    """Seed annual fee milestones for a newly enrolled student (Grade 8+ uses ₹1.5L 3-mini + 3-main structure)."""
+    grade_num = _parse_grade_number(student.class_name)
+    if grade_num is not None and grade_num >= 8:
+        milestones = [
+            FeeMilestone(student_id=student.id, title="Unit Exam 1 (Mini Term 1)", amount=15000.0, due_date="15 Jul 2026", status="Upcoming"),
+            FeeMilestone(student_id=student.id, title="Term 1: Quarterly Tuition & Curriculum Fee", amount=35000.0, due_date="15 Aug 2026", status="Upcoming"),
+            FeeMilestone(student_id=student.id, title="Unit Exam 2 (Mini Term 2)", amount=15000.0, due_date="25 Sep 2026", status="Upcoming"),
+            FeeMilestone(student_id=student.id, title="Term 2: Half-Yearly Tuition & Digital LMS Fee", amount=35000.0, due_date="25 Oct 2026", status="Upcoming"),
+            FeeMilestone(student_id=student.id, title="Unit Exam 3 (Mini Term 3)", amount=15000.0, due_date="10 Dec 2026", status="Upcoming"),
+            FeeMilestone(student_id=student.id, title="Term 3: Annual Tuition & Exam Fee", amount=35000.0, due_date="15 Jan 2027", status="Upcoming"),
+        ]
+        db.add_all(milestones)
+        return
+
+    base_class = (student.class_name or "Class 8").split("-")[0].strip()
+    fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == base_class))
+    fee_struct = fs_res.scalars().first()
+    if not fee_struct:
+        fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == "Default"))
+        fee_struct = fs_res.scalars().first()
+
+    t1_amt = fee_struct.term1_amount if fee_struct else 35000.0
+    t2_amt = fee_struct.term2_amount if fee_struct else 35000.0
+    lms_amt = fee_struct.lms_digital_fee if fee_struct else 14500.0
+    lab_amt = fee_struct.lab_library_fee if fee_struct else 12000.0
+    act_amt = fee_struct.activity_fee if fee_struct else 5000.0
+
+    db.add_all([
+        FeeMilestone(student_id=student.id, title="Milestone 1: Term 1 Tuition & Curriculum Fee", amount=t1_amt, due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026", status="Upcoming"),
+        FeeMilestone(student_id=student.id, title="Milestone 2: Digital Learning Platform & Cloud LMS Fee", amount=lms_amt, due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026", status="Upcoming"),
+        FeeMilestone(student_id=student.id, title="Milestone 3: STEM Robotics, Composite Lab & Library Fee", amount=lab_amt, due_date="18 Aug 2026", status="Upcoming"),
+        FeeMilestone(student_id=student.id, title="Milestone 4: Term 2 Tuition & Infrastructure Fee", amount=t2_amt, due_date=fee_struct.term2_due_date if fee_struct else "25 Oct 2026", status="Upcoming"),
+        FeeMilestone(student_id=student.id, title="Milestone 5: Interactive Virtual Labs & Activity Fee", amount=act_amt, due_date="10 Nov 2026", status="Upcoming"),
+    ])
+
+
 @router.post("/crm/enquiries/{enquiry_id}/convert")
 async def convert_enquiry_to_student(
     enquiry_id: int, 
@@ -1119,17 +1176,19 @@ async def convert_enquiry_to_student(
     clean_student = "".join(ch for ch in (enquiry.student_name or "student").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_") or "student"
     safe_guardian_email = enquiry.email.strip() if (enquiry.email and enquiry.email.strip()) else f"{clean_student}.parent@edu360.internal"
     
+    target_class = enquiry.target_grade or "Class 8"
+    next_roll = await _next_sequential_roll_no(db, target_class, clean_section)
     new_student = Student(
         name=enquiry.student_name,
-        roll_no=str(enquiry_id + 30),
-        class_name=enquiry.target_grade or "Class 8",
+        roll_no=next_roll,
+        class_name=target_class,
         section=clean_section,
         admission_no=adm_no,
         guardian_name=enquiry.parent_name or f"Parent of {enquiry.student_name}",
         guardian_phone=enquiry.phone or "+91 90000 00000",
         guardian_email=safe_guardian_email,
         attendance_pct=100.0,
-        bus_route_id=4,
+        bus_route_id=None,
         academic_average_pct=85.0,
         admission_date=datetime.date.today().isoformat(),
         status="Active"
@@ -1298,57 +1357,7 @@ async def convert_enquiry_to_student(
     new_student.parent_user_id = parent_user.id
 
     # Instantiate Annual Fee Structure & Milestones for the student
-    base_class = (new_student.class_name or "Class 8").split("-")[0].strip()
-    fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == base_class))
-    fee_struct = fs_res.scalars().first()
-    if not fee_struct:
-        fs_res = await db.execute(select(FeeStructure).where(FeeStructure.class_name == "Default"))
-        fee_struct = fs_res.scalars().first()
-
-    t1_amt = fee_struct.term1_amount if fee_struct else 35000.0
-    t2_amt = fee_struct.term2_amount if fee_struct else 35000.0
-    lms_amt = fee_struct.lms_digital_fee if fee_struct else 14500.0
-    lab_amt = fee_struct.lab_library_fee if fee_struct else 12000.0
-    act_amt = fee_struct.activity_fee if fee_struct else 5000.0
-
-    student_milestones = [
-        FeeMilestone(
-            student_id=new_student.id,
-            title="Milestone 1: Term 1 Tuition & Curriculum Fee",
-            amount=t1_amt,
-            due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026",
-            status="Upcoming"
-        ),
-        FeeMilestone(
-            student_id=new_student.id,
-            title="Milestone 2: Digital Learning Platform & Cloud LMS Fee",
-            amount=lms_amt,
-            due_date=fee_struct.term1_due_date if fee_struct else "15 Jul 2026",
-            status="Upcoming"
-        ),
-        FeeMilestone(
-            student_id=new_student.id,
-            title="Milestone 3: STEM Robotics, Composite Lab & Library Fee",
-            amount=lab_amt,
-            due_date="18 Aug 2026",
-            status="Upcoming"
-        ),
-        FeeMilestone(
-            student_id=new_student.id,
-            title="Milestone 4: Term 2 Tuition & Infrastructure Fee",
-            amount=t2_amt,
-            due_date=fee_struct.term2_due_date if fee_struct else "25 Oct 2026",
-            status="Upcoming"
-        ),
-        FeeMilestone(
-            student_id=new_student.id,
-            title="Milestone 5: Interactive Virtual Labs & Activity Fee",
-            amount=act_amt,
-            due_date="10 Nov 2026",
-            status="Upcoming"
-        )
-    ]
-    db.add_all(student_milestones)
+    await _seed_student_fee_milestones(db, new_student)
 
     # Initialize Day 1 Attendance Record so student attendance is present from Day 1
     today_str = datetime.date.today().isoformat()
@@ -1530,23 +1539,26 @@ async def direct_enroll_or_forward_vip(
         rand_suffix = int(datetime.datetime.utcnow().timestamp()) % 900 + 100
         adm_no = f"EDU-{curr_year}-{rand_suffix}"
         
+        target_section = payload.section or "A"
+        next_roll = await _next_sequential_roll_no(db, payload.target_grade, target_section)
         new_student = Student(
             name=payload.student_name,
-            roll_no=str(rand_suffix % 50 + 1),
+            roll_no=next_roll,
             class_name=payload.target_grade,
-            section=payload.section or "A",
+            section=target_section,
             admission_no=adm_no,
             guardian_name=payload.parent_name,
             guardian_phone=payload.phone,
             guardian_email=payload.email or "parent@edu360.internal",
             attendance_pct=100.0,
-            bus_route_id=4,
+            bus_route_id=None,
             academic_average_pct=85.0,
             admission_date=datetime.date.today().isoformat(),
             status="Active"
         )
         db.add(new_student)
         await db.flush()
+        await _seed_student_fee_milestones(db, new_student)
 
         # Create Official Documents in SIS Vault
         doc_slug = new_student.name.lower().replace(" ", "_")
@@ -2185,6 +2197,11 @@ async def verify_physical_signature(clearance_id: int, req: ExitClearancePhysica
     clearance.physical_sign_verified = True
     if clearance.digital_parent_approved and clearance.physical_sign_verified:
         clearance.status = "Completed & Permanently Archived"
+        # Terminate active SIS lifecycle and transition student status to Withdrawn
+        st_res = await db.execute(select(Student).where(Student.id == clearance.student_id))
+        student = st_res.scalars().first()
+        if student:
+            student.status = "Withdrawn"
     else:
         clearance.status = "Physical Verified - Awaiting Digital"
     
@@ -2705,10 +2722,35 @@ async def issue_teacher_permission(req: IssueStaffLeaveRequest, db: AsyncSession
 
 # --- 7. Fee Management & Ledger Sync (PostgreSQL Backed) ---
 @router.get("/fees/defaulters")
-async def list_fee_defaulters(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(
-        select(FeeDefaulter).order_by(FeeDefaulter.days_overdue.desc(), FeeDefaulter.id.asc())
-    )
+async def list_fee_defaulters(
+    include_settled: bool = Query(False, description="Whether to include settled/paid records"),
+    db: AsyncSession = Depends(get_db)
+):
+    # Dynamic aging calculation
+    today = datetime.datetime.utcnow().date()
+    all_defs_res = await db.execute(select(FeeDefaulter))
+    all_defs = all_defs_res.scalars().all()
+    needs_commit = False
+    for d in all_defs:
+        if d.created_at:
+            if d.amount_due > 0 and d.status not in ["Paid", "Waived"]:
+                elapsed = max(0, (today - d.created_at.date()).days)
+                if d.days_overdue != elapsed:
+                    d.days_overdue = elapsed
+                    needs_commit = True
+            elif d.amount_due <= 0 or d.status in ["Paid", "Waived"]:
+                if d.days_overdue != 0:
+                    d.days_overdue = 0
+                    needs_commit = True
+    if needs_commit:
+        await db.commit()
+
+    query = select(FeeDefaulter)
+    if not include_settled:
+        query = query.where(FeeDefaulter.amount_due > 0)
+    query = query.order_by(FeeDefaulter.days_overdue.desc(), FeeDefaulter.id.asc())
+
+    res = await db.execute(query)
     defaulters = res.scalars().all()
     return [
         {
@@ -3110,7 +3152,9 @@ async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession =
                     class_name=db_slot.class_name,
                     subject=db_slot.subject,
                     absent_teacher=db_slot.absent_teacher_name,
-                    time_slot=db_slot.time_slot
+                    time_slot=db_slot.time_slot,
+                    substitute_teacher_id=req.substitute_teacher_id,
+                    substitute_teacher_name=req.substitute_teacher_name
                 )
             except Exception:
                 pass
@@ -3171,7 +3215,9 @@ async def assign_substitution(req: AssignSubstitutionRequest, db: AsyncSession =
                     class_name=slot["class_name"],
                     subject=slot["subject"],
                     absent_teacher=slot["absent_teacher_name"],
-                    time_slot=slot["time_slot"]
+                    time_slot=slot["time_slot"],
+                    substitute_teacher_id=req.substitute_teacher_id,
+                    substitute_teacher_name=req.substitute_teacher_name
                 )
             except Exception:
                 pass
@@ -3223,7 +3269,9 @@ async def auto_resolve_substitutions(db: AsyncSession = Depends(get_db)):
                         class_name=slot.class_name,
                         subject=slot.subject,
                         absent_teacher=slot.absent_teacher_name,
-                        time_slot=slot.time_slot
+                        time_slot=slot.time_slot,
+                        substitute_teacher_id=match["id"],
+                        substitute_teacher_name=match["name"]
                     )
                 except Exception:
                     pass
@@ -3296,7 +3344,9 @@ async def auto_resolve_substitutions(db: AsyncSession = Depends(get_db)):
                         class_name=slot["class_name"],
                         subject=slot["subject"],
                         absent_teacher=slot["absent_teacher_name"],
-                        time_slot=slot["time_slot"]
+                        time_slot=slot["time_slot"],
+                        substitute_teacher_id=match["id"],
+                        substitute_teacher_name=match["name"]
                     )
                 except Exception:
                     pass

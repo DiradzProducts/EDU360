@@ -31,7 +31,6 @@ export type JuniorTab =
   | 'quests'
   | 'booster'
   | 'creative'
-  | 'bus'
   | 'portfolio'
   | 'vault';
 

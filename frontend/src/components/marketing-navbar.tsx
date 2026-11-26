@@ -13,7 +13,7 @@ import {
   FileEdit, 
   Users, 
   BookOpen, 
-  Bus, 
+  Monitor, 
   Award, 
   Building2, 
   GraduationCap, 
@@ -162,7 +162,7 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
                   className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
                 >
                   <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100 group-hover:scale-105 transition-transform">
-                    <Bus className="h-4.5 w-4.5" />
+                    <Monitor className="h-4.5 w-4.5" />
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">Live Classroom &amp; Parent Hub</h4>
@@ -269,7 +269,7 @@ export function MarketingNavbar({ onOpenDemo }: MarketingNavbarProps) {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">For Parents &amp; Families</h4>
-                    <p className="text-[11px] text-slate-500">Live bus GPS, fee milestones &amp; high-signal updates</p>
+                    <p className="text-[11px] text-slate-500">Virtual class schedule, fee milestones &amp; high-signal updates</p>
                   </div>
                 </div>
 

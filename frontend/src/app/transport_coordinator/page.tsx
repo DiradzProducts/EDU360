@@ -329,6 +329,39 @@ export default function TransportCoordinatorPage() {
 
         {/* ── Main Content Canvas ── */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* Module On Hold Notice for Online Schooling */}
+          <div className="rounded-3xl border-2 border-dashed border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-700 text-xl font-bold">
+                ⏸️
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                    Module On Hold
+                  </span>
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                    Online Schooling Platform Active
+                  </span>
+                </div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white mt-1">
+                  Physical Transport &amp; Fleet Operations Suspended
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 max-w-2xl leading-relaxed">
+                  EDU360 is currently operating as an online schooling platform. Physical bus route scheduling, real-time GPS fleet tracking, driver rosters, and RTO vehicle fitness certificates have been put on hold.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href="/admin"
+                className="rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 text-xs font-bold hover:bg-slate-800 transition-colors shadow-xs"
+              >
+                Go to Admin Portal
+              </a>
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <button

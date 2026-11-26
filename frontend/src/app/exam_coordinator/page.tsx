@@ -378,7 +378,11 @@ export default function ExamCoordinatorPage() {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname || 'localhost';
-        const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+        const rawClass = (examPayload as any)?.className || (examPayload as any)?.class_name;
+        const targetRoom = rawClass 
+          ? `exam-room-${String(rawClass).toLowerCase().replace(/[^a-z0-9]/g, '')}`
+          : 'exam-room-class8b';
+        const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/${targetRoom}`);
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
           ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
@@ -1035,7 +1039,11 @@ export default function ExamCoordinatorPage() {
         try {
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const host = window.location.hostname || 'localhost';
-          const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+          const rawClass = (examPayload as any)?.className || (examPayload as any)?.class_name;
+        const targetRoom = rawClass 
+          ? `exam-room-${String(rawClass).toLowerCase().replace(/[^a-z0-9]/g, '')}`
+          : 'exam-room-class8b';
+        const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/${targetRoom}`);
           ws.onopen = () => {
             ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
             ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
@@ -1188,7 +1196,11 @@ export default function ExamCoordinatorPage() {
         try {
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const host = window.location.hostname || 'localhost';
-          const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/exam-room-class8b`);
+          const rawClass = (examPayload as any)?.className || (examPayload as any)?.class_name;
+        const targetRoom = rawClass 
+          ? `exam-room-${String(rawClass).toLowerCase().replace(/[^a-z0-9]/g, '')}`
+          : 'exam-room-class8b';
+        const ws = new WebSocket(`${protocol}//${host}:8000/api/exams/ws/surveillance/${targetRoom}`);
           ws.onopen = () => {
             ws.send(JSON.stringify({ type: 'EXAM_SCHEDULED', ...examPayload }));
             ws.send(JSON.stringify({ type: 'DUTY_ASSIGNED', ...examPayload }));
@@ -6238,17 +6250,23 @@ export default function ExamCoordinatorPage() {
               </button>
 
               <button
-
-                onClick={() => {
-
-                  triggerToast(`Published to Student & Parent Portals for ${selectedReportCard.student_name}!`);
-
-                  setSelectedReportCard(null);
-
+                onClick={async () => {
+                  try {
+                    const res = await api.publishSingleReportCard(selectedReportCard.id);
+                    if (res && res.success === false && res.is_on_hold) {
+                      triggerToast(res.message || 'Cannot publish: Student has active Accounts fee hold.');
+                    } else {
+                      triggerToast(res?.message || `Published to Student & Parent Portals for ${selectedReportCard.student_name}!`);
+                      const updated = await api.getReportCards({ class_name: rcClassFilter, section: rcSectionFilter, term: rcTermFilter });
+                      setReportCards(updated);
+                    }
+                  } catch (e) {
+                    triggerToast('Failed to publish report card.');
+                  } finally {
+                    setSelectedReportCard(null);
+                  }
                 }}
-
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
-
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-4 py-2.5 text-xs font-bold transition-all cursor-pointer"
               >
 
                 <Send className="h-3.5 w-3.5" />

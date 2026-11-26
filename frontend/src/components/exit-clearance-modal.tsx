@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ExitClearance, ClearanceCheckResult } from '@/lib/types';
 import { api } from '@/lib/api';
+import { openAndPrintOfficialDocument } from '@/lib/export-utils';
 
 interface ExitClearanceModalProps {
   clearance: ExitClearance;
@@ -297,7 +298,7 @@ export function ExitClearanceView({
                   className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  <span>{loading ? 'Verifying...' : 'Verify & Lock'}</span>
+                  <span>{loading ? 'Approving...' : 'Approve TC & Complete Exit Clearance'}</span>
                 </button>
               </div>
               <span className="text-[10px] text-slate-400 block text-center">
@@ -314,6 +315,40 @@ export function ExitClearanceView({
           )}
         </div>
       </div>
+
+      {/* FINALIZED OFFICIAL TRANSFER CERTIFICATE (TC) DOWNLOAD VAULT */}
+      {isCompleted && (
+        <div className="rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/40 dark:via-teal-950/20 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 shrink-0">
+              <Stamp className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                  Official Transfer Certificate (TC) Available
+                </h4>
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                  Registrar Sealed
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Dual verification complete. Official CBSE Transfer Certificate has been generated with cryptographic watermark &amp; institutional seal.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => openAndPrintOfficialDocument('Official Transfer Certificate (TC)', clearance.student_name, `OIS-2026-TC-${clearance.id || '9921'}`)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+            >
+              <FileText className="h-4 w-4" />
+              <span>Download Official TC (PDF)</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Scanned Document Preview Modal */}
       {previewDocOpen && (
@@ -362,11 +397,19 @@ export function ExitClearanceView({
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => openAndPrintOfficialDocument('Official Transfer Certificate (TC)', clearance.student_name, `OIS-2026-TC-${clearance.id || '9921'}`)}
+                className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Print Official TC</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setPreviewDocOpen(false)}
-                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold cursor-pointer"
+                className="rounded-xl bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 text-xs font-bold cursor-pointer"
               >
                 Close Archive View
               </button>
