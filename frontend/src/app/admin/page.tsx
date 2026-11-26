@@ -3635,7 +3635,7 @@ export default function AdminPage() {
                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                             }`}
                           >
-                            {tier === 'ALL' ? 'All Tiers' : tier === '0-15' ? '0-15d' : tier === '16-30' ? '16-30d' : '>30d'}
+                            {tier === 'ALL' ? 'All Tiers' : tier === '0-15' ? '0-15d' : tier === '16-30' ? '16-30d' : '30+d'}
                           </button>
                         ))}
                       </div>
