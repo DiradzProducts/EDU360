@@ -4422,7 +4422,7 @@ export default function TeacherPage() {
 
           dataRows.forEach(row => {
 
-            const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(c => c.trim().replace(/^["]|["]$/g, ''));
 
             if (cols.length >= 5) {
 
@@ -4771,9 +4771,9 @@ export default function TeacherPage() {
 
                   activeTab === 'dashboard'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -4781,7 +4781,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <LayoutDashboard className={`h-4 w-4 shrink-0 ${activeTab === 'dashboard' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <LayoutDashboard className={`h-4 w-4 shrink-0 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Dashboard Overview</span>}
 
@@ -4831,9 +4831,9 @@ export default function TeacherPage() {
 
                   activeTab === 'live_class'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -4841,7 +4841,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Radio className={`h-4 w-4 shrink-0 ${activeTab === 'live_class' ? 'text-blue-600 dark:text-blue-400 animate-pulse' : 'text-slate-400'}`} />
+                  <Radio className={`h-4 w-4 shrink-0 ${activeTab === 'live_class' ? 'text-white animate-pulse' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Live Studio &amp; Attendance</span>}
 
@@ -4869,9 +4869,9 @@ export default function TeacherPage() {
 
                   activeTab === 'schedule'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -4879,7 +4879,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Calendar className={`h-4 w-4 shrink-0 ${activeTab === 'schedule' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Calendar className={`h-4 w-4 shrink-0 ${activeTab === 'schedule' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Personal Timetable</span>}
 
@@ -4925,9 +4925,9 @@ export default function TeacherPage() {
 
                   activeTab === 'homework'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -4935,7 +4935,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <FileEdit className={`h-4 w-4 shrink-0 ${activeTab === 'homework' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <FileEdit className={`h-4 w-4 shrink-0 ${activeTab === 'homework' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Homework &amp; Corrections</span>}
 
@@ -4985,9 +4985,9 @@ export default function TeacherPage() {
 
                   activeTab === 'focus_table'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -4995,7 +4995,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'focus_table' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Sparkles className={`h-4 w-4 shrink-0 ${activeTab === 'focus_table' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Student Focus Table</span>}
 
@@ -5037,9 +5037,9 @@ export default function TeacherPage() {
 
                     activeTab === 'exams_gradebook'
 
-                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                   }`}
 
@@ -5047,7 +5047,7 @@ export default function TeacherPage() {
 
                   <div className="flex items-center gap-2.5 min-w-0">
 
-                    <Award className={`h-4 w-4 shrink-0 ${activeTab === 'exams_gradebook' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                    <Award className={`h-4 w-4 shrink-0 ${activeTab === 'exams_gradebook' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                     {!sidebarCollapsed && <span className="truncate">Exams &amp; Gradebook</span>}
 
@@ -5080,7 +5080,7 @@ export default function TeacherPage() {
 
                         examSubTab === 'marks_ledger'
 
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
 
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
 
@@ -5104,7 +5104,7 @@ export default function TeacherPage() {
 
                         examSubTab === 'qp_desk'
 
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold'
+                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
 
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
 
@@ -5171,9 +5171,9 @@ export default function TeacherPage() {
 
                   activeTab === 'curriculum'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5181,7 +5181,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'curriculum' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <BookOpen className={`h-4 w-4 shrink-0 ${activeTab === 'curriculum' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Syllabus &amp; Curriculum</span>}
 
@@ -5213,9 +5213,9 @@ export default function TeacherPage() {
 
                   activeTab === 'roster'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5223,7 +5223,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Users className={`h-4 w-4 shrink-0 ${activeTab === 'roster' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Users className={`h-4 w-4 shrink-0 ${activeTab === 'roster' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">My Classes (360 Cockpit)</span>}
 
@@ -5269,9 +5269,9 @@ export default function TeacherPage() {
 
                   activeTab === 'parent_hub'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5279,7 +5279,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Video className={`h-4 w-4 shrink-0 ${activeTab === 'parent_hub' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Video className={`h-4 w-4 shrink-0 ${activeTab === 'parent_hub' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">PTM Conferences</span>}
 
@@ -5311,9 +5311,9 @@ export default function TeacherPage() {
 
                   activeTab === 'parent_chat'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5321,7 +5321,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <MessageSquare className={`h-4 w-4 shrink-0 ${activeTab === 'parent_chat' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <MessageSquare className={`h-4 w-4 shrink-0 ${activeTab === 'parent_chat' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Chat with Parents</span>}
 
@@ -5353,9 +5353,9 @@ export default function TeacherPage() {
 
                   activeTab === 'leave_approvals'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5363,7 +5363,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <CalendarCheck className={`h-4 w-4 shrink-0 ${activeTab === 'leave_approvals' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CalendarCheck className={`h-4 w-4 shrink-0 ${activeTab === 'leave_approvals' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Student Leave Queue</span>}
 
@@ -5413,9 +5413,9 @@ export default function TeacherPage() {
 
                   activeTab === 'duties'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5423,7 +5423,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Award className={`h-4 w-4 shrink-0 ${activeTab === 'duties' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Award className={`h-4 w-4 shrink-0 ${activeTab === 'duties' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">Faculty Duty Center</span>}
 
@@ -5451,9 +5451,9 @@ export default function TeacherPage() {
 
                   activeTab === 'my_permissions'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5461,7 +5461,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'my_permissions' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <Clock className={`h-4 w-4 shrink-0 ${activeTab === 'my_permissions' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">My Permissions</span>}
 
@@ -5489,9 +5489,9 @@ export default function TeacherPage() {
 
                   activeTab === 'my_salary'
 
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400'
+                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                 }`}
 
@@ -5499,7 +5499,7 @@ export default function TeacherPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'my_salary' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <CreditCard className={`h-4 w-4 shrink-0 ${activeTab === 'my_salary' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
 
                   {!sidebarCollapsed && <span className="truncate">My Payslips</span>}
 
@@ -5738,7 +5738,7 @@ export default function TeacherPage() {
           <div className="space-y-6">
 
             {/* 🔴 LIVE INVIGILATION DUTY HERO BANNER (Point 3 - Real-Time Cockpit Access) */}
-            <div className="rounded-2xl border-2 border-violet-500/60 bg-gradient-to-r from-violet-950 via-slate-900 to-indigo-950 p-5 shadow-xl text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="rounded-2xl border border-violet-500/40 bg-slate-950 dark:bg-[#070B14] p-5 shadow-lg text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-2xl bg-violet-600/30 border border-violet-400 flex items-center justify-center text-violet-300 shadow-md shrink-0">
                   <ShieldAlert className="h-6 w-6 text-violet-400 animate-pulse" />
@@ -5762,7 +5762,7 @@ export default function TeacherPage() {
                     setActiveTab('exams_gradebook');
                     setExamSubTab('live_cockpit');
                   }}
-                  className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                  className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-black shadow-md shadow-violet-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
                 >
                   <Radio className="h-4 w-4" />
                   <span>Launch Invigilation Command Cockpit &rarr;</span>
@@ -5938,7 +5938,7 @@ export default function TeacherPage() {
 
                     </span>
 
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
 
                       <Radio className="h-5 w-5 animate-pulse" />
 
@@ -5953,7 +5953,7 @@ export default function TeacherPage() {
 
                     <div className="flex items-baseline gap-2">
 
-                      <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                      <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                         {presentCount} Present
 
@@ -5989,7 +5989,7 @@ export default function TeacherPage() {
 
 
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform">
 
                   <span>Open Live Attendance</span>
 
@@ -6027,7 +6027,7 @@ export default function TeacherPage() {
 
                     </span>
 
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
 
                       <FileEdit className="h-5 w-5" />
 
@@ -6042,7 +6042,7 @@ export default function TeacherPage() {
 
                     <div className="flex items-baseline gap-2">
 
-                      <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                      <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                         {homeworkStats.needsGrading} To Grade
 
@@ -6078,7 +6078,7 @@ export default function TeacherPage() {
 
 
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform">
 
                   <span>Launch SpeedGrader</span>
 
@@ -6110,7 +6110,7 @@ export default function TeacherPage() {
 
                     </span>
 
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
 
                       <Sparkles className="h-5 w-5" />
 
@@ -6161,7 +6161,7 @@ export default function TeacherPage() {
 
 
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform">
 
                   <span>Review Focus Roster</span>
 
@@ -6193,7 +6193,7 @@ export default function TeacherPage() {
 
                     </span>
 
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center font-bold">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center font-bold">
 
                       <CalendarCheck className="h-5 w-5" />
 
@@ -6208,7 +6208,7 @@ export default function TeacherPage() {
 
                     <div className="flex items-baseline gap-2">
 
-                      <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                      <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
 
                         {pendingLeaves} Pending
 
@@ -6244,7 +6244,7 @@ export default function TeacherPage() {
 
 
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform">
 
                   <span>Manage Approvals</span>
 
@@ -7394,9 +7394,9 @@ export default function TeacherPage() {
 
                         selectedScheduleDay === day
 
-                          ? 'bg-blue-600 text-white shadow-sm'
+                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
 
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 hover:text-slate-900 dark:hover:text-white font-medium'
 
                       }`}
 
@@ -7596,7 +7596,7 @@ export default function TeacherPage() {
 
                           item.is_current_active_period 
 
-                            ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-blue-600 shadow-xs' 
+                            ? 'bg-[var(--primary)]/10 dark:bg-[var(--primary)]/20 border-l-4 border-[var(--primary)] shadow-xs' 
 
                             : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
 
@@ -7612,7 +7612,7 @@ export default function TeacherPage() {
 
                             item.is_current_active_period
 
-                              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                              ? 'bg-[var(--primary)] text-white font-black shadow-sm shadow-[var(--primary)]/25'
 
                               : isInvigilation
 
@@ -8068,9 +8068,9 @@ export default function TeacherPage() {
 
                         homeworkFilter === filter
 
-                          ? 'bg-indigo-600 text-white shadow-xs'
+                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
 
-                          : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
 
                       }`}
 
@@ -19284,7 +19284,7 @@ export default function TeacherPage() {
 
                   onClick={() => setShowPermissionModal(true)}
 
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-4 py-2 text-xs font-bold shadow-xs transition-opacity cursor-pointer"
 
                 >
 
@@ -19306,7 +19306,7 @@ export default function TeacherPage() {
 
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Applications</span>
 
-                  <span className="text-2xl font-black text-slate-900 dark:text-white block">{myPermissions.length}</span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-white block tabular-nums">{myPermissions.length}</span>
 
                   <span className="text-[10px] text-slate-500">Academic Year 2026–27</span>
 
@@ -19318,7 +19318,7 @@ export default function TeacherPage() {
 
                   <span className="text-[10px] uppercase font-bold text-slate-400">Approved by Principal</span>
 
-                  <span className="text-2xl font-black text-emerald-600 block">
+                  <span className="text-2xl font-black text-emerald-600 block tabular-nums">
 
                     {myPermissions.filter(p => p.status === 'Approved').length}
 
@@ -19334,7 +19334,7 @@ export default function TeacherPage() {
 
                   <span className="text-[10px] uppercase font-bold text-slate-400">Pending Review</span>
 
-                  <span className="text-2xl font-black text-amber-600 block">
+                  <span className="text-2xl font-black text-amber-600 block tabular-nums">
 
                     {myPermissions.filter(p => p.status === 'Pending').length}
 
@@ -19528,7 +19528,7 @@ export default function TeacherPage() {
 
                     onClick={() => setShowSalaryInquiryModal(true)}
 
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--primary)] text-white text-xs font-bold hover:opacity-95 transition-opacity shadow-xs cursor-pointer"
 
                     title="Send a discrepancy or salary query to Accounts Coordinator"
 
@@ -19554,7 +19554,7 @@ export default function TeacherPage() {
 
                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gross Earnings</div>
 
-                  <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                  <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
 
                     ₹{myPayslip ? myPayslip.gross_earnings.toLocaleString('en-IN') : '62,000'}
 
@@ -19574,7 +19574,7 @@ export default function TeacherPage() {
 
                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Deductions</div>
 
-                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+                  <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 tabular-nums">
 
                     -₹{myPayslip ? myPayslip.total_deductions.toLocaleString('en-IN') : '7,740'}
 
@@ -19594,7 +19594,7 @@ export default function TeacherPage() {
 
                   <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Net Take-Home Pay</div>
 
-                  <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1">
+                  <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1 tabular-nums">
 
                     ₹{myPayslip ? myPayslip.net_salary.toLocaleString('en-IN') : '54,260'}
 

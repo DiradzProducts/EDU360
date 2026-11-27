@@ -692,7 +692,7 @@ export function ParentPtmView({
                         timelineScrollRef.current.scrollIntoView({ behavior: 'smooth' });
                       }
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white text-xs font-bold shadow-sm shadow-[var(--primary)]/20 active:scale-95 transition-all cursor-pointer"
                   >
                     <Video className="h-3.5 w-3.5" />
                     <span>Book 10-Min PTM Slot</span>
@@ -966,7 +966,7 @@ export function ParentPtmView({
                 setTargetTeacher(homeroomTeacher);
                 setNoteModalOpen(true);
               }}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white text-xs font-bold shadow-sm shadow-[var(--primary)]/20 cursor-pointer"
             >
               Compose Note
             </button>
@@ -1149,7 +1149,7 @@ export function ParentPtmView({
                 <button
                   type="submit"
                   disabled={noteSending}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white px-5 py-2.5 text-xs font-bold shadow-sm shadow-[var(--primary)]/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
                   <Send className="h-4 w-4" />
                   <span>{noteSending ? 'Dispatching...' : 'Dispatch Note'}</span>

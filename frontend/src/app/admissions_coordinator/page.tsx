@@ -254,52 +254,78 @@ export default function AdmissionsCoordinatorPage() {
       return;
     }
 
-    // Check if line 0 is a header row
-    const firstLineLower = lines[0].toLowerCase();
-    const hasHeader = firstLineLower.includes('name') || firstLineLower.includes('student') || firstLineLower.includes('phone') || firstLineLower.includes('grade') || firstLineLower.includes('email');
-    
+    // Accurate header detection: check if first line has at least 2 column keywords
+    // and does NOT contain an actual email (@) or phone number with 7+ digits
+    const firstLineParts = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(p => p.trim().replace(/^["]|["]$/g, '').toLowerCase());
+    const hasActualEmail = firstLineParts.some(p => p.includes('@') && p.includes('.') && p.length > 5);
+    const hasActualPhone = firstLineParts.some(p => {
+      const digits = p.replace(/\D/g, '');
+      return digits.length >= 7 && (p.startsWith('+') || p.startsWith('0') || /^[6-9]/.test(digits));
+    });
+
+    const headerKeywords = [
+      'student_name', 'student name', 'student', 'child', 'candidate', 'applicant',
+      'target_grade', 'target grade', 'grade', 'class', 'standard',
+      'parent_name', 'parent name', 'parent', 'guardian', 'father', 'mother',
+      'email', 'parent email', 'email address', 'mail',
+      'phone', 'phone number', 'mobile', 'contact', 'cell',
+      'lead_temperature', 'temperature', 'priority', 'status',
+      'next_followup_date', 'followup date', 'followup', 'follow-up'
+    ];
+    const matchedKeywords = firstLineParts.filter(p => headerKeywords.some(kw => p === kw || p.startsWith(kw + '_') || p.endsWith('_' + kw)));
+    const hasHeader = !hasActualEmail && !hasActualPhone && matchedKeywords.length >= 2;
+
     let headers: string[] = [];
     if (hasHeader) {
-      headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(h => h.trim().replace(/^["]|["]$/g, '').toLowerCase());
+      headers = firstLineParts;
     }
     const dataLines = hasHeader ? lines.slice(1) : lines;
-
-    const findCol = (parts: string[], aliases: string[], fallbackIdx: number): string => {
-      if (hasHeader && headers.length > 0) {
-        const found = headers.findIndex(h => aliases.some(a => h.includes(a)));
-        if (found !== -1 && parts[found] !== undefined) return parts[found].trim();
-      }
-      return (fallbackIdx >= 0 && parts[fallbackIdx] !== undefined ? parts[fallbackIdx].trim() : '');
-    };
 
     const parsed = dataLines.map((line) => {
       // Split by comma or tab, taking quotes into account
       const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)|\t/).map(p => p.trim().replace(/^["]|["]$/g, ''));
       
-      const student_name = findCol(parts, ['student', 'child'], 0) || parts[0] || '';
-      const target_grade = findCol(parts, ['grade', 'class'], 1) || 'Grade 8';
-      const parent_name = findCol(parts, ['parent', 'guardian', 'father', 'mother'], 2) || 'Parent / Guardian';
+      // Determine if this row follows 9-column layout (with email at index 3) or legacy 8-column layout
+      const emailAt3 = parts[3] && parts[3].includes('@') && parts[3].includes('.');
+      const is9Col = parts.length >= 9 || emailAt3;
+
+      const findCol = (aliases: string[], fallbackIdx: number): string => {
+        if (hasHeader && headers.length > 0) {
+          const found = headers.findIndex(h => aliases.some(a => h === a || h.includes(a)));
+          if (found !== -1 && parts[found] !== undefined) return parts[found].trim();
+        }
+        return (fallbackIdx >= 0 && parts[fallbackIdx] !== undefined ? parts[fallbackIdx].trim() : '');
+      };
+
+      const student_name = findCol(['student_name', 'student', 'child', 'applicant'], 0) || parts[0] || '';
+      const target_grade = findCol(['target_grade', 'grade', 'class', 'standard'], 1) || parts[1] || 'Grade 8';
+      const parent_name = findCol(['parent_name', 'parent', 'guardian', 'father', 'mother'], 2) || parts[2] || 'Parent / Guardian';
       
-      // Parse real parent email: header alias match, or column containing '@'
-      let email = findCol(parts, ['email', 'mail'], -1);
+      // Parse real parent email: header alias match, or column 3 if 9-col, or any column containing '@'
+      let email = findCol(['email', 'mail', 'email address'], is9Col ? 3 : -1);
       if (!email) {
         const emailCol = parts.find(p => p.includes('@') && p.includes('.'));
         if (emailCol) email = emailCol.trim();
       }
 
-      const rawPhone = findCol(parts, ['phone', 'mobile', 'contact'], 3) || parts[3] || '';
-      const source = findCol(parts, ['source', 'channel'], 4) || parts[4] || 'Website';
-      const tempRaw = (findCol(parts, ['temp', 'status', 'priority'], 5) || parts[5] || 'warm').toLowerCase();
+      const rawPhone = findCol(['phone', 'mobile', 'contact', 'cell', 'tel'], is9Col ? 4 : 3) || (is9Col ? parts[4] : parts[3]) || '';
+      const source = findCol(['source', 'channel', 'medium'], is9Col ? 5 : 4) || (is9Col ? parts[5] : parts[4]) || 'Website';
+      const tempRaw = (findCol(['lead_temperature', 'temp', 'priority', 'status'], is9Col ? 6 : 5) || (is9Col ? parts[6] : parts[5]) || 'warm').toLowerCase();
       const lead_temperature: 'hot' | 'warm' | 'cold' = 
         tempRaw.includes('hot') ? 'hot' : tempRaw.includes('cold') ? 'cold' : 'warm';
-      const notes = findCol(parts, ['note', 'remark', 'comment'], 6) || parts[6] || 'Bulk imported inquiry';
-      const next_followup_date = findCol(parts, ['follow', 'date'], 7) || parts[7] || todayStr;
+      const notes = findCol(['notes', 'note', 'remark', 'comment'], is9Col ? 7 : 6) || (is9Col ? parts[7] : parts[6]) || 'Bulk imported inquiry';
+      
+      let next_followup_date = findCol(['next_followup_date', 'followup', 'follow', 'date'], is9Col ? 8 : 7) || (is9Col ? parts[8] : parts[7]) || '';
+      if (!next_followup_date || !/^\d{4}-\d{2}-\d{2}$/.test(next_followup_date)) {
+        next_followup_date = todayStr;
+      }
 
       // Validate
-      const isValid = student_name.trim().length >= 2 && rawPhone.trim().length >= 7;
+      const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
+      const isValid = student_name.trim().length >= 2 && cleanPhoneDigits.length >= 7;
       let errorMsg = '';
       if (student_name.trim().length < 2) errorMsg = 'Student name required';
-      else if (rawPhone.trim().length < 7) errorMsg = 'Valid phone number required';
+      else if (cleanPhoneDigits.length < 7) errorMsg = 'Valid phone number required';
 
       return {
         student_name: student_name.trim(),
@@ -331,6 +357,7 @@ export default function AdmissionsCoordinatorPage() {
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleDownloadSampleCsv = () => {
@@ -361,9 +388,11 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
 
     setBulkImporting(true);
     let count = 0;
-    for (const row of validRows) {
+    let failedCount = 0;
+
+    const importPromises = validRows.map(async (row) => {
       try {
-        const cleanName = (row.student_name || 'student').toLowerCase().replace(/\s+/g, '.');
+        const cleanName = (row.student_name || 'student').toLowerCase().replace(/[^a-z0-9]/g, '.');
         const finalEmail = row.email && row.email.includes('@')
           ? row.email
           : `${cleanName}.parent@edu360.internal`;
@@ -381,9 +410,12 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
         });
         count++;
       } catch (err) {
+        failedCount++;
         console.error('Error importing lead:', row, err);
       }
-    }
+    });
+
+    await Promise.allSettled(importPromises);
 
     const updated = await api.getEnquiries();
     setEnquiries(updated);
@@ -391,7 +423,12 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
     setShowBulkImportModal(false);
     setBulkCsvText('');
     setBulkPreviewRows([]);
-    triggerToast(`✓ Successfully imported ${count} new student inquiries into the Admissions Pipeline!`);
+    
+    if (failedCount === 0) {
+      triggerToast(`✓ Successfully imported ${count} new student inquiries into the Admissions Pipeline!`);
+    } else {
+      triggerToast(`Imported ${count} inquiries (${failedCount} encountered errors).`);
+    }
   };
 
   // 4. Register New Enquiry
@@ -635,7 +672,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
           <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60 shrink-0">
+                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                   AC
                 </div>
                 <div className="min-w-0">
@@ -644,7 +681,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center border border-blue-200/60 dark:border-blue-800/60">
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                 AC
               </div>
             )}
@@ -702,13 +739,13 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                   }}
                   className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                     active 
-                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold border-r-[3px] border-blue-600 dark:border-blue-400' 
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-medium'
+                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title={item.label}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
                     {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                   </div>
                   {!sidebarCollapsed && item.badge && (
@@ -803,7 +840,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                   setRegPhoneError(null);
                   setShowRegisterModal(true);
                 }}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Register New Enquiry</span>
@@ -930,7 +967,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                   setCrmFilter('all');
                   setSearchQuery('');
                 }}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold shadow-xs transition-all cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>Reset All Filters</span>
@@ -1074,7 +1111,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                               e.stopPropagation();
                               openCallModal(enq);
                             }}
-                            className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="flex-1 py-2 px-3 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                             title="Add New Follow-Up Call & Outcome"
                           >
                             <PhoneCall className="h-3.5 w-3.5" />
@@ -1257,7 +1294,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   Save Call Outcome ✓
@@ -1369,7 +1406,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center">
+                  <span className="h-6 w-6 rounded-full bg-[var(--primary)] text-white text-xs font-black shadow-xs flex items-center justify-center">
                     2
                   </span>
                   <label className="text-xs font-black text-slate-900 dark:text-white">
@@ -1393,8 +1430,8 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                 rows={5}
                 value={bulkCsvText}
                 onChange={e => handleParseCsvInput(e.target.value)}
-                placeholder="Paste CSV rows here (e.g. Aarav Sharma, Grade 8, Dr. Rajeev Sharma, 9849022114, Website, hot, CBSE admission, 2026-10-30)..."
-                className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 font-mono text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                placeholder="Paste CSV rows here (e.g. Aarav Sharma, Grade 8, Dr. Rajeev Sharma, rajeev.sharma@example.com, +91 98490 22114, Website, hot, CBSE Class 8 Inquiry, 2026-10-30)..."
+                className="w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 font-mono text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
               />
             </div>
 
@@ -1654,7 +1691,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:opacity-95 text-white shadow-sm shadow-[var(--primary)]/20 font-bold shadow-xs cursor-pointer"
                 >
                   Save Enquiry
                 </button>

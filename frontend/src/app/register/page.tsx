@@ -343,7 +343,7 @@ export default function RegisterPage() {
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       placeholder={activeRoleData.identifierPlaceholder}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                     />
                   </div>
                 </div>
@@ -363,7 +363,7 @@ export default function RegisterPage() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Diya Patel"
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                       />
                     </div>
                   </div>
@@ -382,7 +382,7 @@ export default function RegisterPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="diya.patel@example.com"
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                       />
                     </div>
                   </div>
@@ -401,7 +401,7 @@ export default function RegisterPage() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+91 98765 00000"
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                     />
                   </div>
                 </div>
@@ -421,7 +421,7 @@ export default function RegisterPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Create password (6+ chars)"
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                       />
                       <button
                         type="button"
@@ -469,7 +469,7 @@ export default function RegisterPage() {
                             ? 'border-rose-300 focus:ring-rose-400 bg-rose-50/20'
                             : confirmPassword && password === confirmPassword
                             ? 'border-emerald-300 focus:ring-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/20'
-                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-blue-500/20'
+                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-[var(--primary)]/20'
                         }`}
                       />
                       <button
@@ -489,7 +489,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading || !verifiedSchool}
-                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold px-4 py-3 text-sm shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 transition-all active:scale-[0.99] disabled:opacity-50 mt-4 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] hover:opacity-95 active:opacity-90 text-white font-bold px-4 py-3 text-sm shadow-md shadow-[var(--primary)]/25 hover:shadow-lg hover:shadow-[var(--primary)]/35 transition-all active:scale-[0.99] disabled:opacity-50 mt-4 cursor-pointer"
               >
                 {loading ? (
                   <span>Creating Account...</span>
