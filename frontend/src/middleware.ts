@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server';
 // Protected portal routes that require an authenticated session
 const PROTECTED_ROUTES = [
   '/student',
+  '/junior',
   '/teacher',
   '/admin',
   '/parent',
@@ -40,6 +41,15 @@ export function middleware(request: NextRequest) {
 
   // Role validation: if session role does not match the target portal, redirect to their rightful portal
   if (targetPortal && sessionCookie !== targetPortal) {
+    // Junior K-5 students authenticate with role 'student' and access /junior
+    if (targetPortal === 'junior' && sessionCookie === 'student') {
+      const juniorResponse = NextResponse.next();
+      juniorResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      juniorResponse.headers.set('Pragma', 'no-cache');
+      juniorResponse.headers.set('Expires', '0');
+      return juniorResponse;
+    }
+
     // School Admin (Principal) has oversight privilege to inspect coordinator operational desks
     const isCoordinatorPortal = [
       'academic_coordinator',
@@ -58,8 +68,9 @@ export function middleware(request: NextRequest) {
       return adminResponse;
     }
 
-    // Redirect to the user's rightful portal
-    const authorizedUrl = new URL(`/${sessionCookie}`, request.url);
+    // Redirect to the user's rightful portal (validate slug to prevent open redirect)
+    const safePortal = /^[a-z0-9_]+$/.test(sessionCookie) ? sessionCookie : 'login';
+    const authorizedUrl = new URL(`/${safePortal}`, request.url);
     return NextResponse.redirect(authorizedUrl);
   }
 
@@ -74,6 +85,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/student/:path*',
+    '/junior/:path*',
     '/teacher/:path*',
     '/admin/:path*',
     '/parent/:path*',

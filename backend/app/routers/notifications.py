@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_, and_
+from sqlalchemy import select, update, or_, and_, func
 from app.core.database import get_db
 from app.models.models import Notification
 
@@ -222,14 +222,15 @@ async def mark_all_notifications_read(
     """
     conditions = [Notification.is_read == False]
     if req.user_id is not None and req.role:
+        r_clean = req.role.lower()
         conditions.append(or_(
             Notification.recipient_user_id == req.user_id,
-            and_(Notification.recipient_role == req.role, Notification.recipient_user_id.is_(None))
+            and_(func.lower(Notification.recipient_role) == r_clean, Notification.recipient_user_id.is_(None))
         ))
     elif req.user_id is not None:
         conditions.append(Notification.recipient_user_id == req.user_id)
     elif req.role:
-        conditions.append(Notification.recipient_role == req.role)
+        conditions.append(func.lower(Notification.recipient_role) == req.role.lower())
 
     await db.execute(
         update(Notification)
@@ -261,4 +262,21 @@ async def send_notification(
         action_url=req.action_url,
         metadata_dict=req.metadata
     )
-    return {"success": True, "notification_id": notif.id}
+    return {
+        "success": True,
+        "notification_id": notif.id,
+        "notification": {
+            "id": notif.id,
+            "recipient_user_id": notif.recipient_user_id,
+            "recipient_role": notif.recipient_role,
+            "sender_name": notif.sender_name,
+            "sender_role": notif.sender_role,
+            "title": notif.title,
+            "message": notif.message,
+            "notification_type": notif.notification_type,
+            "priority": notif.priority,
+            "action_url": notif.action_url,
+            "is_read": notif.is_read,
+            "created_at": _to_utc_iso(notif.created_at),
+        }
+    }

@@ -104,7 +104,8 @@ export class ClockProvider {
    */
   public static async syncWithBackend(): Promise<void> {
     try {
-      const res = await fetch('/api/system/clock');
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiBase}/api/system/clock`);
       if (res.ok) {
         const data = await res.json();
         if (data.is_overridden && data.iso) {

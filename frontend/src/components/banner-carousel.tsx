@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '@/lib/api';
 import { 
   FileText, 
   Sparkles, 
@@ -77,23 +78,52 @@ interface BannerCarouselProps {
   onActionClick?: (target: string) => void;
 }
 
+const iconMap: Record<string, any> = {
+  FileText,
+  Sparkles,
+  CreditCard,
+  Navigation,
+  Calendar
+};
+
 export function BannerCarousel({ onActionClick }: BannerCarouselProps) {
+  const [slides, setSlides] = useState<BannerSlide[]>(defaultSlides);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
-    if (isPaused) return;
+    api.getParentBanners().then((data) => {
+      if (data && data.length > 0) {
+        setSlides(
+          data.map((b: any) => ({
+            id: b.id,
+            title: b.title,
+            subtitle: b.subtitle,
+            badge: b.badge,
+            badge_color: b.badge_color || 'bg-blue-100 text-blue-700 border-blue-200',
+            action_text: b.action_text || 'View',
+            action_target: b.action_target || 'marks',
+            gradient: b.gradient || 'from-blue-700 via-indigo-700 to-blue-900',
+            icon: typeof b.icon === 'string' ? (iconMap[b.icon] || FileText) : (b.icon || FileText),
+          }))
+        );
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (isPaused || slides.length === 0) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % defaultSlides.length);
+      setCurrentIndex((prev) => (prev + 1) % slides.length);
     }, 5500);
     return () => clearInterval(interval);
-  }, [isPaused]);
+  }, [isPaused, slides.length]);
 
-  const currentSlide = defaultSlides[currentIndex];
+  const currentSlide = slides[currentIndex] || defaultSlides[0];
   const Icon = currentSlide.icon;
 
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % defaultSlides.length);
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + defaultSlides.length) % defaultSlides.length);
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % slides.length);
+  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
 
   return (
     <div 
@@ -162,7 +192,7 @@ export function BannerCarousel({ onActionClick }: BannerCarouselProps) {
 
           {/* Indicator dots */}
           <div className="mt-4 flex items-center gap-1.5">
-            {defaultSlides.map((_, idx) => (
+            {slides.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentIndex(idx)}

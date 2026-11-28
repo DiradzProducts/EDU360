@@ -1,0 +1,82 @@
+[
+  {
+    "role": "Website / Admissions",
+    "workflow": "Website Apply for Admission modal",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Public visitor submitting admission enquiry hits auth-protected endpoint."
+  },
+  {
+    "role": "Admissions Coordinator",
+    "workflow": "Portal load & tab navigation (6 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: All Inquiries 37 | Active Leads ⚡ 15 | Passive Leads 💤 1 | Today's Follow-ups 1 Due | Enrolled Students (SIS) 21 | Dropped Inquiries 0"
+  },
+  {
+    "role": "Teacher",
+    "workflow": "Portal load & tab navigation (10 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Dashboard Overview Daily Pulse | Live Studio & Attendance | Personal Timetable Today | Homework & Corrections 3 To Grade | Student Focus Table 9 On Plan | Exams & Gradebook 0 PENDING | Evaluation Ledger | QP Blueprints | Live Invigilation | Syllabus & Curriculum Math"
+  },
+  {
+    "role": "Student (Secondary)",
+    "workflow": "Portal load & tab navigation (10 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Dashboard | Live Classes 1 Live | Class Recordings Archive | Timetable & Schedule | Homework & Tasks 10 Backlog | My Focus Table 12 Weak Areas | Exams & Results 88.8% | Dual Portfolio 11 Items | Holidays & Calendar | SIS Profile 94.2%"
+  },
+  {
+    "role": "Student (Junior)",
+    "workflow": "Login redirect to /junior",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Landed on /junior instead of /junior"
+  },
+  {
+    "role": "Parent",
+    "workflow": "Portal load & tab navigation (10 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Parent Dashboard Live | Exams & Report Cards 88.8% · #4 | Shared Focus Table 7 Subjects | Child SIS Profile & Vault 94.2% Safe | Chat with Teachers 1 New | Teacher Connect & PTM 1 Booked | Student Leave Requests 1 Pending | Events & Holidays 8 Listed | Fee Milestones & Receipts Due Oct 25 | School Exit & TC Vault Action Req"
+  },
+  {
+    "role": "Super Admin / Principal",
+    "workflow": "Portal load & tab navigation (14 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Principal Dashboard | Action Alerts 3 | School Tasks 14 | New Admissions 37 | Student Directory | Student Leaves 16 | Teacher Cover 32 | Staff Directory 12 | Teacher Leaves 3 | Exams | Class Promotion | Fee Collections 1 | Staff Salaries | School Events"
+  },
+  {
+    "role": "Academic Coordinator",
+    "workflow": "Portal load & tab navigation (7 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Academic Dashboard | Period Substitutions 32 Urgent | Curriculum Pacing | Question Papers & Blueprints 1 Review | Exam Clearance 5 Pending | Faculty Roster 12 Staff | Faculty Tasks & SLAs 13 Open"
+  },
+  {
+    "role": "Exam Coordinator",
+    "workflow": "Portal load & tab navigation (6 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Exams Dashboard | Paper Vault & Custody 2 Sealed | Exam Schedules & Virtual Rooms 9 Slots | Grade Moderation 100% Synced | Report Cards & Memos 4 Cards | Invigilation & Tasks 0 Open"
+  },
+  {
+    "role": "Accounts Coordinator",
+    "workflow": "Portal load & tab navigation (7 tabs)",
+    "status": "WORKING",
+    "httpErrors": [],
+    "consoleErrors": [],
+    "notes": "Tabs visited: Accounts Dashboard | Today's Live Collections ₹1.38L | Fee Collections & Aging 13 Due | Staff Salaries & Payroll 2 Queries | Vendor Bills & Payables 4 Transfers | Online Bank Verification 15 To Verify | Fee Reminders & Audit"
+  }
+]

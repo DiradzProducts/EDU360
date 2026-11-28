@@ -84,7 +84,7 @@ export default function AccountsCoordinatorPage() {
   // Core Data States
   const [tasks, setTasks] = useState<AdminTask[]>([]);
   const [defaulters, setDefaulters] = useState<FeeDefaulter[]>([]);
-  const [transactions, setTransactions] = useState<PaymentTransactionItem[]>(() => getLivePaymentTransactions());
+  const [transactions, setTransactions] = useState<PaymentTransactionItem[]>([]);
   const [invoices, setInvoices] = useState<VendorInvoiceItem[]>([]);
   const [dispatchLogs, setDispatchLogs] = useState<FinanceDispatchLogItem[]>([]);
   
@@ -1010,7 +1010,7 @@ export default function AccountsCoordinatorPage() {
           <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                   AC
                 </div>
                 <div className="min-w-0">
@@ -1019,7 +1019,7 @@ export default function AccountsCoordinatorPage() {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                 AC
               </div>
             )}
@@ -1098,7 +1098,7 @@ export default function AccountsCoordinatorPage() {
                   }}
                   className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                     active 
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title={item.label}
@@ -1446,51 +1446,62 @@ export default function AccountsCoordinatorPage() {
                   </span>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Inflow bar */}
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                        Inflow: Tuition Fees &amp; New Admissions
-                      </span>
-                      <span className="text-emerald-600 font-bold">₹{stats.total_collected_mtd.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
-                      <div className="bg-emerald-500 h-3 rounded-full" style={{ width: '85%' }} />
-                    </div>
-                  </div>
+                {(() => {
+                  const inflowAmt = Number(stats.total_collected_mtd || 0);
+                  const payrollAmt = payrollBatches.length > 0 ? Number(payrollBatches[0].net_payable || 0) : 299200;
+                  const vendorAmt = Number(stats.pending_vendor_invoices_amount || 0);
+                  const maxBar = Math.max(inflowAmt, payrollAmt, vendorAmt, 1);
+                  const inflowPct = inflowAmt > 0 ? Math.max(8, Math.round((inflowAmt / maxBar) * 100)) : 0;
+                  const payrollPct = payrollAmt > 0 ? Math.max(8, Math.round((payrollAmt / maxBar) * 100)) : 0;
+                  const vendorPct = vendorAmt > 0 ? Math.max(8, Math.round((vendorAmt / maxBar) * 100)) : 0;
+                  return (
+                    <div className="space-y-4">
+                      {/* Inflow bar */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                          <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                            Inflow: Tuition Fees &amp; New Admissions
+                          </span>
+                          <span className="text-emerald-600 font-bold">₹{inflowAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                          <div className="bg-emerald-500 h-3 rounded-full transition-all duration-300" style={{ width: `${inflowPct}%` }} />
+                        </div>
+                      </div>
 
-                  {/* Outflow: Salaries */}
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-purple-500" />
-                        Outflow: Monthly Staff Salaries (Payroll)
-                      </span>
-                      <span className="text-purple-600 font-bold">
-                        ₹{payrollBatches.length > 0 ? payrollBatches[0].net_payable.toLocaleString('en-IN') : '2,99,200'}
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
-                      <div className="bg-purple-500 h-3 rounded-full" style={{ width: '48%' }} />
-                    </div>
-                  </div>
+                      {/* Outflow: Salaries */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                          <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-purple-500" />
+                            Outflow: Monthly Staff Salaries (Payroll)
+                          </span>
+                          <span className="text-purple-600 font-bold">
+                            ₹{payrollAmt.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                          <div className="bg-purple-500 h-3 rounded-full transition-all duration-300" style={{ width: `${payrollPct}%` }} />
+                        </div>
+                      </div>
 
-                  {/* Outflow: Vendor & Operations */}
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                      <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-blue-500" />
-                        Outflow: Vendor Invoices &amp; Maintenance Bills
-                      </span>
-                      <span className="text-blue-600 font-bold">₹{stats.pending_vendor_invoices_amount.toLocaleString('en-IN')}</span>
+                      {/* Outflow: Vendor & Operations */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                          <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-blue-500" />
+                            Outflow: Vendor Invoices &amp; Maintenance Bills
+                          </span>
+                          <span className="text-blue-600 font-bold">₹{vendorAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                          <div className="bg-blue-500 h-3 rounded-full transition-all duration-300" style={{ width: `${vendorPct}%` }} />
+                        </div>
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
-                      <div className="bg-blue-500 h-3 rounded-full" style={{ width: '22%' }} />
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
                   <span className="text-slate-500">Live bank balance across 2 Current Accounts</span>
@@ -2964,7 +2975,7 @@ export default function AccountsCoordinatorPage() {
                           onClick={() => setInquiryFilterStatus(st)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                             inquiryFilterStatus === st
-                              ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                           }`}
                         >

@@ -244,7 +244,7 @@ function StandardStudentDashboard() {
     const basePeriods = [
       { id: 1, periodNum: 'P1', name: 'Physics: Kinematics & Laws', topic: 'Kinematics & Laws', subject: 'Physics', teacher: 'Dr. K. Raman', faculty: 'Dr. K. Raman', room: 'Lab 2', startTime: '08:30', endTime: '09:15', timing: '08:30 – 09:15 AM', timeRange: '08:30 – 09:15 AM', startMin: 510, endMin: 555 },
       { id: 2, periodNum: 'P2', name: 'Chemistry: Acids & Bases', topic: 'Acids & Bases', subject: 'Chemistry', teacher: 'Mrs. S. Sen', faculty: 'Mrs. S. Sen', room: 'Room 204', startTime: '09:15', endTime: '10:00', timing: '09:15 – 10:00 AM', timeRange: '09:15 – 10:00 AM', startMin: 555, endMin: 600 },
-      { id: 3, periodNum: 'P3', name: 'Mathematics: Quadratic Equations', topic: 'Quadratic Equations', subject: 'Mathematics', teacher: 'Mrs. Ananya Verma', faculty: 'Mrs. Ananya Verma', room: 'Room 204 & Stream', startTime: '10:30', endTime: '11:15', timing: '10:30 – 11:15 AM', timeRange: '10:30 – 11:15 AM', startMin: 630, endMin: 675 },
+      { id: 3, periodNum: 'P3', name: 'Mathematics: Quadratic Equations', topic: 'Quadratic Equations', subject: 'Mathematics', teacher: 'Mrs. Ananya Verma', faculty: 'Mrs. Ananya Verma', room: 'Room 204 (Live Stream)', startTime: '10:30', endTime: '11:15', timing: '10:30 – 11:15 AM', timeRange: '10:30 – 11:15 AM', startMin: 630, endMin: 675 },
       { id: 4, periodNum: 'P4', name: 'Computer Science: Python Logic', topic: 'Python Logic', subject: 'Computer Science', teacher: 'Mr. V. Nair', faculty: 'Mr. V. Nair', room: 'Lab 1', startTime: '11:15', endTime: '12:00', timing: '11:15 – 12:00 PM', timeRange: '11:15 – 12:00 PM', startMin: 675, endMin: 720 },
       { id: 5, periodNum: 'P5', name: 'Social Science: Indian Constitution', topic: 'Indian Constitution', subject: 'Social Science', teacher: 'Ms. P. Roy', faculty: 'Ms. P. Roy', room: 'Room 204', startTime: '13:00', endTime: '13:45', timing: '01:00 – 01:45 PM', timeRange: '01:00 – 01:45 PM', startMin: 780, endMin: 825 },
       { id: 6, periodNum: 'P6', name: 'Western Choir Rehearsal', topic: 'Choral Harmonization', subject: 'Music / Co-curricular', teacher: 'Music Faculty', faculty: 'Music Faculty', room: 'Auditorium', startTime: '13:45', endTime: '14:30', timing: '01:45 – 02:30 PM', timeRange: '01:45 – 02:30 PM', startMin: 825, endMin: 870 },
@@ -1252,7 +1252,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('dashboard'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'dashboard'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Dashboard"
@@ -1266,7 +1266,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('live_classes'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'live_classes'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Live Classes"
@@ -1288,7 +1288,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('recordings'); setActiveRecordingDetail(null); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'recordings'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Class Recordings"
@@ -1309,7 +1309,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('timetable'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'timetable'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Timetable & Schedule"
@@ -1333,7 +1333,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('homework'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'homework'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Homework & Assignments"
@@ -1386,7 +1386,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('focus_table'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'focus_table'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="My Focus Table (Personalized Weak-Concepts Study Plan)"
@@ -1421,7 +1421,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('exams'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'exams'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Exams & Results"
@@ -1456,7 +1456,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('portfolio'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'portfolio'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Participations & Achievements"
@@ -1477,7 +1477,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('calendar'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'calendar'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Holidays & Calendar"
@@ -1501,7 +1501,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('profile'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'profile'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="SIS Profile & Attendance"
@@ -1522,7 +1522,7 @@ function StandardStudentDashboard() {
                   onClick={() => { setActiveNav('vault'); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
                     activeNav === 'vault'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title="Official Documents (View-Only Vault)"
@@ -1595,9 +1595,9 @@ function StandardStudentDashboard() {
             <span className="text-xs font-bold text-slate-500">Student Portal</span>
           </div>
 
-          {/* Toast Notification Banner */}
+          {/* Toast Notification Banner (Bottom-Right so it never overlaps hero header pills) */}
           {toastMessage && (
-            <div className="fixed top-20 right-8 z-50 flex items-center gap-3 rounded-2xl bg-[#0F172A] text-white px-4 py-3 shadow-2xl border border-blue-500/40 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#0F172A] text-white px-4 py-3 shadow-2xl border border-blue-500/40 text-xs font-semibold animate-in fade-in slide-in-from-bottom-4 duration-300">
               <CheckCircle2 className="h-4 w-4 text-[#10B981] shrink-0" />
               <span>{toastMessage}</span>
               <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
@@ -2699,7 +2699,7 @@ function StandardStudentDashboard() {
                         onClick={() => setHomeworkFilter('all')}
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                           homeworkFilter === 'all'
-                            ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                            ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium'
                         }`}
                       >
@@ -2806,7 +2806,7 @@ function StandardStudentDashboard() {
                             onClick={() => setShowAllDates(!showAllDates)}
                             className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all border cursor-pointer ${
                               showAllDates
-                                ? 'bg-[var(--primary)] text-white border-[var(--primary)] font-bold shadow-xs'
+                                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-bold shadow-xs'
                                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                             }`}
                           >
@@ -3317,7 +3317,7 @@ function StandardStudentDashboard() {
                   onClick={() => setExamSubTab('timetable')}
                   className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     examSubTab === 'timetable'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                 >
@@ -3330,7 +3330,7 @@ function StandardStudentDashboard() {
                   onClick={() => setExamSubTab('results')}
                   className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     examSubTab === 'results'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                 >
@@ -3343,7 +3343,7 @@ function StandardStudentDashboard() {
                   onClick={() => setExamSubTab('report_card')}
                   className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     examSubTab === 'report_card'
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                 >
@@ -4524,7 +4524,7 @@ function StandardStudentDashboard() {
                         onClick={() => setPortfolioCategoryFilter(cat)}
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold capitalize transition-all ${
                           portfolioCategoryFilter === cat
-                            ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                            ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
@@ -5329,7 +5329,7 @@ function StandardStudentDashboard() {
                           onClick={() => setSelectedSubjectFilter(sub)}
                           className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                             selectedSubjectFilter.toLowerCase() === sub.toLowerCase()
-                              ? 'bg-[var(--primary)] text-white font-bold shadow-xs ring-2 ring-[var(--primary)]/30'
+                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs ring-2 ring-[var(--primary)]/30'
                               : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                           }`}
                         >
@@ -5577,7 +5577,7 @@ function StandardStudentDashboard() {
                             <td className="p-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                               {row.day}
                               {isToday && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-[var(--primary)] text-white font-extrabold uppercase shadow-2xs">
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-[var(--primary)] text-[var(--primary-foreground)] font-extrabold uppercase shadow-2xs">
                                   Today
                                 </span>
                               )}
@@ -5729,7 +5729,7 @@ function StandardStudentDashboard() {
                       onClick={() => setCalendarFilter(filterKey)}
                       className={`capitalize px-3 py-1.5 rounded-xl transition-all ${
                         calendarFilter === filterKey
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
@@ -5754,7 +5754,7 @@ function StandardStudentDashboard() {
                       }}
                       className={`px-3 py-1 rounded-lg font-bold transition-all ${
                         selectedCalendarMonth === m
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
                       }`}
                     >

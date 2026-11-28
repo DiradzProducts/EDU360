@@ -8,6 +8,7 @@ Enforces role-based permissions with dual-mode support:
 Blocks all unauthenticated and unauthorized callers.
 """
 
+import os
 from fastapi import Depends, HTTPException, Header, Cookie, status
 from typing import Optional, List, Callable, Dict, Any
 from app.core.security import decode_access_token
@@ -43,8 +44,9 @@ def resolve_caller_identity(
                 "is_authenticated": True
             }
 
-    # 2. X-User-Role & X-User-Id headers (sent by EDU360 frontend)
-    if x_user_role and x_user_role.strip():
+    # 2. X-User-Role & X-User-Id headers (disabled when EDU360_STRICT_AUTH=true)
+    strict_auth = os.getenv("EDU360_STRICT_AUTH", "false").lower() == "true"
+    if not strict_auth and x_user_role and x_user_role.strip():
         clean_role = x_user_role.lower().strip()
         if clean_role != "anonymous":
             return {
@@ -55,8 +57,8 @@ def resolve_caller_identity(
                 "is_authenticated": True
             }
 
-    # 3. Session cookie (Next.js middleware fallback)
-    if session_cookie and session_cookie.strip():
+    # 3. Session cookie (Next.js middleware fallback; disabled in strict mode)
+    if not strict_auth and session_cookie and session_cookie.strip():
         clean_role = session_cookie.lower().strip()
         if clean_role != "anonymous":
             return {

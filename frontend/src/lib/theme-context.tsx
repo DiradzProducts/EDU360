@@ -85,6 +85,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [palette, setPaletteState] = useState<Palette>('lime');
   const [mounted, setMounted] = useState(false);
 
+  const applyTheme = (t: Theme) => {
+    const root = document.documentElement;
+    if (t === 'dark') {
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+    }
+  };
+
+  const applyPalette = (p: Palette) => {
+    const root = document.documentElement;
+    root.setAttribute('data-palette', p);
+  };
+
   useEffect(() => {
     setMounted(true);
 
@@ -107,22 +123,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setPaletteState(initialPalette);
     applyPalette(initialPalette);
   }, []);
-
-  const applyTheme = (t: Theme) => {
-    const root = document.documentElement;
-    if (t === 'dark') {
-      root.classList.add('dark');
-      root.style.colorScheme = 'dark';
-    } else {
-      root.classList.remove('dark');
-      root.style.colorScheme = 'light';
-    }
-  };
-
-  const applyPalette = (p: Palette) => {
-    const root = document.documentElement;
-    root.setAttribute('data-palette', p);
-  };
 
   const setTheme = (t: Theme) => {
     setThemeState(t);

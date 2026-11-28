@@ -545,8 +545,8 @@ class FocusTableResponse(BaseModel):
 # --- Leave Request Schemas ---
 class LeaveRequestCreate(BaseModel):
     student_id: int
-    student_name: str
-    parent_name: str
+    student_name: Optional[str] = None
+    parent_name: Optional[str] = None
     from_date: str
     to_date: str
     reason: str

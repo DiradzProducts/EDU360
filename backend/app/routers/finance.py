@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_, and_, func
 
 from app.core.database import get_db
+from app.core.clock import ClockProvider
 from app.models.models import (
     FeeDefaulter, VendorInvoice, PaymentTransaction, FinanceDispatchLog,
     FeeMilestone, FeeStructure, Student, Notification, StaffMember, StaffPermission,
@@ -96,6 +97,25 @@ async def get_accounts_student_fees(student_id: int, db: AsyncSession = Depends(
         "payment_method": m.payment_method
     } for m in milestones]
 
+def _sync_defaulters_aging(defaulters: List[FeeDefaulter]) -> bool:
+    """Sync days_overdue against ClockProvider; returns True if any row changed."""
+    today = ClockProvider.get_current_date()
+    needs_commit = False
+    for d in defaulters:
+        if not d.created_at:
+            continue
+        if d.amount_due > 0 and d.status not in ["Paid", "Waived"]:
+            elapsed = max(0, (today - d.created_at.date()).days)
+            if d.days_overdue != elapsed:
+                d.days_overdue = elapsed
+                needs_commit = True
+        elif d.amount_due <= 0 or d.status in ["Paid", "Waived"]:
+            if d.days_overdue != 0:
+                d.days_overdue = 0
+                needs_commit = True
+    return needs_commit
+
+
 # 1. DASHBOARD STATS
 # =========================================================================
 
@@ -111,14 +131,12 @@ async def get_finance_dashboard_stats(db: AsyncSession = Depends(get_db)):
     - Overall collection target progress %
     """
     # 1. Fee Defaulters aggregation
-    today = datetime.datetime.utcnow().date()
     defaulters_res = await db.execute(
         select(FeeDefaulter).where(FeeDefaulter.status.in_(["Overdue", "Partially Paid"]), FeeDefaulter.amount_due > 0)
     )
     defaulters = defaulters_res.scalars().all()
-    for d in defaulters:
-        if d.created_at:
-            d.days_overdue = max(0, (today - d.created_at.date()).days)
+    if _sync_defaulters_aging(defaulters):
+        await db.commit()
 
     total_arrears = sum(d.amount_due for d in defaulters)
     tier_15 = sum(1 for d in defaulters if d.days_overdue <= 15)
@@ -187,22 +205,9 @@ async def get_fee_defaulters(
     Dynamically synchronizes days_overdue from student joining/created_at timestamp.
     """
     # 1. Real-time dynamic aging calculation
-    today = datetime.datetime.utcnow().date()
     all_defs_res = await db.execute(select(FeeDefaulter))
     all_defs = all_defs_res.scalars().all()
-    needs_commit = False
-    for d in all_defs:
-        if d.created_at:
-            if d.amount_due > 0 and d.status not in ["Paid", "Waived"]:
-                elapsed = max(0, (today - d.created_at.date()).days)
-                if d.days_overdue != elapsed:
-                    d.days_overdue = elapsed
-                    needs_commit = True
-            elif d.amount_due <= 0 or d.status in ["Paid", "Waived"]:
-                if d.days_overdue != 0:
-                    d.days_overdue = 0
-                    needs_commit = True
-    if needs_commit:
+    if _sync_defaulters_aging(all_defs):
         await db.commit()
 
     query = select(FeeDefaulter)
@@ -402,6 +407,8 @@ async def record_fee_payment(
 
     if defaulter.amount_due == 0:
         defaulter.status = "Paid"
+        defaulter.exam_clearance = True
+        defaulter.days_overdue = 0
     else:
         defaulter.status = "Partially Paid"
 
@@ -696,33 +703,47 @@ async def get_payment_transactions(
     return result.scalars().all()
 
 
-@router.post("/transactions/{id}/reconcile", response_model=PaymentTransactionResponse)
-async def reconcile_transaction(
-    id: int,
-    reconciled_by: str = Query("Mr. Arvind Krishnan"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Reconciles a single payment transaction against the school's bank statement.
-    """
-    res = await db.execute(select(PaymentTransaction).where(PaymentTransaction.id == id))
-    tx = res.scalars().first()
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    tx.reconciled = True
-    tx.reconciled_at = datetime.datetime.utcnow()
-    tx.reconciled_by = reconciled_by
-
-    # Settle / deduct from matching FeeDefaulter record for the student
-    def_res = await db.execute(
-        select(FeeDefaulter).where(
-            FeeDefaulter.student_name == tx.student_name,
-            FeeDefaulter.amount_due > 0
+async def _apply_reconciliation_to_defaulter(
+    db: AsyncSession,
+    tx: PaymentTransaction,
+    reconciled_by: str,
+    now: datetime.datetime,
+    is_batch: bool = False,
+) -> None:
+    """Lock and deduct reconciled payment from the matching FeeDefaulter row (preferring exact class match)."""
+    defaulter = None
+    if tx.class_name:
+        def_res = await db.execute(
+            select(FeeDefaulter).where(
+                FeeDefaulter.student_name == tx.student_name,
+                FeeDefaulter.class_name == tx.class_name,
+                FeeDefaulter.amount_due > 0
+            ).with_for_update()
         )
+        defaulter = def_res.scalars().first()
+    if not defaulter:
+        def_res = await db.execute(
+            select(FeeDefaulter).where(
+                FeeDefaulter.student_name == tx.student_name,
+                FeeDefaulter.amount_due > 0
+            ).with_for_update()
+        )
+        defaulter = def_res.scalars().first()
+    if not defaulter:
+        return
+
+    hist = []
+    if defaulter.payment_history_json:
+        try:
+            hist = json.loads(defaulter.payment_history_json)
+        except Exception:
+            hist = []
+
+    already_applied = any(
+        isinstance(entry, dict) and entry.get("utr_or_cheque") == tx.utr_number
+        for entry in hist
     )
-    defaulter = def_res.scalars().first()
-    if defaulter:
+    if not already_applied:
         new_amt = max(0.0, round(float(defaulter.amount_due) - float(tx.amount), 2))
         defaulter.amount_due = new_amt
         if new_amt <= 0.0:
@@ -731,22 +752,51 @@ async def reconcile_transaction(
             defaulter.exam_clearance = True
         else:
             defaulter.status = "Partially Paid"
+    elif float(defaulter.amount_due) <= 0.0:
+        defaulter.exam_clearance = True
 
-        hist = []
-        if defaulter.payment_history_json:
-            try:
-                hist = json.loads(defaulter.payment_history_json)
-            except Exception:
-                hist = []
-        hist.append({
-            "date": datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p"),
-            "amount": float(tx.amount),
-            "method": tx.payment_method,
-            "utr_or_cheque": tx.utr_number,
-            "received_by": f"Bank Verified ({reconciled_by})",
-            "notes": f"Bank reconciliation verified against statement. Ref: {tx.gateway_ref or tx.utr_number}"
-        })
-        defaulter.payment_history_json = json.dumps(hist)
+    prefix = "Batch Bank Verified" if is_batch else "Bank Verified"
+    note_prefix = "Batch bank reconciliation" if is_batch else "Bank reconciliation"
+    hist.append({
+        "date": now.strftime("%d %b %Y, %I:%M %p"),
+        "amount": 0.0 if already_applied else float(tx.amount),
+        "method": tx.payment_method,
+        "utr_or_cheque": tx.utr_number,
+        "received_by": f"{prefix} ({reconciled_by})",
+        "notes": (
+            f"{note_prefix} confirmed (balance already updated on online payment). Ref: {tx.gateway_ref or tx.utr_number}"
+            if already_applied
+            else f"{note_prefix} verified against statement. Ref: {tx.gateway_ref or tx.utr_number}"
+        )
+    })
+    defaulter.payment_history_json = json.dumps(hist)
+
+
+@router.post("/transactions/{id}/reconcile", response_model=PaymentTransactionResponse)
+async def reconcile_transaction(
+    id: int,
+    reconciled_by: str = Query("Mr. Arvind Krishnan"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reconciles a single payment transaction against the school's bank statement.
+    Idempotent and row-locked to prevent double-deduction on concurrent requests.
+    """
+    res = await db.execute(
+        select(PaymentTransaction).where(PaymentTransaction.id == id).with_for_update()
+    )
+    tx = res.scalars().first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.reconciled:
+        return tx
+
+    now = datetime.datetime.utcnow()
+    tx.reconciled = True
+    tx.reconciled_at = now
+    tx.reconciled_by = reconciled_by
+
+    await _apply_reconciliation_to_defaulter(db, tx, reconciled_by, now, is_batch=False)
 
     await log_financial_audit(
         db=db,
@@ -773,7 +823,7 @@ async def bulk_reconcile_transactions(
     Reconciles multiple or all pending transactions in 1 click.
     Calculates total reconciled amount and logs an immutable audit event for financial governance.
     """
-    query = select(PaymentTransaction).where(PaymentTransaction.reconciled == False)
+    query = select(PaymentTransaction).where(PaymentTransaction.reconciled == False).with_for_update()
     if transaction_ids and len(transaction_ids) > 0:
         query = query.where(PaymentTransaction.id.in_(transaction_ids))
 
@@ -786,40 +836,7 @@ async def bulk_reconcile_transactions(
         tx.reconciled = True
         tx.reconciled_at = now
         tx.reconciled_by = reconciled_by
-
-        # Settle / deduct from matching FeeDefaulter record for the student
-        def_res = await db.execute(
-            select(FeeDefaulter).where(
-                FeeDefaulter.student_name == tx.student_name,
-                FeeDefaulter.amount_due > 0
-            )
-        )
-        defaulter = def_res.scalars().first()
-        if defaulter:
-            new_amt = max(0.0, round(float(defaulter.amount_due) - float(tx.amount), 2))
-            defaulter.amount_due = new_amt
-            if new_amt <= 0.0:
-                defaulter.status = "Paid"
-                defaulter.days_overdue = 0
-                defaulter.exam_clearance = True
-            else:
-                defaulter.status = "Partially Paid"
-
-            hist = []
-            if defaulter.payment_history_json:
-                try:
-                    hist = json.loads(defaulter.payment_history_json)
-                except Exception:
-                    hist = []
-            hist.append({
-                "date": now.strftime("%d %b %Y, %I:%M %p"),
-                "amount": float(tx.amount),
-                "method": tx.payment_method,
-                "utr_or_cheque": tx.utr_number,
-                "received_by": f"Batch Bank Verified ({reconciled_by})",
-                "notes": f"Batch bank reconciliation verified against statement. Ref: {tx.gateway_ref or tx.utr_number}"
-            })
-            defaulter.payment_history_json = json.dumps(hist)
+        await _apply_reconciliation_to_defaulter(db, tx, reconciled_by, now, is_batch=True)
 
     if len(txs) > 0:
         await log_financial_audit(
@@ -1307,6 +1324,16 @@ async def get_payroll_lop_preview(payroll_month: str = "November 2026", db: Asyn
     month_tokens = payroll_month.lower().split()
     month_name = month_tokens[0] if month_tokens else ""
     month_abbr = month_name[:3] if len(month_name) >= 3 else month_name
+    # Bug 4 fix: parse payroll_month as "Month YYYY" for proper date matching
+    _payroll_year: int = 0
+    _payroll_month_num: int = 0
+    try:
+        import calendar as _cal
+        _payroll_dt = datetime.datetime.strptime(payroll_month.strip(), "%B %Y")
+        _payroll_year = _payroll_dt.year
+        _payroll_month_num = _payroll_dt.month
+    except Exception:
+        pass
 
     perm_res = await db.execute(select(StaffPermission))
     all_perms = perm_res.scalars().all()
@@ -1318,10 +1345,17 @@ async def get_payroll_lop_preview(payroll_month: str = "November 2026", db: Asyn
         for p in all_perms:
             if p.staff_id != s.id:
                 continue
-            p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
-            is_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
-            if not is_match and len(month_tokens) > 1 and month_tokens[1] in p_dates:
-                is_match = True
+            # Bug 4 fix: use ISO date parse when available, fall back to string match
+            is_match = False
+            if _payroll_year and _payroll_month_num and p.from_date:
+                try:
+                    _leave_dt = datetime.date.fromisoformat(str(p.from_date)[:10])
+                    is_match = (_leave_dt.year == _payroll_year and _leave_dt.month == _payroll_month_num)
+                except Exception:
+                    pass
+            if not is_match:
+                p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
+                is_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
             if not is_match:
                 continue
 
@@ -1390,16 +1424,32 @@ async def generate_monthly_payroll(
     month_tokens = req.payroll_month.lower().split()
     month_name = month_tokens[0] if month_tokens else ""
     month_abbr = month_name[:3] if len(month_name) >= 3 else month_name
+    # Bug 4 fix: parse payroll month as "Month YYYY" for proper date matching in generate
+    _gen_payroll_year: int = 0
+    _gen_payroll_month_num: int = 0
+    try:
+        _gen_dt = datetime.datetime.strptime(req.payroll_month.strip(), "%B %Y")
+        _gen_payroll_year = _gen_dt.year
+        _gen_payroll_month_num = _gen_dt.month
+    except Exception:
+        pass
 
     perm_res = await db.execute(select(StaffPermission))
     all_perms = perm_res.scalars().all()
     unapproved_lop_map = {}
 
     for p in all_perms:
-        p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
-        is_month_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
-        if not is_month_match and len(month_tokens) > 1 and month_tokens[1] in p_dates:
-            is_month_match = True
+        # Bug 4 fix: use ISO date parse when available
+        is_month_match = False
+        if _gen_payroll_year and _gen_payroll_month_num and p.from_date:
+            try:
+                _leave_dt = datetime.date.fromisoformat(str(p.from_date)[:10])
+                is_month_match = (_leave_dt.year == _gen_payroll_year and _leave_dt.month == _gen_payroll_month_num)
+            except Exception:
+                pass
+        if not is_month_match:
+            p_dates = f"{p.from_date or ''} {p.to_date or ''} {str(p.created_at or '')}".lower()
+            is_month_match = (month_name and month_name in p_dates) or (month_abbr and month_abbr in p_dates)
 
         if not is_month_match:
             continue

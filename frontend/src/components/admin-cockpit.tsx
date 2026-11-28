@@ -464,13 +464,13 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse table-fixed">
                 <thead>
                   <tr className="text-xs uppercase tracking-wider">
-                    <th className="py-3 px-5">Action Item</th>
-                    <th className="py-3 px-4">Area</th>
-                    <th className="py-3 px-4">Priority</th>
-                    <th className="py-3 px-5 text-right">Go</th>
+                    <th className="py-3 px-4 w-[44%]">Action Item</th>
+                    <th className="py-3 px-3 w-[16%]">Area</th>
+                    <th className="py-3 px-3 w-[20%]">Priority</th>
+                    <th className="py-3 px-4 w-[20%] text-right">Go</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1E293B] text-[13px]">
@@ -480,7 +480,7 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
                       onClick={() => onNavigateTab?.(item.targetTab)}
                       className="cursor-pointer"
                     >
-                      <td className="py-3.5 px-5 max-w-[340px]">
+                      <td className="py-3.5 px-4 min-w-0">
                         <p className="font-semibold text-slate-900 dark:text-white truncate">
                           {item.title}
                         </p>
@@ -488,12 +488,12 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
                           {item.subtitle}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="py-3.5 px-3 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap truncate">
                         {item.category}
                       </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                             item.severity === 'critical'
                               ? 'edu-badge-critical'
                               : item.severity === 'warning'
@@ -508,7 +508,7 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
                               : 'Pending'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -518,7 +518,7 @@ export function AdminCockpit({ onNavigateTab }: AdminCockpitProps) {
                           className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                         >
                           <span>{item.actionLabel}</span>
-                          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         </button>
                       </td>
                     </tr>

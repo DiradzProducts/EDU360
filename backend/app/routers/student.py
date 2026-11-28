@@ -65,8 +65,6 @@ async def list_student_homework(
         st = st_res.scalars().first()
         if not st:
             return []
-        if st.id != 1:
-            return []
 
         # Refactored: Single query with SQLAlchemy OUTER JOIN to project submission status directly in SQL
         # Eliminates in-memory aggregation, avoids N+1 queries, and leaves session ORM entities un-mutated.
@@ -139,7 +137,7 @@ async def list_student_homework(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-@router.post("/homework", response_model=HomeworkResponse)
+@router.post("/homework", response_model=HomeworkResponse, dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
 async def create_student_homework(req: HomeworkCreate, db: AsyncSession = Depends(get_db)):
     new_hw = Homework(
         title=req.title,
@@ -386,7 +384,7 @@ async def upload_student_achievement(req: StudentPortfolioCreate, db: AsyncSessi
 
     return new_entry
 
-@router.post("/portfolio/{item_id}/verify")
+@router.post("/portfolio/{item_id}/verify", dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))])
 async def verify_student_portfolio(item_id: int, db: AsyncSession = Depends(get_db)):
     """
     Academic Coordinator verifies and seals a student portfolio achievement.
@@ -529,8 +527,20 @@ async def get_student_calendar_events(db: AsyncSession = Depends(get_db)):
 # --- 4. Official Document Vault (View-Only for Student) ---
 @router.get("/documents/{student_id}", response_model=list[OfficialDocumentResponse])
 async def get_student_vault_documents(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(OfficialDocument).where(OfficialDocument.student_id == student_id))
-    return result.scalars().all()
+    from app.routers.admin import get_student_documents
+    return await get_student_documents(student_id, db)
+
+
+@router.get("/tc-status/{student_id}")
+async def get_student_tc_status_for_portal(student_id: int, db: AsyncSession = Depends(get_db)):
+    from app.routers.admin import get_student_tc_status
+    return await get_student_tc_status(student_id, db)
+
+
+@router.get("/substitutions")
+async def get_student_substitutions(db: AsyncSession = Depends(get_db)):
+    from app.routers.admin import list_substitution_slots
+    return await list_substitution_slots(db)
 
 
 # --- 5. K-5 Junior Gamification Engine Endpoints ---

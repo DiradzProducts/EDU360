@@ -73,11 +73,28 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
 
   if (!isOpen) return null;
 
-  const handleDemoSubmit = (e: React.FormEvent) => {
+  const handleDemoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      await fetch(`${apiBase}/api/public/enquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_name: formData.schoolName || 'School Demo Request',
+          parent_name: formData.name || 'School Leader',
+          email: formData.email,
+          phone: 'Demo Request',
+          target_grade: `School (${formData.studentCount})`,
+          source: 'Website Demo Request',
+          notes: `Role: ${formData.role}. Preferred Date: ${formData.preferredDate || 'Flexible'}. ${formData.notes || ''}`.trim()
+        })
+      });
+    } catch (err) {
+      console.error('Failed to submit demo request:', err);
+    } finally {
       setLoading(false);
       setSubmitted(true);
       try {
@@ -89,7 +106,7 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
       } catch (err) {
         // ignore
       }
-    }, 600);
+    }
   };
 
   const handleAdmissionSubmit = async (e: React.FormEvent) => {
@@ -97,15 +114,21 @@ export function DemoBookingModal({ isOpen, onClose, defaultRole = 'admin', initi
     setLoading(true);
 
     try {
-      await api.createEnquiry({
-        student_name: admissionData.studentName,
-        parent_name: admissionData.parentName,
-        email: admissionData.email,
-        phone: admissionData.phone,
-        target_grade: admissionData.gradeApplying,
-        source: 'Website Form',
-        notes: `${admissionData.currentSchool ? `Current School: ${admissionData.currentSchool}. ` : ''}${admissionData.notes || ''}`.trim()
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiBase}/api/public/enquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_name: admissionData.studentName,
+          parent_name: admissionData.parentName,
+          email: admissionData.email,
+          phone: admissionData.phone,
+          target_grade: admissionData.gradeApplying,
+          source: 'Website Form',
+          notes: `${admissionData.currentSchool ? `Current School: ${admissionData.currentSchool}. ` : ''}${admissionData.notes || ''}`.trim()
+        })
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSubmitted(true);
       try {
         confetti({

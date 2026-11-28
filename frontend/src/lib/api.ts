@@ -4392,40 +4392,51 @@ let fallbackMyTeacherPermissions: TeacherPermissionRequest[] = [
 
 
 
-// Generic fetch with fallback
+function _getAuthContext() {
+  if (typeof window === 'undefined') {
+    return { role: 'anonymous', userId: '0', token: '' };
+  }
+  const activeUserStr = localStorage.getItem('edu360_active_user') || localStorage.getItem('edu360_user');
+  let activeRole = localStorage.getItem('edu360_role') || '';
+  let activeUserId = '0';
+  let activeToken = localStorage.getItem('edu360_token') || '';
 
+  if (activeUserStr) {
+    try {
+      const parsed = JSON.parse(activeUserStr);
+      if (!activeRole) activeRole = parsed.role || 'anonymous';
+      activeUserId = String(parsed.id || parsed.student_id || '0');
+      if (!activeToken && parsed.access_token) activeToken = parsed.access_token;
+    } catch {}
+  }
+  return {
+    role: (activeRole || 'anonymous').toLowerCase(),
+    userId: activeUserId,
+    token: activeToken,
+  };
+}
+
+function _getAuthHeaders(extraHeaders?: HeadersInit): Record<string, string> {
+  const { role, userId, token } = _getAuthContext();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    'X-User-Role': role,
+    'X-User-Id': userId,
+    ...((extraHeaders as Record<string, string>) || {}),
+  };
+}
+
+// Generic fetch with fallback (network/offline fallback only — never masks 4xx/5xx server errors)
 async function fetchWithFallback<T>(url: string, options?: RequestInit, fallback?: T): Promise<T> {
-
   const controller = new AbortController();
-
   const timeoutId = setTimeout(() => controller.abort(), 2000);
 
   try {
-    const activeUserStr = typeof window !== 'undefined' ? (localStorage.getItem('edu360_active_user') || localStorage.getItem('edu360_user')) : null;
-    let activeRole = typeof window !== 'undefined' ? localStorage.getItem('edu360_role') || '' : '';
-    let activeUserId = '0';
-    let activeToken = typeof window !== 'undefined' ? localStorage.getItem('edu360_token') || '' : '';
-
-    if (activeUserStr) {
-      try {
-        const parsed = JSON.parse(activeUserStr);
-        if (!activeRole) activeRole = parsed.role || 'anonymous';
-        activeUserId = String(parsed.id || parsed.student_id || '0');
-        if (!activeToken && parsed.access_token) activeToken = parsed.access_token;
-      } catch {}
-    }
-    if (!activeRole) activeRole = 'anonymous';
-
     const res = await fetch(`${API_BASE}${url}`, {
       ...options,
       signal: options?.signal || controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
-        'X-User-Role': activeRole,
-        'X-User-Id': activeUserId,
-        ...(options?.headers || {})
-      }
+      headers: _getAuthHeaders(options?.headers),
     });
 
     clearTimeout(timeoutId);
@@ -4439,21 +4450,14 @@ async function fetchWithFallback<T>(url: string, options?: RequestInit, fallback
     }
 
     return await res.json();
-
   } catch (err) {
-
     clearTimeout(timeoutId);
-
-    if (fallback !== undefined) {
-
+    // Only return offline fallback for network/abort errors; never mask real HTTP 4xx/5xx errors
+    if (fallback !== undefined && !(err as any)?.status) {
       return fallback;
-
     }
-
     throw err;
-
   }
-
 }
 
 
@@ -6567,7 +6571,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
   getStudentById: async (studentId: number) => {
     try {
-      return await fetchWithFallback<Student>(`/api/admin/students/${studentId}`);
+      return await fetchWithFallback<Student>(`/api/student/profile/${studentId}`);
     } catch {
       return fallbackStudents.find(s => s.id === studentId) || null;
     }
@@ -6641,7 +6645,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       ];
       fallbackDocuments = [...matching, ...fallbackDocuments];
     }
-    return fetchWithFallback<OfficialDocument[]>(`/api/admin/students/${studentId}/documents`, undefined, matching);
+    return fetchWithFallback<OfficialDocument[]>(`/api/student/documents/${studentId}`, undefined, matching);
   },
 
   getStudentTcStatus: async (studentId: number) => {
@@ -6672,7 +6676,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       tc_doc_id: tcDoc?.id,
       tc_doc_status: tcDoc?.status || (isUndertaking ? 'Pending Submission (30-Day Window)' : 'Verified')
     };
-    return fetchWithFallback<any>(`/api/admin/students/${studentId}/tc-status`, undefined, fallback);
+    return fetchWithFallback<any>(`/api/student/tc-status/${studentId}`, undefined, fallback);
   },
 
   depositStudentTc: async (studentId: number) => {
@@ -7049,21 +7053,27 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   getExitClearances: async () => {
+    const { role } = _getAuthContext();
+    if (role === 'parent' || role === 'student') {
+      return fetchWithFallback<ExitClearance[]>('/api/parent/exit-clearances', undefined, []);
+    }
     try {
-      const res = await fetchWithFallback<ExitClearance[]>('/api/parent/exit-clearances', undefined, []);
-      if (res && res.length > 0) return res;
-    } catch {}
-    return fetchWithFallback<ExitClearance[]>('/api/admin/exit-clearances', undefined, fallbackExitClearance);
+      return await fetchWithFallback<ExitClearance[]>('/api/admin/exit-clearances', undefined, fallbackExitClearance);
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+      return fallbackExitClearance;
+    }
   },
 
   getStudentExitClearance: async (studentId: number) => {
-    try {
-      const res = await fetchWithFallback<ExitClearance | null>(`/api/parent/exit-clearance/${studentId}`, undefined, null);
-      if (res) return res;
-    } catch {}
+    const { role } = _getAuthContext();
+    if (role === 'parent' || role === 'student') {
+      return fetchWithFallback<ExitClearance | null>(`/api/parent/exit-clearance/${studentId}`, undefined, null);
+    }
     try {
       return await fetchWithFallback<ExitClearance | null>(`/api/admin/exit-clearances/student/${studentId}`, undefined, null);
-    } catch {
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
       return fallbackExitClearance.find(ec => ec.student_id === studentId) || null;
     }
   },
@@ -7247,7 +7257,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         method: 'POST',
         body: JSON.stringify({ status })
       });
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     fallbackTeacherPermissions = fallbackTeacherPermissions.map(p => p.id === id ? { ...p, status } : p);
     const targetPerm = res?.permission || fallbackTeacherPermissions.find(p => p.id === id);
@@ -7578,22 +7590,24 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   sendFeeReminder: async (id: number, channel: string = 'WhatsApp'): Promise<any> => {
-    const student = fallbackFeeDefaulters.find(d => d.id === id);
-    const studentName = student?.student_name || 'Student';
-    const amountDue = student?.amount_due || 25000;
-    api.publishClientNotification({
-      recipient_role: 'parent',
-      title: `Fee Payment Reminder: ${studentName}`,
-      message: `Bursar reminder for overdue milestone payment (₹${amountDue.toLocaleString('en-IN')}) via ${channel}.`,
-      sender_name: 'Mr. Arvind Krishnan (Senior Accounts Officer)',
-      sender_role: 'accounts_coordinator',
-      priority: 'URGENT',
-      notification_type: 'FEE_REMINDER',
-      action_url: '/parent?tab=fees'
-    });
     try {
-      return await fetchWithFallback(`/api/finance/defaulters/${id}/reminder?channel=${encodeURIComponent(channel)}`, { method: 'POST' });
-    } catch {
+      const res = await fetchWithFallback(`/api/finance/defaulters/${id}/reminder?channel=${encodeURIComponent(channel)}`, { method: 'POST' });
+      const student = fallbackFeeDefaulters.find(d => d.id === id);
+      const studentName = student?.student_name || 'Student';
+      const amountDue = student?.amount_due || 25000;
+      api.publishClientNotification({
+        recipient_role: 'parent',
+        title: `Fee Payment Reminder: ${studentName}`,
+        message: `Bursar reminder for overdue milestone payment (₹${amountDue.toLocaleString('en-IN')}) via ${channel}.`,
+        sender_name: 'Mr. Arvind Krishnan (Senior Accounts Officer)',
+        sender_role: 'accounts_coordinator',
+        priority: 'URGENT',
+        notification_type: 'FEE_REMINDER',
+        action_url: '/parent?tab=fees'
+      });
+      return res;
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
       fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => d.id === id ? { ...d, reminder_sent: true } : d);
       return { success: true };
     }
@@ -7604,9 +7618,10 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   // Substitution & Timetable Cover Engine
 
   getSubstitutions: async () => {
-
-    return fetchWithFallback<SubstitutionSlot[]>('/api/admin/substitutions', undefined, fallbackSubstitutions);
-
+    const { role } = _getAuthContext();
+    const isNonStaff = role === 'student' || role === 'parent';
+    const endpoint = isNonStaff ? '/api/student/substitutions' : '/api/admin/substitutions';
+    return fetchWithFallback<SubstitutionSlot[]>(endpoint, undefined, fallbackSubstitutions);
   },
 
   getAvailableFaculty: async () => {
@@ -7622,7 +7637,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         method: 'POST',
         body: JSON.stringify({ slot_id: slotId, substitute_teacher_id: substituteTeacherId, substitute_teacher_name: substituteTeacherName, notes })
       });
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     fallbackSubstitutions = fallbackSubstitutions.map(s => s.id === slotId ? {
       ...s,
@@ -9878,7 +9895,8 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
       return res;
 
-    } catch {
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
 
       const newLr: LeaveRequest = {
 
@@ -10857,73 +10875,21 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
 
+  getParentBanners: async () => {
+    try {
+      const res = await fetchWithFallback<any[]>('/api/parent/banners', undefined, []);
+      if (res && Array.isArray(res) && res.length > 0) return res;
+    } catch {
+      // Fallback handled by component
+    }
+    return [];
+  },
+
   getTodayHomework: async (studentId: number = 1) => {
 
     const todayStr = '2026-10-18';
 
-    if (studentId === 7) {
-
-      return [
-
-        {
-
-          id: 101,
-
-          title: 'Sight Words & Vowel Sound Magic Card Set',
-
-          subject: 'Reading & Phonics',
-
-          class_name: 'Class 3-A',
-
-          description: 'Read aloud the 15 vowel blend flashcards and color the matching word family pictures.',
-
-          task_type: 'DAILY_HOMEWORK' as any,
-
-          due_date: todayStr,
-
-          due_time: '19:30',
-
-          status: 'PENDING' as any,
-
-          teacher_id: 8,
-
-          teacher_name: 'Ms. Priya Nair',
-
-          max_marks: 5
-
-        },
-
-        {
-
-          id: 102,
-
-          title: 'Fun with 2-Digit Regrouping & Number Line',
-
-          subject: 'Junior Mathematics',
-
-          class_name: 'Class 3-A',
-
-          description: 'Solve the 8 caterpillar addition hops by carrying over into the tens place.',
-
-          task_type: 'DAILY_HOMEWORK' as any,
-
-          due_date: todayStr,
-
-          due_time: '20:00',
-
-          status: 'PENDING' as any,
-
-          teacher_id: 9,
-
-          teacher_name: 'Mrs. Kavitha Reddy',
-
-          max_marks: 5
-
-        }
-
-      ];
-
-    }
+    // Bug 17 fix: removed studentId===7 mock short-circuit; always hit real backend
 
     try {
       const res = await fetchWithFallback<Homework[]>(`/api/parent/today-homework/${studentId}`, undefined, []);
@@ -14493,26 +14459,19 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   // --- Notifications Engine ---
 
   getNotifications: async (params?: { user_id?: number; role?: string; unread_only?: boolean; limit?: number }): Promise<{ unread_count: number; notifications: any[] }> => {
-
     try {
-
       const q = new URLSearchParams();
-
       if (params?.user_id !== undefined) q.set('user_id', String(params.user_id));
-
       if (params?.role) q.set('role', params.role);
-
       if (params?.unread_only) q.set('unread_only', 'true');
-
       if (params?.limit) q.set('limit', String(params.limit));
 
       const res = await fetchWithFallback<{ success: boolean; unread_count: number; notifications: any[] }>(`/api/notifications?${q.toString()}`);
-
-      if (res && res.notifications && res.notifications.length > 0) {
+      if (res && Array.isArray(res.notifications)) {
         return { unread_count: res.unread_count || 0, notifications: res.notifications };
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
     }
 
     let list = [...fallbackNotifications];
@@ -14559,39 +14518,63 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     action_url?: string;
     notification_type?: string;
   }) => {
-    const newNotif = {
-      id: Date.now(),
-      title: notif.title,
-      message: notif.message,
-      recipient_role: (notif.recipient_role || 'all').toLowerCase(),
-      recipient_user_id: notif.recipient_user_id,
+    const cleanRole = (notif.recipient_role || 'all').toLowerCase();
+    const payload = {
+      recipient_user_id: notif.recipient_user_id ?? null,
+      recipient_role: cleanRole,
       sender_name: notif.sender_name,
       sender_role: notif.sender_role,
-      priority: notif.priority || 'Normal',
-      action_url: notif.action_url || '',
+      title: notif.title,
+      message: notif.message,
       notification_type: notif.notification_type || 'SYSTEM',
+      priority: (notif.priority || 'NORMAL').toUpperCase(),
+      action_url: notif.action_url || undefined,
+    };
+
+    const optimisticNotif = {
+      id: Date.now(),
+      ...payload,
+      action_url: notif.action_url || '',
       is_read: false,
       created_at: new Date().toISOString()
     };
-    fallbackNotifications = [newNotif, ...fallbackNotifications];
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = JSON.parse(localStorage.getItem('edu360_client_notifications') || '[]');
-        localStorage.setItem('edu360_client_notifications', JSON.stringify([newNotif, ...stored.filter((n: any) => n.id !== newNotif.id)]));
-        window.dispatchEvent(new StorageEvent('storage', { key: 'edu360_client_notifications' }));
-      } catch {}
 
-      window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: newNotif }));
-
+    const emitLiveEvents = (targetNotif: any) => {
+      if (typeof window === 'undefined') return;
+      window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: targetNotif }));
       if ('BroadcastChannel' in window) {
         try {
           const bc = new BroadcastChannel('edu360_global_notifications');
-          bc.postMessage({ type: 'NOTIFICATION_PUBLISHED', notification: newNotif });
+          bc.postMessage({ type: 'NOTIFICATION_PUBLISHED', notification: targetNotif });
           setTimeout(() => { try { bc.close(); } catch {} }, 2000);
         } catch {}
       }
+    };
+
+    if (typeof window !== 'undefined') {
+      fetch(`${API_BASE}/api/notifications/send`, {
+        method: 'POST',
+        headers: _getAuthHeaders(),
+        body: JSON.stringify(payload)
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const persisted = data?.notification || { ...optimisticNotif, id: data?.notification_id || optimisticNotif.id };
+          emitLiveEvents(persisted);
+        })
+        .catch(() => {
+          // Offline fallback only when backend is unreachable
+          fallbackNotifications = [optimisticNotif, ...fallbackNotifications];
+          try {
+            const stored = JSON.parse(localStorage.getItem('edu360_client_notifications') || '[]');
+            localStorage.setItem('edu360_client_notifications', JSON.stringify([optimisticNotif, ...stored.filter((n: any) => n.id !== optimisticNotif.id)]));
+            window.dispatchEvent(new StorageEvent('storage', { key: 'edu360_client_notifications' }));
+          } catch {}
+          emitLiveEvents(optimisticNotif);
+        });
     }
-    return newNotif;
+    return optimisticNotif;
   },
 
 
@@ -14651,41 +14634,43 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
   sendNotification: async (payload: any): Promise<any> => {
-
+    const cleanPayload = {
+      ...payload,
+      recipient_role: payload?.recipient_role ? String(payload.recipient_role).toLowerCase() : 'all',
+      priority: payload?.priority ? String(payload.priority).toUpperCase() : 'NORMAL',
+    };
     try {
-
-      await fetchWithFallback<any>(`/api/notifications/send`, {
-
+      const res = await fetchWithFallback<any>(`/api/notifications/send`, {
         method: 'POST',
-
         headers: { 'Content-Type': 'application/json' },
-
-        body: JSON.stringify(payload)
-
+        body: JSON.stringify(cleanPayload)
       });
-
-    } catch {}
+      const persisted = res?.notification || { ...cleanPayload, id: res?.notification_id || Date.now(), is_read: false, created_at: new Date().toISOString() };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('edu360_notification_event', { detail: persisted }));
+        if ('BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('edu360_global_notifications');
+            bc.postMessage({ type: 'NOTIFICATION_PUBLISHED', notification: persisted });
+            bc.close();
+          } catch {}
+        }
+      }
+      return { success: true, notification: persisted };
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     const newNotif = {
-
       id: Date.now() + Math.floor(Math.random() * 1000),
-
       title: payload.title || 'System Notification',
-
       message: payload.message || '',
-
-      recipient_role: payload.recipient_role || 'all',
-
+      recipient_role: cleanPayload.recipient_role,
       sender_name: payload.sender_name || 'System',
-
       sender_role: payload.sender_role || 'system',
-
       priority: payload.priority || 'Normal',
-
       is_read: false,
-
       created_at: new Date().toISOString()
-
     };
 
     fallbackNotifications = [newNotif, ...fallbackNotifications];
@@ -14704,7 +14689,6 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
     }
 
     return { success: true, notification: newNotif };
-
   },
 
   // =========================================================================
@@ -14722,6 +14706,11 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
   bulkSendFeeReminders: async (payload: BulkReminderPayload): Promise<any> => {
+    const res = await fetchWithFallback<any>(`/api/finance/defaulters/bulk-remind`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
     api.publishClientNotification({
       recipient_role: 'parent',
       title: 'Institutional Fee Payment Cycle Notice',
@@ -14732,11 +14721,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       notification_type: 'FEE_CYCLE_NOTICE',
       action_url: '/parent?tab=fees'
     });
-    return await fetchWithFallback<any>(`/api/finance/defaulters/bulk-remind`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    return res;
   },
 
 
@@ -14778,55 +14763,25 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
 
 
   recordFeePayment: async (id: number, payload: RecordFeePaymentPayload): Promise<FeeDefaulterItem> => {
-    const targetDefaulter = fallbackFeeDefaulters.find(d => d.id === id);
-    const slipNo = payload.notes || `REC-2026-CASH-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newTx: PaymentTransactionItem = {
-      id: Date.now(),
-      utr_number: payload.payment_method?.includes('Cheque') ? `CHQ-${Math.floor(100000 + Math.random() * 900000)}` : `CASH-REC-${Math.floor(1000 + Math.random() * 9000)}`,
-      student_name: targetDefaulter?.student_name || "Student",
-      class_name: targetDefaulter?.class_name || "Class 8-B",
-      parent_name: targetDefaulter?.parent_name || "Parent",
-      amount: payload.amount_paid,
-      payment_method: payload.payment_method || 'Cash Counter',
-      bank_name: 'School Cash Counter Vault',
-      milestone_title: targetDefaulter?.milestone_title || "Term Fee Recovery",
-      status: "Success",
-      transaction_date: "Today",
-      reconciled: true,
-      reconciled_at: "Physical Counter Slip",
-      reconciled_by: payload.received_by || "Accounts Cash Desk",
-      gateway_ref: slipNo,
-      notes: `Counter payment recorded by ${payload.received_by || 'Bursar'}`,
-      created_at: new Date().toISOString()
-    };
-    fallbackPaymentTransactions.unshift(newTx);
-
-    api.publishClientNotification({
-      recipient_role: 'parent',
-      title: 'Fee Payment Recorded & Receipt Generated',
-      message: `Offline counter payment of ₹${payload.amount_paid.toLocaleString('en-IN')} (${payload.payment_method}) was recorded. Receipt generated.`,
-      sender_name: payload.received_by || 'Bursar Counter',
-      sender_role: 'accounts_coordinator',
-      priority: 'Normal',
-      notification_type: 'PAYMENT_RECEIVED',
-      action_url: '/parent?tab=fees'
-    });
-
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        const bc = new BroadcastChannel('edu360_global_transactions');
-        bc.postMessage({ type: 'TRANSACTION_RECORDED', transaction: newTx });
-        bc.close();
-      } catch {}
-    }
-
     try {
-      return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
+      const res = await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-    } catch {
+      api.publishClientNotification({
+        recipient_role: 'parent',
+        title: 'Fee Payment Recorded & Receipt Generated',
+        message: `Offline counter payment of ₹${payload.amount_paid.toLocaleString('en-IN')} (${payload.payment_method}) was recorded. Receipt generated.`,
+        sender_name: payload.received_by || 'Bursar Counter',
+        sender_role: 'accounts_coordinator',
+        priority: 'Normal',
+        notification_type: 'PAYMENT_RECEIVED',
+        action_url: '/parent?tab=fees'
+      });
+      return res;
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
       fallbackFeeDefaulters = fallbackFeeDefaulters.map(d => {
         if (d.id === id) {
           const remaining = Math.max(0, d.amount_due - payload.amount_paid);
@@ -14845,6 +14800,11 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   applyFeeWaiver: async (id: number, payload: ApplyWaiverPayload): Promise<FeeDefaulterItem> => {
+    const res = await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/waiver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
     api.publishClientNotification({
       recipient_role: 'parent',
       title: 'Fee Concession Approved',
@@ -14855,11 +14815,7 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
       notification_type: 'FEE_CONCESSION',
       action_url: '/parent?tab=fees'
     });
-    return await fetchWithFallback<FeeDefaulterItem>(`/api/finance/defaulters/${id}/waiver`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    return res;
   },
 
 
@@ -14895,25 +14851,27 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
   },
 
   bulkReconcileTransactions: async (transactionIds?: number[], reconciledBy: string = 'Mr. Arvind Krishnan'): Promise<any> => {
-    bulkReconcileLiveTransactions(transactionIds, reconciledBy);
-    api.publishClientNotification({
-      recipient_role: 'accounts_coordinator',
-      title: 'Batch Bank Reconciliation Committed',
-      message: 'Pending transactions have been officially matched against the bank statement and committed.',
-      sender_name: reconciledBy,
-      sender_role: 'accounts_coordinator',
-      priority: 'Normal',
-      notification_type: 'BATCH_RECONCILE',
-      action_url: '/accounts_coordinator?tab=reconciliation'
-    });
     try {
       const res = await fetchWithFallback<any>(`/api/finance/transactions/bulk-reconcile?reconciled_by=${encodeURIComponent(reconciledBy)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transactionIds || null)
       });
+      bulkReconcileLiveTransactions(transactionIds, reconciledBy);
+      api.publishClientNotification({
+        recipient_role: 'accounts_coordinator',
+        title: 'Batch Bank Reconciliation Committed',
+        message: 'Pending transactions have been officially matched against the bank statement and committed.',
+        sender_name: reconciledBy,
+        sender_role: 'accounts_coordinator',
+        priority: 'Normal',
+        notification_type: 'BATCH_RECONCILE',
+        action_url: '/accounts_coordinator?tab=reconciliation'
+      });
       return res;
-    } catch {
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+      bulkReconcileLiveTransactions(transactionIds, reconciledBy);
       const live = getLivePaymentTransactions();
       return {
         status: 'success',
@@ -15064,7 +15022,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         });
         return res;
       }
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     const newId = fallbackPayrollBatches.length + 1;
     const newBatch: PayrollBatchItem = {
@@ -15134,7 +15094,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         });
         return res;
       }
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     fallbackPayrollBatches = fallbackPayrollBatches.map(b => b.id === batchId ? {
       ...b,
@@ -15237,7 +15199,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         });
         return res;
       }
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     fallbackPayrollBatches = fallbackPayrollBatches.map(b => b.id === batchId ? {
       ...b,
@@ -15279,7 +15243,9 @@ login: async (usernameOrEmail: string, password?: string, schoolCode?: string) =
         });
         return res;
       }
-    } catch {}
+    } catch (err: any) {
+      if (err?.status >= 400) throw err;
+    }
 
     fallbackPayrollBatches = fallbackPayrollBatches.map(b => b.id === batchId ? {
       ...b,

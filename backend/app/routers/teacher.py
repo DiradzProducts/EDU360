@@ -27,7 +27,7 @@ from app.schemas.schemas import (
 )
 from app.services.ai_analytics import evaluate_attendance_rule
 from app.routers.notifications import create_system_notification
-from app.core.rbac import require_role
+from app.core.rbac import require_role, resolve_caller_identity
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"], dependencies=[Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator", "student", "parent"]))])
 
@@ -37,7 +37,9 @@ async def get_teacher_classes(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(LiveClass).order_by(LiveClass.id.asc()))
     return result.scalars().all()
 
-@router.post("/live-classes/{class_id}/start", response_model=LiveClassResponse)
+_TEACHER_ONLY_DEPS = [Depends(require_role(["teacher", "admin", "principal", "super_admin", "academic_coordinator"]))]
+
+@router.post("/live-classes/{class_id}/start", response_model=LiveClassResponse, dependencies=_TEACHER_ONLY_DEPS)
 async def start_live_class(class_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(LiveClass).where(LiveClass.id == class_id))
     cls = result.scalars().first()
@@ -51,10 +53,19 @@ async def start_live_class(class_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/live-classes/{class_id}/attendance", response_model=list[AttendanceRecordResponse])
 async def get_class_attendance(class_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AttendanceRecord).where(AttendanceRecord.class_id == class_id))
+    # Bug 5 fix: exclude Withdrawn students from attendance
+    result = await db.execute(
+        select(AttendanceRecord)
+        .where(AttendanceRecord.class_id == class_id)
+        .where(
+            ~AttendanceRecord.student_id.in_(
+                select(Student.id).where(Student.status == "Withdrawn")
+            )
+        )
+    )
     return result.scalars().all()
 
-@router.post("/live-classes/{class_id}/simulate-join")
+@router.post("/live-classes/{class_id}/simulate-join", dependencies=_TEACHER_ONLY_DEPS)
 async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(AttendanceRecord).where(
@@ -65,6 +76,9 @@ async def simulate_student_join(class_id: int, req: AttendanceJoinSimulate, db: 
     record = result.scalars().first()
     s_res = await db.execute(select(Student).where(Student.id == req.student_id))
     st = s_res.scalars().first()
+    # Bug 5 fix: reject Withdrawn students from attendance recording
+    if st and st.status == "Withdrawn":
+        raise HTTPException(status_code=400, detail=f"Student {st.name} is Withdrawn and cannot join live classes.")
     student_name = st.name if st else f"Student #{req.student_id}"
 
     if not record:
@@ -235,7 +249,7 @@ async def get_single_submission(submission_id: int, db: AsyncSession = Depends(g
         raise HTTPException(status_code=404, detail="Submission not found")
     return sub
 
-@router.post("/submissions/{submission_id}/grade", response_model=HomeworkSubmissionResponse)
+@router.post("/submissions/{submission_id}/grade", response_model=HomeworkSubmissionResponse, dependencies=_TEACHER_ONLY_DEPS)
 async def grade_homework_inline(submission_id: int, req: HomeworkSubmissionGrade, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(HomeworkSubmission).where(HomeworkSubmission.id == submission_id))
     sub = result.scalars().first()
@@ -267,7 +281,7 @@ async def get_student_focus_table(student_id: int, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=404, detail="No Focus Table found for student")
     return ft
 
-@router.patch("/focus-table/{table_id}", response_model=FocusTableResponse)
+@router.patch("/focus-table/{table_id}", response_model=FocusTableResponse, dependencies=_TEACHER_ONLY_DEPS)
 async def update_focus_table(table_id: int, req: FocusTableUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(FocusTable).where(FocusTable.id == table_id))
     ft = result.scalars().first()
@@ -290,7 +304,7 @@ async def list_leave_requests(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(LeaveRequest).order_by(LeaveRequest.applied_at.desc()))
     return result.scalars().all()
 
-@router.post("/leave-requests/{request_id}/review", response_model=LeaveRequestResponse)
+@router.post("/leave-requests/{request_id}/review", response_model=LeaveRequestResponse, dependencies=_TEACHER_ONLY_DEPS)
 async def review_leave_request(request_id: int, req: LeaveRequestReview, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(LeaveRequest).where(LeaveRequest.id == request_id))
     lr = result.scalars().first()
@@ -426,7 +440,7 @@ async def review_leave_request(request_id: int, req: LeaveRequestReview, db: Asy
     await db.refresh(lr)
     return lr
 
-@router.get("/parent-context/{student_id}")
+@router.get("/parent-context/{student_id}", dependencies=_TEACHER_ONLY_DEPS)
 async def get_parent_chat_context(student_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Student).where(Student.id == student_id))
     st = result.scalars().first()
@@ -449,7 +463,7 @@ async def get_parent_chat_context(student_id: int, db: AsyncSession = Depends(ge
     }
 
 # --- 5. Student Roster (Class 8B & 9A) ---
-@router.get("/students")
+@router.get("/students", dependencies=_TEACHER_ONLY_DEPS)
 async def list_teacher_students(include_withdrawn: bool = False, db: AsyncSession = Depends(get_db)):
     stmt = select(Student)
     if not include_withdrawn:
@@ -752,7 +766,7 @@ async def get_my_permissions(db: AsyncSession = Depends(get_db)):
     return _my_permissions
 
 @router.post("/apply-permission")
-async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)):
+async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db), identity: dict = Depends(resolve_caller_identity)):
     leave_cat = req.get("leave_category") or req.get("type") or "Casual Leave (CL)"
     tot_days = int(req.get("total_days", 1) or 1)
     teacher_name = req.get("teacher_name", "Mrs. Ananya Verma")
@@ -760,9 +774,11 @@ async def apply_teacher_permission(req: dict, db: AsyncSession = Depends(get_db)
     from_date = req.get("date") or datetime.date.today().isoformat()
     to_date = req.get("to_date") or from_date
     affected = req.get("affected_periods") or "Period 2 (Class 8-B Math), Period 5 (Class 9-A Math)"
+    # Bug 3 fix: use real user_id from token, not hardcoded 2
+    caller_id = int(identity.get("user_id", 0) or 0) or req.get("staff_id") or 2
 
     perm_record = StaffPermission(
-        staff_id=2,
+        staff_id=caller_id,
         staff_name=teacher_name,
         role="Teacher",
         permission_type=leave_cat,
@@ -2762,6 +2778,12 @@ async def mark_period_attendance(
 
     # 2. Iterate and record each student's punctuality status
     for rec in payload.records:
+        # Bug 5 fix: skip Withdrawn students in period attendance
+        st_check = await db.execute(select(Student).where(Student.id == rec.student_id))
+        st_obj = st_check.scalars().first()
+        if st_obj and st_obj.status == "Withdrawn":
+            continue
+
         rule = "ON_TIME"
         action = "Present on Time"
         status_val = rec.status

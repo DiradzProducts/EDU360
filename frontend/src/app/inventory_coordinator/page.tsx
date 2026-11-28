@@ -373,7 +373,7 @@ export default function InventoryCoordinatorPage() {
           <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                   IN
                 </div>
                 <div className="min-w-0">
@@ -382,7 +382,7 @@ export default function InventoryCoordinatorPage() {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                 IN
               </div>
             )}
@@ -439,7 +439,7 @@ export default function InventoryCoordinatorPage() {
                   }}
                   className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                     active 
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title={item.label}
@@ -534,7 +534,7 @@ export default function InventoryCoordinatorPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-[var(--primary)]/10 text-[var(--primary)] dark:text-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-bold border border-[var(--primary)]/20">
+                <span className="rounded-full bg-[var(--primary)]/10 text-[var(--primary)] dark:text-[var(--primary)] px-2.5 py-0.5 text-xs font-bold border border-[var(--primary)]/20">
                   Asset &amp; Store Directorate
                 </span>
                 <span className="text-xs text-slate-500 dark:text-slate-400">Science Labs, Classroom IT &amp; Sports Depot</span>

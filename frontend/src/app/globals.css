@@ -648,8 +648,31 @@ html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h1,
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h2,
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside h3,
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-white,
-html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-\[\#F0FDF4\] {
-  color: #FFFFFF !important;
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-\[\#F0FDF4\],
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-900,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-800,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-700 {
+  color: var(--sidebar-text) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-600,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-500,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .text-slate-400 {
+  color: var(--sidebar-muted) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .bg-slate-50,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .bg-slate-100,
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside .bg-slate-200 {
+  background-color: var(--sidebar-hover) !important;
+  color: var(--sidebar-text) !important;
+  border-color: var(--sidebar-border) !important;
+}
+
+html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside button span.rounded-full {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  color: var(--sidebar-text) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
 }
 
 html:not(:has(.public-marketing)):not(:has(.junior-jungle-portal)) aside span.uppercase {

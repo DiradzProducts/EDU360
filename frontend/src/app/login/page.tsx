@@ -36,10 +36,12 @@ export default function LoginPage() {
   // Auto-forward active sessions away from /login back to their rightful portal
   useEffect(() => {
     if (mounted && isAuthenticated && user?.role && !isLoggingInRef.current) {
+      const isJunior = user.is_junior_k5 || user.grade_tier === 'k5' || user.username === 'junior';
+      const targetRoute = isJunior ? '/junior' : `/${user.role}`;
       if (typeof window !== 'undefined') {
-        window.location.replace(`/${user.role}`);
+        window.location.replace(targetRoute);
       } else {
-        router.replace(`/${user.role}`);
+        router.replace(targetRoute);
       }
     }
   }, [mounted, isAuthenticated, user]);

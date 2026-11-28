@@ -690,10 +690,12 @@ export default function AdminPage() {
   const handleAddAdminRemark = (e: React.FormEvent) => {
     e.preventDefault();
     if (!adminRemarkText.trim()) return;
+    const targetId = selectedStudentForSIS?.id ?? 1;
+    const targetName = selectedStudentForSIS?.name ?? "Aarav Sharma";
     const newEntry: StudentRemark = {
       id: Date.now(),
-      student_id: 1,
-      student_name: "Aarav Sharma",
+      student_id: targetId,
+      student_name: targetName,
       author_name: "Principal & Admin Office",
       author_role: "Administrator",
       category: adminRemarkCategory,
@@ -704,9 +706,19 @@ export default function AdminPage() {
       acknowledged_by_parent: false
     };
     setStudentRemarks(prev => [newEntry, ...prev]);
+    api.publishClientNotification({
+      recipient_role: 'parent',
+      sender_name: 'Principal & Admin Office',
+      sender_role: 'admin',
+      notification_type: 'STUDENT_REMARK',
+      title: `Principal Observation (${adminRemarkCategory}): ${targetName}`,
+      message: adminRemarkText.trim(),
+      priority: adminRemarkPriority === 'High Attention' ? 'High' : 'Normal',
+      action_url: '/parent'
+    });
     setAdminRemarkText('');
     setShowAdminRemarkModal(false);
-    triggerToast("Administrative observation officially recorded & sealed into Student SIS.");
+    triggerToast(`Administrative observation officially recorded for ${targetName}.`);
   };
 
   const triggerToast = (msg: string) => {
@@ -3459,13 +3471,13 @@ export default function AdminPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {[
-                            { receipt: 'RCP-2026-1042', name: 'Kabir Verma', roll: '10-A', head: 'Term 2 Tuition & Transport', amt: 22500, mode: 'UPI (Google Pay)', utr: 'UPI/329482910482', time: '11:42 AM' },
+                            { receipt: 'RCP-2026-1042', name: 'Kabir Verma', roll: '10-A', head: 'Term 2 Tuition & Digital LMS', amt: 22500, mode: 'UPI (Google Pay)', utr: 'UPI/329482910482', time: '11:42 AM' },
                             { receipt: 'RCP-2026-1041', name: 'Ananya Deshmukh', roll: '8-B', head: 'Term 2 Tuition', amt: 18000, mode: 'Razorpay NetBanking', utr: 'RZP_PAY_928194', time: '11:15 AM' },
                             { receipt: 'RCP-2026-1040', name: 'Rohan Iyer', roll: '12-Sci', head: 'Term 2 Tuition & Lab Fee', amt: 26000, mode: 'NEFT Direct Deposit', utr: 'HDFC000192837', time: '10:30 AM' },
                             { receipt: 'RCP-2026-1039', name: 'Diya Patel', roll: '6-A', head: 'Term 2 Tuition', amt: 17500, mode: 'UPI (PhonePe)', utr: 'UPI/849201948271', time: '10:04 AM' },
-                            { receipt: 'RCP-2026-1038', name: 'Vivaan Sen', roll: '9-C', head: 'Term 2 Tuition & Transport', amt: 23000, mode: 'UPI (Paytm)', utr: 'UPI/194820193847', time: '09:48 AM' },
+                            { receipt: 'RCP-2026-1038', name: 'Vivaan Sen', roll: '9-C', head: 'Term 2 Tuition & Digital LMS', amt: 23000, mode: 'UPI (Paytm)', utr: 'UPI/194820193847', time: '09:48 AM' },
                             { receipt: 'RCP-2026-1037', name: 'Ishaan Reddy', roll: '11-Com', head: 'Term 2 Tuition', amt: 23000, mode: 'School Cash Counter', utr: 'CSH-REC-2026-89', time: '09:20 AM' },
-                            { receipt: 'RCP-2026-1036', name: 'Meera Nair', roll: '7-B', head: 'Term 2 Transport Fee', amt: 15000, mode: 'NEFT Direct Deposit', utr: 'SBIN002938471', time: '08:55 AM' },
+                            { receipt: 'RCP-2026-1036', name: 'Meera Nair', roll: '7-B', head: 'Term 2 Virtual Lab & LMS Fee', amt: 15000, mode: 'NEFT Direct Deposit', utr: 'SBIN002938471', time: '08:55 AM' },
                           ].map((rec) => (
                             <tr key={rec.receipt} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="py-3.5 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
