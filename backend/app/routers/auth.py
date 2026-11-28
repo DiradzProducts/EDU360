@@ -75,7 +75,7 @@ async def register_user(req: UserRegisterRequest, db: AsyncSession = Depends(get
         raise HTTPException(status_code=400, detail="An account with this email address is already registered.")
 
     role_clean = req.role.lower().strip()
-    if role_clean not in ["admin", "teacher", "parent", "student"]:
+    if role_clean not in ["parent", "student"]:
         role_clean = "student"
 
     new_user = User(

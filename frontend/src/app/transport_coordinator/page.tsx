@@ -218,7 +218,7 @@ export default function TransportCoordinatorPage() {
             <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
               {!sidebarCollapsed ? (
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                     TR
                   </div>
                   <div className="min-w-0">
@@ -227,7 +227,7 @@ export default function TransportCoordinatorPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                   TR
                 </div>
               )}
@@ -283,7 +283,7 @@ export default function TransportCoordinatorPage() {
                     }}
                     className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                       active 
-                        ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                         : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                     }`}
                     title={item.label}

@@ -141,8 +141,8 @@ export function AttendanceSimulator({ records, onSimulateJoin, onOverride }: Att
               onChange={(e) => setSelectedStudentId(Number(e.target.value))}
               className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white shadow-sm focus:outline-hidden focus:border-indigo-500 cursor-pointer"
             >
-              {records.map((r) => (
-                <option key={r.student_id} value={r.student_id}>
+              {records.map((r, idx) => (
+                <option key={`${r.id}-${r.student_id}-${idx}`} value={r.student_id}>
                   {r.student_name} (#{r.student_id})
                 </option>
               ))}
@@ -308,14 +308,14 @@ export function AttendanceSimulator({ records, onSimulateJoin, onOverride }: Att
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-              {records.map((rec) => {
+              {records.map((rec, idx) => {
                 const isPresent = rec.status === 'Present';
                 const isLate = rec.status === 'Late';
                 const isLeave = (rec.status as string) === 'Leave' || (rec.status as string) === 'Excused Leave';
                 const isAbsent = rec.status === 'Absent' && !isLeave;
 
                 return (
-                  <tr key={rec.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                  <tr key={`${rec.id}-${rec.student_id}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">
                       <div className="flex items-center gap-2.5">
                         <div className="h-7 w-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-[11px] text-slate-700 dark:text-slate-300">

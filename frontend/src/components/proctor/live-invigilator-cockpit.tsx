@@ -2632,8 +2632,8 @@ export function LiveInvigilatorCockpit({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {selectedAnalysisCandidate.analysisSheet.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors">
+                      {selectedAnalysisCandidate.analysisSheet.map((item, idx) => (
+                        <tr key={`${item.id}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors">
                           <td className="py-3 px-3 font-mono font-bold text-slate-600 dark:text-slate-400 whitespace-nowrap">
                             {item.timestamp}
                           </td>

@@ -4,6 +4,7 @@ Provides salted password hashing and HMAC-SHA256 token generation/verification
 using Python's standard library without requiring external C-extensions.
 """
 
+import os
 import hmac
 import hashlib
 import base64
@@ -12,8 +13,9 @@ import secrets
 import time
 from typing import Optional, Dict, Any
 
-SECRET_KEY = "edu360-jwt-secret-key-change-in-production-2026"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "edu360-jwt-secret-key-change-in-production-2026")
 TOKEN_EXPIRY_SECONDS = 86400 * 7  # 7 days
+DEV_DEMO_LOGIN = os.getenv("EDU360_DEV_DEMO_LOGIN", "true").lower() == "true"
 
 ACCEPTED_DEMO_PASSWORDS = {
     "password123", "admin123", "teacher123", "parent123", "student123", "123456"
@@ -42,8 +44,8 @@ def verify_password(plain_password: str, stored_password_or_hash: Optional[str])
 
     clean_plain = plain_password.strip()
 
-    # 1. Universal demo passwords always succeed in development/demo mode
-    if clean_plain.lower() in ACCEPTED_DEMO_PASSWORDS or clean_plain == "Password123":
+    # 1. Universal demo passwords succeed only when DEV_DEMO_LOGIN is enabled
+    if DEV_DEMO_LOGIN and (clean_plain.lower() in ACCEPTED_DEMO_PASSWORDS or clean_plain == "Password123"):
         return True
 
     if not stored_password_or_hash:

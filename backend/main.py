@@ -90,15 +90,67 @@ async def get_system_clock():
 
 @app.post("/api/system/clock")
 async def set_system_clock(payload: dict):
+    from fastapi import HTTPException
     from app.core.clock import ClockProvider
     import datetime
     override_val = payload.get("override_iso")
     if not override_val or override_val == "REALTIME":
         ClockProvider.set_override(None)
     else:
-        clean_val = override_val.replace("Z", "")
-        ClockProvider.set_override(datetime.datetime.fromisoformat(clean_val))
+        clean_val = str(override_val).replace("Z", "")
+        try:
+            ClockProvider.set_override(datetime.datetime.fromisoformat(clean_val))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid override_iso datetime format")
     return ClockProvider.to_dict()
+
+
+@app.post("/api/public/enquiries")
+async def create_public_website_enquiry(payload: dict):
+    """Unauthenticated website endpoint for prospective family admission & demo inquiries."""
+    from app.models.models import AdmissionEnquiry
+    from app.routers.notifications import create_system_notification
+
+    async with AsyncSessionLocal() as db:
+        enquiry = AdmissionEnquiry(
+            student_name=(payload.get("student_name") or payload.get("schoolName") or "Website Visitor").strip(),
+            parent_name=(payload.get("parent_name") or payload.get("name") or "Prospective Parent").strip(),
+            email=(payload.get("email") or "").strip(),
+            phone=(payload.get("phone") or "Not provided").strip(),
+            target_grade=(payload.get("target_grade") or "Class 8").strip(),
+            lead_temperature="warm",
+            source=payload.get("source") or "Website",
+            notes=payload.get("notes") or "",
+            stage="new",
+        )
+        db.add(enquiry)
+        await db.commit()
+        await db.refresh(enquiry)
+        try:
+            await create_system_notification(
+                db=db,
+                sender_name=enquiry.parent_name,
+                sender_role="public_website",
+                recipient_role="admissions_coordinator",
+                title=f"New Website Inquiry: {enquiry.student_name}",
+                message=f"{enquiry.parent_name} submitted an inquiry for {enquiry.target_grade} ({enquiry.source}).",
+                notification_type="NEW_ENQUIRY",
+                priority="HIGH",
+                action_url="/admissions_coordinator",
+            )
+        except Exception as e:
+            print(f"Warning: could not dispatch public enquiry notification: {e}")
+        return {
+            "id": enquiry.id,
+            "student_name": enquiry.student_name,
+            "parent_name": enquiry.parent_name,
+            "email": enquiry.email,
+            "phone": enquiry.phone,
+            "target_grade": enquiry.target_grade,
+            "stage": enquiry.stage,
+            "source": enquiry.source,
+        }
+
 
 if __name__ == "__main__":
     import uvicorn

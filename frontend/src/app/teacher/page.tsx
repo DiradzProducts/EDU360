@@ -1699,9 +1699,9 @@ export default function TeacherPage() {
 
         const rosterRes = await api.getRemedialRoster();
 
-        if (rosterRes && Array.isArray(rosterRes)) {
+        if (rosterRes && Array.isArray(rosterRes?.roster)) {
 
-          setFocusRoster(rosterRes);
+          setFocusRoster(rosterRes.roster);
 
         }
 
@@ -1895,13 +1895,11 @@ export default function TeacherPage() {
 
   const [newPermShift, setNewPermShift] = useState('Morning Shift (08:30 AM - 12:30 PM)');
 
-  const [permDate, setPermDate] = useState(() => {
+  const [permDate, setPermDate] = useState('');
 
-    const today = new Date();
-
-    return today.toISOString().split('T')[0];
-
-  });
+  useEffect(() => {
+    setPermDate((prev) => prev || new Date().toISOString().split('T')[0]);
+  }, []);
 
   const [permStartTime, setPermStartTime] = useState('11:30');
 
@@ -2715,9 +2713,9 @@ export default function TeacherPage() {
 
           api.getAttendanceRoster(1),
 
-          api.getSubmission(1),
+          api.getSubmission(selectedChatStudentId),
 
-          api.getFocusTable(1),
+          api.getFocusTable(selectedChatStudentId),
 
           api.getLeaveRequests(),
 
@@ -2729,7 +2727,7 @@ export default function TeacherPage() {
 
           api.getMyTeacherPermissions(),
 
-          api.getParentChatContext(1),
+          api.getParentChatContext(selectedChatStudentId),
 
           api.getTeacherPersonalSchedule('Monday', user?.id, user?.name),
 
@@ -2823,7 +2821,7 @@ export default function TeacherPage() {
 
             start_time: s.time_slot ? s.time_slot.split('-')[0].trim() : '11:15 AM',
 
-            end_time: s.time_slot ? s.time_slot.split('-')[1].trim() : '12:00 PM',
+            end_time: s.time_slot && s.time_slot.includes('-') ? s.time_slot.split('-')[1].trim() : '12:00 PM',
 
             day_of_week: 'Monday' as const,
 
@@ -2843,7 +2841,7 @@ export default function TeacherPage() {
 
           }));
 
-          setPersonalSchedule(prev => [...subPersItems, ...prev]);
+          setPersonalSchedule(prev => [...subPersItems, ...prev.filter(p => !subPersItems.some(s => s.id === p.id))]);
 
 
 
@@ -2875,7 +2873,7 @@ export default function TeacherPage() {
 
           }));
 
-          setFacultyDuties(prev => [...subDutyTasks, ...prev]);
+          setFacultyDuties(prev => [...subDutyTasks, ...prev.filter(d => !subDutyTasks.some(s => s.id === d.id))]);
 
         }
 
@@ -3095,6 +3093,13 @@ export default function TeacherPage() {
       if (s.id === slotId) {
 
         const isCurrentlyBreak = s.status === 'BREAK';
+
+        // Bug 8 fix: persist slot block/unblock to backend
+        if (isCurrentlyBreak) {
+          api.restorePTMSlot(slotId, { status: 'AVAILABLE' }).catch(() => {});
+        } else {
+          api.holdPTMSlot(slotId).catch(() => {});
+        }
 
         return {
 
@@ -3421,7 +3426,7 @@ export default function TeacherPage() {
 
       if (filtered.length > 0) {
 
-        return filtered.map(p => {
+        return Array.from(new Set(filtered.map(p => {
 
           const cls = p.class_grade ? `${p.class_grade}${p.section ? '-' + p.section : ''}` : 'Class';
 
@@ -3429,7 +3434,7 @@ export default function TeacherPage() {
 
           return `Period ${p.period_number}: ${cls} (${subj}, ${p.start_time} - ${p.end_time})`;
 
-        });
+        })));
 
       }
 
@@ -3767,6 +3772,15 @@ export default function TeacherPage() {
 
     setShowPTMModal(false);
 
+    // Bug 8 fix: persist PTM schedule to backend
+    api.bookPTMSlot({
+      booked_student_name: ptmStudent,
+      booked_class: '8-B',
+      interaction_scope: 'HOMEROOM_CLASS',
+      focus_table_agenda: ptmAgenda ? [ptmAgenda] : [],
+      requested_date: ptmDate
+    }).catch(() => {});
+
     triggerToast(`Online PTM invite sent to ${ptmStudent}'s parent for ${ptmDate}!`);
 
   };
@@ -4076,7 +4090,14 @@ export default function TeacherPage() {
 
     }));
 
+    // Bug 8 fix: persist verify to backend
     const targetStudent = focusRoster.find(s => s.student_id === studentId || s.id === studentId);
+    api.verifyRemedialDay({
+      student_id: studentId,
+      day_num: targetStudent?.current_day ?? 1,
+      action: 'approve',
+      teacher_remarks: finalRemarks
+    }).catch(() => {});
 
     triggerToast(`✓ Verified ${targetStudent?.name || 'student'}'s remedial submission! Focus record updated.`);
 
@@ -4104,7 +4125,14 @@ export default function TeacherPage() {
 
     }));
 
+    // Bug 8 fix: persist return-for-rework to backend
     const targetStudent = focusRoster.find(s => s.student_id === studentId || s.id === studentId);
+    api.verifyRemedialDay({
+      student_id: studentId,
+      day_num: targetStudent?.current_day ?? 1,
+      action: 'rework',
+      teacher_remarks: remarks || "Please re-check intermediate signs and re-upload solution."
+    }).catch(() => {});
 
     triggerToast(`Returned practice sheet to ${targetStudent?.name || 'student'} with revision notes.`);
 
@@ -4151,6 +4179,16 @@ export default function TeacherPage() {
       return s;
 
     }));
+
+    // Bug 8 fix: persist batch verify to backend for each pending student
+    pendingItems.forEach(s => {
+      api.verifyRemedialDay({
+        student_id: s.student_id ?? s.id,
+        day_num: s.current_day ?? 1,
+        action: 'approve',
+        teacher_remarks: 'Batch verified by Subject Faculty.'
+      }).catch(() => {});
+    });
 
     triggerToast(`⚡ Batch verified ${pendingItems.length} remedial practice submissions! All students updated.`);
 
@@ -4771,7 +4809,7 @@ export default function TeacherPage() {
 
                   activeTab === 'dashboard'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -4831,7 +4869,7 @@ export default function TeacherPage() {
 
                   activeTab === 'live_class'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -4869,7 +4907,7 @@ export default function TeacherPage() {
 
                   activeTab === 'schedule'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -4925,7 +4963,7 @@ export default function TeacherPage() {
 
                   activeTab === 'homework'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -4985,7 +5023,7 @@ export default function TeacherPage() {
 
                   activeTab === 'focus_table'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5037,7 +5075,7 @@ export default function TeacherPage() {
 
                     activeTab === 'exams_gradebook'
 
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5080,7 +5118,7 @@ export default function TeacherPage() {
 
                         examSubTab === 'marks_ledger'
 
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
 
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
 
@@ -5104,7 +5142,7 @@ export default function TeacherPage() {
 
                         examSubTab === 'qp_desk'
 
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
 
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
 
@@ -5171,7 +5209,7 @@ export default function TeacherPage() {
 
                   activeTab === 'curriculum'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5213,7 +5251,7 @@ export default function TeacherPage() {
 
                   activeTab === 'roster'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5269,7 +5307,7 @@ export default function TeacherPage() {
 
                   activeTab === 'parent_hub'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5311,7 +5349,7 @@ export default function TeacherPage() {
 
                   activeTab === 'parent_chat'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5353,7 +5391,7 @@ export default function TeacherPage() {
 
                   activeTab === 'leave_approvals'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5413,7 +5451,7 @@ export default function TeacherPage() {
 
                   activeTab === 'duties'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5451,7 +5489,7 @@ export default function TeacherPage() {
 
                   activeTab === 'my_permissions'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5489,7 +5527,7 @@ export default function TeacherPage() {
 
                   activeTab === 'my_salary'
 
-                    ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20'
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20'
 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -5750,7 +5788,7 @@ export default function TeacherPage() {
                     </span>
                     <span className="text-xs font-mono text-violet-300">Class 8-B • Term 1 Assessment</span>
                   </div>
-                  <h3 className="text-base font-black text-white">English Literature: Class 8 Mathematics Examination</h3>
+                  <h3 className="text-base font-black text-white">Class 8-B Mathematics Term 1 Examination</h3>
                   <p className="text-xs text-slate-300">
                     40 Enrolled Candidates • Chief Invigilator Studio • Real-Time AI Proctor Surveillance Matrix
                   </p>
@@ -6214,9 +6252,13 @@ export default function TeacherPage() {
 
                       </h3>
 
-                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                        pendingLeaves > 0
+                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/60'
+                          : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60'
+                      }`}>
 
-                        Review Required
+                        {pendingLeaves > 0 ? 'Review Required' : 'All Clear'}
 
                       </span>
 
@@ -6224,7 +6266,9 @@ export default function TeacherPage() {
 
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
 
-                      Aarav Sharma (Medical) • Doctor/Dental
+                      {pendingLeaves > 0
+                        ? `${leaveRequests.find((lr: any) => lr.status === 'Pending')?.student_name || 'Student'} • Leave Approval Pending`
+                        : 'No pending student leave requests'}
 
                     </p>
 
@@ -6790,7 +6834,7 @@ export default function TeacherPage() {
 
                     .filter(t => t.assigned_to === 'Mrs. Ananya Verma' || t.assigned_to_role === 'teacher')
 
-                    .map(task => {
+                    .map((task, idx) => {
 
                       const label = task.task_label || (
 
@@ -6820,7 +6864,7 @@ export default function TeacherPage() {
 
                       <div 
 
-                        key={task.id} 
+                        key={`${task.id}-${idx}`} 
 
                         className={`p-4 rounded-2xl border bg-white dark:bg-slate-900 transition-all space-y-3 ${
 
@@ -7394,7 +7438,7 @@ export default function TeacherPage() {
 
                         selectedScheduleDay === day
 
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
 
                           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -7570,7 +7614,7 @@ export default function TeacherPage() {
 
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
 
-                  {personalSchedule.map((item) => {
+                  {personalSchedule.map((item, idx) => {
 
                     const isTeaching = item.activity_type === 'TEACHING_SESSION';
 
@@ -7590,7 +7634,7 @@ export default function TeacherPage() {
 
                       <div 
 
-                        key={item.id} 
+                        key={`${item.id}-${item.period_number || ''}-${idx}`} 
 
                         className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
 
@@ -7612,7 +7656,7 @@ export default function TeacherPage() {
 
                             item.is_current_active_period
 
-                              ? 'bg-[var(--primary)] text-white font-black shadow-sm shadow-[var(--primary)]/25'
+                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-black shadow-sm shadow-[var(--primary)]/25'
 
                               : isInvigilation
 
@@ -8068,7 +8112,7 @@ export default function TeacherPage() {
 
                         homeworkFilter === filter
 
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
 
                           : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
 
@@ -8126,7 +8170,7 @@ export default function TeacherPage() {
 
                           <tr 
 
-                            key={hw.id}
+                            key={`${hw.id}-${idx}`}
 
                             className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
 
@@ -8492,11 +8536,11 @@ export default function TeacherPage() {
 
                     <span className="text-xs font-bold text-slate-500 mr-1">Select Exam:</span>
 
-                    {examConfigs.map(exam => (
+                    {examConfigs.map((exam, idx) => (
 
                       <button
 
-                        key={exam.id}
+                        key={`${exam.id}-${idx}`}
 
                         onClick={() => setSelectedExamId(exam.id)}
 
@@ -9439,7 +9483,7 @@ export default function TeacherPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
 
-                  {filteredFocus.map((item) => {
+                  {filteredFocus.map((item, idx) => {
 
                     const progressPct = Math.round((item.current_day / item.total_days) * 100);
 
@@ -9451,7 +9495,7 @@ export default function TeacherPage() {
 
                       <div
 
-                        key={item.id}
+                        key={`${item.id}-${item.student_id}-${idx}`}
 
                         className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xs hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all duration-200 flex flex-col justify-between space-y-4 group"
 
@@ -9725,7 +9769,7 @@ export default function TeacherPage() {
 
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
 
-                        {filteredFocus.map((item) => {
+                        {filteredFocus.map((item, idx) => {
 
                           const progressPct = Math.round((item.current_day / item.total_days) * 100);
 
@@ -9737,7 +9781,7 @@ export default function TeacherPage() {
 
                             <tr
 
-                              key={item.id}
+                              key={`${item.id}-${item.student_id}-row-${idx}`}
 
                               className="hover:bg-blue-50/40 dark:hover:bg-slate-800/40 transition-colors"
 
@@ -10232,7 +10276,7 @@ export default function TeacherPage() {
 
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Select Exam:</span>
 
-                {examsList.map((ex) => {
+                {examsList.map((ex, idx) => {
 
                   const isSelected = ex.id === activePublishExamId;
 
@@ -10240,7 +10284,7 @@ export default function TeacherPage() {
 
                     <button
 
-                      key={ex.id}
+                      key={`${ex.id}-${idx}`}
 
                       onClick={() => handleSelectExam(ex.id)}
 
@@ -10620,13 +10664,13 @@ export default function TeacherPage() {
 
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
 
-                            {examSubmissionsList.map((sub) => {
+                            {examSubmissionsList.map((sub, idx) => {
 
                               const isRemedial = sub.percentage !== null && sub.percentage !== undefined && sub.percentage <= activeExam.remedial_threshold_pct;
 
                               return (
 
-                                <tr key={sub.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                                <tr key={`${sub.id}-${idx}`} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
 
                                   <td className="py-3.5 px-4 font-mono font-bold text-slate-600 dark:text-slate-400">
 
@@ -12277,7 +12321,7 @@ export default function TeacherPage() {
 
                       <div className="grid grid-cols-1 gap-4">
 
-                        {filteredPapers.map(qp => {
+                        {filteredPapers.map((qp, idx) => {
 
                           const bp = qp.blueprint || {};
 
@@ -12291,7 +12335,7 @@ export default function TeacherPage() {
 
                             <div
 
-                              key={qp.id}
+                              key={`${qp.id}-${idx}`}
 
                               className={`rounded-3xl border bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4 transition-all ${
 
@@ -13611,7 +13655,7 @@ export default function TeacherPage() {
 
                     <div
 
-                      key={item.id}
+                      key={`${item.id}-${item.class_name}-${item.subject}`}
 
                       className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between space-y-4 shadow-xs"
 
@@ -19528,7 +19572,7 @@ export default function TeacherPage() {
 
                     onClick={() => setShowSalaryInquiryModal(true)}
 
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--primary)] text-white text-xs font-bold hover:opacity-95 transition-opacity shadow-xs cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold hover:opacity-95 transition-opacity shadow-xs cursor-pointer"
 
                     title="Send a discrepancy or salary query to Accounts Coordinator"
 

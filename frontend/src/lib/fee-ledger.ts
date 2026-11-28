@@ -81,7 +81,7 @@ export function generateBaselineTransactions(): PaymentTransactionItem[] {
       reconciled_by: "UPI Gateway Engine",
       gateway_ref: "REC-2026-1028-01",
       notes: "Settled via Parent Online Portal (PhonePe/UPI)",
-      created_at: new Date(Date.now() - 3600000).toISOString()
+      created_at: "2026-11-28T09:00:00.000Z"
     },
     {
       id: 102,

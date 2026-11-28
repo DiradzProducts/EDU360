@@ -633,7 +633,7 @@ export default function AcademicCoordinatorPage() {
             <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
               {!sidebarCollapsed ? (
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                     AC
                   </div>
                   <div className="min-w-0">
@@ -642,7 +642,7 @@ export default function AcademicCoordinatorPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                   AC
                 </div>
               )}
@@ -701,7 +701,7 @@ export default function AcademicCoordinatorPage() {
                     }}
                     className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                       active 
-                        ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                         : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                     }`}
                     title={item.label}
@@ -1194,7 +1194,7 @@ export default function AcademicCoordinatorPage() {
                 <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/20 p-5 shadow-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 dark:border-indigo-900/40 pb-3.5">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-9 w-9 rounded-2xl bg-[var(--primary)] text-white flex items-center justify-center font-bold shadow-sm shadow-[var(--primary)]/20">
+                      <div className="h-9 w-9 rounded-2xl bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center font-bold shadow-sm shadow-[var(--primary)]/20">
                         <CalendarRange className="h-4 w-4" />
                       </div>
                       <div>
@@ -2470,7 +2470,7 @@ export default function AcademicCoordinatorPage() {
                         }}
                         className={`px-2 py-1 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-[var(--primary)] text-white border-[var(--primary)] font-bold shadow-2xs'
+                            ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-bold shadow-2xs'
                             : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                         }`}
                       >
@@ -2760,7 +2760,7 @@ export default function AcademicCoordinatorPage() {
                       onClick={() => setSlaExtensionHours(ext.hrs)}
                       className={`py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
                         slaExtensionHours === ext.hrs
-                          ? 'bg-[var(--primary)] text-white border-[var(--primary)] font-bold shadow-2xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-bold shadow-2xs'
                           : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                       }`}
                     >
@@ -3009,7 +3009,7 @@ export default function AcademicCoordinatorPage() {
           <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 my-8">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-[var(--primary)] text-white flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+                <div className="h-9 w-9 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                   <FileText className="h-4.5 w-4.5" />
                 </div>
                 <div>

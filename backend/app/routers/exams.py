@@ -364,6 +364,10 @@ async def grade_exam_submission(
     if not sub:
         raise HTTPException(status_code=404, detail="Submission record not found for student")
         
+    if exam.total_marks <= 0:
+        raise HTTPException(status_code=400, detail="Exam total_marks must be greater than zero")
+    if req.marks_obtained < 0 or req.marks_obtained > exam.total_marks:
+        raise HTTPException(status_code=400, detail="marks_obtained must be between 0 and total_marks")
     pct = round((req.marks_obtained / exam.total_marks) * 100, 1)
     sub.marks_obtained = req.marks_obtained
     sub.percentage = pct
@@ -719,8 +723,7 @@ async def get_question_paper_details(
     res = await db.execute(select(QuestionPaper).where(QuestionPaper.id == paper_id))
     paper = res.scalars().first()
     if not paper:
-        res_any = await db.execute(select(QuestionPaper).order_by(QuestionPaper.id.asc()))
-        paper = res_any.scalars().first()
+        raise HTTPException(status_code=404, detail="Question paper not found")
 
     if schedule_id and user_role == "student":
         sched_res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))
@@ -929,8 +932,7 @@ async def download_question_paper_docket(
     res = await db.execute(select(QuestionPaper).where(QuestionPaper.id == paper_id))
     paper = res.scalars().first()
     if not paper:
-        res_any = await db.execute(select(QuestionPaper).order_by(QuestionPaper.id.asc()))
-        paper = res_any.scalars().first()
+        raise HTTPException(status_code=404, detail="Question paper not found")
 
     if schedule_id and user_role == "student":
         sched_res = await db.execute(select(ExamSchedule).where(ExamSchedule.id == schedule_id))

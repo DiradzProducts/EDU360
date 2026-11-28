@@ -722,7 +722,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('ut2')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut2'
-                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -732,7 +732,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('midterm')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'midterm'
-                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -742,7 +742,7 @@ export function ParentMarksView({
             onClick={() => setSelectedTerm('ut1')}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               selectedTerm === 'ut1'
-                ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >

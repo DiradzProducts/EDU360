@@ -205,10 +205,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
     localStorage.setItem('edu360_active_user', JSON.stringify(newUser));
     syncSessionCookie(newUser.role);
+    const isJunior = newUser.is_junior_k5 || newUser.grade_tier === 'k5' || newUser.username === 'junior';
+    const targetRoute = isJunior ? '/junior' : getRoleRoute(newUser.role);
     if (typeof window !== 'undefined') {
-      window.location.replace(getRoleRoute(newUser.role));
+      window.location.replace(targetRoute);
     } else {
-      router.replace(getRoleRoute(newUser.role));
+      router.replace(targetRoute);
     }
   };
 

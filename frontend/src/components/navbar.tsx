@@ -26,20 +26,53 @@ import { MarketingNavbar } from '@/components/marketing-navbar';
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, role, logout } = useAuth();
+  const { theme, toggleTheme, palette, setPalette, palettes, currentPaletteInfo } = useTheme();
+
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showPaletteMenu, setShowPaletteMenu] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && !target.closest('#navbar-palette-container')) {
+        setShowPaletteMenu(false);
+      }
+    };
+    if (showPaletteMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showPaletteMenu]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // If on public marketing landing page, strictly render the dedicated Public Marketing Navbar
   if (pathname === '/') {
     return <MarketingNavbar />;
   }
 
-  const router = useRouter();
-  const { user, role, logout } = useAuth();
-
   // If in junior student portal (K-5), the junior dashboard renders its own full-screen illustrated theme
-  if (pathname === '/junior' || (pathname === '/student' && (user?.grade_tier === 'k5' || user?.is_junior_k5 || user?.id === 5 || user?.student_id === 6))) {
+  if (pathname === '/junior' || (mounted && pathname === '/student' && (user?.grade_tier === 'k5' || user?.is_junior_k5 || user?.id === 5 || user?.student_id === 6))) {
     return null;
   }
-  const { theme, toggleTheme, palette, setPalette, palettes, currentPaletteInfo } = useTheme();
 
   const isAuthPage = pathname === '/login' || pathname?.startsWith('/login/') || pathname === '/register' || pathname?.startsWith('/register/');
 
@@ -128,41 +161,7 @@ export function Navbar() {
     );
   }
 
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showPaletteMenu, setShowPaletteMenu] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && !target.closest('#navbar-palette-container')) {
-        setShowPaletteMenu(false);
-      }
-    };
-    if (showPaletteMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [showPaletteMenu]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-    const safeRole = mounted && role ? role : '';
+  const safeRole = mounted && role ? role : '';
   return (
     <header className="sticky top-0 z-50 w-full h-16 border-b border-slate-200/80 bg-white/95 text-slate-900 dark:border-slate-800 dark:bg-[#0B0F19]/95 dark:text-white backdrop-blur-md transition-colors duration-150">
       <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -185,7 +184,7 @@ export function Navbar() {
                   </span>
                 )}
               </div>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Action &amp; Intelligence Platform</p>
+              <p className="hidden sm:block text-xs font-medium text-slate-500 dark:text-slate-400">Action &amp; Intelligence Platform</p>
             </div>
           </Link>
         </div>
@@ -215,7 +214,7 @@ export function Navbar() {
         )}
 
         {/* Right Section: Theme Toggle, Notifications, Authenticated User Profile */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           
           {/* Mobile Search Button */}
           {mounted && user && (
@@ -250,7 +249,6 @@ export function Navbar() {
               <span className="font-semibold hidden sm:inline">
                 {currentPaletteInfo.name}
               </span>
-              <span className="font-semibold sm:hidden">Theme</span>
               <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${showPaletteMenu ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 

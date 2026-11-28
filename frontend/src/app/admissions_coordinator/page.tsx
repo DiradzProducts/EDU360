@@ -143,6 +143,16 @@ export default function AdmissionsCoordinatorPage() {
   };
 
   const handleSubmitDocsToAdmin = (enq: AdmissionEnquiry) => {
+    api.publishClientNotification({
+      recipient_role: 'admin',
+      sender_name: 'Admissions Coordinator',
+      sender_role: 'admissions_coordinator',
+      notification_type: 'ADMISSION_DOCS_SUBMITTED',
+      title: `Admission Dossier Submitted: ${enq.student_name}`,
+      message: `All 3 verified documents for ${enq.student_name} (${enq.target_grade}) submitted to Principal Office for Official Vault Sealing.`,
+      priority: 'High',
+      action_url: '/admin?tab=admissions'
+    });
     triggerToast(`All 3 documents for ${enq.student_name} submitted to Principal Office for Official Vault Sealing!`);
   };
 
@@ -672,7 +682,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
           <div className="flex h-16 items-center justify-between px-3.5 border-b border-slate-200/90 dark:border-slate-800/90 shrink-0">
             {!sidebarCollapsed ? (
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
                   AC
                 </div>
                 <div className="min-w-0">
@@ -681,7 +691,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                 </div>
               </div>
             ) : (
-              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+              <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
                 AC
               </div>
             )}
@@ -739,7 +749,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
                   }}
                   className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
                     active 
-                      ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                      ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                       : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
                   }`}
                   title={item.label}
@@ -1406,7 +1416,7 @@ Vihaan Iyer,Grade 7,Narayanan Iyer,n.iyer@corporate.in,+91 98401 55667,Social Me
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="h-6 w-6 rounded-full bg-[var(--primary)] text-white text-xs font-black shadow-xs flex items-center justify-center">
+                  <span className="h-6 w-6 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-black shadow-xs flex items-center justify-center">
                     2
                   </span>
                   <label className="text-xs font-black text-slate-900 dark:text-white">

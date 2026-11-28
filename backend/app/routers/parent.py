@@ -543,6 +543,8 @@ async def reset_fee_demo_data(db: AsyncSession = Depends(get_db)):
 
 @router.post("/fees/{milestone_id}/pay", response_model=FeeMilestoneResponse)
 async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSession = Depends(get_db)):
+    if req.amount is not None and req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
     result = await db.execute(select(FeeMilestone).where(FeeMilestone.id == milestone_id).with_for_update())
     milestone = result.scalars().first()
     
@@ -604,6 +606,7 @@ async def pay_fee_milestone(milestone_id: int, req: FeePayRequest, db: AsyncSess
         if new_amount_due <= 0.0:
             defaulter.status = "Paid"
             defaulter.days_overdue = 0
+            defaulter.exam_clearance = True
         else:
             defaulter.status = "Partially Paid"
         history = []
@@ -710,16 +713,50 @@ class WhatsAppFeeDispatchRequest(BaseModel):
 async def dispatch_parent_fee_whatsapp(req: WhatsAppFeeDispatchRequest, db: AsyncSession = Depends(get_db)):
     """
     Simulated dummy WhatsApp dispatch endpoint for fee receipts and fee summary dispatches.
-    Logs dispatch and returns realistic payload.
+    Logs dispatch and returns realistic payload grounded in DB student/milestone records.
     """
     phone = req.phone or "+91 98480 22338"
     timestamp_str = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
-    
+
+    student_name = "Student"
+    class_name = "Class 8-B"
+    total_paid = 0.0
+    total_due = 0.0
+    due_date = "25 Oct 2026"
+    student_id = 1
+
+    if req.milestone_id:
+        m_res = await db.execute(select(FeeMilestone).where(FeeMilestone.id == req.milestone_id))
+        ms = m_res.scalars().first()
+        if ms and ms.student_id:
+            student_id = ms.student_id
+            due_date = ms.due_date or due_date
+    elif req.phone:
+        s_res = await db.execute(select(Student).where(Student.guardian_phone == req.phone))
+        st_match = s_res.scalars().first()
+        if st_match:
+            student_id = st_match.id
+
+    st_res = await db.execute(select(Student).where(Student.id == student_id))
+    st = st_res.scalars().first()
+    if st:
+        student_name = st.name
+        class_name = f"{st.class_name}-{st.section}" if st.section else (st.class_name or class_name)
+        phone = req.phone or st.guardian_phone or phone
+
+    ms_res = await db.execute(select(FeeMilestone).where(FeeMilestone.student_id == student_id))
+    for m in ms_res.scalars().all():
+        if m.status == "Paid":
+            total_paid += float(m.amount or 0)
+        else:
+            total_due += float(m.amount or 0)
+
+    slug = student_name.lower().replace(" ", "")[:10]
     if req.action_type == "summary":
-        message_preview = f"EDU360 Accounts: Aarav Sharma (Class 8-B). Total Paid: ₹35,000 | Pending Dues: ₹18,500 (Due: 25 Oct 2026). Settle instantly via https://edu360.school/pay/aarav8b"
+        message_preview = f"EDU360 Accounts: {student_name} ({class_name}). Total Paid: ₹{total_paid:,.0f} | Pending Dues: ₹{total_due:,.0f} (Due: {due_date}). Settle instantly via https://edu360.school/pay/{slug}"
     else:
         receipt_code = f"REC-2026-FEE-{req.milestone_id or 5821}"
-        message_preview = f"EDU360 Accounts: Official payment receipt #{receipt_code} for Aarav Sharma has been generated. Download authenticated PDF: https://edu360.school/receipts/{receipt_code}.pdf"
+        message_preview = f"EDU360 Accounts: Official payment receipt #{receipt_code} for {student_name} has been generated. Download authenticated PDF: https://edu360.school/receipts/{receipt_code}.pdf"
     
     return {
         "success": True,
@@ -746,10 +783,15 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
                     detail=f"Invalid medical leave attachment extension '{ext}'. Only authenticated documents (PDF, PNG, JPG, WEBP) are accepted."
                 )
 
+    st_res = await db.execute(select(Student).where(Student.id == req.student_id))
+    st_row = st_res.scalars().first()
+    resolved_student_name = (req.student_name or "").strip() or (st_row.name if st_row else f"Student #{req.student_id}")
+    resolved_parent_name = (req.parent_name or "").strip() or (st_row.guardian_name if st_row and st_row.guardian_name else "Parent / Guardian")
+
     new_lr = LeaveRequest(
         student_id=req.student_id,
-        student_name=req.student_name,
-        parent_name=req.parent_name,
+        student_name=resolved_student_name,
+        parent_name=resolved_parent_name,
         from_date=req.from_date,
         to_date=req.to_date,
         reason=req.reason,
@@ -763,10 +805,10 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
 
     # Statutory Security & Attendance Audit Log
     leave_audit = SecurityAuditLog(
-        actor_name=req.parent_name,
+        actor_name=resolved_parent_name,
         actor_role="PARENT",
         action_type="PARENT_LEAVE_APPLICATION",
-        target_entity=f"Student #{req.student_id} - {req.student_name}",
+        target_entity=f"Student #{req.student_id} - {resolved_student_name}",
         ip_address="127.0.0.1",
         status="VERIFIED",
         details=f"Leave application for {req.from_date} to {req.to_date}. Medical: {bool(req.is_medical)}. Reason: {req.reason[:150]}"
@@ -788,10 +830,10 @@ async def apply_student_leave(req: LeaveRequestCreate, db: AsyncSession = Depend
         
         await create_system_notification(
             db=db,
-            sender_name=req.parent_name,
+            sender_name=resolved_parent_name,
             sender_role="parent",
-            title=f"New Leave Application: {req.student_name}",
-            message=f"Parent {req.parent_name} submitted a {med_prefix}leave request for {req.student_name} ({req.from_date} to {req.to_date}): \"{req.reason}\". Action required in Leave Approvals.",
+            title=f"New Leave Application: {resolved_student_name}",
+            message=f"Parent {resolved_parent_name} submitted a {med_prefix}leave request for {resolved_student_name} ({req.from_date} to {req.to_date}): \"{req.reason}\". Action required in Leave Approvals.",
             notification_type="LEAVE_APPLICATION",
             priority="HIGH" if req.is_medical else "NORMAL",
             recipient_user_id=homeroom_uid,

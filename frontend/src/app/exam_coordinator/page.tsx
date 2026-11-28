@@ -337,12 +337,17 @@ export default function ExamCoordinatorPage() {
 
 
 
-  const handlePublishTimetableAndHallTickets = () => {
+  const handlePublishTimetableAndHallTickets = async () => {
     setPublishingTimetable(true);
-    setTimeout(() => {
+    try {
+      await api.releaseHallTickets({ series_name: 'Term 1 Final Examination 2026', class_name: 'Class 8' });
+      const updated = await api.getExamSchedules();
+      if (updated && updated.length > 0) {
+        setSchedules(updated);
+      } else {
+        setSchedules(prev => prev.map(s => ({ ...s, is_published: true, hall_ticket_published: true })));
+      }
       setIsTimetablePublished(true);
-      setPublishingTimetable(false);
-      setSchedules(prev => prev.map(s => ({ ...s, is_published: true, hall_ticket_published: true })));
       triggerToast('✓ Timetable published & Hall Tickets issued for all students! (Admit cards released without fee blockades per Board Mandate)');
 
       const examPayload = {
@@ -389,7 +394,11 @@ export default function ExamCoordinatorPage() {
           setTimeout(() => ws.close(), 1000);
         };
       } catch {}
-    }, 600);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to publish timetable & hall tickets.');
+    } finally {
+      setPublishingTimetable(false);
+    }
   };
 
   // Grouped Exam Batch Interface
@@ -405,17 +414,21 @@ export default function ExamCoordinatorPage() {
     totalSlots: number;
   }
 
-  const handlePublishBatchAdmitCards = (batchId: string, seriesName: string, className: string) => {
+  const handlePublishBatchAdmitCards = async (batchId: string, seriesName: string, className: string) => {
     setPublishingTimetable(true);
-    setTimeout(() => {
+    try {
+      await api.releaseHallTickets({ series_name: seriesName, class_name: className });
       setIsTimetablePublished(true);
-      setPublishingTimetable(false);
       setSchedules(prev => prev.map(s => {
         const match = s.batch_id === batchId || (s.series_name === seriesName && s.class_name.includes(className));
         return match ? { ...s, is_published: true, hall_ticket_published: true } : s;
       }));
       triggerToast(`✓ Admit cards activated for ${seriesName} (${className})! Enrolled student hall tickets deployed.`);
-    }, 400);
+    } catch (err: any) {
+      triggerToast(err?.message || `Failed to activate admit cards for ${seriesName}.`);
+    } finally {
+      setPublishingTimetable(false);
+    }
   };
 
   const handleExportBatchCsv = (batch: ExamBatchGroup) => {
@@ -1117,9 +1130,17 @@ export default function ExamCoordinatorPage() {
 
 
   const handleNudgeAcademic = (subject: string, className: string) => {
-
+    api.publishClientNotification({
+      recipient_role: 'academic_coordinator',
+      sender_name: 'Exam Coordinator',
+      sender_role: 'exam_coordinator',
+      notification_type: 'EXAM_BLUEPRINT_NUDGE',
+      title: `Urgent Blueprint Clearance: ${className} ${subject}`,
+      message: `Urgent reminder for Prof. Rajeshwari Nair: ${className} ${subject} blueprint & syllabus clearance is pending.`,
+      priority: 'High',
+      action_url: '/academic_coordinator'
+    });
     triggerToast(`🔔 Urgent reminder dispatched to Prof. Rajeshwari Nair for ${className} ${subject} blueprint & syllabus clearance!`);
-
   };
 
 
@@ -1475,7 +1496,7 @@ export default function ExamCoordinatorPage() {
 
                 <div className="flex items-center gap-2.5 min-w-0">
 
-                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
+                  <div className="h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20 shrink-0">
 
                     EX
 
@@ -1493,7 +1514,7 @@ export default function ExamCoordinatorPage() {
 
               ) : (
 
-                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
+                <div className="mx-auto h-8 w-8 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shadow-sm shadow-[var(--primary)]/20">
 
                   EX
 
@@ -1610,7 +1631,7 @@ export default function ExamCoordinatorPage() {
                     className={`w-full flex items-center justify-between rounded-xl p-2.5 text-xs transition-all cursor-pointer ${
 
                       active 
-                        ? 'bg-[var(--primary)] text-white font-bold shadow-sm shadow-[var(--primary)]/20' 
+                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-sm shadow-[var(--primary)]/20' 
                         : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white font-medium'
 
                     }`}
@@ -1725,7 +1746,7 @@ export default function ExamCoordinatorPage() {
 
                 <div className="flex items-center gap-2">
 
-                  <span className="rounded-full bg-[var(--primary)]/10 text-[var(--primary)] dark:text-[var(--primary-soft)] px-2.5 py-0.5 text-[10px] font-bold border border-[var(--primary)]/20">
+                  <span className="rounded-full bg-[var(--primary)]/10 text-[var(--primary)] dark:text-[var(--primary)] px-2.5 py-0.5 text-[10px] font-bold border border-[var(--primary)]/20">
 
                     Examination Authority
 
@@ -4907,7 +4928,7 @@ export default function ExamCoordinatorPage() {
 
                         newTaskLabel === lbl
 
-                          ? 'bg-[var(--primary)] text-white font-bold shadow-xs'
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-bold shadow-xs'
 
                           : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
 

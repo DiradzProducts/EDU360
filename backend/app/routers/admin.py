@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func
 from app.core.database import get_db
+from app.core.clock import ClockProvider
 from app.models.models import (
     User, TriageAlert, AdminTask, AdmissionEnquiry, Student, OfficialDocument,
     ExitClearance, Event, EventStaffAssignment, VendorEquipment,
@@ -1138,6 +1139,84 @@ async def _seed_student_fee_milestones(db: AsyncSession, student: Student) -> No
     ])
 
 
+async def _provision_student_onboarding(
+    db: AsyncSession,
+    new_student: Student,
+    safe_guardian_email: str,
+) -> tuple[User, User]:
+    """Provision Student & Parent login accounts, fee milestones, Day-1 attendance, and digital Hall Ticket."""
+    clean_student = "".join(ch for ch in (new_student.name or "student").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_") or "student"
+    student_uname = f"{clean_student}_{new_student.id}"
+    clean_parent = "".join(ch for ch in (new_student.guardian_name or "parent").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_") or "parent"
+    parent_uname = f"parent_{clean_parent}_{new_student.id}"
+
+    st_user_res = await db.execute(select(User).where(User.username == student_uname))
+    student_user = st_user_res.scalars().first()
+    if not student_user:
+        target_st_email = f"{student_uname}@student.edu360.internal"
+        existing_st_email = (await db.execute(select(User).where(User.email == target_st_email))).scalars().first()
+        if existing_st_email:
+            target_st_email = f"{student_uname}_{new_student.id}@student.edu360.internal"
+        student_user = User(
+            name=new_student.name,
+            username=student_uname,
+            email=target_st_email,
+            role="student",
+            school_code="EDU-GLOBAL-360",
+            password="Password123",
+            phone=new_student.guardian_phone,
+            avatar="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150"
+        )
+        db.add(student_user)
+        await db.flush()
+    new_student.user_id = student_user.id
+
+    pr_user_res = await db.execute(select(User).where(User.username == parent_uname))
+    parent_user = pr_user_res.scalars().first()
+    if not parent_user:
+        target_pr_email = safe_guardian_email or f"parent_{clean_parent}_{new_student.id}@edu360.internal"
+        existing_pr_email = (await db.execute(select(User).where(User.email == target_pr_email))).scalars().first()
+        if existing_pr_email:
+            target_pr_email = f"parent_{clean_parent}_{new_student.id}@edu360.internal"
+        parent_user = User(
+            name=new_student.guardian_name or f"Parent of {new_student.name}",
+            username=parent_uname,
+            email=target_pr_email,
+            role="parent",
+            school_code="EDU-GLOBAL-360",
+            password="Password123",
+            phone=new_student.guardian_phone,
+            avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
+        )
+        db.add(parent_user)
+        await db.flush()
+    new_student.parent_user_id = parent_user.id
+
+    await _seed_student_fee_milestones(db, new_student)
+
+    db.add(AttendanceRecord(
+        class_id=1,
+        student_id=new_student.id,
+        student_name=new_student.name,
+        join_timestamp="10:00 AM (Enrolment Baseline)",
+        minutes_late=0.0,
+        status="Present",
+        teacher_override=False,
+        date=datetime.date.today().isoformat()
+    ))
+
+    clean_class = (new_student.class_name or "Class8").replace(" ", "")
+    roll_str = str(new_student.roll_no or new_student.id).zfill(2)
+    db.add(HallTicket(
+        student_id=new_student.id,
+        ticket_number=f"HT-2026-{clean_class}-{roll_str}-{new_student.id}",
+        series_name="Term 1 Final Examination 2026",
+        is_released=True,
+        released_at=datetime.datetime.utcnow()
+    ))
+    return student_user, parent_user
+
+
 @router.post("/crm/enquiries/{enquiry_id}/convert")
 async def convert_enquiry_to_student(
     enquiry_id: int, 
@@ -1304,84 +1383,7 @@ async def convert_enquiry_to_student(
         )
         db.add(new_defaulter)
 
-    # Generate Institutional User Credentials for Student & Parent
-    clean_student = "".join(ch for ch in new_student.name.lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
-    student_uname = f"{clean_student}_{new_student.id}"
-    clean_parent = "".join(ch for ch in (new_student.guardian_name or "parent").lower() if ch.isalnum() or ch == " ").strip().replace(" ", "_")
-    parent_uname = f"parent_{clean_parent}_{new_student.id}"
-
-    # Student Account
-    st_user_res = await db.execute(select(User).where(User.username == student_uname))
-    student_user = st_user_res.scalars().first()
-    if not student_user:
-        target_st_email = f"{student_uname}@student.edu360.internal"
-        existing_st_email = (await db.execute(select(User).where(User.email == target_st_email))).scalars().first()
-        if existing_st_email:
-            target_st_email = f"{student_uname}_{new_student.id}@student.edu360.internal"
-        student_user = User(
-            name=new_student.name,
-            username=student_uname,
-            email=target_st_email,
-            role="student",
-            school_code="EDU-GLOBAL-360",
-            password="Password123",
-            phone=new_student.guardian_phone,
-            avatar="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150"
-        )
-        db.add(student_user)
-        await db.flush()
-
-    new_student.user_id = student_user.id
-
-    # Parent Account
-    pr_user_res = await db.execute(select(User).where(User.username == parent_uname))
-    parent_user = pr_user_res.scalars().first()
-    if not parent_user:
-        target_pr_email = safe_guardian_email
-        existing_pr_email = (await db.execute(select(User).where(User.email == target_pr_email))).scalars().first()
-        if existing_pr_email:
-            target_pr_email = f"parent_{clean_parent}_{new_student.id}@edu360.internal"
-        parent_user = User(
-            name=new_student.guardian_name or f"Parent of {new_student.name}",
-            username=parent_uname,
-            email=target_pr_email,
-            role="parent",
-            school_code="EDU-GLOBAL-360",
-            password="Password123",
-            phone=new_student.guardian_phone,
-            avatar="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
-        )
-        db.add(parent_user)
-        await db.flush()
-
-    new_student.parent_user_id = parent_user.id
-
-    # Instantiate Annual Fee Structure & Milestones for the student
-    await _seed_student_fee_milestones(db, new_student)
-
-    # Initialize Day 1 Attendance Record so student attendance is present from Day 1
-    today_str = datetime.date.today().isoformat()
-    db.add(AttendanceRecord(
-        class_id=1,
-        student_id=new_student.id,
-        student_name=new_student.name,
-        join_timestamp="10:00 AM (Enrolment Baseline)",
-        minutes_late=0.0,
-        status="Present",
-        teacher_override=False,
-        date=today_str
-    ))
-
-    # Auto-generate digital Hall Ticket so new student immediately accesses exams with peers
-    clean_class = new_student.class_name.replace(" ", "")
-    roll_str = str(new_student.roll_no or new_student.id).zfill(2)
-    db.add(HallTicket(
-        student_id=new_student.id,
-        ticket_number=f"HT-2026-{clean_class}-{roll_str}",
-        series_name="Term 1 Final Examination 2026",
-        is_released=True,
-        released_at=datetime.datetime.utcnow()
-    ))
+    student_user, parent_user = await _provision_student_onboarding(db, new_student, safe_guardian_email)
 
     # In-App Welcome Notification for Student
     await create_system_notification(
@@ -1429,7 +1431,7 @@ async def convert_enquiry_to_student(
         sender_role="admissions_coordinator",
         recipient_role="accounts_coordinator",
         title=f"🎓 New Enrolment: {new_student.name} ({new_student.class_name}-{new_student.section})",
-        message=f"Student converted from CRM. Admission fee ₹{fee_amt:,.0f} status: {fee_status}. Profile and Class {base_class} fee milestones added to Accounts Queue.",
+        message=f"Student converted from CRM. Admission fee ₹{fee_amt:,.0f} status: {fee_status}. Profile and {new_student.class_name} fee milestones added to Accounts Queue.",
         notification_type="NEW_ENROLMENT",
         priority="HIGH" if fee_status == "Pending" else "NORMAL",
         action_url="/accounts_coordinator"
@@ -1446,14 +1448,14 @@ async def convert_enquiry_to_student(
         "fee_status": fee_status,
         "credentials": {
             "student_name": new_student.name,
-            "student_username": student_uname,
+            "student_username": student_user.username,
             "student_password": "Password123",
             "student_roll": new_student.roll_no,
             "student_class": f"{new_student.class_name}-{new_student.section}",
             "student_admission_no": adm_no,
             "student_portal": "/student",
             "parent_name": new_student.guardian_name or "Parent / Guardian",
-            "parent_username": parent_uname,
+            "parent_username": parent_user.username,
             "parent_password": "Password123",
             "parent_phone": new_student.guardian_phone or "",
             "parent_portal": "/parent"
@@ -1558,7 +1560,11 @@ async def direct_enroll_or_forward_vip(
         )
         db.add(new_student)
         await db.flush()
-        await _seed_student_fee_milestones(db, new_student)
+        await _provision_student_onboarding(
+            db,
+            new_student,
+            payload.email or f"parent_{new_student.id}@edu360.internal"
+        )
 
         # Create Official Documents in SIS Vault
         doc_slug = new_student.name.lower().replace(" ", "_")
@@ -2727,7 +2733,7 @@ async def list_fee_defaulters(
     db: AsyncSession = Depends(get_db)
 ):
     # Dynamic aging calculation
-    today = datetime.datetime.utcnow().date()
+    today = ClockProvider.get_current_date()
     all_defs_res = await db.execute(select(FeeDefaulter))
     all_defs = all_defs_res.scalars().all()
     needs_commit = False
@@ -2810,9 +2816,16 @@ async def pay_fee_defaulter(defaulter_id: int, req: RecordFeePaymentRequest, db:
         raise HTTPException(status_code=404, detail="Defaulter record not found")
         
     paid = float(req.amount_paid)
+    # Bug 2 fix: cap payment to outstanding balance
+    if paid > float(d.amount_due):
+        raise HTTPException(status_code=400, detail=f"Payment amount (₹{paid:,.2f}) cannot exceed outstanding balance (₹{float(d.amount_due):,.2f}).")
     d.amount_due = max(0.0, float(d.amount_due) - paid)
     d.reminder_sent = False
     d.status = "Paid" if d.amount_due <= 0 else "Partially Paid"
+    # Bug 2 fix: sync exam_clearance and days_overdue on full payment
+    if d.amount_due <= 0:
+        d.exam_clearance = True
+        d.days_overdue = 0
     
     history = []
     if d.payment_history_json:
@@ -2830,6 +2843,27 @@ async def pay_fee_defaulter(defaulter_id: int, req: RecordFeePaymentRequest, db:
         "received_by": req.received_by or "Admin Officer"
     })
     d.payment_history_json = json.dumps(history)
+
+    # Bug 2 fix: sync matching FeeMilestone (same as finance.py counter payment)
+    if d.student_id:
+        m_res = await db.execute(
+            select(FeeMilestone)
+            .where(
+                FeeMilestone.student_id == d.student_id,
+                FeeMilestone.status.in_(["Overdue", "Upcoming"])
+            )
+        )
+        milestones = m_res.scalars().all()
+        for m in milestones:
+            if m.title.strip().lower() == (d.milestone_title or "").strip().lower() or len(milestones) == 1:
+                if d.amount_due <= 0:
+                    m.status = "Paid"
+                    m.receipt_no = receipt_no
+                    m.paid_at = datetime.datetime.utcnow().strftime("%d %b %Y, %I:%M %p")
+                    m.payment_method = f"Admin ({req.payment_method})"
+                else:
+                    m.amount = d.amount_due
+                break
     
     tx = PaymentTransaction(
         utr_number=receipt_no,
@@ -3462,11 +3496,11 @@ async def persist_audit_log(db: AsyncSession, actor_name: str, actor_role: str, 
     except Exception as e:
         print(f"[AUDIT] Failed to persist audit log: {e}")
 
-@router.get("/audit-logs", response_model=list[SecurityAuditLogResponse])
+@router.get("/audit-logs", response_model=list[SecurityAuditLogResponse], dependencies=[Depends(require_admin)])
 async def list_security_audit_logs():
     return _security_audit_logs
 
-@router.post("/audit-logs/export")
+@router.post("/audit-logs/export", dependencies=[Depends(require_admin)])
 async def export_security_audit_logs():
     return {
         "success": True,
@@ -3475,7 +3509,7 @@ async def export_security_audit_logs():
         "checksum": "SHA256:7f9a2b8e3c1d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a"
     }
 
-@router.get("/audit-logs/export/{filename}")
+@router.get("/audit-logs/export/{filename}", dependencies=[Depends(require_admin)])
 async def download_audit_logs_export(filename: str):
     """
     Exports CBSE compliance audit trail as CSV for statutory inspection.
@@ -3997,7 +4031,7 @@ async def list_admin_student_leaves(
     return result.scalars().all()
 
 
-@router.post("/student-leaves/{request_id}/override", response_model=LeaveRequestResponse)
+@router.post("/student-leaves/{request_id}/override", response_model=LeaveRequestResponse, dependencies=[Depends(require_admin)])
 async def admin_override_student_leave(
     request_id: int,
     req: AdminStudentLeaveOverrideRequest,
